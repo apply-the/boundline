@@ -5,11 +5,11 @@
 
 ## Summary
 
-Refound Boundline's primary delivery path around session-native runtime control instead of fixture-shaped replay. Planning will derive a bounded task draft from captured goals, workspace evidence, authored inputs, and available Canon artifacts; execution will choose explicit next decisions from live state through a bounded observe-decide-act-verify-update loop; flow will become an operator-confirmed policy surface; compatibility execution remains explicit rather than implicit; and status or inspection output will explain route choice, decision history, recovery, and terminal outcome.
+Refound Boundline's primary delivery path around session-native runtime control instead of fixture-shaped replay. Planning will derive a bounded task draft from recorded goals, workspace evidence, authored inputs, and available Canon artifacts; execution will choose explicit next decisions from live state through a bounded observe-decide-act-verify-update loop; flow will become an operator-confirmed policy surface; compatibility execution remains explicit rather than implicit; and status or inspection output will explain route choice, decision history, recovery, and terminal outcome.
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, plus Rust standard library filesystem, path, process, and collections APIs  
 **Storage**: Workspace-local `.boundline/session.json`, `.boundline/traces/`, optional `.boundline/execution.json`, optional `.canon/` artifacts, plus repository docs and assistant assets updated as part of rollout  
 **Testing**: `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test --no-run --all-targets`, `cargo nextest run --workspace --all-features`, `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`, `cargo deny check licenses advisories bans sources`  

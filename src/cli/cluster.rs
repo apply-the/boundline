@@ -140,6 +140,7 @@ fn summarize_member(workspace_ref: &str, include_trace: bool) -> ClusterMemberSt
             let state = if matches!(
                 record.latest_status,
                 SessionStatus::Failed
+                    | SessionStatus::Blocked
                     | SessionStatus::Exhausted
                     | SessionStatus::Aborted
                     | SessionStatus::Invalid
@@ -186,6 +187,7 @@ fn session_status_text(status: SessionStatus) -> &'static str {
         SessionStatus::Initialized => "initialized",
         SessionStatus::GoalCaptured => "goal_captured",
         SessionStatus::Planned => "planned",
+        SessionStatus::Blocked => "blocked",
         SessionStatus::Running => "running",
         SessionStatus::Succeeded => "succeeded",
         SessionStatus::Failed => "failed",
@@ -280,4 +282,31 @@ impl ClusterCommandError {
 
 pub fn validate_init_inputs(cluster_id: &str) -> Result<(), ClusterCommandError> {
     ClusterCommandError::validate_cluster_id(cluster_id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::session::SessionStatus;
+
+    #[test]
+    fn session_status_text_covers_all_variants() {
+        assert_eq!(session_status_text(SessionStatus::Initialized), "initialized");
+        assert_eq!(session_status_text(SessionStatus::GoalCaptured), "goal_captured");
+        assert_eq!(session_status_text(SessionStatus::Planned), "planned");
+        assert_eq!(session_status_text(SessionStatus::Blocked), "blocked");
+        assert_eq!(session_status_text(SessionStatus::Running), "running");
+        assert_eq!(session_status_text(SessionStatus::Succeeded), "succeeded");
+        assert_eq!(session_status_text(SessionStatus::Failed), "failed");
+        assert_eq!(session_status_text(SessionStatus::Exhausted), "exhausted");
+        assert_eq!(session_status_text(SessionStatus::Aborted), "aborted");
+        assert_eq!(session_status_text(SessionStatus::Invalid), "invalid");
+    }
+
+    #[test]
+    fn validate_cluster_id_rejects_empty_and_whitespace() {
+        assert!(ClusterCommandError::validate_cluster_id("").is_err());
+        assert!(ClusterCommandError::validate_cluster_id("   ").is_err());
+        assert!(ClusterCommandError::validate_cluster_id("my-cluster").is_ok());
+    }
 }

@@ -9,8 +9,9 @@ use crate::adapters::governance_runtime::{
 use crate::adapters::trace_store::{TraceStore, TraceStoreError};
 use crate::domain::flow::FlowStepMetadata;
 use crate::domain::governance::{
-    ApprovalState, GovernanceLifecycleState, GovernanceProfile, GovernanceRuntimeKind,
-    GovernedStageRecord, PacketReadiness, resolved_canon_mode,
+    ApprovalState, CanonAuthorityZone, CanonIntendedPersona, CanonRiskClass,
+    GovernanceLifecycleState, GovernanceProfile, GovernanceRuntimeKind, GovernedStageRecord,
+    PacketReadiness, resolved_canon_mode,
 };
 use crate::domain::limits::TerminalCondition;
 use crate::domain::step::{
@@ -23,9 +24,9 @@ use crate::domain::trace::{ExecutionTrace, TraceEventType, current_timestamp_mil
 use crate::orchestrator::governance::{
     GovernanceStepDecision, bounded_governance_context, build_autopilot_decision,
     compacted_canon_memory_for_block, compacted_canon_memory_from_response,
-    governance_input_documents, governance_projection_snapshot, governance_stage_key,
-    governance_state_patch, overlay_stage_policy_with_intent, requested_governance_intent,
-    runtime_command_available, selected_stage_policy,
+    default_stage_canon_mode, governance_input_documents, governance_projection_snapshot,
+    governance_stage_key, governance_state_patch, overlay_stage_policy_with_intent,
+    requested_governance_intent, runtime_command_available, selected_stage_policy,
 };
 use crate::orchestrator::planner::{Planner, PlanningError};
 use crate::orchestrator::recovery::{RecoveryDecision, decide_recovery};
@@ -437,7 +438,8 @@ where
             .as_ref()
             .and_then(|record| record.selected_mode)
             .or_else(|| resolved_canon_mode(&policy, governance.default_runtime))
-            .or(existing_packet.as_ref().and_then(|packet| packet.canon_mode));
+            .or(existing_packet.as_ref().and_then(|packet| packet.canon_mode))
+            .or_else(|| default_stage_canon_mode(&policy, governance.default_runtime));
         let mut selected_runtime = requested_runtime;
         if requested_runtime == GovernanceRuntimeKind::Canon
             && (mode.is_none() || !canon_available)
@@ -513,7 +515,7 @@ where
                         autopilot_enabled: policy.autopilot,
                         runtime: GovernanceRuntimeKind::Canon,
                         reason: format!(
-                            "governance stage {stage_key} requires an explicit Canon mode"
+                            "Boundline could not determine a Canon mode for governance stage {stage_key}"
                         ),
                     },
                     decision.clone(),
@@ -529,9 +531,19 @@ where
                 autopilot: policy.autopilot,
                 mode: Some(mode_value),
                 system_context: policy.system_context.or(canon.default_system_context),
-                risk: policy.risk.clone().or_else(|| canon.default_risk.clone()),
-                zone: policy.zone.clone().or_else(|| canon.default_zone.clone()),
-                owner: policy.owner.clone().or_else(|| canon.default_owner.clone()),
+                risk: policy.risk.clone().or_else(|| canon.default_risk.clone()).map(|risk| {
+                    CanonRiskClass::canonicalize_label(&risk).map(str::to_string).unwrap_or(risk)
+                }),
+                zone: policy.zone.clone().or_else(|| canon.default_zone.clone()).map(|zone| {
+                    CanonAuthorityZone::canonicalize_label(&zone)
+                        .map(str::to_string)
+                        .unwrap_or(zone)
+                }),
+                owner: policy.owner.clone().or_else(|| canon.default_owner.clone()).map(|owner| {
+                    CanonIntendedPersona::canonicalize_label(&owner)
+                        .map(str::to_string)
+                        .unwrap_or(owner)
+                }),
                 run_ref: None,
                 packet_ref: existing_packet.as_ref().map(|packet| packet.packet_ref.clone()),
                 bounded_context,
@@ -743,6 +755,7 @@ where
             previous_governance_attempt_id: None,
             packet_ref: response.packet.as_ref().map(|packet| packet.packet_ref.clone()),
             decision_ref: decision.as_ref().map(|decision| decision.decision_id.clone()),
+            stage_council: None,
             blocked_reason: blocked_reason.clone(),
         };
         let compacted_canon_memory =
@@ -946,6 +959,7 @@ where
             previous_governance_attempt_id: None,
             packet_ref: None,
             decision_ref: decision.as_ref().map(|decision| decision.decision_id.clone()),
+            stage_council: None,
             blocked_reason: Some(block.reason.clone()),
         };
         let compacted_canon_memory =
@@ -2009,6 +2023,7 @@ mod tests {
                 previous_governance_attempt_id: None,
                 packet_ref: Some(".canon/runs/canon-run-1".to_string()),
                 decision_ref: None,
+                stage_council: None,
                 blocked_reason: None,
             })
             .unwrap();
@@ -2046,10 +2061,44 @@ mod tests {
     }
 
     #[test]
-    fn ensure_stage_governance_blocks_when_required_canon_mode_is_missing() {
+    fn ensure_stage_governance_selects_default_mode_for_required_canon_stage() {
+        let workspace = temp_workspace("engine-canon-default-mode");
+        let document_ref = ".canon/runs/canon-run-verify/security-assessment.md";
+        let document_path = workspace.join(document_ref);
+        fs::create_dir_all(document_path.parent().unwrap()).unwrap();
+        fs::write(&document_path, "# Security Assessment\n\nCredible governed evidence.\n")
+            .unwrap();
+        let response_path = workspace.join("canon-response.json");
+        fs::write(
+            &response_path,
+            json!({
+                "status": "governed_ready",
+                "approval_state": "not_needed",
+                "message": "Canon completed the governed stage",
+                "run_ref": "canon-run-verify",
+                "packet_ref": ".canon/runs/canon-run-verify",
+                "expected_document_refs": [document_ref],
+                "document_refs": [document_ref],
+                "packet_readiness": "reusable",
+                "missing_sections": [],
+                "authority_governance": {
+                    "contract_line": "authority-governance-v1",
+                    "authority_zone": "green",
+                    "change_class": "low-impact",
+                    "intended_persona": "delivery-engineer",
+                    "approval_state": "not_needed",
+                    "packet_readiness": "reusable",
+                    "risk": "low-impact"
+                },
+                "headline": "security assessment packet ready",
+                "reason_code": "packet_ready"
+            })
+            .to_string(),
+        )
+        .unwrap();
         let script = write_shell_script(
             "engine-canon-mode-required",
-            "#!/bin/sh\ncat >/dev/null\nprintf '%s' '{\"status\":\"failed\",\"approval_state\":\"not_needed\",\"message\":\"unused\"}'\n",
+            &format!("#!/bin/sh\ncat >/dev/null\ncat '{}'\n", response_path.to_string_lossy()),
         );
         let orchestrator = build_governed_orchestrator_for_stage(
             "verify",
@@ -2057,20 +2106,24 @@ mod tests {
             Some(script.to_string_lossy().as_ref()),
             None,
         );
-        let mut task = build_governed_task_for_stage("verify", "/tmp/boundline-engine");
+        let mut task =
+            build_governed_task_for_stage("verify", workspace.to_string_lossy().as_ref());
         let mut trace = ExecutionTrace::new("task-governed", "session-engine", "goal");
 
         let result = orchestrator.ensure_stage_governance(&mut task, &mut trace).unwrap();
 
         assert!(matches!(
             result,
-            crate::orchestrator::governance::GovernanceStepDecision::Terminal(_)
+            crate::orchestrator::governance::GovernanceStepDecision::Continue
         ));
-        assert_eq!(
-            task.context.latest_governance_stage().unwrap().unwrap().blocked_reason.as_deref(),
-            Some("governance stage bug-fix:verify requires an explicit Canon mode")
-        );
+        let record = task.context.latest_governance_stage().unwrap().unwrap();
+        assert_eq!(record.runtime, GovernanceRuntimeKind::Canon);
+        assert_eq!(record.lifecycle_state, GovernanceLifecycleState::GovernedReady);
+        let packet = task.context.latest_governance_packet().unwrap().unwrap();
+        assert_eq!(packet.canon_mode, Some(CanonMode::SecurityAssessment));
+        assert_eq!(packet.packet_ref, ".canon/runs/canon-run-verify");
 
+        fs::remove_dir_all(workspace).unwrap();
         fs::remove_dir_all(script.parent().unwrap()).unwrap();
     }
 

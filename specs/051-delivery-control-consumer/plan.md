@@ -14,7 +14,7 @@ consumer compatibility state without redefining Canon promotion policy.
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, Edition 2024  
+**Language/Version**: Rust 1.96.0, Edition 2024  
 **Primary Dependencies**: `clap`, `dialoguer`, `serde`, `serde_json`,
 `thiserror`, `tracing`, `uuid`, `toml`  
 **Storage**: workspace-local `.boundline/session.json`, `.boundline/traces/`,
@@ -52,7 +52,7 @@ managed-block consumption across Canon and Boundline evidence docs
   provider-runtime, voting, UI, and deployment work stay out of scope. (Spec:
   Scope Boundaries)
 - **Primary workflow**: PASS. The main operator path remains session-native
-  (`start -> capture -> plan -> run -> status -> next -> inspect`). No new
+  (`goal -> plan -> run -> status -> next -> inspect`). No new
   compatibility-first path is introduced. (Spec: User Story 1, User Story 3)
 - **Bounded execution**: PASS. V1 hard stops and warnings are explicit, and the
   slice does not add background work or hidden loops. (Spec: FR-006, FR-007,

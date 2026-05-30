@@ -24,7 +24,7 @@ project the new behavior through CLI output, docs, and release notes.
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: Existing runtime dependencies `clap` 4.x, `serde` 1.x, `serde_json` 1.x, `thiserror` 2.x, `tracing` 0.1, `uuid` 1.x, `toml` 0.8, plus Rust standard library filesystem, path, collections, and process APIs; no new runtime dependencies planned  
 **Storage**: Workspace-local `.boundline/config.toml`, optional `.boundline/execution.json`, `.boundline/session.json`, `.boundline/traces/`, and repository ignore files such as `.gitignore`, `.dockerignore`, `.eslintignore`, `.prettierignore`, `.terraformignore`, and `.helmignore` when bounded hygiene defaults justify them  
 **Testing**: `cargo test`, targeted integration tests for `init`, `doctor`, and native direct-run entry, unit tests for routing defaults and hygiene merge logic, contract-style assertions for config and CLI output surfaces  
@@ -42,7 +42,7 @@ project the new behavior through CLI output, docs, and release notes.
 
 - **Delivery identity**: **PASS** — The feature improves real bounded delivery entry by letting operators start a session from credible non-Rust workspaces, select assistant/model defaults during workspace initialization, and carry domain selection into repository hygiene instead of stopping before execution begins.
 - **Delivery-first scope**: **PASS** — The plan prioritizes execution entry, initialization, bounded setup hygiene, and validation surfaces ahead of polish. No speculative platform work or UI work is introduced.
-- **Primary workflow**: **PASS** — The main operator path remains session-native: `start -> capture -> plan -> confirm -> run -> status -> next -> inspect`. Direct native `run --goal` continues as the fast path to that same session-native route. Explicit compatibility behavior through `.boundline/execution.json` remains available but subordinate.
+- **Primary workflow**: **PASS** — The main operator path remains session-native: `goal -> plan -> confirm -> run -> status -> next -> inspect`. Direct native `run --goal` continues as the fast path to that same session-native route. Explicit compatibility behavior through `.boundline/execution.json` remains available but subordinate.
 - **Bounded execution**: **PASS** — Start conditions: existing writable workspace plus any route-specific prerequisites already required by the native flow. Terminal conditions: initialization completes, planning continues, or the run stops explicitly because stack/domain or assistant default selection is not credible. Step and retry limits remain inherited from the existing sequential orchestrator.
 - **Stateful execution**: **PASS** — Workspace-local config remains the authority for assistant runtimes, resolved route defaults, domain-template settings, and any seeded hygiene defaults that later planning or inspection must explain. Native planning and run surfaces keep using persisted session and trace state.
 - **Mutable planning**: **PASS** — The feature does not remove existing replanning behavior. Instead, it makes the initial workspace/bootstrap context more credible so later plan mutation works from explicit domain and routing defaults instead of a Rust-biased prerequisite.

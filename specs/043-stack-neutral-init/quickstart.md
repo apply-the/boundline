@@ -6,7 +6,7 @@
 2. Run `boundline init --assistant copilot`.
 3. Confirm `.boundline/config.toml` exists and shows Copilot plus auto-seeded route defaults.
 4. Run `boundline doctor`.
-5. Run `boundline start`, `capture`, and `plan` on the same workspace.
+5. Run `boundline start`, `goal`, and `plan` on the same workspace.
 6. Expected result: the workspace is accepted without a Rust-specific manifest; planning either proposes a credible path or stops with explicit clarification.
 
 ## Scenario 2: Non-Rust Repository Uses Direct Native Run

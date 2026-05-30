@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
+use crate::domain::audit::SessionAuditProjection;
 use crate::domain::cluster::ClusterDeliveryStory;
 use crate::domain::context_intelligence::AdvancedContextProjection;
 use crate::domain::guidance::GuidanceGuardianProjection;
@@ -55,6 +56,8 @@ pub enum TraceEventType {
     ReviewTriggerIgnored,
     ReviewerStarted,
     ReviewerCompleted,
+    ReviewCouncilAssembled,
+    ReviewStopSemanticsRecorded,
     ReviewVoteResolved,
     ReviewAdjudicated,
     ReviewTerminalRecorded,
@@ -252,6 +255,12 @@ pub struct TraceSummaryView {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub authored_input_deduplicated_sources: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub goal_brief_ref: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_plan_brief_ref: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_brief_ref: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_summary: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_credibility: Option<String>,
@@ -316,6 +325,8 @@ pub struct TraceSummaryView {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub review_timeline: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_audit: Option<SessionAuditProjection>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub delight_feedback: Option<DelightFeedbackSignal>,
     pub terminal_status: TaskStatus,
     pub terminal_reason: TerminalReason,
@@ -340,6 +351,9 @@ impl Default for TraceSummaryView {
             authored_input_summary: None,
             authored_input_sources: Vec::new(),
             authored_input_deduplicated_sources: Vec::new(),
+            goal_brief_ref: None,
+            session_plan_brief_ref: None,
+            run_brief_ref: None,
             context_summary: None,
             context_credibility: None,
             context_primary_inputs: Vec::new(),
@@ -373,6 +387,7 @@ impl Default for TraceSummaryView {
             inspect_council: None,
             inspect_timeline: None,
             review_timeline: Vec::new(),
+            session_audit: None,
             delight_feedback: None,
             terminal_status: TaskStatus::Planned,
             terminal_reason: TerminalReason::new(TerminalCondition::GoalSatisfied, "", None),

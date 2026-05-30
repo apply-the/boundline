@@ -10,7 +10,7 @@ cd /tmp/native-loop-workspace
 cargo init --lib native-loop-workspace
 
 cargo run --bin boundline -- start
-cargo run --bin boundline -- capture --goal "fix the broken add function"
+cargo run --bin boundline -- goal --goal "fix the broken add function"
 cargo run --bin boundline -- plan
 ```
 
@@ -57,7 +57,7 @@ cargo run --bin boundline -- run
 ```bash
 cd /tmp/native-loop-workspace
 cargo run --bin boundline -- start
-cargo run --bin boundline -- capture --goal "fix the failing auth test"
+cargo run --bin boundline -- goal --goal "fix the failing auth test"
 cargo run --bin boundline -- plan
 cargo run --bin boundline -- run
 ```

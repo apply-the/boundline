@@ -30,7 +30,7 @@ The `version` value must equal the workspace package version in `Cargo.toml`.
 Every supported package surface must expose or document:
 
 - `/boundline:start`
-- `/boundline:capture`
+- `/boundline:goal`
 - `/boundline:plan`
 - `/boundline:run`
 - `/boundline:status`

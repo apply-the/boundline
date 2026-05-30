@@ -76,6 +76,8 @@ pub struct ClarificationRecord {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub missing_fields: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub questions: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub blocking_sources: Vec<String>,
     pub turn_index: usize,
     pub status: ClarificationStatus,
@@ -371,6 +373,7 @@ mod tests {
                 reason_kind,
                 prompt: "question".to_string(),
                 missing_fields: Vec::new(),
+                questions: Vec::new(),
                 blocking_sources: Vec::new(),
                 turn_index: 0,
                 status: ClarificationStatus::Open,

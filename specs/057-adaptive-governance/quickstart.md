@@ -16,7 +16,7 @@ Expected result:
 Run:
 
 ```bash
-boundline capture --goal "stabilize the governed delivery boundary"
+boundline goal --goal "stabilize the governed delivery boundary"
 ```
 
 Expected result:

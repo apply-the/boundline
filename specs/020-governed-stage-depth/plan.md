@@ -9,7 +9,7 @@ Deepen Boundline's bounded governance story by making governed `bug-fix:investig
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, plus Rust standard library filesystem, path, process, and collections APIs; no new runtime dependencies planned for this slice  
 **Storage**: Workspace-local `.boundline/session.json`, `.boundline/traces/`, optional `.boundline/execution.json`, optional `.canon/` artifacts, and release-aligned repository docs plus assistant assets  
 **Testing**: `cargo fmt --all`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test --no-run --all-targets`, targeted `cargo test` suites for governed-stage session and workflow surfaces, `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`, plus repository-standard `cargo nextest run --workspace --all-features` and `cargo deny check licenses advisories bans sources` during release closeout  
@@ -27,7 +27,7 @@ Deepen Boundline's bounded governance story by making governed `bug-fix:investig
 
 - **PASS** Delivery identity: The slice deepens real bounded delivery work by letting a bug-fix session carry governance into `investigate` before later verify work, rather than widening Boundline into a new platform. See Summary, Technical Context, and [spec.md](/Users/rt/workspace/boundline/specs/020-governed-stage-depth/spec.md).
 - **PASS** Delivery-first scope: The work prioritizes execution, governance visibility, packet lineage, and next-step guidance before polish. See Summary, Technical Context, and research decisions.
-- **PASS** Primary workflow: The main operator path remains session-native `start -> capture -> plan -> run -> status -> next -> inspect`; the named-workflow layer remains a bounded projection over the same session state, and the compatibility path stays explicit. See Summary, Technical Context, quickstart, and contracts.
+- **PASS** Primary workflow: The main operator path remains session-native `goal -> plan -> run -> status -> next -> inspect`; the named-workflow layer remains a bounded projection over the same session state, and the compatibility path stays explicit. See Summary, Technical Context, quickstart, and contracts.
 - **PASS** Bounded execution: Governance still starts only at declared stage boundaries, stops at the first unmet approval or packet-readiness condition, and never advances hidden work in the background. See Technical Context, data model, research, and quickstart.
 - **PASS** Stateful execution: Governed stage state, packet references, reuse lineage, and refreshed approval outcomes remain persisted in `.boundline/session.json` and `.boundline/traces/`. See Summary, data model, and contracts.
 - **PASS** Mutable planning: The slice reuses the current goal-plan and stage-boundary governance primitives without introducing a second runtime; later commands may refresh state before the next step resumes. See Summary, research, and data model.

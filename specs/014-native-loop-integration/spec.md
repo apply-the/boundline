@@ -13,12 +13,12 @@ A developer starts a session, captures a goal, and runs planning. Instead of pro
 
 **Why this priority**: The session-native path cannot become the primary product story until `plan` produces session-owned planning state instead of stopping at fixture-era planning semantics.
 
-**Independent Test**: Can be tested by running the real session CLI flow through `start`, `capture`, and `plan` on a workspace without an explicit execution profile and verifying that the session stores a goal plan plus either a confirmed inferred flow or an explicit no-flow decision.
+**Independent Test**: Can be tested by running the real session CLI flow through `start`, `goal`, and `plan` on a workspace without an explicit execution profile and verifying that the session stores a goal plan plus either a confirmed inferred flow or an explicit no-flow decision.
 
 **Acceptance Scenarios**:
 
-1. **Given** an active session with a captured goal and no execution profile, **When** the developer runs planning, **Then** Boundline stores a bounded goal plan in the session and exposes the derived tasks in session-facing output.
-2. **Given** an active session with a captured goal whose wording implies a bug fix, **When** planning runs, **Then** Boundline proposes the matching flow, records the confirmation outcome in session state, and keeps the session resumable.
+1. **Given** an active session with a recorded goal and no execution profile, **When** the developer runs planning, **Then** Boundline stores a bounded goal plan in the session and exposes the derived tasks in session-facing output.
+2. **Given** an active session with a recorded goal whose wording implies a bug fix, **When** planning runs, **Then** Boundline proposes the matching flow, records the confirmation outcome in session state, and keeps the session resumable.
 3. **Given** an active session where planning cannot infer a credible flow, **When** planning completes, **Then** Boundline still persists the goal plan and records that execution will proceed without flow constraints.
 
 ---
@@ -29,7 +29,7 @@ A developer runs execution on a planned session. If the session already contains
 
 **Why this priority**: This is the behavioral switch that makes the new planning model matter. Without it, GoalPlan remains metadata while the real runtime still behaves like the old product.
 
-**Independent Test**: Can be tested by driving the CLI through `start`, `capture`, `plan`, `run`, and `inspect` and verifying that a planned session uses the decision loop, while an explicitly declarative fixture profile still follows the compatibility path.
+**Independent Test**: Can be tested by driving the CLI through `start`, `goal`, `plan`, `run`, and `inspect` and verifying that a planned session uses the decision loop, while an explicitly declarative fixture profile still follows the compatibility path.
 
 **Acceptance Scenarios**:
 
@@ -56,7 +56,7 @@ When Boundline executes the decision loop on the session-native CLI path, each d
 ### Edge Cases
 
 - What happens when planning derives a goal plan but the operator declines the proposed flow? The goal plan remains valid, the session records that no confirmed flow is active, and execution continues without implicit flow constraints.
-- What happens when execution is requested on a session that has a captured goal but no persisted goal plan? Boundline returns an explicit error or remediation message telling the operator to plan first instead of silently falling back to fixture behavior.
+- What happens when execution is requested on a session that has a recorded goal but no persisted goal plan? Boundline returns an explicit error or remediation message telling the operator to plan first instead of silently falling back to fixture behavior.
 - What happens when the decision loop selects an action but no registered adapter can credibly execute it? Boundline records a failed decision with adapter-unavailable evidence and terminates or replans explicitly.
 - What happens when decision execution reaches configured step limits before all planned work is resolved? Boundline terminates in an explicit exhaustion state and preserves the accumulated decisions in session state and trace output.
 - What happens when a compatibility profile is present but the operator intends to use the session-native path? Session-owned planning state takes precedence unless the operator explicitly chooses the compatibility path.
@@ -65,8 +65,8 @@ When Boundline executes the decision loop on the session-native CLI path, each d
 
 ### Functional Requirements
 
-- **FR-001**: System MUST persist a bounded goal plan in active session state when planning succeeds on a captured goal.
-- **FR-002**: System MUST derive planning state from the captured goal, workspace signals, and available Canon artifacts before execution begins on the session-native path.
+- **FR-001**: System MUST persist a bounded goal plan in active session state when planning succeeds on a recorded goal.
+- **FR-002**: System MUST derive planning state from the recorded goal, workspace signals, and available Canon artifacts before execution begins on the session-native path.
 - **FR-003**: System MUST propose an inferred flow during planning, preserve the operator's confirmation outcome, and allow the session to continue without a confirmed flow when inference is declined or unavailable.
 - **FR-004**: System MUST route session execution to the decision loop whenever a persisted goal plan is present, unless the operator explicitly selects the declarative compatibility path.
 - **FR-005**: System MUST preserve the existing declarative fixture behavior when no goal plan exists and the operator is using an explicit execution profile.
@@ -85,7 +85,7 @@ When Boundline executes the decision loop on the session-native CLI path, each d
 
 ### Key Entities *(include if feature involves data)*
 
-- **Session Planning Record**: The planning portion of active session state that binds the captured goal, the persisted goal plan, the flow confirmation outcome, and the routing decision that determines whether the session follows the native loop or the compatibility path.
+- **Session Planning Record**: The planning portion of active session state that binds the recorded goal, the persisted goal plan, the flow confirmation outcome, and the routing decision that determines whether the session follows the native loop or the compatibility path.
 - **Persisted Decision History**: The ordered set of decisions chosen during session-native execution, including target, rationale, expected outcome, evidence inputs, execution result, and terminal or recovery status.
 - **Compatibility Routing State**: The explicit execution-selection state that decides whether `run` follows the decision loop or the fixture fallback based on goal-plan presence and operator intent.
 
@@ -93,7 +93,7 @@ When Boundline executes the decision loop on the session-native CLI path, each d
 
 ### Measurable Outcomes
 
-- **SC-001**: A developer can complete `start → capture → plan → run → inspect` on a workspace without an execution profile and observe session-owned planning plus decision-oriented execution from the real CLI path.
+- **SC-001**: A developer can complete `goal → plan → run → inspect` on a workspace without an execution profile and observe session-owned planning plus decision-oriented execution from the real CLI path.
 - **SC-002**: 100% of session-native runs with a persisted goal plan terminate through an explicit terminal state and record at least one persisted decision when work begins.
 - **SC-003**: Developers can determine from session state and trace output whether `run` used the native loop or the compatibility path in under 2 minutes.
 - **SC-004**: Planning records a bounded goal plan and the flow confirmation outcome for all supported inference cases without requiring a separate flow-selection command in the common path.

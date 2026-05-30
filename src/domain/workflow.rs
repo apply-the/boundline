@@ -204,18 +204,8 @@ pub fn propose_project_scale_path(input: ProjectScaleInput) -> ProjectScalePath 
             if input.capability_structure_unclear {
                 push_stage(
                     &mut stages,
-                    ProjectScaleStageKind::DomainLanguage,
-                    "domain language is not fixed",
-                );
-                push_stage(
-                    &mut stages,
-                    ProjectScaleStageKind::DomainModel,
-                    "domain model is not fixed",
-                );
-                push_stage(
-                    &mut stages,
                     ProjectScaleStageKind::SystemShaping,
-                    "capability structure is not fixed",
+                    "domain language, domain model, and capability structure are not fixed",
                 );
             }
             if input.architecture_material {

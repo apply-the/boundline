@@ -24,7 +24,7 @@
 - **Rationale**: The repository already uses a trait-plus-file-implementation pattern for traces. Mirroring that pattern for sessions keeps persistence isolated, testable, and replaceable without coupling CLI command routing to filesystem details.
 - **Alternatives considered**:
   - Put JSON reads and writes directly in `cli.rs`: rejected because session lifecycle logic would become harder to test and reuse.
-  - Persist the session only through orchestrator code: rejected because `start`, `capture`, `status`, and `next` must work even when no orchestration loop is running.
+  - Persist the session only through orchestrator code: rejected because `start`, `goal`, `status`, and `next` must work even when no orchestration loop is running.
 
 ## Decision 4: Reuse existing orchestrator semantics by extracting a session runtime adapter instead of inventing a second engine
 
@@ -35,12 +35,12 @@
   - Extend traces into a resumable execution engine: rejected because traces are for inspection, not as the authoritative mutable runtime state.
   - Add a background worker that keeps the task alive between commands: rejected because the constitution requires explicit, user-invoked sequential execution.
 
-## Decision 5: Introduce an explicit session-backed CLI surface with `start`, `capture`, `plan`, `step`, `run`, `status`, and `next`
+## Decision 5: Introduce an explicit session-backed CLI surface with `start`, `goal`, `plan`, `step`, `run`, `status`, and `next`
 
 - **Decision**: Add session-native CLI commands that operate on the active workspace session, while keeping `inspect` as the trace-focused command for detailed run history and retaining `doctor` for readiness checks.
 - **Rationale**: The feature's value is reducing repeated inputs and aligning CLI with assistant workflows. A dedicated session-native command set gives both surfaces the same explicit vocabulary for establishing, advancing, and inspecting work state.
 - **Alternatives considered**:
-  - Overload the existing `run` and `inspect` commands with hidden session behavior only: rejected because the user would still lack explicit `start`, `capture`, and `next` lifecycle entry points.
+  - Overload the existing `run` and `inspect` commands with hidden session behavior only: rejected because the user would still lack explicit `start`, `goal`, and `next` lifecycle entry points.
   - Make assistant-only commands reuse hidden session state while leaving CLI unchanged: rejected because the feature must unify, not split, interaction models.
 
 ## Decision 6: Resolve the workspace from the nearest initialized or Git repository root by default, with optional explicit override

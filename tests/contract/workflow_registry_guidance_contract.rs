@@ -42,9 +42,13 @@ fn workflow_registry_guidance_contract_keeps_route_relationships_explicit() {
     assert!(readme.contains("available as an explicit compatibility path"), "{readme}");
     assert!(
         assistant
-            .contains("bounded named-workflow surface: `workflow list -> workflow run -> workflow"),
+            .contains("bounded named-workflow CLI surface directly: `workflow list -> workflow run -> workflow"),
         "{assistant}"
     );
-    assert!(assistant.contains("/boundline-workflow-list"), "{assistant}");
+    assert!(
+        assistant.contains("Do not expose dedicated `/boundline-workflow-*` prompt surfaces"),
+        "{assistant}"
+    );
+    assert!(!assistant.contains("/boundline-workflow-list"), "{assistant}");
     assert!(assistant.contains("compatibility remains explicit and subordinate"), "{assistant}");
 }

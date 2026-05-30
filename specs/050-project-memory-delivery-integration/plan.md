@@ -16,7 +16,7 @@ explicitly non-authoritative.
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, Edition 2024
+**Language/Version**: Rust 1.96.0, Edition 2024
 **Primary Dependencies**: `clap`, `serde`, `serde_json`, `thiserror`,
 `tracing`, `uuid`, `toml`
 **Storage**: workspace-local `.boundline/session.json`,
@@ -49,7 +49,7 @@ paths from the Canon contract
   session-native surface integration, (5) compatibility checking, (6) docs and
   polish. (Plan §Implementation Phases)
 - **Primary workflow**: PASS. The main operator path remains session-native
-  (`start -> capture -> plan -> run -> status -> next -> inspect`). Canon refs
+  (`goal -> plan -> run -> status -> next -> inspect`). Canon refs
   appear inside `status`, `next`, and `inspect` when available. No
   compatibility path is needed. (Spec §US2)
 - **Bounded execution**: PASS. Contract-version check is a single-step gate

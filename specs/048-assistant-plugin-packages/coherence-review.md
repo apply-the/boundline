@@ -11,7 +11,7 @@ No blocking inconsistencies found. The artifacts are coherent enough to proceed 
 
 - **Scope alignment**: The spec keeps runtime redesign, chat-authoritative state, divergent host behavior, provider-routing complexity, UI, and deployment pipelines out of scope. The plan preserves those boundaries by limiting changes to version surfaces, host package metadata, shared assistant assets, validation, tests, and docs.
 - **Version sequencing**: The spec requires the version upgrade as the first implementation task. The plan and quickstart consistently target `0.49.0`.
-- **Command coverage**: The spec, data model, contract, and quickstart all require `/boundline:start`, `/boundline:capture`, `/boundline:plan`, `/boundline:run`, `/boundline:status`, `/boundline:inspect`, `/boundline:recover`, and conditional `/boundline:govern`.
+- **Command coverage**: The spec, data model, contract, and quickstart all require `/boundline:start`, `/boundline:goal`, `/boundline:plan`, `/boundline:run`, `/boundline:status`, `/boundline:inspect`, `/boundline:recover`, and conditional `/boundline:govern`.
 - **State authority**: All artifacts preserve `.boundline/session.json` and CLI output as authoritative. None make host chat history authoritative.
 - **Canon boundary**: Canon appears only as conditional downstream governance. The artifacts do not describe Boundline as a governance runtime or Canon replacement.
 - **Copilot honesty**: Copilot is represented as `.copilot-prompts/` prompt-pack metadata and documentation, not as an invented universal plugin format.

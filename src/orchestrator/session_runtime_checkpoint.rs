@@ -120,7 +120,7 @@ impl SessionRuntime {
                 .clone()
                 .map(|group_id| format!("{group_id}-{index}"))
                 .unwrap_or_else(|| restore_id.clone());
-            FileCheckpointStore::for_workspace(Path::new(&scope.workspace_ref))
+            FileCheckpointStore::for_session(Path::new(&scope.workspace_ref), &session.session_id)
                 .capture(CheckpointCaptureRequest {
                     checkpoint_id,
                     group_id: group_id.clone(),
@@ -159,11 +159,13 @@ impl SessionRuntime {
 
     pub(crate) fn refresh_checkpoint_projection(
         &self,
+        session: &ActiveSessionRecord,
         projection: &CheckpointProjectionState,
     ) -> Result<(), SessionRuntimeError> {
         if projection.workspace_refs.len() > 1 {
             for workspace_ref in &projection.workspace_refs {
-                let store = FileCheckpointStore::for_workspace(Path::new(workspace_ref));
+                let store =
+                    FileCheckpointStore::for_session(Path::new(workspace_ref), &session.session_id);
                 for manifest in store
                     .load_group(&projection.checkpoint_id)
                     .map_err(SessionRuntimeError::CheckpointStore)?
@@ -174,7 +176,7 @@ impl SessionRuntime {
                 }
             }
         } else if let Some(workspace_ref) = projection.workspace_refs.first() {
-            FileCheckpointStore::for_workspace(Path::new(workspace_ref))
+            FileCheckpointStore::for_session(Path::new(workspace_ref), &session.session_id)
                 .refresh_observed_state(&projection.checkpoint_id)
                 .map_err(SessionRuntimeError::CheckpointStore)?;
         }

@@ -9,7 +9,7 @@
 
 ### User Story 1 - Infer A Bounded Plan From Workspace Evidence (Priority: P1)
 
-An operator can capture a bounded goal and have Boundline infer a credible flow,
+An operator can record a bounded goal and have Boundline infer a credible flow,
 target set, and verification approach from the current context pack and observed
 workspace evidence instead of relying on keyword-first flow matching and a mostly
 static analyze-then-implement plan shape.
@@ -18,7 +18,7 @@ static analyze-then-implement plan shape.
 035. Without it, planning still behaves like a lightly contextualized wrapper
 around static task derivation.
 
-**Independent Test**: Run `start -> capture -> plan` on representative Rust
+**Independent Test**: Run `goal -> plan` on representative Rust
 workspaces with distinct goals and verify that the proposed flow and tasks are
 derived from observed files, symbols, tests, and acceptance cues rather than
 from keyword matches alone.
@@ -149,7 +149,7 @@ dynamic planning operating model.
 - **FR-005**: System MUST allow bounded replanning to revise targets,
   verification strategy, or flow choice when new evidence invalidates the prior
   proposal.
-- **FR-006**: System MUST keep replanning bounded by the captured goal,
+- **FR-006**: System MUST keep replanning bounded by the recorded goal,
   negotiated delivery packet, and explicit acceptance boundary instead of
   silently broadening scope.
 - **FR-007**: System MUST keep workflows as operator-facing guidance and

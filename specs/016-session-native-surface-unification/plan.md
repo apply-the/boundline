@@ -17,7 +17,7 @@ Unify Boundline's remaining operator-facing runtime surfaces so review, adaptive
   the iteration process.
 -->
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, plus Rust standard library filesystem, path, process, and collections APIs; no new runtime dependencies planned for the first slice  
 **Storage**: Workspace-local `.boundline/session.json`, `.boundline/traces/`, optional `.boundline/execution.json`, optional `.canon/` artifacts, and updated repository docs and assistant assets  
 **Testing**: `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test --no-run --all-targets`, `cargo nextest run --workspace --all-features`, `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`, `cargo deny check licenses advisories bans sources`  
@@ -35,7 +35,7 @@ Unify Boundline's remaining operator-facing runtime surfaces so review, adaptive
 
 - **PASS** Delivery identity: The slice directly improves bounded engineering delivery by making all operator surfaces describe the same session-native runtime story instead of fragmenting review, adaptive, governance, and compatibility into separate mental models. See Summary and Technical Context.
 - **PASS** Delivery-first scope: The work is about execution explanation, session-state projection, route precedence, validation guidance, and inspectability before secondary ergonomics. See Summary and Constraints.
-- **PASS** Primary workflow: `start -> capture -> plan -> run -> status -> next -> inspect` remains the dominant operator path; direct compatibility runs remain available only as an explicit alternative. See Summary, Constraints, and quickstart scenarios.
+- **PASS** Primary workflow: `goal -> plan -> run -> status -> next -> inspect` remains the dominant operator path; direct compatibility runs remain available only as an explicit alternative. See Summary, Constraints, and quickstart scenarios.
 - **PASS** Bounded execution: The slice preserves existing explicit start conditions, blocked and waiting conditions, terminal outcomes, and bounded execution semantics while improving how they are surfaced. See Technical Context, research decisions, and contracts.
 - **PASS** Stateful execution: Unified summaries are derived from persisted session state, persisted decisions, task state, and persisted traces rather than from stateless rendering. See Summary, data-model, and contracts.
 - **PASS** Mutable planning: Initial planning and later runtime changes remain explicit through route, condition, decision, and optional mode projections instead of hidden renderer-only logic. See research and data-model.

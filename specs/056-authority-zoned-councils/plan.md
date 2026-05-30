@@ -20,7 +20,7 @@ coverage validation at 95% or higher.
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: Existing workspace dependencies `clap`, `dialoguer`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, and Rust standard-library collections, filesystem, path, and process APIs; no new runtime dependencies planned for this slice  
 **Storage**: Workspace-local `.boundline/session.json`, persisted traces under `.boundline/traces/`, optional `.boundline/execution.json` and `.boundline/config.toml`, plus optional Canon-governed packet refs consumed through the existing governance runtime boundary  
 **Testing**: `cargo fmt --all`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, targeted unit and integration tests for governance resolution and projection, `cargo test --no-run --all-targets`, focused package tests such as `cargo test -p boundline-core ...` and `cargo test -p boundline-adapters ...` where root `src/` modules are re-exported, `cargo nextest run --workspace --all-features` when feasible, and modified-file coverage validation at 95% or higher  
@@ -38,7 +38,7 @@ coverage validation at 95% or higher.
 
 - **PASS** Delivery identity: The feature improves bounded engineering delivery by turning implicit governance posture into explicit admission-control decisions at real stage boundaries. See Summary and Technical Context.
 - **PASS** Delivery-first scope: The slice prioritizes governance resolution, bounded review control, persisted findings, and operator-visible stop behavior ahead of release polish. See Summary, Constraints, and Scale/Scope.
-- **PASS** Primary workflow: The main path remains the session-native `start -> capture -> plan -> run -> status -> next -> inspect` workflow, with explicit local-governance compatibility when Canon is optional and unavailable. See Execution Model and Constraints.
+- **PASS** Primary workflow: The main path remains the session-native `goal -> plan -> run -> status -> next -> inspect` workflow, with explicit local-governance compatibility when Canon is optional and unavailable. See Execution Model and Constraints.
 - **PASS** Bounded execution: Governed evaluation starts at a stage boundary, resolves one explicit profile, and ends in explicit proceed, waiting, or stop states with no hidden background loops. See Execution Model and Scale/Scope.
 - **PASS** Stateful execution: Council and governance outcomes are persisted in existing session and trace surfaces so later commands read the same explicit state rather than recomputing hidden decisions. See Storage and Observability Surface.
 - **PASS** Mutable planning: Planning remains mutable because accepted findings can create remediation work and plan updates while preserving the same bounded session story. See Summary and Observability Surface.

@@ -9,7 +9,7 @@ Design the next Boundline product slice for project-scale delivery UX while pres
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0 workspace, edition 2024, plus JSON, Markdown, TOML, Bash, and assistant command assets  
+**Language/Version**: Rust 1.96.0 workspace, edition 2024, plus JSON, Markdown, TOML, Bash, and assistant command assets  
 **Primary Dependencies**: Existing workspace dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`); external Canon CLI compatibility target `0.45.0`; no new runtime crates planned for the first implementation slice  
 **Storage**: Workspace-local `.boundline/session.json`, `.boundline/traces/`, optional `.boundline/checkpoints/`, optional `.canon/` governed packet artifacts, repo-managed assistant package files, docs, and Spec Kit artifacts  
 **Testing**: Contract/unit/integration tests for assistant bootstrap, governed stage catalog, `/boundline:govern`, voting state projection, status/next/inspect parity, docs validation, `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test`, and touched-Rust-file coverage with `cargo llvm-cov`  
@@ -27,7 +27,7 @@ Design the next Boundline product slice for project-scale delivery UX while pres
 
 - **PASS** Delivery identity: The feature improves Boundline as a delivery orchestrator by making broad engineering work decomposable into bounded stages, with chat and CLI surfaces leading to the same runtime state. See Summary.
 - **PASS** Delivery-first scope: The slice prioritizes orchestration, decomposition, validation, governance boundary routing, and status/inspect visibility before polish.
-- **PASS** Primary workflow: The main operator path remains session-native (`start -> capture -> plan -> run -> status -> next -> inspect`). Global assistant bootstrap is a discovery/init path; compatibility manifests remain advanced-only.
+- **PASS** Primary workflow: The main operator path remains session-native (`goal -> plan -> run -> status -> next -> inspect`). Global assistant bootstrap is a discovery/init path; compatibility manifests remain advanced-only.
 - **PASS** Bounded execution: Each stage and work unit has entry conditions, stop conditions, confirmation gates, retry exhaustion behavior, and terminal/blocked states. No unbounded project execution is introduced.
 - **PASS** Stateful execution: `.boundline/session.json` remains authoritative, and CLI/chat surfaces read the same session, trace, checkpoint, governance, and voting refs.
 - **PASS** Mutable planning: Project-scale paths can insert, replace, or defer stages based on evidence, risk, Canon capability results, approval state, and validation outcomes, with the changes visible in traces.

@@ -16,7 +16,7 @@ fn explicit_compatibility_run_is_visible_when_execution_profile_is_chosen_delibe
     assert_eq!(run.status.code(), Some(0), "{run_text}");
     assert!(run_text.contains("routing: compatibility"), "{run_text}");
     assert!(run_text.contains("execution_condition: terminal -"), "{run_text}");
-    assert!(run_text.contains("execution_path: fixture_compatibility"), "{run_text}");
+    assert!(run_text.contains("next_command: /boundline-status"), "{run_text}");
     assert!(!run_text.contains("decision "), "{run_text}");
 
     let inspect = run_boundline_in(&workspace, &["inspect", "--workspace", "."]);
@@ -70,11 +70,8 @@ fn direct_goal_run_refuses_to_overwrite_meaningful_active_session_state() {
         "runtime-refoundation-direct-run-active-session",
     );
 
-    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
     assert_eq!(
-        run_boundline_in(&workspace, &["capture", "--goal", "fix the failing add test"])
-            .status
-            .code(),
+        run_boundline_in(&workspace, &["goal", "--goal", "fix the failing add test"]).status.code(),
         Some(0)
     );
 
@@ -93,11 +90,8 @@ fn native_session_run_wins_over_execution_profile_when_goal_plan_is_ready() {
     let workspace =
         temp_runtime_refoundation_compat_workspace("runtime-refoundation-compat-native");
 
-    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
     assert_eq!(
-        run_boundline_in(&workspace, &["capture", "--goal", "fix the failing add test"])
-            .status
-            .code(),
+        run_boundline_in(&workspace, &["goal", "--goal", "fix the failing add test"]).status.code(),
         Some(0)
     );
     assert_eq!(run_boundline_in(&workspace, &["plan", "--flow", "bug-fix"]).status.code(), Some(0));

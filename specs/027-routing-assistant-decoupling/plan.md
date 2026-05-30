@@ -21,7 +21,7 @@ cleanup, and formatting.
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, plus Rust standard library filesystem, path, process, and collections APIs; no new runtime dependencies planned for the first slice  
 **Storage**: Workspace-local `.boundline/config.toml`, `.boundline/cluster.toml`, `.boundline/session.json`, persisted execution traces under `<workspace>/.boundline/traces/`, and repository-managed assistant asset files under `assistant/`  
 **Testing**: `cargo fmt --all`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test --no-run --all-targets`, targeted unit/contract/integration coverage for routing projection and assistant binding, `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`, and `cargo nextest run --workspace --all-features`  

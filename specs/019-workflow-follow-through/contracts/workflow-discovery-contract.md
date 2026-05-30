@@ -33,7 +33,7 @@ The discovery surface MUST remain read-only and MUST NOT activate a workflow or 
 ```text
 workflow: governed-delivery
 summary: use when the task requires review and governance before completion
-phases: capture -> plan -> run -> review -> govern -> inspect
+phases: goal -> plan -> run -> review -> govern -> inspect
 invoke_with: boundline workflow run governed-delivery
 ```
 

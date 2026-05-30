@@ -8,6 +8,21 @@ use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+const SYSTEMS_GOAL_KEYWORDS: &[&str] = &["rust", "cargo", "cli", "terminal", "tui", "crate"];
+const JVM_GOAL_KEYWORDS: &[&str] = &["java", "jvm", "spring", "gradle", "maven"];
+const DOTNET_GOAL_KEYWORDS: &[&str] = &["dotnet", "aspnet", "blazor"];
+const PYTHON_GOAL_KEYWORDS: &[&str] = &["python", "django", "flask", "fastapi"];
+const NODE_GOAL_KEYWORDS: &[&str] = &["node", "express", "nest", "backend", "api", "server"];
+const WEB_UI_GOAL_KEYWORDS: &[&str] =
+    &["frontend", "web", "ui", "dashboard", "landing", "component", "page"];
+const REACT_GOAL_KEYWORDS: &[&str] = &["react", "next", "nextjs"];
+const VUE_GOAL_KEYWORDS: &[&str] = &["vue", "nuxt"];
+const ANGULAR_GOAL_KEYWORDS: &[&str] = &["angular"];
+const RUBY_GOAL_KEYWORDS: &[&str] = &["ruby", "rails"];
+const PHP_GOAL_KEYWORDS: &[&str] = &["php", "laravel", "symfony"];
+const DATA_GOAL_KEYWORDS: &[&str] = &["data", "analytics", "sql", "warehouse", "pipeline", "ml"];
+const MOBILE_GOAL_KEYWORDS: &[&str] = &["mobile", "ios", "android", "swift", "kotlin"];
+
 /// Supported domain families used to tailor guidance and context assembly.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, ValueEnum)]
 #[serde(rename_all = "snake_case")]
@@ -347,6 +362,17 @@ impl AppliedDomainContext {
 
 /// Detects likely domain families from workspace signals and an optional target.
 pub fn detect_domain_families(workspace_ref: &Path, target: Option<&str>) -> Vec<DomainFamily> {
+    detect_domain_families_with_goal(workspace_ref, target, None)
+}
+
+/// Detects likely domain families from workspace signals, an optional target,
+/// and an optional goal-text fallback when the workspace does not yet provide
+/// file or manifest cues.
+pub fn detect_domain_families_with_goal(
+    workspace_ref: &Path,
+    target: Option<&str>,
+    goal_text: Option<&str>,
+) -> Vec<DomainFamily> {
     let mut families = BTreeSet::new();
 
     if let Some(target) = target {
@@ -354,10 +380,86 @@ pub fn detect_domain_families(workspace_ref: &Path, target: Option<&str>) -> Vec
     }
 
     if families.is_empty() {
-        families.extend(workspace_domain_families(workspace_ref));
+        let workspace_families = workspace_domain_families(workspace_ref);
+        if workspace_families.is_empty() {
+            if let Some(goal_text) = goal_text {
+                families.extend(goal_text_domain_families(goal_text));
+            }
+        } else {
+            families.extend(workspace_families);
+        }
     }
 
     families.into_iter().collect()
+}
+
+fn goal_text_domain_families(goal_text: &str) -> Vec<DomainFamily> {
+    let goal_text_lower = goal_text.to_ascii_lowercase();
+    let terms = goal_text_terms(goal_text);
+    let has_term =
+        |keywords: &[&str]| -> bool { terms.iter().any(|term| keywords.contains(&term.as_str())) };
+
+    let mut families = Vec::new();
+
+    if has_term(REACT_GOAL_KEYWORDS) {
+        families.push(DomainFamily::React);
+        families.push(DomainFamily::WebUi);
+    }
+    if has_term(VUE_GOAL_KEYWORDS) {
+        families.push(DomainFamily::Vue);
+        families.push(DomainFamily::WebUi);
+    }
+    if has_term(ANGULAR_GOAL_KEYWORDS) {
+        families.push(DomainFamily::Angular);
+        families.push(DomainFamily::WebUi);
+    }
+    if has_term(WEB_UI_GOAL_KEYWORDS) {
+        families.push(DomainFamily::WebUi);
+    }
+    if has_term(MOBILE_GOAL_KEYWORDS) {
+        families.push(DomainFamily::Mobile);
+    }
+    if goal_text_lower.contains("c#") || has_term(DOTNET_GOAL_KEYWORDS) {
+        families.push(DomainFamily::DotNetService);
+    }
+    if has_term(JVM_GOAL_KEYWORDS) {
+        families.push(DomainFamily::JvmService);
+    }
+    if has_term(PYTHON_GOAL_KEYWORDS) {
+        families.push(DomainFamily::PythonService);
+    }
+    if has_term(NODE_GOAL_KEYWORDS) {
+        families.push(DomainFamily::NodeService);
+    }
+    if has_term(SYSTEMS_GOAL_KEYWORDS) {
+        families.push(DomainFamily::Systems);
+    }
+    if has_term(RUBY_GOAL_KEYWORDS) {
+        families.push(DomainFamily::Ruby);
+    }
+    if has_term(PHP_GOAL_KEYWORDS) {
+        families.push(DomainFamily::Php);
+    }
+    if has_term(DATA_GOAL_KEYWORDS) {
+        families.push(DomainFamily::Data);
+    }
+
+    dedup_families(families)
+}
+
+fn goal_text_terms(goal_text: &str) -> Vec<String> {
+    let mut terms = Vec::new();
+    for raw in goal_text.split(|ch: char| !ch.is_ascii_alphanumeric()) {
+        let term = raw.trim();
+        if term.is_empty() {
+            continue;
+        }
+        let term = term.to_ascii_lowercase();
+        if !terms.iter().any(|existing| existing == &term) {
+            terms.push(term);
+        }
+    }
+    terms
 }
 
 fn workspace_domain_families(workspace_ref: &Path) -> Vec<DomainFamily> {
@@ -590,6 +692,7 @@ mod tests {
     use super::{
         AppliedDomainContext, AppliedDomainCredibility, DomainFamily, DomainTemplateSettings,
         ExternalContextBinding, ExternalContextKind, ExternalContextStatus, detect_domain_families,
+        detect_domain_families_with_goal,
     };
 
     static TEMP_DIR_COUNTER: AtomicUsize = AtomicUsize::new(0);
@@ -918,6 +1021,29 @@ mod tests {
             .unwrap();
         let workspace_families = detect_domain_families(&workspace, None);
         assert!(workspace_families.contains(&DomainFamily::DotNetService));
+    }
+
+    #[test]
+    fn detect_domain_families_uses_goal_fallback_when_workspace_has_no_signals() {
+        let workspace = temp_workspace("domain-template-goal-fallback");
+
+        let baseline = detect_domain_families(&workspace, None);
+        assert!(baseline.is_empty());
+
+        let react_goal = detect_domain_families_with_goal(
+            &workspace,
+            Some("goal:build-react-dashboard"),
+            Some("build a React dashboard"),
+        );
+        assert!(react_goal.contains(&DomainFamily::React));
+        assert!(react_goal.contains(&DomainFamily::WebUi));
+
+        let python_goal = detect_domain_families_with_goal(
+            &workspace,
+            Some("goal:bootstrap-python-api"),
+            Some("bootstrap a Python API service"),
+        );
+        assert!(python_goal.contains(&DomainFamily::PythonService));
     }
 
     #[test]

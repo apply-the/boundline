@@ -11,10 +11,7 @@ use boundline::domain::context_intelligence::{
 #[test]
 fn effective_routing_prefers_cluster_over_global_when_workspace_is_absent() {
     let cluster = RoutingConfig {
-        planning: Some(ModelRoute {
-            runtime: RuntimeKind::Codex,
-            model: "gpt-5-codex".to_string(),
-        }),
+        planning: Some(ModelRoute { runtime: RuntimeKind::Codex, model: "o4-mini".to_string() }),
         ..RoutingConfig::default()
     };
     let global = RoutingConfig {
@@ -37,14 +34,14 @@ fn effective_routing_prefers_workspace_over_cluster() {
     let workspace = RoutingConfig {
         verification: Some(ModelRoute {
             runtime: RuntimeKind::Copilot,
-            model: "gpt-5.4".to_string(),
+            model: "gpt-4o".to_string(),
         }),
         ..RoutingConfig::default()
     };
     let cluster = RoutingConfig {
         verification: Some(ModelRoute {
             runtime: RuntimeKind::Codex,
-            model: "gpt-5-codex".to_string(),
+            model: "o4-mini".to_string(),
         }),
         ..RoutingConfig::default()
     };

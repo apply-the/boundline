@@ -14,7 +14,7 @@ use crate::domain::context_intelligence::AdvancedContextProjection;
 use crate::domain::decision::{Decision, DecisionStatus};
 use crate::domain::flow::SessionFlowState;
 use crate::domain::flow_policy::FlowPolicy;
-use crate::domain::goal_plan::GoalPlan;
+use crate::domain::goal_plan::{GoalPlan, PlanningAnalysisCoverage, PlanningAnalysisFinding};
 use crate::domain::governance::{
     AutopilotDecisionRecord, CompactedCanonMemory, GovernanceConfidenceHandoff,
     GovernedSessionLifecycle, GovernedStagePacket, GovernedStageRecord, PacketReuseBinding,
@@ -32,6 +32,152 @@ use crate::domain::task_context::{
 };
 use crate::domain::trace::current_timestamp_millis;
 use crate::domain::workflow::{ProjectScalePath, WorkflowProgressState};
+
+const BOUNDLINE_STATE_ROOT: &str = ".boundline";
+const LEGACY_SESSION_RECORD_FILE_NAME: &str = "session.json";
+const ACTIVE_SESSION_POINTER_FILE_NAME: &str = "active-session";
+const SESSION_STORAGE_ROOT: &str = ".boundline/sessions";
+const SESSION_BRANCH_PREFIX: &str = "session";
+const SESSION_REF_DEFAULT_SLUG: &str = "session";
+const SESSION_REF_SEPARATOR: char = '-';
+const SESSION_REF_MAX_SLUG_LENGTH: usize = 32;
+const SESSION_REF_DAILY_SEQ_WIDTH: usize = 3;
+const SESSION_BRIEFS_DIRECTORY_NAME: &str = "briefs";
+const SESSION_TRACES_DIRECTORY_NAME: &str = "traces";
+const SESSION_CHECKPOINTS_DIRECTORY_NAME: &str = "checkpoints";
+const SESSION_AUDIT_DIRECTORY_NAME: &str = "audit";
+const SESSION_GOAL_BRIEF_FILE_NAME: &str = "goal.md";
+const SESSION_PLAN_BRIEF_FILE_NAME: &str = "plan.md";
+const SESSION_RUN_BRIEF_FILE_NAME: &str = "run.md";
+const SESSION_AUDIT_EVENTS_FILE_NAME: &str = "events.jsonl";
+const SESSION_AUDIT_CURSOR_FILE_NAME: &str = "cursor.json";
+
+pub fn legacy_session_record_ref() -> String {
+    format!("{BOUNDLINE_STATE_ROOT}/{LEGACY_SESSION_RECORD_FILE_NAME}")
+}
+
+pub fn active_session_pointer_ref() -> String {
+    format!("{BOUNDLINE_STATE_ROOT}/{ACTIVE_SESSION_POINTER_FILE_NAME}")
+}
+
+pub fn session_storage_root_ref() -> &'static str {
+    SESSION_STORAGE_ROOT
+}
+
+pub fn session_root_ref(session_ref: &str) -> String {
+    format!("{SESSION_STORAGE_ROOT}/{session_ref}")
+}
+
+pub fn session_record_ref(session_ref: &str) -> String {
+    format!("{}/{LEGACY_SESSION_RECORD_FILE_NAME}", session_root_ref(session_ref))
+}
+
+pub fn session_branch_ref(session_ref: &str) -> String {
+    format!("{SESSION_BRANCH_PREFIX}/{session_ref}")
+}
+
+pub fn session_briefs_root_ref(session_ref: &str) -> String {
+    format!("{}/{SESSION_BRIEFS_DIRECTORY_NAME}", session_root_ref(session_ref))
+}
+
+pub fn session_traces_root_ref(session_ref: &str) -> String {
+    format!("{}/{SESSION_TRACES_DIRECTORY_NAME}", session_root_ref(session_ref))
+}
+
+pub fn session_checkpoints_root_ref(session_ref: &str) -> String {
+    format!("{}/{SESSION_CHECKPOINTS_DIRECTORY_NAME}", session_root_ref(session_ref))
+}
+
+pub fn session_audit_root_ref(session_ref: &str) -> String {
+    format!("{}/{SESSION_AUDIT_DIRECTORY_NAME}", session_root_ref(session_ref))
+}
+
+pub fn session_audit_events_ref(session_ref: &str) -> String {
+    format!("{}/{SESSION_AUDIT_EVENTS_FILE_NAME}", session_audit_root_ref(session_ref))
+}
+
+pub fn session_audit_cursor_ref(session_ref: &str) -> String {
+    format!("{}/{SESSION_AUDIT_CURSOR_FILE_NAME}", session_audit_root_ref(session_ref))
+}
+
+/// Converts a Unix-epoch millisecond timestamp to a `YYYYMMDD` date string
+/// (UTC), used as the first segment of a session reference.
+///
+/// Uses Howard Hinnant's civil-calendar algorithm (public domain):
+/// <https://howardhinnant.github.io/date_algorithms.html>
+pub fn date_prefix_from_millis(millis: u64) -> String {
+    let days = (millis / 86_400_000) as i64;
+    let z = days + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = (z - era * 146_097) as u64;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { yoe as i64 + era * 400 + 1 } else { yoe as i64 + era * 400 };
+    format!("{y:04}{m:02}{d:02}")
+}
+
+pub fn generate_session_ref(
+    goal_hint: Option<&str>,
+    date_prefix: &str,
+    daily_seq: u16,
+    slug_override: Option<&str>,
+) -> String {
+    let slug = normalize_session_slug(slug_override.or(goal_hint));
+    let seq = format!("{daily_seq:0>width$}", width = SESSION_REF_DAILY_SEQ_WIDTH);
+    format!("{date_prefix}{SESSION_REF_SEPARATOR}{seq}{SESSION_REF_SEPARATOR}{slug}")
+}
+
+pub fn normalize_session_slug(goal_hint: Option<&str>) -> String {
+    let raw = goal_hint.unwrap_or("").trim();
+    if raw.is_empty() {
+        return SESSION_REF_DEFAULT_SLUG.to_string();
+    }
+
+    let mut slug = String::with_capacity(SESSION_REF_MAX_SLUG_LENGTH);
+    let mut hit_limit = false;
+
+    for ch in raw.chars() {
+        if slug.len() >= SESSION_REF_MAX_SLUG_LENGTH {
+            hit_limit = true;
+            break;
+        }
+
+        if ch.is_ascii_alphanumeric() {
+            slug.push(ch.to_ascii_lowercase());
+        } else if !slug.is_empty() && !slug.ends_with(SESSION_REF_SEPARATOR) {
+            slug.push(SESSION_REF_SEPARATOR);
+        }
+    }
+
+    // When truncated, backtrack to the last word boundary (separator) so the
+    // slug never ends mid-word.
+    if hit_limit && let Some(last_sep) = slug.rfind(SESSION_REF_SEPARATOR) {
+        slug.truncate(last_sep);
+    }
+
+    let final_slug = slug.trim_end_matches(SESSION_REF_SEPARATOR);
+
+    if final_slug.is_empty() {
+        SESSION_REF_DEFAULT_SLUG.to_string()
+    } else {
+        final_slug.to_string()
+    }
+}
+
+pub fn session_goal_brief_ref(session_ref: &str) -> String {
+    format!("{}/{SESSION_GOAL_BRIEF_FILE_NAME}", session_briefs_root_ref(session_ref))
+}
+
+pub fn session_plan_brief_ref(session_ref: &str) -> String {
+    format!("{}/{SESSION_PLAN_BRIEF_FILE_NAME}", session_briefs_root_ref(session_ref))
+}
+
+pub fn session_run_brief_ref(session_ref: &str) -> String {
+    format!("{}/{SESSION_RUN_BRIEF_FILE_NAME}", session_briefs_root_ref(session_ref))
+}
 
 /// Session-side projection of an in-progress project-scale path.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -237,6 +383,7 @@ pub enum SessionStatus {
     Initialized,
     GoalCaptured,
     Planned,
+    Blocked,
     Running,
     Succeeded,
     Failed,
@@ -960,6 +1107,34 @@ pub struct SessionStatusView {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub authored_input_deduplicated_sources: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub goal_quality_state: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub goal_quality_findings: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub goal_quality_assumptions: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plan_quality_state: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plan_quality_findings: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plan_quality_assumptions: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backlog_quality_state: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backlog_quality_findings: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backlog_task_count: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backlog_mvp_scope: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backlog_unmapped_items: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub planning_analysis_state: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub planning_analysis_findings: Option<Vec<PlanningAnalysisFinding>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub planning_analysis_coverage: Option<PlanningAnalysisCoverage>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_summary: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_credibility: Option<String>,
@@ -975,6 +1150,8 @@ pub struct SessionStatusView {
     pub clarification_prompt: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub clarification_missing_fields: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clarification_questions: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub requested_governance_runtime: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1019,6 +1196,12 @@ pub struct SessionStatusView {
     pub latest_status: SessionStatus,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub execution_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub goal_brief_ref: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session_plan_brief_ref: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_brief_ref: Option<String>,
     pub latest_trace_ref: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub latest_decision_status: Option<String>,
@@ -1115,6 +1298,8 @@ pub struct SessionStatusView {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub governance_lifecycle_selected_mode: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub governance_lifecycle_selected_mode_sequence: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub latest_reasoning_profile: Option<ProfileActivationRecord>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub project_scale_path: Option<String>,
@@ -1157,6 +1342,20 @@ impl Default for SessionStatusView {
             authored_input_summary: None,
             authored_input_sources: None,
             authored_input_deduplicated_sources: None,
+            goal_quality_state: None,
+            goal_quality_findings: None,
+            goal_quality_assumptions: None,
+            plan_quality_state: None,
+            plan_quality_findings: None,
+            plan_quality_assumptions: None,
+            backlog_quality_state: None,
+            backlog_quality_findings: None,
+            backlog_task_count: None,
+            backlog_mvp_scope: None,
+            backlog_unmapped_items: None,
+            planning_analysis_state: None,
+            planning_analysis_findings: None,
+            planning_analysis_coverage: None,
             context_summary: None,
             context_credibility: None,
             context_primary_inputs: None,
@@ -1165,6 +1364,7 @@ impl Default for SessionStatusView {
             clarification_headline: None,
             clarification_prompt: None,
             clarification_missing_fields: None,
+            clarification_questions: None,
             requested_governance_runtime: None,
             requested_governance_risk: None,
             requested_governance_zone: None,
@@ -1189,6 +1389,9 @@ impl Default for SessionStatusView {
             current_step_index: None,
             latest_status: SessionStatus::Initialized,
             execution_path: None,
+            goal_brief_ref: None,
+            session_plan_brief_ref: None,
+            run_brief_ref: None,
             latest_trace_ref: None,
             latest_decision_status: None,
             latest_decision_target: None,
@@ -1237,6 +1440,7 @@ impl Default for SessionStatusView {
             governance_lifecycle_opt_out: None,
             governance_lifecycle_mode_selection: None,
             governance_lifecycle_selected_mode: None,
+            governance_lifecycle_selected_mode_sequence: None,
             latest_reasoning_profile: None,
             project_scale_path: None,
             project_scale_current_stage: None,
@@ -1590,6 +1794,14 @@ impl SessionStatusView {
             return Err(SessionValidationError::StatusViewClarificationMissingFieldsMismatch {
                 expected: expected_clarification_missing_fields,
                 actual: self.clarification_missing_fields.clone(),
+            });
+        }
+        let expected_clarification_questions =
+            record.authored_brief.as_ref().and_then(|bundle| bundle.clarification_questions());
+        if self.clarification_questions != expected_clarification_questions {
+            return Err(SessionValidationError::StatusViewClarificationQuestionsMismatch {
+                expected: expected_clarification_questions,
+                actual: self.clarification_questions.clone(),
             });
         }
         Ok(())
@@ -2080,9 +2292,6 @@ impl RoutingOutcome {
             (RoutingMode::Compatibility, RoutingSource::ExecutionProfile) => {
                 Some("fixture_compatibility")
             }
-            (RoutingMode::Blocked, RoutingSource::GoalPlan) => {
-                Some("native_goal_plan_pending_plan_confirmation")
-            }
             (RoutingMode::Blocked, RoutingSource::GoalCapture) => {
                 Some("native_session_pending_plan")
             }
@@ -2113,9 +2322,9 @@ pub fn routing_outcome(record: &ActiveSessionRecord) -> RoutingOutcome {
     if let Some(goal_plan) = record.goal_plan.as_ref() {
         if goal_plan.requires_confirmation() {
             return RoutingOutcome {
-                mode: RoutingMode::Blocked,
+                mode: RoutingMode::Native,
                 source: RoutingSource::GoalPlan,
-                reason: "plan confirmation is still pending before native execution".to_string(),
+                reason: "goal plan is proposed and ready for native execution".to_string(),
             };
         }
 
@@ -2291,6 +2500,11 @@ pub enum SessionValidationError {
         expected: Option<Vec<String>>,
         actual: Option<Vec<String>>,
     },
+    #[error("status view clarification questions mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewClarificationQuestionsMismatch {
+        expected: Option<Vec<String>>,
+        actual: Option<Vec<String>>,
+    },
     #[error("status view workspace slice mismatch: expected {expected:?}, got {actual:?}")]
     StatusViewWorkspaceSliceMismatch { expected: Option<String>, actual: Option<String> },
     #[error("status view selection headline mismatch: expected {expected:?}, got {actual:?}")]
@@ -2414,6 +2628,7 @@ fn status_requires_task(status: SessionStatus) -> bool {
     matches!(
         status,
         SessionStatus::Planned
+            | SessionStatus::Blocked
             | SessionStatus::Running
             | SessionStatus::Succeeded
             | SessionStatus::Failed
@@ -2429,6 +2644,7 @@ fn status_allows_goal_plan_without_task(
     matches!(
         status,
         SessionStatus::Planned
+            | SessionStatus::Blocked
             | SessionStatus::Running
             | SessionStatus::Succeeded
             | SessionStatus::Failed
@@ -2445,7 +2661,10 @@ fn expected_task_status(status: SessionStatus) -> Option<TaskStatus> {
         SessionStatus::Failed => Some(TaskStatus::Failed),
         SessionStatus::Exhausted => Some(TaskStatus::Exhausted),
         SessionStatus::Aborted => Some(TaskStatus::Aborted),
-        SessionStatus::Initialized | SessionStatus::GoalCaptured | SessionStatus::Invalid => None,
+        SessionStatus::Initialized
+        | SessionStatus::GoalCaptured
+        | SessionStatus::Blocked
+        | SessionStatus::Invalid => None,
     }
 }
 
@@ -2710,7 +2929,7 @@ pub fn task_state_governance_next_action(task: &Task) -> Option<String> {
     governance_next_action_for_state(governance_state.as_deref())
 }
 
-fn governance_next_action_for_record(record: &ActiveSessionRecord) -> Option<String> {
+pub(crate) fn governance_next_action_for_record(record: &ActiveSessionRecord) -> Option<String> {
     record.active_task.as_ref().and_then(task_state_governance_next_action).or_else(|| {
         governance_confidence_handoff_for_record(record).and_then(|handoff| handoff.next_action)
     })
@@ -2927,6 +3146,7 @@ mod tests {
             clarification_headline: None,
             clarification_prompt: None,
             clarification_missing_fields: None,
+            clarification_questions: None,
             requested_governance_runtime: None,
             requested_governance_risk: None,
             requested_governance_zone: None,
@@ -2972,6 +3192,9 @@ mod tests {
                 .map(|task| task.plan.current_step_index),
             latest_status: record.latest_status,
             execution_path: execution_path_text(record),
+            goal_brief_ref: None,
+            session_plan_brief_ref: None,
+            run_brief_ref: None,
             latest_trace_ref: record.latest_trace_ref.clone(),
             latest_decision_status: record
                 .decisions
@@ -3035,6 +3258,7 @@ mod tests {
             governance_lifecycle_opt_out: None,
             governance_lifecycle_mode_selection: None,
             governance_lifecycle_selected_mode: None,
+            governance_lifecycle_selected_mode_sequence: None,
             latest_reasoning_profile: record
                 .governance_lifecycle
                 .as_ref()
@@ -3052,6 +3276,7 @@ mod tests {
             delight_feedback: record.delight_feedback.clone(),
             next_command: Some("boundline step".to_string()),
             explanation: "view is consistent".to_string(),
+            ..SessionStatusView::default()
         }
     }
 
@@ -3101,6 +3326,7 @@ mod tests {
                 packet_ref: Some(".canon/runs/canon-run-1".to_string()),
                 decision_ref: Some("decision-1".to_string()),
                 blocked_reason: None,
+                stage_council: None,
             })
             .unwrap();
         task.context
@@ -3164,6 +3390,8 @@ mod tests {
             record.authored_brief.as_ref().and_then(|bundle| bundle.clarification_prompt());
         view.clarification_missing_fields =
             record.authored_brief.as_ref().and_then(|bundle| bundle.clarification_missing_fields());
+        view.clarification_questions =
+            record.authored_brief.as_ref().and_then(|bundle| bundle.clarification_questions());
         view.latest_selection_headline = task_state_string(task, "latest_selection_headline");
         view.latest_candidate_family = task_state_string(task, "latest_candidate_family");
         view.latest_selection_reason = task_state_string(task, "latest_selection_reason");
@@ -3266,6 +3494,7 @@ mod tests {
             stage_records: Vec::new(),
             accumulated_context: Vec::new(),
             terminal_reason: None,
+            planning_input_fingerprint: None,
         });
 
         let view = build_derived_view(&record);
@@ -4338,12 +4567,9 @@ mod tests {
             .unwrap(),
         );
         let pending_outcome = routing_outcome(&pending_record);
-        assert_eq!(pending_outcome.mode, RoutingMode::Blocked);
+        assert_eq!(pending_outcome.mode, RoutingMode::Native);
         assert_eq!(pending_outcome.source, RoutingSource::GoalPlan);
-        assert_eq!(
-            execution_path_text(&pending_record),
-            Some("native_goal_plan_pending_plan_confirmation".to_string())
-        );
+        assert_eq!(execution_path_text(&pending_record), Some("native_goal_plan".to_string()));
 
         let mut native_record = build_record(workspace);
         native_record.active_task = None;
@@ -4427,6 +4653,7 @@ mod tests {
         assert!(!SessionStatus::Initialized.is_terminal());
         assert!(!SessionStatus::GoalCaptured.is_terminal());
         assert!(!SessionStatus::Planned.is_terminal());
+        assert!(!SessionStatus::Blocked.is_terminal());
         assert!(!SessionStatus::Running.is_terminal());
         assert!(!SessionStatus::Invalid.is_terminal());
     }
@@ -4635,5 +4862,102 @@ mod tests {
         assert_eq!(DelegationContinuityMode::Stuck.as_str(), "stuck");
         assert_eq!(DelegationContinuityMode::Exhausted.as_str(), "exhausted");
         assert_eq!(DelegationContinuityMode::InspectOnly.as_str(), "inspect_only");
+    }
+
+    #[test]
+    fn generate_session_ref_uses_slug_override_when_provided() {
+        use super::generate_session_ref;
+
+        let session_id = generate_session_ref(
+            Some("Build a microservice with many words that would be truncated"),
+            "20260525",
+            1,
+            Some("rust-user-service"),
+        );
+        let parts: Vec<&str> = session_id.splitn(3, '-').collect();
+        assert_eq!(
+            parts.len(),
+            3,
+            "session_id should have three dash-separated segments: {session_id}"
+        );
+        assert_eq!(parts[0], "20260525", "first segment should be date prefix: {session_id}");
+        assert_eq!(parts[1], "001", "second segment should be zero-padded daily seq: {session_id}");
+        assert_eq!(
+            parts[2], "rust-user-service",
+            "slug segment should match the override, got: {session_id}"
+        );
+    }
+
+    #[test]
+    fn generate_session_ref_falls_back_to_goal_hint_when_slug_override_is_none() {
+        use super::generate_session_ref;
+
+        let session_id = generate_session_ref(Some("fix crash"), "20260525", 2, None);
+        assert!(
+            !session_id.is_empty(),
+            "session_id should be non-empty without slug override: {session_id}"
+        );
+        assert!(session_id.starts_with("20260525-002-"), "prefix segment wrong: {session_id}");
+        let slug = session_id.splitn(3, '-').nth(2).unwrap_or("");
+        assert!(!slug.is_empty(), "slug segment should derive from goal hint: {session_id}");
+        assert!(slug.contains("fix"), "slug should contain 'fix' from goal hint: {session_id}");
+    }
+
+    #[test]
+    fn generate_session_ref_normalizes_slug_override_chars() {
+        use super::generate_session_ref;
+
+        let session_id = generate_session_ref(
+            Some("irrelevant hint"),
+            "20260525",
+            1,
+            Some("Rust User Service 2024"),
+        );
+        let slug = session_id.splitn(3, '-').nth(2).unwrap_or("");
+        assert_eq!(
+            slug, "rust-user-service-2024",
+            "slug should normalize uppercase and spaces: {session_id}"
+        );
+    }
+
+    #[test]
+    fn date_prefix_from_millis_returns_correct_yyyymmdd() {
+        use super::date_prefix_from_millis;
+
+        // 2026-05-25 midnight UTC (day 20598 since Unix epoch)
+        assert_eq!(date_prefix_from_millis(1_779_667_200_000), "20260525");
+        // 1970-01-01 (epoch day 0)
+        assert_eq!(date_prefix_from_millis(0), "19700101");
+        // 2000-03-01 (known leap-year boundary)
+        assert_eq!(date_prefix_from_millis(951_868_800_000), "20000301");
+    }
+
+    #[test]
+    fn normalize_session_slug_truncates_at_word_boundary() {
+        use super::normalize_session_slug;
+
+        // This input exceeds 32 chars when slugified; it should backtrack to
+        // the last complete word rather than cutting mid-token.
+        let long_goal = "auth boundary service validates oauth2 tokens directly";
+        let slug = normalize_session_slug(Some(long_goal));
+        assert!(!slug.ends_with("-di"), "slug should not cut mid-word, got: {slug}");
+        assert!(
+            slug.len() <= 32,
+            "slug should respect the max length, got len={}: {slug}",
+            slug.len()
+        );
+        // Expect it to backtrack to last separator before the 32-char limit
+        assert!(
+            slug.ends_with(|c: char| c.is_ascii_alphanumeric()),
+            "slug should end on a complete word, got: {slug}"
+        );
+    }
+
+    #[test]
+    fn normalize_session_slug_preserves_short_input() {
+        use super::normalize_session_slug;
+
+        let slug = normalize_session_slug(Some("rust-user-service"));
+        assert_eq!(slug, "rust-user-service");
     }
 }

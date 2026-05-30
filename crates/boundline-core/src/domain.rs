@@ -1,3 +1,7 @@
+#[path = "../../../src/domain/audit.rs"]
+pub mod audit;
+#[path = "../../../src/domain/auth_profile.rs"]
+pub mod auth_profile;
 #[path = "../../../src/domain/brief.rs"]
 pub mod brief;
 #[path = "../../../src/domain/checkpoint.rs"]
@@ -36,6 +40,8 @@ pub mod limits;
 pub mod negotiation;
 #[path = "../../../src/domain/plan.rs"]
 pub mod plan;
+#[path = "../../../src/domain/probe.rs"]
+pub mod probe;
 #[path = "../../../src/domain/project_index.rs"]
 pub mod project_index;
 #[path = "../../../src/domain/project_memory.rs"]
@@ -46,8 +52,12 @@ pub mod reasoning;
 pub mod review;
 #[path = "../../../src/domain/routing_decision.rs"]
 pub mod routing_decision;
+#[path = "../../../src/domain/scaffold_manifest.rs"]
+pub mod scaffold_manifest;
 #[path = "../../../src/domain/session.rs"]
 pub mod session;
+#[path = "../../../src/domain/stage_council.rs"]
+pub mod stage_council;
 #[path = "../../../src/domain/step.rs"]
 pub mod step;
 #[path = "../../../src/domain/task.rs"]

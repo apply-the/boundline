@@ -14,8 +14,8 @@ validation.
 
 1. Start a fresh session:
    `cargo run --bin boundline -- start`
-2. Capture a bounded goal:
-   `cargo run --bin boundline -- capture --goal "fix the failing bounded add behavior"`
+2. Record a bounded goal:
+   `cargo run --bin boundline -- goal --goal "fix the failing bounded add behavior"`
 3. Plan the task:
    `cargo run --bin boundline -- plan`
 4. Run the native path:

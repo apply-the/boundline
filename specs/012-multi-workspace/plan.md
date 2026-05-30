@@ -21,7 +21,7 @@ and output renderers.
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: Existing runtime dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`) plus Rust standard library path and filesystem APIs; no new runtime dependencies for the first clustered slice  
 **Storage**: Workspace-local `.boundline/session.json` and `.boundline/traces/` remain authoritative per repository, existing workspace `.boundline/config.toml` and user-global config remain in place, and a new primary-workspace `.boundline/cluster.toml` stores cluster membership and cluster-scoped defaults  
 **Testing**: `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, focused unit tests for cluster validation and precedence, focused integration tests for cluster CLI/session/status flows, and focused contract tests for cluster CLI/config surfaces  

@@ -8,11 +8,42 @@ const BUG_FIX_KEYWORDS: &[&str] =
     &["fix", "bug", "broken", "failing", "regression", "crash", "error"];
 
 /// Keywords that map to the change flow.
-const CHANGE_KEYWORDS: &[&str] =
-    &["add", "implement", "feature", "new", "create", "extend", "refactor"];
+const CHANGE_KEYWORDS: &[&str] = &["change", "update", "modify", "extend", "prepare", "refactor"];
 
 /// Keywords that map to the delivery flow.
 const DELIVERY_KEYWORDS: &[&str] = &["deliver", "release", "ship", "deploy", "complete", "launch"];
+const DELIVERY_BUILD_KEYWORDS: &[&str] = &[
+    "add",
+    "build",
+    "implement",
+    "feature",
+    "new",
+    "create",
+    "bootstrap",
+    "initialize",
+    "scaffold",
+    "first slice",
+];
+const DELIVERY_SHAPE_KEYWORDS: &[&str] = &[
+    "api",
+    "apis",
+    "endpoint",
+    "endpoints",
+    "grpc",
+    "microservice",
+    "microservizio",
+    "service",
+    "oauth",
+    "authorization",
+    "authenticates",
+    "crud",
+    "rbac",
+    "role",
+    "roles",
+    "user management",
+];
+const EXISTING_SYSTEM_CHANGE_KEYWORDS: &[&str] =
+    &["existing", "change", "update", "modify", "extend", "refactor", "prepare"];
 
 /// Inputs used to infer a delivery flow from bounded planning evidence.
 #[derive(Debug, Clone, Copy)]
@@ -87,12 +118,9 @@ pub fn infer_flow_from_context(context: &FlowInferenceContext<'_>) -> Option<Inf
 /// Returns `Some(InferredFlow)` if a match is found, `None` if no keywords
 /// match (caller should default to no-flow mode).
 pub fn infer_flow(goal_text: &str) -> Option<InferredFlow> {
-    let lower = goal_text.to_lowercase();
-    let words: Vec<&str> = lower.split_whitespace().collect();
-
     // Check bug-fix first (highest priority for safety)
     for keyword in BUG_FIX_KEYWORDS {
-        if words.iter().any(|w| w.contains(keyword)) {
+        if contains_goal_cue(&goal_text.to_lowercase(), keyword) {
             return Some(InferredFlow {
                 flow_name: "bug-fix".to_string(),
                 confidence_reason: format!("goal contains keyword '{keyword}'"),
@@ -101,9 +129,29 @@ pub fn infer_flow(goal_text: &str) -> Option<InferredFlow> {
         }
     }
 
+    let lower = goal_text.to_lowercase();
+    let change_is_explicit = matched_keywords(goal_text, EXISTING_SYSTEM_CHANGE_KEYWORDS);
+    let delivery_shapes = matched_keywords(goal_text, DELIVERY_SHAPE_KEYWORDS);
+    let delivery_build = matched_keywords(goal_text, DELIVERY_BUILD_KEYWORDS);
+
+    if !delivery_shapes.is_empty()
+        && (!delivery_build.is_empty()
+            || !matched_keywords(goal_text, DELIVERY_KEYWORDS).is_empty())
+        && change_is_explicit.is_empty()
+    {
+        return Some(InferredFlow {
+            flow_name: "delivery".to_string(),
+            confidence_reason: format!(
+                "goal describes a concrete delivery surface via {}",
+                delivery_shapes.join(", ")
+            ),
+            confirmed: false,
+        });
+    }
+
     // Check delivery before change (broader scope takes precedence)
     for keyword in DELIVERY_KEYWORDS {
-        if words.iter().any(|w| w.contains(keyword)) {
+        if contains_goal_cue(&lower, keyword) {
             return Some(InferredFlow {
                 flow_name: "delivery".to_string(),
                 confidence_reason: format!("goal contains keyword '{keyword}'"),
@@ -114,7 +162,7 @@ pub fn infer_flow(goal_text: &str) -> Option<InferredFlow> {
 
     // Check change last
     for keyword in CHANGE_KEYWORDS {
-        if words.iter().any(|w| w.contains(keyword)) {
+        if contains_goal_cue(&lower, keyword) {
             return Some(InferredFlow {
                 flow_name: "change".to_string(),
                 confidence_reason: format!("goal contains keyword '{keyword}'"),
@@ -195,12 +243,29 @@ fn score_delivery(context: &FlowInferenceContext<'_>) -> (usize, Vec<String>) {
     let mut score = 0;
     let mut reasons = Vec::new();
 
-    let matched_keywords = matched_keywords(context.goal_text, DELIVERY_KEYWORDS);
-    if !matched_keywords.is_empty() {
-        score += 4 * matched_keywords.len();
+    let delivery_keywords = matched_keywords(context.goal_text, DELIVERY_KEYWORDS);
+    if !delivery_keywords.is_empty() {
+        score += 4 * delivery_keywords.len();
         reasons.push(format!(
             "goal language mentions {}",
-            matched_keywords
+            delivery_keywords
+                .iter()
+                .map(|keyword| format!("`{keyword}`"))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
+    let delivery_shapes = matched_keywords(context.goal_text, DELIVERY_SHAPE_KEYWORDS);
+    let delivery_build = matched_keywords(context.goal_text, DELIVERY_BUILD_KEYWORDS);
+    let change_is_explicit = matched_keywords(context.goal_text, EXISTING_SYSTEM_CHANGE_KEYWORDS);
+    if !delivery_shapes.is_empty()
+        && (!delivery_build.is_empty() || !delivery_keywords.is_empty())
+        && change_is_explicit.is_empty()
+    {
+        score += 6 + delivery_shapes.len();
+        reasons.push(format!(
+            "goal describes a concrete delivery surface via {}",
+            delivery_shapes
                 .iter()
                 .map(|keyword| format!("`{keyword}`"))
                 .collect::<Vec<_>>()
@@ -223,12 +288,22 @@ fn score_delivery(context: &FlowInferenceContext<'_>) -> (usize, Vec<String>) {
 
 fn matched_keywords(goal_text: &str, keywords: &[&str]) -> Vec<String> {
     let lower = goal_text.to_lowercase();
-    let words = lower.split_whitespace().collect::<Vec<_>>();
     keywords
         .iter()
-        .filter(|keyword| words.iter().any(|word| word.contains(**keyword)))
+        .filter(|keyword| contains_goal_cue(&lower, keyword))
         .map(|keyword| (*keyword).to_string())
         .collect()
+}
+
+fn contains_goal_cue(lower: &str, cue: &str) -> bool {
+    if cue.contains(' ') {
+        return lower.contains(cue);
+    }
+
+    lower
+        .split(|character: char| !character.is_alphanumeric() && character != '-')
+        .filter(|word| !word.is_empty())
+        .any(|word| word == cue)
 }
 
 fn has_recent_trace(context: &FlowInferenceContext<'_>) -> bool {
@@ -301,4 +376,42 @@ fn is_test_target(target: &str) -> bool {
 fn is_doc_target(target: &str) -> bool {
     let lower = target.to_lowercase();
     lower.ends_with(".md") || lower.contains("readme") || lower.contains("changelog")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{FlowInferenceContext, infer_flow, infer_flow_from_context};
+    use crate::domain::goal_plan::WorkspaceSignals;
+
+    #[test]
+    fn infer_flow_prefers_delivery_for_concrete_greenfield_feature_goals() {
+        let inferred = infer_flow(
+            "Implement the first slice of a Rust user-management microservice with REST endpoints, gRPC methods, and OAuth2 authorization",
+        )
+        .expect("concrete feature goal should infer a flow");
+
+        assert_eq!(inferred.flow_name, "delivery");
+    }
+
+    #[test]
+    fn infer_flow_from_context_prefers_delivery_for_concrete_service_surfaces() {
+        let inferred = infer_flow_from_context(&FlowInferenceContext {
+            goal_text:
+                "Implement the first slice of a Rust user-management microservice with REST endpoints, gRPC methods, and OAuth2 authorization",
+            context_pack: None,
+            workspace_signals: &WorkspaceSignals::default(),
+            workflow_progress: None,
+        })
+        .expect("concrete feature goal should infer a flow");
+
+        assert_eq!(inferred.flow_name, "delivery");
+    }
+
+    #[test]
+    fn infer_flow_keeps_existing_system_updates_on_change() {
+        let inferred = infer_flow("Update the existing onboarding flow to add audit logging")
+            .expect("existing-system change should infer a flow");
+
+        assert_eq!(inferred.flow_name, "change");
+    }
 }

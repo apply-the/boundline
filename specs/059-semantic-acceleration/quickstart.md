@@ -32,7 +32,7 @@ Expected result:
 Run:
 
 ```bash
-boundline capture --goal "recover the most relevant local evidence for a bounded change" --workspace <workspace>
+boundline goal --goal "recover the most relevant local evidence for a bounded change" --workspace <workspace>
 ```
 
 Expected result:

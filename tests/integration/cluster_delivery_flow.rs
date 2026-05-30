@@ -4,8 +4,8 @@ use boundline::adapters::session_store::{FileSessionStore, SessionStore};
 use boundline::cli::cluster::execute_init;
 use boundline::cli::inspect::execute_inspect;
 use boundline::cli::session::{
-    execute_capture_with_target, execute_plan_with_target, execute_run_with_target,
-    execute_start_with_target, execute_status_with_target,
+    execute_goal_with_target, execute_plan_with_target, execute_run_with_target,
+    execute_status_with_target,
 };
 use boundline::domain::cluster::ClusteredExecutionKind;
 use boundline::domain::session::SessionStatus;
@@ -17,8 +17,7 @@ fn clustered_delivery_run_mutates_both_member_workspaces_under_one_session_owner
     let (primary, secondary) = temp_cluster_workspaces("cluster-delivery-success");
 
     execute_init(&primary, "cluster-1", &[primary.clone(), secondary.clone()]).unwrap();
-    execute_start_with_target(None, Some(&primary)).unwrap();
-    execute_capture_with_target(
+    execute_goal_with_target(
         None,
         Some(&primary),
         Some("Fix the failing add test"),
@@ -27,13 +26,14 @@ fn clustered_delivery_run_mutates_both_member_workspaces_under_one_session_owner
         None,
         None,
         None,
+        None,
     )
     .unwrap();
-    execute_plan_with_target(None, Some(&primary), Some("bug-fix"), false, false).unwrap();
+    execute_plan_with_target(None, Some(&primary), Some("bug-fix"), false).unwrap();
 
     let run = execute_run_with_target(None, Some(&primary)).unwrap();
-    let status = execute_status_with_target(None, Some(&primary)).unwrap();
-    let inspect = execute_inspect(None, Some(&primary)).unwrap();
+    let status = execute_status_with_target(None, Some(&primary), None).unwrap();
+    let inspect = execute_inspect(None, Some(&primary), None, false).unwrap();
 
     assert!(run.terminal_output.contains("terminal_status: succeeded"), "{}", run.terminal_output);
     assert!(status.terminal_output.contains("cluster_id: cluster-1"), "{}", status.terminal_output);

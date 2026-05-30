@@ -23,7 +23,7 @@ the effective configuration inspectable through CLI and output surfaces.
   the iteration process.
 -->
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: Existing runtime dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`) plus `toml` for human-editable config serialization; no additional runtime abstraction crates for the first slice  
 **Storage**: Workspace-local `.boundline/execution.json`, `.boundline/session.json`, `.boundline/traces/`, new workspace-local `.boundline/config.toml`, and new user-scoped global config at `$XDG_CONFIG_HOME/boundline/config.toml` with fallback to `$HOME/.config/boundline/config.toml` on macOS/Linux developer machines  
 **Testing**: `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test --all-targets`, focused contract tests for CLI and config surfaces, focused integration tests for init and precedence, and unit tests for config resolution and validation  

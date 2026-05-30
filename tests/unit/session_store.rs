@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use boundline::adapters::session_store::{FileSessionStore, SessionStore, SessionStoreError};
 use boundline::domain::limits::RunLimits;
 use boundline::domain::plan::Plan;
-use boundline::domain::session::{ActiveSessionRecord, SessionStatus};
+use boundline::domain::session::{ActiveSessionRecord, SessionStatus, session_record_ref};
 use boundline::domain::step::Step;
 use boundline::domain::task::{Task, TaskRunRequest};
 use serde_json::json;
@@ -65,7 +65,7 @@ fn file_session_store_round_trips_a_valid_record() {
     let record = build_record(workspace.to_str().unwrap());
 
     let path = store.persist(&record).unwrap();
-    assert_eq!(path, workspace.join(".boundline").join("session.json"));
+    assert_eq!(path, workspace.join(session_record_ref(&record.session_id)));
 
     let loaded = store.load().unwrap().unwrap();
     assert_eq!(loaded, record);

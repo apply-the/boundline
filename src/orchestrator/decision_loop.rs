@@ -24,7 +24,7 @@ use crate::domain::routing_decision::RoutingDecisionProjection;
 use crate::domain::step::{
     ErrorInfo, ExecutionStatus, Recoverability, StepExecutionRequest, StepExecutionResult, StepKind,
 };
-use crate::domain::task_context::TaskContext;
+use crate::domain::task_context::{TASK_GOAL_KEY, TASK_ROUTING_PROJECTION_KEY, TaskContext};
 use crate::domain::tool_result::ToolResult;
 use crate::domain::trace::{ExecutionTrace, TraceEventType};
 use crate::registry::agent_registry::AgentRegistry;
@@ -124,7 +124,9 @@ where
         workspace_ref: &str,
         session_id: &str,
     ) -> Result<(LoopTerminal, Vec<Decision>, ExecutionTrace), DecisionLoopError> {
-        self.run_with_options(plan, flow_policy, workspace_ref, session_id, false)
+        let (terminal, decisions, trace, _task_context) =
+            self.run_with_options_and_context(plan, flow_policy, workspace_ref, session_id, false)?;
+        Ok((terminal, decisions, trace))
     }
 
     pub fn run_with_options(
@@ -135,10 +137,34 @@ where
         session_id: &str,
         enable_flow_retry_probe: bool,
     ) -> Result<(LoopTerminal, Vec<Decision>, ExecutionTrace), DecisionLoopError> {
+        let (terminal, decisions, trace, _task_context) = self.run_with_options_and_context(
+            plan,
+            flow_policy,
+            workspace_ref,
+            session_id,
+            enable_flow_retry_probe,
+        )?;
+        Ok((terminal, decisions, trace))
+    }
+
+    pub fn run_with_options_and_context(
+        &self,
+        plan: &GoalPlan,
+        flow_policy: Option<&FlowPolicy>,
+        workspace_ref: &str,
+        session_id: &str,
+        enable_flow_retry_probe: bool,
+    ) -> Result<(LoopTerminal, Vec<Decision>, ExecutionTrace, TaskContext), DecisionLoopError> {
         let mut trace = ExecutionTrace::new(
             session_id.to_string(),
             session_id.to_string(),
             plan.goal_text.clone(),
+        );
+        let mut task_context = TaskContext::new(
+            session_id.to_string(),
+            workspace_ref.to_string(),
+            RunLimits::default(),
+            decision_task_state(plan, workspace_ref),
         );
         trace.record_event(
             TraceEventType::GoalPlanCreated,
@@ -203,7 +229,7 @@ where
                 0,
                 no_actionable_state_payload(ActionSelector::Replan, &reason),
             );
-            return Ok((LoopTerminal::NoActionableState(reason), Vec::new(), trace));
+            return Ok((LoopTerminal::NoActionableState(reason), Vec::new(), trace, task_context));
         }
 
         let mut decisions: Vec<Decision> = Vec::new();
@@ -226,7 +252,7 @@ where
                         "max_steps": self.max_steps,
                     }),
                 );
-                return Ok((terminal, decisions, trace));
+                return Ok((terminal, decisions, trace, task_context));
             }
 
             // -- OBSERVE --
@@ -246,7 +272,7 @@ where
                     0,
                     json!({ "terminal": "success", "steps_taken": step_count }),
                 );
-                return Ok((terminal, decisions, trace));
+                return Ok((terminal, decisions, trace, task_context));
             }
 
             let observation = Observation {
@@ -332,8 +358,14 @@ where
 
             // Simulate tool execution: in the real implementation this dispatches
             // through the tool/agent adapter. For now, produce a synthetic result.
-            let tool_result =
-                self.dispatch_action(&decision, workspace_ref, session_id, enable_flow_retry_probe);
+            let step_result =
+                self.dispatch_action(&decision, &task_context, enable_flow_retry_probe);
+            apply_step_result_to_task_context(&mut task_context, &decision.id, &step_result);
+            let tool_result = tool_result_from_step_execution(
+                adapter_name_for_decision(&decision),
+                &decision,
+                &step_result,
+            );
 
             // -- VERIFY --
             if tool_result.success {
@@ -370,7 +402,7 @@ where
                             0,
                             no_actionable_state_payload(selector_label, &reason),
                         );
-                        return Ok((terminal, decisions, trace));
+                        return Ok((terminal, decisions, trace, task_context));
                     }
 
                     if recovery_completes_task(planned_decision_type, decision.selector_kind()) {
@@ -408,7 +440,7 @@ where
                             0,
                             no_actionable_state_payload(selector_label, &reason),
                         );
-                        return Ok((terminal, decisions, trace));
+                        return Ok((terminal, decisions, trace, task_context));
                     }
 
                     decisions.push(decision);
@@ -427,10 +459,9 @@ where
     fn dispatch_action(
         &self,
         decision: &Decision,
-        workspace_ref: &str,
-        session_id: &str,
+        task_context: &TaskContext,
         enable_flow_retry_probe: bool,
-    ) -> ToolResult {
+    ) -> StepExecutionResult {
         let selector = decision.selector_kind();
         let (step_kind, adapter_name) = adapter_binding(selector);
         let request = StepExecutionRequest {
@@ -444,15 +475,10 @@ where
                 expected_outcome: &decision.expected_outcome,
                 force_retry_once: enable_flow_retry_probe && selector == ActionSelector::Modify,
             }),
-            task_snapshot: TaskContext::new(
-                session_id.to_string(),
-                workspace_ref.to_string(),
-                RunLimits::default(),
-                Map::new(),
-            ),
+            task_snapshot: task_context.clone(),
             attempt_number: 1,
         };
-        let step_result = match step_kind {
+        match step_kind {
             StepKind::Agent => self
                 .agents
                 .get(adapter_name)
@@ -464,10 +490,54 @@ where
                 .map(|adapter| adapter.execute(request.clone()))
                 .unwrap_or_else(|| missing_adapter_result(adapter_name)),
             StepKind::Decision => missing_adapter_result(adapter_name),
-        };
-
-        tool_result_from_step_execution(adapter_name, decision, &step_result)
+        }
     }
+}
+
+fn adapter_name_for_decision(decision: &Decision) -> &'static str {
+    let (_, adapter_name) = adapter_binding(decision.selector_kind());
+    adapter_name
+}
+
+fn apply_step_result_to_task_context(
+    task_context: &mut TaskContext,
+    step_id: &str,
+    step_result: &StepExecutionResult,
+) {
+    match step_result.status {
+        ExecutionStatus::Succeeded => {
+            if let Some(output) = step_result.output.as_ref() {
+                task_context.apply_success_output(
+                    step_id,
+                    output,
+                    step_result.state_patch.as_ref(),
+                );
+            } else if let Some(state_patch) = step_result.state_patch.as_ref() {
+                task_context.apply_state_patch(state_patch);
+            }
+        }
+        ExecutionStatus::Failed => {
+            if let Some(error) = step_result.error.as_ref() {
+                task_context.apply_failure_error(step_id, error);
+            }
+            if let Some(state_patch) = step_result.state_patch.as_ref() {
+                task_context.apply_state_patch(state_patch);
+            }
+        }
+    }
+}
+
+fn decision_task_state(plan: &GoalPlan, workspace_ref: &str) -> Map<String, Value> {
+    let mut state = Map::new();
+    state.insert(TASK_GOAL_KEY.to_string(), Value::String(plan.goal_text.clone()));
+
+    if let Ok(routing_projection) =
+        serde_json::to_value(workspace_routing_projection(Path::new(workspace_ref)))
+    {
+        state.insert(TASK_ROUTING_PROJECTION_KEY.to_string(), routing_projection);
+    }
+
+    state
 }
 
 fn decision_details(
@@ -873,8 +943,9 @@ pub enum DecisionLoopError {
 mod tests {
     use std::fs;
     use std::path::PathBuf;
+    use std::sync::{Arc, Mutex};
 
-    use serde_json::json;
+    use serde_json::{Map, Value, json};
     use uuid::Uuid;
 
     use super::{
@@ -884,6 +955,7 @@ mod tests {
         select_action_selector, successful_recovery_terminal_reason,
         tool_result_from_step_execution,
     };
+    use crate::adapters::agent::FnAgentAdapter;
     use crate::adapters::trace_store::FileTraceStore;
     use crate::domain::decision::{ActionSelector, Decision, DecisionType, EvidenceRef};
     use crate::domain::flow_policy::{FlowPolicy, StagePolicy, TransitionCondition};
@@ -1363,6 +1435,83 @@ mod tests {
                 && event.payload.get("reason").and_then(|value| value.as_str())
                     == Some("refresh_required")
         }));
+
+        fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[test]
+    fn decision_loop_carries_task_state_between_steps() {
+        let workspace = temp_workspace("decision-loop-task-context");
+        fs::create_dir_all(workspace.join("src")).unwrap();
+        fs::write(workspace.join("src/lib.rs"), "left - right\n").unwrap();
+
+        let plan = GoalPlan::new(
+            "repair arithmetic",
+            vec![
+                planned_task("src/lib.rs", DecisionType::Analyze, Some("collect evidence")),
+                planned_task("src/lib.rs", DecisionType::Code, Some("apply fix")),
+            ],
+        )
+        .unwrap();
+        let observed_carry = Arc::new(Mutex::new(None::<String>));
+
+        let mut agents = AgentRegistry::new();
+        agents
+            .register("analyzer", {
+                FnAgentAdapter::new(move |_request| {
+                    StepExecutionResult::success_with_patch(
+                        json!({
+                            "analysis": "subtraction detected"
+                        }),
+                        Map::from_iter([(String::from("carry"), json!("from-analyzer"))]),
+                    )
+                })
+            })
+            .unwrap();
+        agents
+            .register("coder", {
+                let observed_carry = Arc::clone(&observed_carry);
+                FnAgentAdapter::new(move |request| {
+                    let carry = request
+                        .task_snapshot
+                        .state
+                        .get("carry")
+                        .and_then(Value::as_str)
+                        .map(str::to_string);
+                    if let Ok(mut slot) = observed_carry.lock() {
+                        *slot = carry.clone();
+                    }
+                    StepExecutionResult::success(json!({
+                        "change": carry,
+                    }))
+                })
+            })
+            .unwrap();
+
+        let loop_runner = crate::orchestrator::decision_loop::DecisionLoop::new(
+            agents,
+            ToolRegistry::new(),
+            FileTraceStore::for_workspace(&workspace),
+            4,
+        );
+
+        let (terminal, decisions, _trace, task_context) = loop_runner
+            .run_with_options_and_context(
+                &plan,
+                None,
+                workspace.to_string_lossy().as_ref(),
+                "session-task-context",
+                false,
+            )
+            .unwrap();
+
+        assert_eq!(terminal, crate::orchestrator::decision_loop::LoopTerminal::Success);
+        assert_eq!(decisions.len(), 2);
+        assert_eq!(
+            observed_carry.lock().ok().and_then(|value| value.clone()),
+            Some("from-analyzer".to_string())
+        );
+        assert_eq!(task_context.state.get("carry").and_then(Value::as_str), Some("from-analyzer"));
 
         fs::remove_dir_all(workspace).unwrap();
     }

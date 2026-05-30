@@ -1,11 +1,11 @@
 # Research: Human-Facing Brief Ingestion
 
-## Decision 1: Extend the existing `capture` and direct-input `run` surfaces instead of adding a new ingest command
+## Decision 1: Extend the existing `goal` and direct-input `run` surfaces instead of adding a new ingest command
 
-- Decision: Reuse the existing human-facing entry points by changing `capture` and direct-input `run` to accept optional direct text plus repeated Markdown brief paths and business-level governance flags. The first-slice CLI contract is `--goal <text>` plus repeated `--brief <path>` with optional `--governance <local|canon>`, `--risk <value>`, `--zone <value>`, and `--owner <value>`. Assistant-driven usage must call the same normalization path with inline text and resolved file references.
-- Rationale: Boundline already teaches `start`, `capture`, `plan`, and `run` as the bounded delivery loop. Reusing those commands removes manifest authoring without adding another concept to learn, preserves existing goal-only usage, and keeps governance expressed in human business terms rather than a second JSON-shaped payload.
+- Decision: Reuse the existing human-facing entry points by changing `goal` and direct-input `run` to accept optional direct text plus repeated Markdown brief paths and business-level governance flags. The first-slice CLI contract is `--goal <text>` plus repeated `--brief <path>` with optional `--governance <local|canon>`, `--risk <value>`, `--zone <value>`, and `--owner <value>`. Assistant-driven usage must call the same normalization path with inline text and resolved file references.
+- Rationale: Boundline already teaches `start`, `goal`, `plan`, and `run` as the bounded delivery loop. Reusing those commands removes manifest authoring without adding another concept to learn, preserves existing goal-only usage, and keeps governance expressed in human business terms rather than a second JSON-shaped payload.
 - Alternatives considered:
-  - Add a new `ingest` command: rejected because it duplicates the role of `capture` and would fragment the entry surface for the same bounded workflow.
+  - Add a new `ingest` command: rejected because it duplicates the role of `goal` and would fragment the entry surface for the same bounded workflow.
   - Require governance JSON on the CLI: rejected because it reintroduces machine-shaped authoring after the spec explicitly removed JSON from the normal human path.
   - Accept only text that mentions file paths: rejected because explicit repeated `--brief` flags are more reliable and auditable for normal CLI usage.
 

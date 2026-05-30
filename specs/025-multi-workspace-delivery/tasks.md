@@ -52,7 +52,7 @@
 
 ### Implementation for User Story 1
 
-- [ ] T011 [US1] Implement cluster-aware `start`, `capture`, `plan`, and `run` command flow in `/Users/rt/workspace/boundline/src/cli.rs`, `/Users/rt/workspace/boundline/src/cli/session.rs`, and `/Users/rt/workspace/boundline/src/cli/run.rs`
+- [ ] T011 [US1] Implement cluster-aware `start`, `goal`, `plan`, and `run` command flow in `/Users/rt/workspace/boundline/src/cli.rs`, `/Users/rt/workspace/boundline/src/cli/session.rs`, and `/Users/rt/workspace/boundline/src/cli/run.rs`
 - [ ] T012 [US1] Implement bounded workspace-selection, handoff, and participation recording in `/Users/rt/workspace/boundline/src/orchestrator/session_runtime.rs`, `/Users/rt/workspace/boundline/src/orchestrator/engine.rs`, and `/Users/rt/workspace/boundline/src/domain/task.rs`
 - [ ] T013 [US1] Persist clustered delivery authority and workspace participation into session and trace state in `/Users/rt/workspace/boundline/src/domain/session.rs`, `/Users/rt/workspace/boundline/src/domain/task_context.rs`, and `/Users/rt/workspace/boundline/src/domain/trace.rs`
 

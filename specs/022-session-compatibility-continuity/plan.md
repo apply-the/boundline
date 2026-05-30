@@ -17,7 +17,7 @@ Tighten Boundline's operator continuity story after explicit compatibility runs 
   the iteration process.
 -->
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, plus Rust standard library filesystem and path APIs; no new runtime dependencies planned for this slice  
 **Storage**: Existing workspace-local `.boundline/session.json` and `.boundline/traces/` remain authoritative; no new persistence surface is planned unless research proves existing state cannot express continuity safely  
 **Testing**: `cargo fmt --all`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test --no-run --all-targets`, targeted contract, integration, and unit coverage for compatibility follow-up continuity, `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`, plus repository-standard `cargo nextest run --workspace --all-features` and `cargo deny check licenses advisories bans sources` during release closeout  
@@ -35,7 +35,7 @@ Tighten Boundline's operator continuity story after explicit compatibility runs 
 
 - Delivery identity: Explain how this feature directly improves bounded engineering task delivery.
 - Delivery-first scope: Confirm execution, orchestration, decomposition, or validation work is prioritized ahead of optimization or polish.
-- Primary workflow: State whether the main operator path is session-native (`start -> capture -> plan -> run -> status -> next -> inspect`) and identify any explicit compatibility path that remains available.
+- Primary workflow: State whether the main operator path is session-native (`goal -> plan -> run -> status -> next -> inspect`) and identify any explicit compatibility path that remains available.
 - Bounded execution: Identify explicit start conditions, terminal conditions, and max step or retry limits.
 - Stateful execution: Describe shared task context, read and write points, and justify any stateless segment.
 - Mutable planning: Describe initial planning plus replanning, step insertion, or replacement behavior.

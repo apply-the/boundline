@@ -5,7 +5,7 @@ use boundline::adapters::session_store::{FileSessionStore, SessionStore};
 use boundline::cli::inspect::execute_inspect;
 use boundline::cli::run::{execute_custom_run, execute_native_direct_run};
 use boundline::cli::session::{
-    execute_capture, execute_next, execute_plan, execute_run, execute_start, execute_status,
+    execute_goal, execute_next, execute_plan, execute_run, execute_status,
 };
 use boundline::domain::configuration::{ConfigFile, ModelRoute, RoutingConfig, RuntimeKind};
 
@@ -17,18 +17,9 @@ use crate::runtime_refoundation::{
 fn confirmed_goal_plan_takes_precedence_over_execution_profile_for_session_run() {
     let workspace = temp_runtime_refoundation_compat_workspace("runtime-routing-contract-native");
 
-    execute_start(Some(&workspace)).unwrap();
-    execute_capture(
-        Some(&workspace),
-        Some("fix the failing add test"),
-        &[],
-        None,
-        None,
-        None,
-        None,
-    )
-    .unwrap();
-    execute_plan(Some(&workspace), Some("bug-fix"), false, false).unwrap();
+    execute_goal(Some(&workspace), Some("fix the failing add test"), &[], None, None, None, None)
+        .unwrap();
+    execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
 
     let run = execute_run(Some(&workspace)).unwrap();
     assert!(run.terminal_output.contains("decision "), "{}", run.terminal_output);
@@ -69,18 +60,9 @@ fn native_direct_run_stays_native_even_when_execution_profile_exists() {
 fn explicit_compatibility_run_is_visible_and_preserves_native_session_state() {
     let workspace = temp_runtime_refoundation_compat_workspace("runtime-routing-contract-compat");
 
-    execute_start(Some(&workspace)).unwrap();
-    execute_capture(
-        Some(&workspace),
-        Some("fix the failing add test"),
-        &[],
-        None,
-        None,
-        None,
-        None,
-    )
-    .unwrap();
-    execute_plan(Some(&workspace), Some("bug-fix"), false, false).unwrap();
+    execute_goal(Some(&workspace), Some("fix the failing add test"), &[], None, None, None, None)
+        .unwrap();
+    execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
 
     let before = FileSessionStore::for_workspace(&workspace).load().unwrap().unwrap();
     let report = execute_custom_run(
@@ -165,8 +147,7 @@ fn native_and_compatibility_follow_up_keep_shared_routing_and_execution_conditio
 
     let native_workspace =
         temp_runtime_refoundation_compat_workspace("runtime-routing-contract-native-summary");
-    execute_start(Some(&native_workspace)).unwrap();
-    execute_capture(
+    execute_goal(
         Some(&native_workspace),
         Some("fix the failing add test"),
         &[],
@@ -176,7 +157,7 @@ fn native_and_compatibility_follow_up_keep_shared_routing_and_execution_conditio
         None,
     )
     .unwrap();
-    execute_plan(Some(&native_workspace), Some("bug-fix"), false, false).unwrap();
+    execute_plan(Some(&native_workspace), Some("bug-fix"), false).unwrap();
 
     let native_run = execute_run(Some(&native_workspace)).unwrap();
     assert!(
@@ -204,11 +185,11 @@ fn status_projects_workspace_routing_defaults_for_native_follow_up() {
         routing: RoutingConfig {
             planning: Some(ModelRoute {
                 runtime: RuntimeKind::Codex,
-                model: "gpt-5-codex".to_string(),
+                model: "o4-mini".to_string(),
             }),
             implementation: Some(ModelRoute {
                 runtime: RuntimeKind::Copilot,
-                model: "gpt-5.4".to_string(),
+                model: "gpt-4o".to_string(),
             }),
             ..RoutingConfig::default()
         },
@@ -216,25 +197,16 @@ fn status_projects_workspace_routing_defaults_for_native_follow_up() {
     };
     FileConfigStore::for_workspace(&workspace).save_local(&config).unwrap();
 
-    execute_start(Some(&workspace)).unwrap();
-    execute_capture(
-        Some(&workspace),
-        Some("fix the failing add test"),
-        &[],
-        None,
-        None,
-        None,
-        None,
-    )
-    .unwrap();
-    execute_plan(Some(&workspace), Some("bug-fix"), false, false).unwrap();
+    execute_goal(Some(&workspace), Some("fix the failing add test"), &[], None, None, None, None)
+        .unwrap();
+    execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
 
     let status = execute_status(Some(&workspace)).unwrap();
     assert!(status.terminal_output.contains("route_owner: native"), "{}", status.terminal_output);
     assert!(
         status
             .terminal_output
-            .contains("route_config_projection: workspace_routing: planning=codex/gpt-5-codex, implementation=copilot/gpt-5.4"),
+            .contains("route_config_projection: workspace_routing: planning=codex/o4-mini, implementation=copilot/gpt-4o"),
         "{}",
         status.terminal_output
     );
@@ -281,12 +253,12 @@ fn compatibility_inspect_uses_persisted_routing_snapshot_after_config_changes() 
     };
     FileConfigStore::for_workspace(&workspace).save_local(&after).unwrap();
 
-    let inspect = execute_inspect(Some(Path::new(&trace_ref)), None).unwrap();
+    let inspect = execute_inspect(Some(Path::new(&trace_ref)), None, None, false).unwrap();
 
     assert!(
         inspect
             .terminal_output
-            .contains("effective_routing: planning=codex/gpt-5-codex [built-in], implementation=codex/gpt-5-codex [built-in], verification=copilot/gpt-5.5 [built-in], review=claude/reviewer-before [workspace], adjudication=codex/gpt-5-codex [built-in]"),
+            .contains("effective_routing: planning=codex/o4-mini [built-in], implementation=codex/o4-mini [built-in], verification=copilot/gpt-4.1 [built-in], review=claude/reviewer-before [workspace], adjudication=codex/o4-mini [built-in]"),
         "{}",
         inspect.terminal_output
     );
@@ -310,18 +282,9 @@ fn native_inspect_uses_persisted_routing_snapshot_after_config_changes() {
     };
     FileConfigStore::for_workspace(&workspace).save_local(&before).unwrap();
 
-    execute_start(Some(&workspace)).unwrap();
-    execute_capture(
-        Some(&workspace),
-        Some("fix the failing add test"),
-        &[],
-        None,
-        None,
-        None,
-        None,
-    )
-    .unwrap();
-    execute_plan(Some(&workspace), Some("bug-fix"), false, false).unwrap();
+    execute_goal(Some(&workspace), Some("fix the failing add test"), &[], None, None, None, None)
+        .unwrap();
+    execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
     execute_run(Some(&workspace)).unwrap();
 
     let trace_ref = FileSessionStore::for_workspace(&workspace)
@@ -343,12 +306,12 @@ fn native_inspect_uses_persisted_routing_snapshot_after_config_changes() {
     };
     FileConfigStore::for_workspace(&workspace).save_local(&after).unwrap();
 
-    let inspect = execute_inspect(Some(Path::new(&trace_ref)), None).unwrap();
+    let inspect = execute_inspect(Some(Path::new(&trace_ref)), None, None, false).unwrap();
 
     assert!(
         inspect
             .terminal_output
-            .contains("effective_routing: planning=codex/gpt-5-codex [built-in], implementation=codex/gpt-5-codex [built-in], verification=copilot/gpt-5.5 [built-in], review=claude/reviewer-before [workspace], adjudication=codex/gpt-5-codex [built-in]"),
+            .contains("effective_routing: planning=codex/o4-mini [built-in], implementation=codex/o4-mini [built-in], verification=copilot/gpt-4.1 [built-in], review=claude/reviewer-before [workspace], adjudication=codex/o4-mini [built-in]"),
         "{}",
         inspect.terminal_output
     );
@@ -374,18 +337,9 @@ fn native_run_persists_delegation_when_route_runtime_missing_from_declared_assis
     };
     FileConfigStore::for_workspace(&workspace).save_local(&config).unwrap();
 
-    execute_start(Some(&workspace)).unwrap();
-    execute_capture(
-        Some(&workspace),
-        Some("fix the failing add test"),
-        &[],
-        None,
-        None,
-        None,
-        None,
-    )
-    .unwrap();
-    execute_plan(Some(&workspace), Some("bug-fix"), false, false).unwrap();
+    execute_goal(Some(&workspace), Some("fix the failing add test"), &[], None, None, None, None)
+        .unwrap();
+    execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
 
     let run = execute_run(Some(&workspace)).unwrap();
     let record = FileSessionStore::for_workspace(&workspace).load().unwrap().unwrap();
@@ -414,18 +368,9 @@ fn canon_artifacts_remain_bounded_evidence_for_native_runs() {
     let workspace =
         temp_runtime_refoundation_governed_workspace("runtime-routing-contract-governed");
 
-    execute_start(Some(&workspace)).unwrap();
-    execute_capture(
-        Some(&workspace),
-        Some("fix the failing add test"),
-        &[],
-        None,
-        None,
-        None,
-        None,
-    )
-    .unwrap();
-    execute_plan(Some(&workspace), None, true, false).unwrap();
+    execute_goal(Some(&workspace), Some("fix the failing add test"), &[], None, None, None, None)
+        .unwrap();
+    execute_plan(Some(&workspace), None, true).unwrap();
 
     let run = execute_run(Some(&workspace)).unwrap();
     assert!(run.terminal_output.contains("decision "), "{}", run.terminal_output);

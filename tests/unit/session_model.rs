@@ -48,7 +48,7 @@ fn build_goal_plan(confirmed: bool) -> GoalPlan {
 }
 
 #[test]
-fn execution_path_prefers_pending_native_goal_plan_over_fixture_state() {
+fn execution_path_uses_native_goal_plan_for_proposed_plan() {
     let record = ActiveSessionRecord {
         session_id: "session-native".to_string(),
         workspace_ref: "/tmp/boundline-session-model".to_string(),
@@ -72,10 +72,7 @@ fn execution_path_prefers_pending_native_goal_plan_over_fixture_state() {
         delight_feedback: None,
     };
 
-    assert_eq!(
-        execution_path_text(&record).as_deref(),
-        Some("native_goal_plan_pending_plan_confirmation")
-    );
+    assert_eq!(execution_path_text(&record).as_deref(), Some("native_goal_plan"));
 }
 
 #[test]
@@ -136,7 +133,7 @@ fn execution_path_marks_goal_captured_sessions_as_pending_plan() {
 }
 
 #[test]
-fn routing_outcome_blocks_when_plan_confirmation_is_pending() {
+fn routing_outcome_routes_native_when_plan_confirmation_is_pending() {
     let record = ActiveSessionRecord {
         session_id: "session-native".to_string(),
         workspace_ref: "/tmp/boundline-session-model".to_string(),
@@ -161,9 +158,9 @@ fn routing_outcome_blocks_when_plan_confirmation_is_pending() {
     };
 
     let outcome = routing_outcome(&record);
-    assert_eq!(outcome.mode, RoutingMode::Blocked);
+    assert_eq!(outcome.mode, RoutingMode::Native);
     assert_eq!(outcome.source, RoutingSource::GoalPlan);
-    assert!(outcome.reason.contains("plan confirmation"));
+    assert!(outcome.reason.contains("native execution"));
 }
 
 #[test]

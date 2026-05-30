@@ -11,7 +11,7 @@ Add a typed guidance-catalog and guardian-rule-pack layer so Boundline can disco
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: Existing workspace dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `toml`, `uuid`, and Rust standard-library filesystem, path, collections, and process APIs; no new runtime dependencies planned for this slice  
 **Storage**: Repository-managed reference catalog packs under `assistant/packs/`, workspace-local catalog packs under `.boundline/packs/`, existing workspace-local `.boundline/session.json` and `.boundline/traces/`, and optional Canon-governed repo-visible standards consumed through existing project-memory and governed-artifact surfaces  
 **Testing**: `cargo fmt --all`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, targeted unit, integration, and contract tests for catalog parsing, validation, resolution projection, and CLI visibility, `cargo test --no-run --all-targets`, `cargo nextest run --workspace --all-features` when feasible, and modified-file coverage validation at 95% or higher  
@@ -29,7 +29,7 @@ Add a typed guidance-catalog and guardian-rule-pack layer so Boundline can disco
 
 - **PASS** Delivery identity: The feature directly improves bounded engineering delivery by making guidance content packages explicit, typed, inspectable, and safe to resolve before planning or bounded execution. See Summary and Technical Context.
 - **PASS** Delivery-first scope: The slice prioritizes pack discovery, validation, trace visibility, and runtime-consumable metadata ahead of distribution polish or packaging automation. See Summary and Constraints.
-- **PASS** Primary workflow: The main operator path remains session-native `start -> capture -> plan -> run -> status -> next -> inspect`, with catalog packs feeding the same runtime surfaces rather than introducing a parallel workflow. See Execution Model and Observability Surface.
+- **PASS** Primary workflow: The main operator path remains session-native `goal -> plan -> run -> status -> next -> inspect`, with catalog packs feeding the same runtime surfaces rather than introducing a parallel workflow. See Execution Model and Observability Surface.
 - **PASS** Bounded execution: Catalog discovery and validation run at explicit planning or phase-entry points with clear loaded, skipped, warning, or error terminal states and no hidden background work. See Execution Model and Constraints.
 - **PASS** Stateful execution: Loaded pack metadata, validation findings, and precedence outcomes are persisted in existing session and trace surfaces rather than recomputed opaquely on every read-side command. See Storage and Observability Surface.
 - **PASS** Mutable planning: A replan may incorporate newly added or removed catalog packs while preserving the previously persisted load story until an explicit bounded replan occurs. See Summary and Execution Model.

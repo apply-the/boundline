@@ -9,7 +9,7 @@ Add deterministic delivery flows on top of the existing session model so a works
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024 for the existing CLI and orchestrator backend  
+**Language/Version**: Rust 1.96.0, edition 2024 for the existing CLI and orchestrator backend  
 **Primary Dependencies**: Existing runtime dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`); no new runtime dependencies for this slice  
 **Storage**: Workspace-local JSON session record at `<workspace>/.boundline/session.json` plus persisted execution traces under `<workspace>/.boundline/traces/`  
 **Testing**: `cargo test` with new unit, integration, and contract coverage for flow definitions, session serialization, CLI flow selection, stage-aware status and next guidance, and bounded recovery inside a stage  

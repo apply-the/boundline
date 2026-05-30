@@ -3,6 +3,7 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
+use boundline::adapters::session_store::{FileSessionStore, SessionStore};
 use boundline::adapters::trace_store::{FileTraceStore, TraceStore};
 use boundline::domain::governance::CanonMode;
 use boundline::domain::reasoning::{
@@ -58,12 +59,8 @@ fn ensure_contains(haystack: &str, needle: &str, context: &str) -> Result<(), Bo
 }
 
 fn bootstrap_bug_fix(workspace: &Path) -> Result<(), Box<dyn Error>> {
-    let start = run_boundline_in(workspace, &["start"]);
-    ensure_success(&start, &terminal_text(&start), "start")?;
-
-    let capture =
-        run_boundline_in(workspace, &["capture", "--goal", "Fix the failing checkout flow"]);
-    ensure_success(&capture, &terminal_text(&capture), "capture")?;
+    let goal = run_boundline_in(workspace, &["goal", "--goal", "Fix the failing checkout flow"]);
+    ensure_success(&goal, &terminal_text(&goal), "goal")?;
 
     let flow = run_boundline_in(workspace, &["flow", "bug-fix"]);
     ensure_success(&flow, &terminal_text(&flow), "flow")?;
@@ -180,10 +177,7 @@ fn save_collapsed_review_routing(workspace: &Path) -> Result<(), Box<dyn Error>>
     FileConfigStore::for_workspace(workspace).save_local(&ConfigFile {
         version: 1,
         routing: RoutingConfig {
-            review: Some(ModelRoute {
-                runtime: RuntimeKind::Codex,
-                model: "gpt-5-codex".to_string(),
-            }),
+            review: Some(ModelRoute { runtime: RuntimeKind::Codex, model: "o4-mini".to_string() }),
             ..RoutingConfig::default()
         },
         canon: None,
@@ -193,8 +187,9 @@ fn save_collapsed_review_routing(workspace: &Path) -> Result<(), Box<dyn Error>>
 }
 
 fn load_session_record(workspace: &Path) -> Result<ActiveSessionRecord, Box<dyn Error>> {
-    let session_path = workspace.join(".boundline/session.json");
-    Ok(serde_json::from_str(&fs::read_to_string(session_path)?)?)
+    Ok(FileSessionStore::for_workspace(workspace)
+        .load()?
+        .ok_or_else(|| io::Error::other("session record should exist"))?)
 }
 
 fn load_latest_trace(workspace: &Path) -> Result<ExecutionTrace, Box<dyn Error>> {
@@ -244,7 +239,7 @@ fn contract_drift_reasoning_profile() -> ProfileActivationRecord {
                 boundline_min: "0.62.0".to_string(),
                 boundline_max_exclusive: "0.63.0".to_string(),
                 canon_min: "0.59.0".to_string(),
-                canon_max_exclusive: "0.60.0".to_string(),
+                canon_max_exclusive: "0.61.0".to_string(),
                 contract_line: DRIFTED_REASONING_POSTURE_CONTRACT_LINE.to_string(),
             },
             required_profile_family: Some(ReasoningProfileFamily::SelfConsistency),
@@ -287,7 +282,7 @@ fn inject_latest_reasoning_profile(
         .as_mut()
         .ok_or_else(|| fail("governance lifecycle should exist"))?;
     lifecycle.latest_reasoning_profile = Some(reasoning_profile.clone());
-    fs::write(workspace.join(".boundline/session.json"), serde_json::to_string_pretty(&session)?)?;
+    FileSessionStore::for_workspace(workspace).persist(&session)?;
 
     let mut trace = load_latest_trace(workspace)?;
     let plan_revision = trace.events.last().map(|event| event.plan_revision).unwrap_or(0);
@@ -349,7 +344,7 @@ fn insufficient_independence_blocks_reasoning_profile_through_status_and_inspect
         ensure_contains(&status_text, needle, "blocked reasoning status")?;
     }
 
-    let inspect = run_boundline_in(&workspace, &["inspect", "--workspace", "."]);
+    let inspect = run_boundline_in(&workspace, &["--verbose", "inspect", "--workspace", "."]);
     let inspect_text = terminal_text(&inspect);
     if inspect.status.code() != Some(1) && inspect.status.code() != Some(0) {
         return Err(fail(format!("inspect returned unexpected code: {inspect_text}")));
@@ -398,7 +393,7 @@ fn approval_pending_interrupts_reasoning_profile_through_status_and_inspect()
         ensure_contains(&status_text, needle, "interrupted reasoning status")?;
     }
 
-    let inspect = run_boundline_in(&workspace, &["inspect", "--workspace", "."]);
+    let inspect = run_boundline_in(&workspace, &["--verbose", "inspect", "--workspace", "."]);
     let inspect_text = terminal_text(&inspect);
     if inspect.status.code() != Some(1) && inspect.status.code() != Some(0) {
         return Err(fail(format!("inspect returned unexpected code: {inspect_text}")));
@@ -451,7 +446,7 @@ fn contract_drift_blocked_outcome_surfaces_guidance_through_status_and_inspect()
         ensure_contains(&status_text, needle, "contract drift reasoning status")?;
     }
 
-    let inspect = run_boundline_in(&workspace, &["inspect", "--workspace", "."]);
+    let inspect = run_boundline_in(&workspace, &["--verbose", "inspect", "--workspace", "."]);
     let inspect_text = terminal_text(&inspect);
     if inspect.status.code() != Some(1) && inspect.status.code() != Some(0) {
         return Err(fail(format!("inspect returned unexpected code: {inspect_text}")));

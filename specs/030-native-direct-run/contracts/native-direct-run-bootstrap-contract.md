@@ -8,7 +8,7 @@ route instead of the explicit compatibility path.
 ## Contract
 
 - Direct `run --goal <goal>` must create or continue the
-  same bounded native execution story that manual `start -> capture -> plan ->
+  same bounded native execution story that manual `goal -> plan ->
   run` would have created.
 - The route choice must be visible as native on `run`, `status`, `next`, and
   `inspect`.

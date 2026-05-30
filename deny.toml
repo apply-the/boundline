@@ -4,14 +4,22 @@ all-features = true
 [licenses]
 allow = [
     "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "CDLA-Permissive-2.0",
+    "ISC",
     "MIT",
     "Unicode-3.0",
+    "Zlib",
 ]
 confidence-threshold = 0.93
 private = { ignore = true }
 
 [advisories]
-ignore = []
+ignore = [
+    # Transitive via ratatui; cargo-deny reports no safe upgrade path.
+    "RUSTSEC-2024-0436",
+]
 version = 2
 yanked = "warn"
 

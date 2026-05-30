@@ -1,3 +1,9 @@
+//! Test fixture utilities and execution-profile loaders.
+//!
+//! Shared between integration tests and the legacy compatibility layer for
+//! loading workspace execution profiles, bootstrapping fixture workspaces,
+//! and driving the compatibility execution engine.
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -11,11 +17,15 @@ use thiserror::Error;
 use crate::adapters::agent::FnAgentAdapter;
 use crate::adapters::cluster_store::FileClusterStore;
 use crate::adapters::config_store::FileConfigStore;
+use crate::adapters::provider_runtime::{
+    self, ProviderAnalysisRequest, ProviderChangeRequest, ProviderReviewDisposition,
+    ProviderReviewRequest, ProviderWorkspaceFile,
+};
 use crate::adapters::tool::FnToolAdapter;
 use crate::domain::brief::AuthoredBriefBundle;
 use crate::domain::configuration::{
-    RoutingOverrides, resolve_effective_routing, resolve_effective_runtime_capabilities,
-    resolve_effective_slot_effort_policies,
+    ModelRoute, RoutingOverrides, resolve_effective_routing,
+    resolve_effective_runtime_capabilities, resolve_effective_slot_effort_policies,
 };
 use crate::domain::distribution::SUPPORTED_CANON_VERSION;
 use crate::domain::execution::{
@@ -29,6 +39,8 @@ use crate::domain::flow::{
     FLOW_METADATA_KEY, FlowStepMetadata, SessionFlowState, attach_stage_metadata, built_in_flow,
 };
 use crate::domain::goal_plan::GoalPlan;
+use crate::domain::governance::CanonIntendedPersona;
+use crate::domain::guidance::CapabilityPhase;
 use crate::domain::limits::RunLimits;
 use crate::domain::negotiation::NegotiatedDeliveryPacket;
 use crate::domain::plan::Plan;
@@ -40,17 +52,21 @@ use crate::domain::reasoning::{
     ReasoningOutcomeKind, ReasoningProfileId,
 };
 use crate::domain::review::{
-    ReviewOutcome, ReviewProfile, ReviewTrigger, ReviewerDefinition, ReviewerDisposition,
-    ReviewerFinding, ReviewerParticipation, ReviewerParticipationStatus, VoteDecision,
-    VoteResolution,
+    ReviewOutcome, ReviewProfile, ReviewScenario, ReviewTrigger, ReviewerDefinition,
+    ReviewerDisposition, ReviewerFinding, ReviewerParticipation, ReviewerParticipationStatus,
+    VoteDecision, VoteResolution, VoteRuleDefinition,
 };
 use crate::domain::routing_decision::RoutingDecisionProjection;
 use crate::domain::step::{
     ErrorInfo, Recoverability, Step, StepError, StepExecutionRequest, StepExecutionResult,
 };
 use crate::domain::task::TaskRunRequest;
-use crate::domain::task_context::{LATEST_CLARIFICATION_KEY, LATEST_DERIVED_TASK_DRAFT_KEY};
+use crate::domain::task_context::{
+    LATEST_CLARIFICATION_KEY, LATEST_DERIVED_TASK_DRAFT_KEY, TASK_GOAL_KEY,
+};
+use crate::orchestrator::goal_planner::collect_workspace_signals;
 use crate::orchestrator::governance::{bounded_reused_packets, select_packet_reuse_binding};
+use crate::orchestrator::guidance_runtime::{GuidanceRuntimeEvidence, load_guidance_for_phase};
 use crate::orchestrator::planner::{CallbackPlanner, Planner, PlanningError, StaticPlanner};
 use crate::registry::agent_registry::{AgentRegistry, RegistryError as AgentRegistryError};
 use crate::registry::tool_registry::{RegistryError as ToolRegistryError, ToolRegistry};
@@ -75,6 +91,22 @@ const FIXTURE_REASONING_REFLEXION_NEXT_ACTION: &str =
     "run one bounded verification pass before merge";
 const FIXTURE_REASONING_REFLEXION_SUMMARY: &str =
     "reflexion converged partially; continue with bounded warning semantics";
+const NATIVE_GOAL_PLAN_LEGACY_SOURCE: &str = "native_goal_plan_synthesized";
+const NATIVE_GOAL_PLAN_PROVIDER_REVIEWER_ID: &str = "provider-review";
+const NATIVE_GOAL_PLAN_PROVIDER_REVIEWER_ROLE: &str = "Provider Review";
+const NATIVE_GOAL_PLAN_PROVIDER_REVIEW_PLACEHOLDER_SUMMARY: &str =
+    "provider-backed review pending runtime execution";
+const PROVIDER_REVIEW_SNAPSHOT_FAILED_CODE: &str = "provider_review_snapshot_failed";
+const PROVIDER_REVIEW_FAILED_CODE: &str = "provider_review_failed";
+const PROVIDER_REVIEW_PRIOR_CONTEXT_KEYS: &[&str] = &[
+    "latest_validation_status",
+    "latest_validation_record",
+    "latest_changed_files",
+    "latest_change_evidence",
+    "next_review_trigger",
+    "latest_governance_stage",
+    "last_output",
+];
 
 #[derive(Clone)]
 pub struct FixtureRuntime {
@@ -422,6 +454,7 @@ pub fn build_task_request(
     let mut initial_context = Map::new();
     input.insert("execution_profile".to_string(), json!(profile.name));
     input.insert("flow".to_string(), json!("workspace_execution"));
+    initial_context.insert("goal".to_string(), json!(&goal));
 
     if let Some(routing_projection) = workspace_routing_projection(workspace) {
         input.insert("routing_projection".to_string(), json!(routing_projection));
@@ -558,8 +591,108 @@ pub fn build_fixture_runtime_for_goal_plan(
     workspace: &Path,
     goal_plan: &GoalPlan,
 ) -> Result<FixtureRuntime, FixtureRuntimeError> {
-    let profile = synthesize_goal_plan_execution_profile(workspace, goal_plan)?;
-    build_fixture_runtime_from_profile(workspace, profile, None)
+    let mut profile = synthesize_goal_plan_execution_profile(workspace, goal_plan)?;
+    let routes = goal_plan_provider_routes(workspace);
+    if provider_runtime::route_is_available(&routes.review) {
+        profile.review = Some(synthesize_goal_plan_review_profile(&routes.review));
+    }
+    let mut runtime = build_fixture_runtime_from_profile(workspace, profile.clone(), None)?;
+    let goal = goal_plan.goal_text.clone();
+
+    if provider_runtime::route_is_available(&routes.planning) {
+        runtime.agents.register("analyzer", {
+            let workspace_ref = workspace.to_path_buf();
+            let profile = profile.clone();
+            let route = routes.planning.clone();
+            let goal = goal.clone();
+            FnAgentAdapter::new(move |request| {
+                analyze_workspace_with_provider(&workspace_ref, &profile, &goal, &route, request)
+            })
+        })?;
+    }
+
+    if provider_runtime::route_is_available(&routes.implementation) {
+        runtime.agents.register("coder", {
+            let workspace_ref = workspace.to_path_buf();
+            let profile = profile.clone();
+            let route = routes.implementation.clone();
+            let goal = goal.clone();
+            FnAgentAdapter::new(move |request| {
+                apply_workspace_with_provider(&workspace_ref, &profile, &goal, &route, request)
+            })
+        })?;
+    }
+
+    if provider_runtime::route_is_available(&routes.review) {
+        runtime.agents.register("reviewer", {
+            let workspace_ref = workspace.to_path_buf();
+            let profile = profile.clone();
+            let route = routes.review.clone();
+            let goal = goal.clone();
+            FnAgentAdapter::new(move |request| {
+                review_workspace_with_provider(&workspace_ref, &profile, &goal, &route, request)
+            })
+        })?;
+    }
+
+    Ok(runtime)
+}
+
+#[derive(Debug, Clone)]
+struct GoalPlanProviderRoutes {
+    planning: ModelRoute,
+    implementation: ModelRoute,
+    review: ModelRoute,
+}
+
+fn goal_plan_provider_routes(workspace: &Path) -> GoalPlanProviderRoutes {
+    let effective = workspace_effective_routing(workspace);
+
+    GoalPlanProviderRoutes {
+        planning: effective.planning.route,
+        implementation: effective.implementation.route,
+        review: effective.review.route,
+    }
+}
+
+fn workspace_effective_routing(workspace: &Path) -> crate::domain::configuration::EffectiveRouting {
+    let workspace_routing =
+        FileConfigStore::for_workspace(workspace).local_routing().ok().flatten();
+    let cluster_routing = FileClusterStore::for_workspace(workspace)
+        .load()
+        .ok()
+        .flatten()
+        .map(|config| config.routing);
+    let global_routing = FileConfigStore::global_routing().ok().flatten();
+    resolve_effective_routing(
+        &RoutingOverrides::default(),
+        workspace_routing.as_ref(),
+        cluster_routing.as_ref(),
+        global_routing.as_ref(),
+    )
+}
+
+fn synthesize_goal_plan_review_profile(route: &ModelRoute) -> ReviewProfile {
+    ReviewProfile {
+        triggers: vec![ReviewTrigger::PrReady],
+        reviewers: vec![ReviewerDefinition {
+            reviewer_id: NATIVE_GOAL_PLAN_PROVIDER_REVIEWER_ID.to_string(),
+            role: NATIVE_GOAL_PLAN_PROVIDER_REVIEWER_ROLE.to_string(),
+            source: Some(provider_route_label(route)),
+            weight: 1,
+        }],
+        vote_rule: VoteRuleDefinition::default(),
+        adjudication: Default::default(),
+        scenarios: vec![ReviewScenario {
+            trigger: ReviewTrigger::PrReady,
+            findings: vec![ReviewerFinding::new(
+                NATIVE_GOAL_PLAN_PROVIDER_REVIEWER_ID.to_string(),
+                ReviewerDisposition::Approve,
+                NATIVE_GOAL_PLAN_PROVIDER_REVIEW_PLACEHOLDER_SUMMARY.to_string(),
+            )],
+            adjudication_finding: None,
+        }],
+    }
 }
 
 fn build_fixture_runtime_from_profile(
@@ -607,24 +740,51 @@ fn build_fixture_runtime_from_profile(
         ))
     };
 
+    let effective_routing = workspace_effective_routing(workspace);
+    let provider_planning_route = explicit_provider_route(&effective_routing.planning.route);
+    let provider_implementation_route =
+        explicit_provider_route(&effective_routing.implementation.route);
+    let provider_review_routes =
+        provider_review_routes_for_profile_with_effective(&effective_routing, &profile);
     let mut agents = AgentRegistry::new();
     agents.register("analyzer", {
         let workspace_ref = workspace_ref.clone();
         let profile = profile.clone();
+        let provider_planning_route = provider_planning_route.clone();
         FnAgentAdapter::new(move |request| {
-            analyze_workspace_fixture(&workspace_ref, &profile, request)
+            analyze_workspace_with_optional_provider(
+                &workspace_ref,
+                &profile,
+                provider_planning_route.as_ref(),
+                request,
+            )
         })
     })?;
     agents.register("coder", {
         let workspace_ref = workspace_ref.clone();
         let profile = profile.clone();
+        let provider_implementation_route = provider_implementation_route.clone();
         FnAgentAdapter::new(move |request| {
-            apply_workspace_fixture(&workspace_ref, &profile, request)
+            apply_workspace_with_optional_provider(
+                &workspace_ref,
+                &profile,
+                provider_implementation_route.as_ref(),
+                request,
+            )
         })
     })?;
     agents.register("reviewer", {
+        let workspace_ref = workspace_ref.clone();
         let profile = profile.clone();
-        FnAgentAdapter::new(move |request| review_workspace_fixture(&profile, request))
+        let provider_review_routes = provider_review_routes.clone();
+        FnAgentAdapter::new(move |request| {
+            review_workspace_with_optional_provider(
+                &workspace_ref,
+                &profile,
+                &provider_review_routes,
+                request,
+            )
+        })
     })?;
 
     let mut tools = ToolRegistry::new();
@@ -703,7 +863,7 @@ fn synthesize_goal_plan_execution_profile(
         limits: RunLimits::default(),
         governance: None,
         review: None,
-        legacy_source: Some("native_goal_plan_synthesized".to_string()),
+        legacy_source: Some(NATIVE_GOAL_PLAN_LEGACY_SOURCE.to_string()),
     })
 }
 
@@ -2521,6 +2681,101 @@ fn analyze_workspace_fixture(
     }
 }
 
+fn analyze_workspace_with_provider(
+    workspace: &Path,
+    profile: &WorkspaceExecutionProfile,
+    goal: &str,
+    route: &ModelRoute,
+    request: StepExecutionRequest,
+) -> StepExecutionResult {
+    let sources = match load_workspace_target_sources(workspace, &read_targets_for_profile(profile))
+    {
+        Ok(sources) => sources,
+        Err(error) => {
+            return StepExecutionResult::failure(
+                ErrorInfo::new(
+                    "provider_analysis_snapshot_failed",
+                    format!("failed to snapshot workspace targets for provider analysis: {error}"),
+                ),
+                Recoverability::Terminal,
+            );
+        }
+    };
+    let provider_files = provider_workspace_files(&sources);
+    let guidance_context =
+        resolve_phase_guidance(workspace, CapabilityPhase::Planning, goal, &request, &sources);
+    let persona = resolve_effective_persona(workspace, &request);
+    let analysis = provider_runtime::analyze_workspace(
+        route,
+        &ProviderAnalysisRequest {
+            goal: goal.to_string(),
+            phase: provider_phase_label(&request),
+            files: provider_files,
+            guidance_context,
+            persona,
+        },
+    );
+
+    match analysis {
+        Ok(analysis) => {
+            let mut state_patch = Map::new();
+            insert_adaptive_state_from_input(
+                &mut state_patch,
+                &request.input,
+                &request.task_snapshot.state,
+            );
+            let governance_context = governance_context_from_request(&request);
+            let mut rendered_output = json!({
+                "execution_profile": profile.name,
+                "legacy_source": profile.legacy_source,
+                "provider_route": provider_route_label(route),
+                "analysis_headline": analysis.headline,
+                "analysis_summary": analysis.summary,
+                "analysis_risks": analysis.risks,
+                "analysis_targets": provider_workspace_previews(&sources),
+            });
+            if let Some(governance_context) = governance_context {
+                rendered_output["governance_context"] = governance_context;
+            }
+
+            if state_patch.is_empty() {
+                StepExecutionResult::success(rendered_output)
+            } else {
+                insert_adaptive_output_from_input(&mut rendered_output, &request.input);
+                StepExecutionResult::success_with_patch(rendered_output, state_patch)
+            }
+        }
+        Err(error) => StepExecutionResult::failure(
+            ErrorInfo::new(
+                "provider_analysis_failed",
+                format!(
+                    "provider analysis failed for route {}: {error}",
+                    provider_route_label(route)
+                ),
+            ),
+            provider_error_recoverability(&error),
+        ),
+    }
+}
+
+fn analyze_workspace_with_optional_provider(
+    workspace: &Path,
+    profile: &WorkspaceExecutionProfile,
+    route: Option<&ModelRoute>,
+    request: StepExecutionRequest,
+) -> StepExecutionResult {
+    match route {
+        Some(route) => analyze_workspace_with_provider(
+            workspace,
+            profile,
+            &provider_goal_from_request(profile, &request),
+            route,
+            request,
+        ),
+        None => analyze_workspace_fixture(workspace, profile, request),
+    }
+}
+
 fn apply_workspace_fixture(
     workspace: &Path,
     profile: &WorkspaceExecutionProfile,
@@ -2597,6 +2852,576 @@ fn apply_workspace_fixture(
             Recoverability::Terminal,
         ),
     }
+}
+
+fn apply_workspace_with_provider(
+    workspace: &Path,
+    profile: &WorkspaceExecutionProfile,
+    goal: &str,
+    route: &ModelRoute,
+    request: StepExecutionRequest,
+) -> StepExecutionResult {
+    if request.input.get("force_retry_once").and_then(Value::as_bool).unwrap_or(false)
+        && request.attempt_number == 1
+    {
+        return StepExecutionResult::failure(
+            ErrorInfo::new(
+                "fixture_retry_once",
+                format!(
+                    "workspace execution profile '{}' intentionally requests one retry before applying changes",
+                    profile.name
+                ),
+            ),
+            Recoverability::Retryable,
+        );
+    }
+
+    let allowed_paths = read_targets_for_profile(profile);
+    let sources = match load_workspace_target_sources(workspace, &allowed_paths) {
+        Ok(sources) => sources,
+        Err(error) => {
+            return StepExecutionResult::failure(
+                ErrorInfo::new(
+                    "provider_change_snapshot_failed",
+                    format!("failed to snapshot workspace targets for provider changes: {error}"),
+                ),
+                Recoverability::Terminal,
+            );
+        }
+    };
+
+    let guidance_context = resolve_phase_guidance(
+        workspace,
+        CapabilityPhase::Implementation,
+        goal,
+        &request,
+        &sources,
+    );
+    let persona = resolve_effective_persona(workspace, &request);
+
+    let change_response = provider_runtime::propose_workspace_changes(
+        route,
+        &ProviderChangeRequest {
+            goal: goal.to_string(),
+            phase: provider_phase_label(&request),
+            allowed_paths: allowed_paths.clone(),
+            files: provider_workspace_files(&sources),
+            guidance_context,
+            persona,
+        },
+    );
+
+    let change_response = match change_response {
+        Ok(change_response) => change_response,
+        Err(error) => {
+            return StepExecutionResult::failure(
+                ErrorInfo::new(
+                    "provider_change_failed",
+                    format!(
+                        "provider change generation failed for route {}: {error}",
+                        provider_route_label(route)
+                    ),
+                ),
+                provider_error_recoverability(&error),
+            );
+        }
+    };
+
+    if change_response.changes.is_empty() {
+        return StepExecutionResult::failure(
+            ErrorInfo::new(
+                "provider_change_empty",
+                format!(
+                    "provider route {} did not return a credible bounded change set",
+                    provider_route_label(route)
+                ),
+            ),
+            Recoverability::Terminal,
+        );
+    }
+
+    let attempt = ExecutionAttemptDefinition {
+        attempt_id: format!("provider-{}", request.step_id),
+        summary: change_response.headline.clone(),
+        failure_mode: ExecutionFailureMode::Terminal,
+        changes: change_response
+            .changes
+            .iter()
+            .map(|change| WorkspaceChange {
+                path: change.path.clone(),
+                find: change.find.clone(),
+                replace: change.replace.clone(),
+            })
+            .collect(),
+    };
+
+    match apply_execution_attempt(workspace, &attempt) {
+        Ok(report) => {
+            let changed_files = if report.updated_files.is_empty() {
+                report.already_applied_files.clone()
+            } else {
+                report.updated_files.clone()
+            };
+            let mut state_patch = Map::new();
+            state_patch.insert("latest_attempt_id".to_string(), json!(attempt.attempt_id));
+            state_patch.insert("latest_changed_files".to_string(), json!(changed_files));
+            state_patch.insert(
+                "latest_change_evidence".to_string(),
+                serde_json::to_value(&report.change_evidence).unwrap_or(Value::Null),
+            );
+            insert_adaptive_state_from_input(
+                &mut state_patch,
+                &request.input,
+                &request.task_snapshot.state,
+            );
+            let governance_context = governance_context_from_request(&request);
+            let mut rendered_output = json!({
+                "execution_profile": profile.name,
+                "attempt_id": attempt.attempt_id,
+                "change_applied": true,
+                "provider_route": provider_route_label(route),
+                "provider_headline": change_response.headline,
+                "provider_summary": change_response.summary,
+                "changed_files": changed_files,
+                "already_applied_files": report.already_applied_files,
+                "change_evidence": report.change_evidence,
+            });
+            insert_adaptive_output_from_input(&mut rendered_output, &request.input);
+            if let Some(governance_context) = governance_context {
+                rendered_output["governance_context"] = governance_context;
+            }
+
+            StepExecutionResult::success_with_patch(rendered_output, state_patch)
+        }
+        Err(error) => StepExecutionResult::failure(
+            ErrorInfo::new(
+                "provider_change_apply_failed",
+                format!("failed to apply provider-generated change set: {error}"),
+            ),
+            Recoverability::Terminal,
+        ),
+    }
+}
+
+fn apply_workspace_with_optional_provider(
+    workspace: &Path,
+    profile: &WorkspaceExecutionProfile,
+    route: Option<&ModelRoute>,
+    request: StepExecutionRequest,
+) -> StepExecutionResult {
+    match route {
+        Some(route) => apply_workspace_with_provider(
+            workspace,
+            profile,
+            &provider_goal_from_request(profile, &request),
+            route,
+            request,
+        ),
+        None => apply_workspace_fixture(workspace, profile, request),
+    }
+}
+
+fn review_workspace_with_provider(
+    workspace: &Path,
+    profile: &WorkspaceExecutionProfile,
+    goal: &str,
+    route: &ModelRoute,
+    request: StepExecutionRequest,
+) -> StepExecutionResult {
+    let Some(review) = profile.review.as_ref() else {
+        return StepExecutionResult::success(json!({"review_skipped": true}));
+    };
+
+    let Some(reviewer_id) = request.input.get("reviewer_id").and_then(Value::as_str) else {
+        return StepExecutionResult::failure(
+            ErrorInfo::new("missing_reviewer_id", "review step is missing reviewer_id metadata"),
+            Recoverability::Terminal,
+        );
+    };
+    let adjudication = request.input.get("adjudication").and_then(Value::as_bool).unwrap_or(false);
+    let Some(trigger) = active_review_trigger(review, &request) else {
+        return StepExecutionResult::success(json!({
+            "review_skipped": true,
+            "reviewer_id": reviewer_id,
+        }));
+    };
+
+    let (reviewer_role, reviewer_source) = match review.reviewer_by_id(reviewer_id) {
+        Some(reviewer) => (reviewer.role.clone(), reviewer.source.clone()),
+        None if adjudication => ("Adjudicator".to_string(), None),
+        None => {
+            return review_terminal_failure(
+                "unknown_reviewer",
+                format!("reviewer '{reviewer_id}' is not configured in the review council"),
+                Some(trigger),
+                reviewer_id,
+            );
+        }
+    };
+
+    let sources = match load_workspace_target_sources(workspace, &read_targets_for_profile(profile))
+    {
+        Ok(sources) => sources,
+        Err(error) => {
+            return StepExecutionResult::failure(
+                ErrorInfo::new(
+                    PROVIDER_REVIEW_SNAPSHOT_FAILED_CODE,
+                    format!("failed to snapshot workspace targets for provider review: {error}"),
+                ),
+                Recoverability::Terminal,
+            );
+        }
+    };
+
+    let review_response = provider_runtime::review_workspace(
+        route,
+        &ProviderReviewRequest {
+            goal: goal.to_string(),
+            phase: provider_phase_label(&request),
+            reviewer_id: reviewer_id.to_string(),
+            reviewer_role: reviewer_role.clone(),
+            attempt_id: provider_review_attempt_id(&request),
+            files: provider_workspace_files(&sources),
+            prior_context: provider_review_prior_context(&request),
+        },
+    );
+
+    let review_response = match review_response {
+        Ok(response) => response,
+        Err(error) => {
+            return StepExecutionResult::failure(
+                ErrorInfo::new(
+                    PROVIDER_REVIEW_FAILED_CODE,
+                    format!(
+                        "provider review failed for route {}: {error}",
+                        provider_route_label(route)
+                    ),
+                ),
+                provider_error_recoverability(&error),
+            );
+        }
+    };
+
+    let reviewer_effective_route = Some(provider_route_label(route));
+    let finding = provider_review_finding(reviewer_id, &reviewer_role, review_response);
+    let mut findings = review_findings_from_state(&request);
+    findings.retain(|existing| existing.reviewer_id != reviewer_id);
+    findings.push(finding.clone());
+    let mut reviewers = review_reviewer_ids_from_state(&request);
+    if !reviewers.contains(&reviewer_id.to_string()) {
+        reviewers.push(reviewer_id.to_string());
+    }
+    let mut participants = review_participants_from_state(&request);
+    participants.retain(|participant| participant.reviewer_id != reviewer_id);
+    participants.push(ReviewerParticipation {
+        reviewer_id: reviewer_id.to_string(),
+        status: ReviewerParticipationStatus::Completed,
+        reason: None,
+        effective_route: reviewer_effective_route.clone(),
+    });
+
+    let mut state_patch = Map::new();
+    state_patch.insert("latest_review_trigger".to_string(), json!(trigger));
+    state_patch.insert(
+        "latest_review_findings".to_string(),
+        serde_json::to_value(&findings).unwrap_or(Value::Null),
+    );
+    state_patch.insert("latest_reviewers".to_string(), json!(reviewers));
+    state_patch.insert(
+        "latest_review_participants".to_string(),
+        serde_json::to_value(&participants).unwrap_or(Value::Null),
+    );
+    if adjudication {
+        state_patch.insert(
+            "latest_review_adjudication".to_string(),
+            serde_json::to_value(&finding).unwrap_or(Value::Null),
+        );
+    }
+
+    let governance_context = governance_context_from_request(&request);
+    let mut rendered_output = json!({
+        "review_trigger": trigger,
+        "reviewer_id": reviewer_id,
+        "reviewer_role": reviewer_role,
+        "reviewer_source": reviewer_source,
+        "reviewer_effective_route": reviewer_effective_route,
+        "provider_route": provider_route_label(route),
+        "finding": finding,
+        "adjudication": adjudication,
+        "review_targets": provider_workspace_previews(&sources),
+    });
+    if let Some(governance_context) = governance_context {
+        rendered_output["governance_context"] = governance_context;
+    }
+
+    StepExecutionResult::success_with_patch(rendered_output, state_patch)
+}
+
+fn review_workspace_with_optional_provider(
+    workspace: &Path,
+    profile: &WorkspaceExecutionProfile,
+    provider_review_routes: &BTreeMap<String, ModelRoute>,
+    request: StepExecutionRequest,
+) -> StepExecutionResult {
+    let reviewer_id = request.input.get("reviewer_id").and_then(Value::as_str).map(str::to_string);
+    let route =
+        reviewer_id.as_deref().and_then(|reviewer_id| provider_review_routes.get(reviewer_id));
+
+    match route {
+        Some(route) => review_workspace_with_provider(
+            workspace,
+            profile,
+            &provider_goal_from_request(profile, &request),
+            route,
+            request,
+        ),
+        None => review_workspace_fixture(profile, request),
+    }
+}
+
+fn provider_phase_label(request: &StepExecutionRequest) -> String {
+    request
+        .input
+        .get("phase")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(request.step_id.as_str())
+        .to_string()
+}
+
+fn resolve_phase_guidance(
+    workspace: &Path,
+    phase: CapabilityPhase,
+    goal: &str,
+    request: &StepExecutionRequest,
+    sources: &[WorkspaceTargetSource],
+) -> Vec<String> {
+    let signals = collect_workspace_signals(workspace);
+    let evidence = GuidanceRuntimeEvidence {
+        goal_text: goal.to_string(),
+        language: signals.language.clone(),
+        selected_targets: sources.iter().map(|source| source.path.clone()).collect(),
+        primary_inputs: provider_primary_input_refs(request),
+        has_tests: signals.has_tests,
+    };
+    load_guidance_for_phase(workspace, phase, &evidence)
+}
+
+fn provider_primary_input_refs(request: &StepExecutionRequest) -> Vec<String> {
+    request
+        .input
+        .get("authored_brief")
+        .cloned()
+        .and_then(|value| serde_json::from_value::<AuthoredBriefBundle>(value).ok())
+        .map(|bundle| {
+            bundle
+                .sources
+                .into_iter()
+                .map(|source| {
+                    let display_label = source.display_label();
+                    source.workspace_path.unwrap_or(display_label)
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default()
+}
+
+/// Resolves the effective persona label from workspace configuration.
+/// Prefers the latest governance packet's intended persona, then workspace or
+/// global config, and finally the default delivery-engineer persona.
+fn resolve_effective_persona(workspace: &Path, request: &StepExecutionRequest) -> Option<String> {
+    if let Ok(Some(packet)) = request.task_snapshot.latest_governance_packet()
+        && let Some(authority) = packet.authority_governance.as_ref()
+    {
+        return Some(authority.intended_persona.as_str().to_string());
+    }
+
+    let config = FileConfigStore::for_workspace(workspace).load_local().ok().flatten();
+    let global = FileConfigStore::load_global().ok().flatten();
+    let canon_prefs = config
+        .as_ref()
+        .and_then(|config| config.canon.as_ref())
+        .or_else(|| global.as_ref().and_then(|config| config.canon.as_ref()));
+    if let Some(owner) = canon_prefs.and_then(|prefs| prefs.default_owner.as_deref())
+        && let Some(persona) = CanonIntendedPersona::canonicalize_label(owner)
+    {
+        return Some(persona.to_string());
+    }
+
+    Some(CanonIntendedPersona::DeliveryEngineer.as_str().to_string())
+}
+
+fn provider_route_label(route: &ModelRoute) -> String {
+    format!("{}/{}", route.runtime.as_str(), route.model)
+}
+
+fn provider_workspace_files(sources: &[WorkspaceTargetSource]) -> Vec<ProviderWorkspaceFile> {
+    sources
+        .iter()
+        .map(|source| ProviderWorkspaceFile {
+            path: source.path.clone(),
+            contents: source.contents.clone(),
+        })
+        .collect()
+}
+
+fn provider_workspace_previews(sources: &[WorkspaceTargetSource]) -> Vec<Value> {
+    sources
+        .iter()
+        .map(|source| {
+            json!({
+                "path": source.path,
+                "preview": excerpt(&source.contents),
+            })
+        })
+        .collect()
+}
+
+fn provider_error_recoverability(error: &provider_runtime::ProviderRuntimeError) -> Recoverability {
+    if error.is_retryable() { Recoverability::Retryable } else { Recoverability::Terminal }
+}
+
+fn provider_review_prior_context(request: &StepExecutionRequest) -> Value {
+    let mut context = Map::new();
+    for key in PROVIDER_REVIEW_PRIOR_CONTEXT_KEYS {
+        if let Some(value) = request.task_snapshot.state.get(*key).cloned() {
+            context.insert((*key).to_string(), value);
+        }
+    }
+    Value::Object(context)
+}
+
+fn provider_goal_from_request(
+    profile: &WorkspaceExecutionProfile,
+    request: &StepExecutionRequest,
+) -> String {
+    request
+        .task_snapshot
+        .state
+        .get(TASK_GOAL_KEY)
+        .and_then(Value::as_str)
+        .or_else(|| request.input.get("goal").and_then(Value::as_str))
+        .or_else(|| request.input.get("negotiation_goal_summary").and_then(Value::as_str))
+        .or_else(|| {
+            request.task_snapshot.state.get("negotiation_goal_summary").and_then(Value::as_str)
+        })
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(profile.name.as_str())
+        .to_string()
+}
+
+fn explicit_provider_route(route: &ModelRoute) -> Option<ModelRoute> {
+    if provider_runtime::route_uses_explicit_provider_namespace(route)
+        && provider_runtime::route_is_available(route)
+    {
+        Some(route.clone())
+    } else {
+        None
+    }
+}
+
+fn provider_review_attempt_id(request: &StepExecutionRequest) -> String {
+    request
+        .input
+        .get("attempt_id")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(request.step_id.as_str())
+        .to_string()
+}
+
+fn provider_review_finding(
+    reviewer_id: &str,
+    reviewer_role: &str,
+    response: provider_runtime::ProviderReviewResponse,
+) -> ReviewerFinding {
+    ReviewerFinding {
+        reviewer_id: reviewer_id.to_string(),
+        disposition: match response.disposition {
+            ProviderReviewDisposition::Approve => ReviewerDisposition::Approve,
+            ProviderReviewDisposition::Concern => ReviewerDisposition::Concern,
+            ProviderReviewDisposition::Block => ReviewerDisposition::Block,
+        },
+        summary: response.summary,
+        details: response.details,
+        runtime_role: Some(reviewer_role.to_string()),
+        severity: None,
+        required_action: response.required_action,
+        confidence: None,
+        evidence_refs: response.evidence_refs,
+    }
+}
+
+#[cfg(test)]
+fn provider_review_routes_for_profile(
+    workspace: &Path,
+    profile: &WorkspaceExecutionProfile,
+) -> BTreeMap<String, ModelRoute> {
+    let effective = workspace_effective_routing(workspace);
+
+    provider_review_routes_for_profile_with_effective(&effective, profile)
+}
+
+fn provider_review_routes_for_profile_with_effective(
+    effective: &crate::domain::configuration::EffectiveRouting,
+    profile: &WorkspaceExecutionProfile,
+) -> BTreeMap<String, ModelRoute> {
+    let Some(review) = profile.review.as_ref() else {
+        return BTreeMap::new();
+    };
+
+    let mut routes = review
+        .reviewers
+        .iter()
+        .filter_map(|reviewer| {
+            provider_review_route_for_reviewer(effective, reviewer)
+                .map(|route| (reviewer.reviewer_id.clone(), route))
+        })
+        .collect::<BTreeMap<_, _>>();
+
+    if review.adjudication.enabled
+        && let Some(adjudicator_id) = review.adjudication.reviewer_id.as_ref()
+        && let Some(route) = explicit_provider_route(&effective.adjudication.route)
+    {
+        routes.insert(adjudicator_id.clone(), route);
+    }
+
+    routes
+}
+
+fn provider_review_route_for_reviewer(
+    effective: &crate::domain::configuration::EffectiveRouting,
+    reviewer: &ReviewerDefinition,
+) -> Option<ModelRoute> {
+    for key in reviewer_route_config_keys(reviewer) {
+        if let Some(route) = effective.reviewer_roles.get(&key) {
+            return explicit_provider_route(&route.route);
+        }
+    }
+
+    explicit_provider_route(&effective.review.route)
+}
+
+fn reviewer_route_config_keys(reviewer: &ReviewerDefinition) -> Vec<String> {
+    let mut keys = BTreeSet::new();
+
+    for value in [&reviewer.reviewer_id, &reviewer.role] {
+        let trimmed = value.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        keys.insert(trimmed.to_string());
+        let normalized = normalize_reviewer_route_key(trimmed);
+        if !normalized.is_empty() {
+            keys.insert(normalized);
+        }
+    }
+
+    keys.into_iter().collect()
 }
 
 fn verify_workspace_fixture(
@@ -3667,24 +4492,26 @@ mod tests {
         AdaptiveCandidateContext, ExecutionAttemptDefinition, ExecutionCommand,
         ExecutionFailureMode, FilePatch, FixtureRuntimeError, GeneratedAdaptiveCandidate,
         RankedAdaptiveCandidate, ReasoningProfileFixtureScenario, WorkspaceChange,
-        WorkspaceExecutionProfile, WorkspaceFixture, adaptive_failure_evidence,
-        adaptive_no_candidate_reason, adaptive_replan_blocker, adaptive_selection_headline,
-        adaptive_selection_reason, adaptive_transition_kind, analyze_workspace_fixture,
-        apply_fixture_patches, apply_workspace_fixture, boolean_flip_candidates,
-        build_adaptive_attempt_steps, build_adaptive_candidates, build_adaptive_initial_plan,
-        build_attempt_steps, build_fixture_plan, build_fixture_plan_for_flow,
-        build_fixture_runtime, build_fixture_runtime_for_goal_plan,
+        WorkspaceExecutionProfile, WorkspaceFixture, WorkspaceTargetSource,
+        adaptive_failure_evidence, adaptive_no_candidate_reason, adaptive_replan_blocker,
+        adaptive_selection_headline, adaptive_selection_reason, adaptive_transition_kind,
+        analyze_workspace_fixture, apply_fixture_patches, apply_workspace_fixture,
+        boolean_flip_candidates, build_adaptive_attempt_steps, build_adaptive_candidates,
+        build_adaptive_initial_plan, build_attempt_steps, build_fixture_plan,
+        build_fixture_plan_for_flow, build_fixture_runtime, build_fixture_runtime_for_goal_plan,
         build_rejected_candidate_summaries, build_review_steps_for_attempt, build_task_request,
         build_vertical_slice_plan, comparison_flip_candidates, execution_manifest_path,
         first_stable_line, fixture_minimum_independence, fixture_next_minor_exclusive,
         fixture_reasoning_budget, guidance_paths_from_text, infer_goal_plan_change,
         load_workspace_execution_profile, local_reasoning_posture_fixture,
         numeric_literal_flip_candidates, ordering_boundary_flip_candidates,
-        reasoning_profile_fixture, resolve_review_vote, resolve_supported_fixture_flow,
+        provider_review_routes_for_profile, reasoning_profile_fixture, resolve_effective_persona,
+        resolve_phase_guidance, resolve_review_vote, resolve_supported_fixture_flow,
         result_status_flip_candidates, review_workspace_fixture, run_fixture_command,
         score_adaptive_candidate, synthesize_goal_plan_execution_profile, verify_workspace_fixture,
     };
     use crate::adapters::config_store::FileConfigStore;
+    use crate::domain::brief::normalize_inputs;
     use crate::domain::configuration::{ConfigFile, ModelRoute, RoutingConfig, RuntimeKind};
     use crate::domain::execution::{
         AdaptiveChangeKind, AdaptiveExecutionProfile, AttemptTransitionKind, PathScore,
@@ -3694,9 +4521,11 @@ mod tests {
     use crate::domain::flow::{SessionFlowState, attach_stage_metadata, built_in_flow};
     use crate::domain::goal_plan::{GoalPlan, PlannedTask};
     use crate::domain::governance::{
-        ApprovalState, CanonMode, GovernanceLifecycleState, GovernanceRuntimeKind,
-        GovernedStagePacket, GovernedStageRecord, PacketReadiness,
+        ApprovalState, CanonAuthorityGovernanceV1Envelope, CanonAuthorityZone, CanonChangeClass,
+        CanonIntendedPersona, CanonMode, CanonRiskClass, GovernanceLifecycleState,
+        GovernanceRuntimeKind, GovernedStagePacket, GovernedStageRecord, PacketReadiness,
     };
+    use crate::domain::guidance::CapabilityPhase;
     use crate::domain::limits::RunLimits;
     use crate::domain::reasoning::{
         ReasoningAdmissionEffect, ReasoningConfidenceLevel, ReasoningProfileId,
@@ -4646,9 +5475,9 @@ mod tests {
             "routing_projection".to_string(),
             json!({
                 "effective_routing": [
-                    "review=claude/sonnet-4.6 [workspace]",
-                    "reviewer:safety=claude/sonnet-4.6 [workspace]",
-                    "reviewer:maintainability=claude/sonnet-4.6 [workspace]"
+                    "review=claude/sonnet-4 [workspace]",
+                    "reviewer:safety=claude/sonnet-4 [workspace]",
+                    "reviewer:maintainability=claude/sonnet-4 [workspace]"
                 ]
             }),
         );
@@ -4693,7 +5522,7 @@ mod tests {
             "routing_projection".to_string(),
             json!({
                 "effective_routing": [
-                    "reviewer:safety=copilot/gpt-5.5 [workspace]",
+                    "reviewer:safety=copilot/gpt-4.1 [workspace]",
                     "reviewer:ux=gemini/gemini-2.5-pro [workspace]"
                 ]
             }),
@@ -4964,9 +5793,41 @@ mod tests {
         .unwrap();
         assert_eq!(
             goal_plan_runtime.profile.legacy_source.as_deref(),
-            Some("native_goal_plan_synthesized")
+            Some(super::NATIVE_GOAL_PLAN_LEGACY_SOURCE)
         );
         assert!(goal_plan_runtime.tools.get("replanner").is_some());
+
+        let review_config = ConfigFile {
+            version: 1,
+            routing: RoutingConfig {
+                review: Some(ModelRoute {
+                    runtime: RuntimeKind::Copilot,
+                    model: "ollama/qwen3:32b".to_string(),
+                }),
+                ..RoutingConfig::default()
+            },
+            canon: None,
+        };
+        FileConfigStore::for_workspace(&workspace).save_local(&review_config).unwrap();
+        let review_goal_plan_runtime = build_fixture_runtime_for_goal_plan(
+            &workspace,
+            &GoalPlan::new(
+                "Fix the workspace",
+                vec![PlannedTask {
+                    task_id: "planned-task-2".to_string(),
+                    description: "Repair arithmetic".to_string(),
+                    target: "src/lib.rs".to_string(),
+                    expected_outcome: Some("tests pass".to_string()),
+                    decision_type_hint: None,
+                }],
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let review = review_goal_plan_runtime.profile.review.as_ref().unwrap();
+        assert_eq!(review.reviewers.len(), 1);
+        assert_eq!(review.reviewers[0].reviewer_id, super::NATIVE_GOAL_PLAN_PROVIDER_REVIEWER_ID);
+        assert_eq!(review.reviewers[0].source.as_deref(), Some("copilot/ollama/qwen3:32b"));
 
         let analysis = analyze_workspace_fixture(&workspace, &profile, request(json!({}), 1));
         assert_eq!(analysis.status, crate::domain::step::ExecutionStatus::Succeeded);
@@ -5013,19 +5874,16 @@ mod tests {
             routing: RoutingConfig {
                 review: Some(ModelRoute {
                     runtime: RuntimeKind::Claude,
-                    model: "sonnet-4.6".to_string(),
+                    model: "sonnet-4".to_string(),
                 }),
                 reviewer_roles: std::collections::BTreeMap::from([
                     (
                         "safety".to_string(),
-                        ModelRoute { runtime: RuntimeKind::Copilot, model: "gpt-5.5".to_string() },
+                        ModelRoute { runtime: RuntimeKind::Copilot, model: "gpt-4.1".to_string() },
                     ),
                     (
                         "maintainability".to_string(),
-                        ModelRoute {
-                            runtime: RuntimeKind::Claude,
-                            model: "sonnet-4.6".to_string(),
-                        },
+                        ModelRoute { runtime: RuntimeKind::Claude, model: "sonnet-4".to_string() },
                     ),
                 ]),
                 ..RoutingConfig::default()
@@ -5037,17 +5895,72 @@ mod tests {
         let task_request =
             build_task_request(&workspace, "Fix the workspace", "session-1", None, None).unwrap();
         let initial_context = task_request.initial_context.as_ref().unwrap();
+        assert_eq!(initial_context.get("goal"), Some(&json!("Fix the workspace")));
         let projection = initial_context.get("routing_projection").unwrap();
         let effective_routing = projection["effective_routing"].as_array().unwrap();
 
         assert!(
             effective_routing
                 .iter()
-                .any(|value| { value.as_str() == Some("review=claude/sonnet-4.6 [workspace]") })
+                .any(|value| { value.as_str() == Some("review=claude/sonnet-4 [workspace]") })
         );
         assert!(effective_routing.iter().any(|value| {
-            value.as_str() == Some("reviewer:safety=copilot/gpt-5.5 [workspace]")
+            value.as_str() == Some("reviewer:safety=copilot/gpt-4.1 [workspace]")
         }));
+    }
+
+    #[test]
+    fn provider_review_routes_for_profile_require_explicit_namespaces() {
+        let workspace = write_execution_workspace(
+            "boundline-provider-review-routes",
+            "pub fn add(left: i32, right: i32) -> i32 {\n    left + right\n}\n",
+        );
+        let profile = sample_review_profile(ExecutionCommand {
+            program: "cargo".to_string(),
+            args: vec!["test".to_string(), "--quiet".to_string()],
+        });
+
+        let generic_config = ConfigFile {
+            version: 1,
+            routing: RoutingConfig {
+                review: Some(ModelRoute {
+                    runtime: RuntimeKind::Copilot,
+                    model: "gpt-5.4".to_string(),
+                }),
+                ..RoutingConfig::default()
+            },
+            canon: None,
+        };
+        FileConfigStore::for_workspace(&workspace).save_local(&generic_config).unwrap();
+        let generic_routes = provider_review_routes_for_profile(&workspace, &profile);
+        assert!(generic_routes.is_empty());
+
+        let explicit_config = ConfigFile {
+            version: 1,
+            routing: RoutingConfig {
+                review: Some(ModelRoute {
+                    runtime: RuntimeKind::Copilot,
+                    model: "gpt-5.4".to_string(),
+                }),
+                reviewer_roles: std::collections::BTreeMap::from([(
+                    "safety".to_string(),
+                    ModelRoute {
+                        runtime: RuntimeKind::Copilot,
+                        model: "ollama/qwen3:32b".to_string(),
+                    },
+                )]),
+                ..RoutingConfig::default()
+            },
+            canon: None,
+        };
+        FileConfigStore::for_workspace(&workspace).save_local(&explicit_config).unwrap();
+        let explicit_routes = provider_review_routes_for_profile(&workspace, &profile);
+        assert_eq!(explicit_routes.len(), 1);
+        assert_eq!(
+            explicit_routes.get("safety").map(|route| route.model.as_str()),
+            Some("ollama/qwen3:32b")
+        );
+        assert!(!explicit_routes.contains_key("maintainability"));
     }
 
     #[test]
@@ -5075,6 +5988,7 @@ mod tests {
                 previous_governance_attempt_id: None,
                 packet_ref: Some(".canon/runs/canon-run-3".to_string()),
                 decision_ref: None,
+                stage_council: None,
                 blocked_reason: None,
             })
             .unwrap(),
@@ -5459,6 +6373,16 @@ mod tests {
             fixture_next_minor_exclusive("1.2"),
             Err(FixtureRuntimeError::InvalidReasoningFixtureVersion { .. })
         ));
+        // Missing major (empty string) hits the major parse error branch.
+        assert!(matches!(
+            fixture_next_minor_exclusive(""),
+            Err(FixtureRuntimeError::InvalidReasoningFixtureVersion { .. })
+        ));
+        // Non-numeric minor hits the minor parse error branch.
+        assert!(matches!(
+            fixture_next_minor_exclusive("1.abc.2"),
+            Err(FixtureRuntimeError::InvalidReasoningFixtureVersion { .. })
+        ));
 
         let independent_floor =
             fixture_minimum_independence(ReasoningProfileId::IndependentPairReview);
@@ -5514,6 +6438,194 @@ mod tests {
             Err(FixtureRuntimeError::UnsupportedFixtureFlow { .. })
         ));
 
+        // A task whose target file does not exist forces infer_goal_plan_change
+        // through the Cargo.toml branch (lines 899-912).
+        let cargo_toml_plan = GoalPlan::new(
+            "Derive from Cargo.toml",
+            vec![PlannedTask {
+                task_id: "planned-task-cargo".to_string(),
+                description: "Nonexistent target falls through to Cargo.toml".to_string(),
+                target: "nonexistent.rs".to_string(),
+                expected_outcome: None,
+                decision_type_hint: None,
+            }],
+        )
+        .unwrap();
+        let (cargo_path, cargo_find, _cargo_replace) =
+            infer_goal_plan_change(&workspace, &cargo_toml_plan).unwrap();
+        assert_eq!(cargo_path, "Cargo.toml");
+        assert!(cargo_find.starts_with("__boundline_goal_plan_change_required__:"));
+
         fs::remove_dir_all(&workspace).unwrap();
+    }
+
+    #[test]
+    fn resolve_effective_persona_prefers_latest_governance_packet() {
+        let workspace = temp_workspace();
+        FileConfigStore::for_workspace(&workspace)
+            .save_local(&ConfigFile {
+                version: 1,
+                routing: RoutingConfig::default(),
+                canon: Some(crate::domain::configuration::CanonPreferences {
+                    mode_selection:
+                        crate::domain::governance::CanonModeSelectionPreference::AutoConfirm,
+                    default_owner: Some("platform".to_string()),
+                    default_risk: None,
+                    default_zone: None,
+                    default_system_context: None,
+                }),
+            })
+            .unwrap();
+
+        let mut task_snapshot = TaskContext::new(
+            "session-runtime",
+            workspace.to_string_lossy(),
+            RunLimits::default(),
+            Map::new(),
+        );
+        task_snapshot
+            .set_latest_governance_packet(&GovernedStagePacket {
+                packet_ref: ".canon/runs/canon-run-1".to_string(),
+                runtime: GovernanceRuntimeKind::Canon,
+                canon_mode: Some(CanonMode::Implementation),
+                expected_document_refs: vec![
+                    ".canon/runs/canon-run-1/implementation.md".to_string(),
+                ],
+                document_refs: vec![".canon/runs/canon-run-1/implementation.md".to_string()],
+                readiness: PacketReadiness::Reusable,
+                missing_sections: Vec::new(),
+                headline: "implementation packet ready".to_string(),
+                reason_code: None,
+                authority_governance: Some(CanonAuthorityGovernanceV1Envelope {
+                    contract_line: "authority-governance-v1".to_string(),
+                    authority_zone: CanonAuthorityZone::Green,
+                    change_class: CanonChangeClass::LowImpact,
+                    intended_persona: CanonIntendedPersona::SystemArchitect,
+                    approval_state: ApprovalState::NotNeeded,
+                    packet_readiness: PacketReadiness::Reusable,
+                    risk: CanonRiskClass::LowImpact,
+                    persona_anti_behaviors: Vec::new(),
+                    primary_artifact: None,
+                    artifact_order: Vec::new(),
+                    promotion_refs: Vec::new(),
+                    stage_role_hints: Vec::new(),
+                }),
+                adaptive_governance: None,
+                semantic_descriptor: None,
+            })
+            .unwrap();
+
+        let request = StepExecutionRequest {
+            step_id: "implement".to_string(),
+            step_kind: StepKind::Agent,
+            target_name: "coder".to_string(),
+            input: json!({}),
+            task_snapshot,
+            attempt_number: 1,
+        };
+
+        assert_eq!(
+            resolve_effective_persona(&workspace, &request).as_deref(),
+            Some("system-architect")
+        );
+    }
+
+    #[test]
+    fn resolve_effective_persona_defaults_to_delivery_engineer_for_invalid_owner() {
+        let workspace = temp_workspace();
+        FileConfigStore::for_workspace(&workspace)
+            .save_local(&ConfigFile {
+                version: 1,
+                routing: RoutingConfig::default(),
+                canon: Some(crate::domain::configuration::CanonPreferences {
+                    mode_selection:
+                        crate::domain::governance::CanonModeSelectionPreference::AutoConfirm,
+                    default_owner: Some("not-a-real-persona".to_string()),
+                    default_risk: None,
+                    default_zone: None,
+                    default_system_context: None,
+                }),
+            })
+            .unwrap();
+
+        let request = StepExecutionRequest {
+            step_id: "implement".to_string(),
+            step_kind: StepKind::Agent,
+            target_name: "coder".to_string(),
+            input: json!({}),
+            task_snapshot: TaskContext::new(
+                "session-runtime",
+                workspace.to_string_lossy(),
+                RunLimits::default(),
+                Map::new(),
+            ),
+            attempt_number: 1,
+        };
+
+        assert_eq!(
+            resolve_effective_persona(&workspace, &request).as_deref(),
+            Some("delivery-engineer")
+        );
+    }
+
+    #[test]
+    fn resolve_phase_guidance_uses_goal_targets_and_authored_inputs() {
+        let workspace = temp_workspace();
+        fs::create_dir_all(workspace.join("src")).unwrap();
+        fs::create_dir_all(workspace.join("tests")).unwrap();
+        fs::write(
+            workspace.join("Cargo.toml"),
+            "[package]\nname = \"fixture-guidance\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+        )
+        .unwrap();
+        fs::write(
+            workspace.join("src/lib.rs"),
+            "pub fn add(left: i32, right: i32) -> i32 { left + right }\n",
+        )
+        .unwrap();
+        fs::write(
+            workspace.join("brief.md"),
+            "Fix the failing Rust tests for src/lib.rs and preserve zero-panic handling.\n",
+        )
+        .unwrap();
+
+        let authored_brief = normalize_inputs(
+            &workspace,
+            Some("Fix the failing Rust tests for src/lib.rs"),
+            &[PathBuf::from("brief.md")],
+        )
+        .unwrap();
+        let request = StepExecutionRequest {
+            step_id: "implement".to_string(),
+            step_kind: StepKind::Agent,
+            target_name: "coder".to_string(),
+            input: json!({
+                "authored_brief": authored_brief,
+            }),
+            task_snapshot: TaskContext::new(
+                "session-runtime",
+                workspace.to_string_lossy(),
+                RunLimits::default(),
+                Map::new(),
+            ),
+            attempt_number: 1,
+        };
+        let sources = vec![WorkspaceTargetSource {
+            path: "src/lib.rs".to_string(),
+            contents: "pub fn add(left: i32, right: i32) -> i32 { left + right }".to_string(),
+        }];
+
+        let guidance = resolve_phase_guidance(
+            &workspace,
+            CapabilityPhase::Implementation,
+            "Fix the failing Rust tests for src/lib.rs",
+            &request,
+            &sources,
+        );
+
+        assert!(
+            guidance.iter().any(|entry| entry.contains("Rust") || entry.contains("cargo test")),
+            "{guidance:?}"
+        );
     }
 }

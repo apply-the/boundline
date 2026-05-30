@@ -26,13 +26,13 @@ the same primary Canon-default workflow.
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024
+**Language/Version**: Rust 1.96.0, edition 2024
 **Primary Dependencies**: `clap` 4.x, `serde` 1.x, `serde_json` 1.x, `thiserror` 2.x, `tracing` 0.1, `uuid` 1.x, `toml` 0.8; Rust standard library filesystem, path, process, and collections APIs; no new runtime dependencies
 **Storage**: Workspace-local `.boundline/session.json`, `.boundline/config.toml`, `.boundline/traces/`, optional `.boundline/execution.json`, optional `.canon/` governed artifacts
 **Testing**: `cargo test`, `cargo nextest run`, unit tests for domain logic and config serialization, integration tests for CLI dispatch and Canon runtime gating, contract tests for governance request/response schemas
 **Target Platform**: macOS/Linux developer workstations, Linux CI
 **Project Type**: Multi-crate Rust CLI (`boundline-cli`, `boundline-core`, `boundline-adapters`)
-**Execution Model**: Sequential session-native pipeline (`start` → `capture` → `plan` → `run`) with bounded governance checkpoints per stage; single step active at a time
+**Execution Model**: Sequential session-native pipeline (`start` → `goal` → `plan` → `run`) with bounded governance checkpoints per stage; single step active at a time
 **Observability Surface**: Persisted execution traces in `.boundline/traces/`, CLI JSON output with governance intent, selected runtime, mode or mode sequence, mode-selection preference, approval state, blocked reason, governed artifact references, local opt-out state, and next safe action; `status`, `next`, `inspect` surfaces project the same governance lifecycle
 **Performance Goals**: CLI startup ≤ 500 ms for local operations; Canon invocation bounded by the external Canon CLI response time; no background processes
 **Constraints**: All Canon mode-selection and model-routing settings are workspace-local only (FR-005c); Canon is a bounded external runtime invoked through its CLI—Boundline does not embed Canon logic; no new runtime dependencies; explicit opt-out required for non-Canon governance; advanced compatibility manifests remain available but subordinate
@@ -46,7 +46,7 @@ the same primary Canon-default workflow.
 
 - **Delivery-first scope**: **PASS** — The plan prioritizes execution (Canon-default `run`, input assembly, governance lifecycle), orchestration (mode selection, stage progression, session state), and validation (install diagnostics, capability surface verification) ahead of any polish.  No optimization or cosmetic work is in scope.
 
-- **Primary workflow**: **PASS** — The main operator path is session-native: `init` → `capture`/`run --goal` → `plan` → `run` → `status` → `next` → `inspect`.  The compatibility path through explicit `execution.json` manifests remains available as an advanced override (FR-012) but is not the primary entry point.
+- **Primary workflow**: **PASS** — The main operator path is session-native: `init` → `goal`/`run --goal` → `plan` → `run` → `status` → `next` → `inspect`.  The compatibility path through explicit `execution.json` manifests remains available as an advanced override (FR-012) but is not the primary entry point.
 
 - **Bounded execution**: **PASS** — Start conditions: workspace must be Canon-ready (diagnostics pass, config present, Canon binary verified).  Terminal conditions: all governed stages complete, a required stage is blocked/rejected, operator aborts, or clarification is unresolved.  Step/retry limits: inherited from existing orchestrator bounded execution (max steps, max retries per step).  Mode-selection `auto` falls back to confirmation on low confidence rather than guessing.
 

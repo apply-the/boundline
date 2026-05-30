@@ -13,7 +13,7 @@ Exercise the complete `0.24.0` operator story: aligned route summaries, explicit
 
 ## Flow
 
-1. Start a session-native workflow and capture a goal.
+1. Start a session-native workflow and record a goal.
 2. Run a named workflow that can pause in review or governance.
 3. Run an explicit compatibility path in the same workspace.
 4. Compare `status`, `next`, `inspect`, and workflow follow-up commands.

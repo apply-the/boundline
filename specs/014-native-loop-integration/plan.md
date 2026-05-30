@@ -9,7 +9,7 @@ Move the real session CLI onto the native planning and decision-loop path by mak
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, Rust standard library filesystem and process APIs  
 **Storage**: Workspace-local `.boundline/session.json`, `.boundline/traces/`, optional `.boundline/execution.json`, optional `.canon/` artifacts  
 **Testing**: `cargo test --no-run --all-targets`, `cargo nextest run --workspace --all-features`, contract/integration/unit harnesses under `tests/`, `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`  

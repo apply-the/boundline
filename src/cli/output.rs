@@ -1,10 +1,7 @@
 //! Operator-facing text and JSON renderers for CLI commands.
 
-use std::path::Path;
-
 use crate::adapters::cluster_store::FileClusterStore;
 use crate::adapters::config_store::FileConfigStore;
-use serde_json::Value;
 
 use crate::cli::diagnostics::{DiagnosticsReport, DiagnosticsStatus};
 use crate::cli::{CliValidationError, DeveloperCommand};
@@ -167,20 +164,29 @@ mod routing;
 #[path = "output_events.rs"]
 mod events;
 
+#[path = "output_orchestrate.rs"]
+mod orchestrate;
+
 pub use cluster::{render_cluster_init, render_cluster_inspect, render_cluster_status};
 pub use compatibility::render_compatibility_follow_up_status;
 pub use events::render_diagnostics;
-pub use host::{CommandExitCode, HostCommandEnvelope, command_name, render_host_command_json};
+pub use host::{
+    CommandExitCode, HostCommandEnvelope, command_name, render_host_command_json,
+    render_orchestrate_event_json, render_orchestrate_stream_json,
+};
+pub use orchestrate::render_human_orchestrate_report;
 pub use routing::{
     render_goal_plan_flow_state, render_route_outcome, trace_execution_condition_text,
 };
 pub use run_trace::render_run_trace;
-pub use session_status::render_session_status;
+pub use session_status::{render_session_status, render_session_status_brief};
 pub use support::{
-    next_command_after_inspect, next_command_after_run, render_guidance_projection_lines,
-    render_inspect_failure, render_session_error,
+    next_command_after_inspect, next_command_after_run, render_guidance_projection_brief_lines,
+    render_guidance_projection_lines, render_inspect_failure, render_session_error,
 };
-pub use trace_summary::render_trace_summary;
+pub use trace_summary::{
+    render_trace_audit_summary, render_trace_summary, render_trace_summary_brief,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ExplanationProjection {
@@ -278,6 +284,7 @@ fn session_status_text(status: SessionStatus) -> &'static str {
         SessionStatus::Initialized => "initialized",
         SessionStatus::GoalCaptured => "goal_captured",
         SessionStatus::Planned => "planned",
+        SessionStatus::Blocked => "blocked",
         SessionStatus::Running => "running",
         SessionStatus::Succeeded => "succeeded",
         SessionStatus::Failed => "failed",
@@ -300,8 +307,9 @@ mod tests {
         trace_execution_condition_parts,
     };
     use super::{
-        command_name, render_host_command_json, render_run_trace, render_session_status,
-        render_trace_summary,
+        command_name, render_guidance_projection_brief_lines, render_host_command_json,
+        render_run_trace, render_session_status, render_session_status_brief,
+        render_trace_audit_summary, render_trace_summary, render_trace_summary_brief,
     };
     use crate::cli::CommandExitStatus;
     use crate::cli::assistant_assets::{AssistantHost, AssistantInstallScope};
@@ -312,6 +320,13 @@ mod tests {
         AssistantSubcommand, CheckpointSubcommand, ClusterSubcommand, ConfigSubcommand,
         DeveloperCommand,
     };
+    use crate::domain::audit::{
+        SessionAuditActor, SessionAuditActorKind, SessionAuditAlgorithm, SessionAuditEntry,
+        SessionAuditEntryKind, SessionAuditIdentity, SessionAuditOutcome,
+        SessionAuditOutcomeStatus, SessionAuditPhase, SessionAuditProjection, SessionAuditSource,
+        SessionAuditSourceKind,
+    };
+    use crate::domain::configuration::InitConfigScope;
     use crate::domain::context_intelligence::{
         AdvancedContextProjection, AuthorityRank, CandidateSelectionState, HybridOutcome,
         RemoteTransmissionPolicyState, RetrievalCompatibilityState, RetrievalIndexState,
@@ -569,19 +584,21 @@ mod tests {
                 },
                 "doctor",
             ),
-            (DeveloperCommand::Start { workspace: None, cluster: None }, "start"),
             (
-                DeveloperCommand::Capture {
+                DeveloperCommand::Goal {
                     workspace: None,
                     cluster: None,
+                    update: false,
+                    new_session: false,
                     goal: Some("goal".to_string()),
                     brief: Vec::new(),
                     governance: None,
                     risk: None,
                     zone: None,
                     owner: None,
+                    slug: None,
                 },
-                "capture",
+                "goal",
             ),
             (
                 DeveloperCommand::Flow {
@@ -595,9 +612,10 @@ mod tests {
                 DeveloperCommand::Plan {
                     workspace: None,
                     cluster: None,
+                    input: None,
                     flow: None,
                     no_flow: false,
-                    confirm: false,
+                    no_canon: false,
                 },
                 "plan",
             ),
@@ -630,14 +648,30 @@ mod tests {
             ),
             (
                 DeveloperCommand::Checkpoint {
-                    command: CheckpointSubcommand::List { workspace: None, cluster: None },
+                    command: CheckpointSubcommand::List {
+                        workspace: None,
+                        cluster: None,
+                        session: None,
+                    },
                 },
                 "checkpoint",
             ),
-            (DeveloperCommand::Inspect { trace: None, workspace: None, cluster: None }, "inspect"),
-            (DeveloperCommand::Status { workspace: None, cluster: None }, "status"),
-            (DeveloperCommand::Next { workspace: None, cluster: None }, "next"),
-            (DeveloperCommand::Continue { workspace: None, cluster: None }, "continue"),
+            (
+                DeveloperCommand::Inspect {
+                    trace: None,
+                    workspace: None,
+                    cluster: None,
+                    session: None,
+                    audit: false,
+                },
+                "inspect",
+            ),
+            (DeveloperCommand::Status { workspace: None, cluster: None, session: None }, "status"),
+            (DeveloperCommand::Next { workspace: None, cluster: None, session: None }, "next"),
+            (
+                DeveloperCommand::Continue { workspace: None, cluster: None, session: None },
+                "continue",
+            ),
             (
                 DeveloperCommand::Govern {
                     workspace: None,
@@ -666,10 +700,13 @@ mod tests {
             ),
             (
                 DeveloperCommand::Init {
+                    scope: InitConfigScope::Workspace,
                     workspace: "/tmp/workspace".into(),
                     non_interactive: false,
                     template: None,
                     assistant: Vec::new(),
+                    ide: Vec::new(),
+                    auto_approve: None,
                     domain: Vec::new(),
                     domain_standard: Vec::new(),
                     context_binding: Vec::new(),
@@ -786,6 +823,9 @@ mod tests {
             authored_input_summary: None,
             authored_input_sources: Vec::new(),
             authored_input_deduplicated_sources: Vec::new(),
+            goal_brief_ref: None,
+            session_plan_brief_ref: None,
+            run_brief_ref: None,
             context_summary: None,
             context_credibility: None,
             context_primary_inputs: Vec::new(),
@@ -840,6 +880,7 @@ mod tests {
             inspect_council: None,
             inspect_timeline: None,
             review_timeline: Vec::new(),
+            session_audit: None,
             delight_feedback: None,
             terminal_status: TaskStatus::Failed,
             terminal_reason: TerminalReason::new(
@@ -880,6 +921,7 @@ mod tests {
             clarification_headline: None,
             clarification_prompt: None,
             clarification_missing_fields: None,
+            clarification_questions: None,
             requested_governance_runtime: None,
             requested_governance_risk: None,
             requested_governance_zone: None,
@@ -904,6 +946,9 @@ mod tests {
             current_step_index: None,
             latest_status: SessionStatus::Invalid,
             execution_path: None,
+            goal_brief_ref: None,
+            session_plan_brief_ref: None,
+            run_brief_ref: None,
             latest_trace_ref: None,
             latest_decision_status: None,
             latest_decision_target: None,
@@ -952,6 +997,7 @@ mod tests {
             governance_lifecycle_opt_out: None,
             governance_lifecycle_mode_selection: None,
             governance_lifecycle_selected_mode: None,
+            governance_lifecycle_selected_mode_sequence: None,
             latest_reasoning_profile: None,
             project_scale_path: None,
             project_scale_current_stage: None,
@@ -966,12 +1012,357 @@ mod tests {
             delight_feedback: None,
             next_command: None,
             explanation: "session is invalid".to_string(),
+            ..SessionStatusView::default()
         };
 
         let text = render_session_status(&view);
 
         assert!(text.contains("latest_status: invalid"), "{text}");
         assert!(!text.contains("latest_changed_files:"), "{text}");
+    }
+
+    #[test]
+    fn render_session_status_brief_stays_compact_and_surfaces_authoritative_fields() {
+        let view = SessionStatusView {
+            session_id: "session-brief".to_string(),
+            workspace_ref: "/tmp/workspace".to_string(),
+            goal: Some("Implement the bounded checkout repair with the attached spec".to_string()),
+            authored_input_sources: Some(vec![
+                "attached_markdown: docs/checkout-spec.md".to_string(),
+                "attached_markdown: docs/api-notes.md".to_string(),
+            ]),
+            context_provenance: Some(vec!["workspace_file: docs/checkout-spec.md".to_string()]),
+            latest_status: SessionStatus::Planned,
+            execution_path: Some("native_goal_plan".to_string()),
+            goal_brief_ref: Some(".boundline/briefs/goal.md".to_string()),
+            session_plan_brief_ref: Some(".boundline/briefs/plan.md".to_string()),
+            goal_plan_state: Some("proposed".to_string()),
+            goal_plan_revision: Some(2),
+            latest_governance_stage: Some("plan:discovery".to_string()),
+            latest_trace_ref: Some("/tmp/workspace/.boundline/traces/task.json".to_string()),
+            latest_governance_packet_ref: Some(".canon/artifacts/R-20260522/discovery".to_string()),
+            next_command: Some("boundline run".to_string()),
+            explanation: "planned the active goal into 3 bounded goal-plan task(s)".to_string(),
+            ..SessionStatusView::default()
+        };
+
+        let text = render_session_status_brief(&view);
+
+        assert!(text.contains("goal: Implement the bounded checkout repair"), "{text}");
+        assert!(
+            text.contains("authored_input_sources: attached_markdown: docs/checkout-spec.md"),
+            "{text}"
+        );
+        assert!(text.contains("routing: native (goal_plan)"), "{text}");
+        assert!(
+            text.contains(
+                "execution_condition: waiting - planning is complete and execution can begin"
+            ),
+            "{text}"
+        );
+        assert!(text.contains("summary: goal_plan_state=proposed r2"), "{text}");
+        assert!(
+            text.contains("artifacts: goal_brief_ref=.boundline/briefs/goal.md; session_plan_brief_ref=.boundline/briefs/plan.md; latest_trace_ref=/tmp/workspace/.boundline/traces/task.json; plan_brief_ref=.boundline/governance/planning/discovery/brief.md; latest_governance_packet_ref=.canon/artifacts/R-20260522/discovery"),
+            "{text}"
+        );
+        assert!(text.contains("latest_status: planned"), "{text}");
+        assert!(text.contains("next_command: boundline run"), "{text}");
+        assert!(!text.contains("context_provenance:"), "{text}");
+        assert!(!text.contains("route_config_projection:"), "{text}");
+    }
+
+    #[test]
+    fn render_guidance_projection_brief_lines_keeps_story_without_source_dump() {
+        let guidance = crate::domain::guidance::GuidanceGuardianProjection {
+            capability_resolution_summary: Some(
+                "resolved 2 guidance capability entries from 1 source(s)".to_string(),
+            ),
+            loaded_guardian_sources: vec!["assistant/packs/verification.toml".to_string()],
+            guardian_timeline: vec!["verification-only: completed".to_string()],
+            guardian_findings_summary: Some("no blocking guardian findings".to_string()),
+            ..crate::domain::guidance::GuidanceGuardianProjection::default()
+        };
+
+        let lines = render_guidance_projection_brief_lines(&guidance);
+        let rendered = lines.join("\n");
+
+        assert!(rendered.contains("guidance_resolution_summary: resolved 2 guidance capability entries from 1 source(s)"), "{rendered}");
+        assert!(rendered.contains("guardian_timeline: verification-only: completed"), "{rendered}");
+        assert!(
+            rendered.contains("guardian_findings_summary: no blocking guardian findings"),
+            "{rendered}"
+        );
+        assert!(!rendered.contains("loaded_guardian_sources"), "{rendered}");
+    }
+
+    #[test]
+    fn render_trace_summary_brief_stays_compact_and_surfaces_authoritative_fields() {
+        let summary = TraceSummaryView {
+            trace_ref: "/tmp/workspace/.boundline/traces/task.json".to_string(),
+            goal: "Repair the broken checkout flow with the attached bounded brief".to_string(),
+            authored_input_sources: vec![
+                "attached_markdown: docs/checkout-spec.md".to_string(),
+                "attached_markdown: docs/api-notes.md".to_string(),
+            ],
+            goal_brief_ref: Some(".boundline/briefs/goal.md".to_string()),
+            session_plan_brief_ref: Some(".boundline/briefs/plan.md".to_string()),
+            run_brief_ref: Some(".boundline/briefs/run.md".to_string()),
+            routing_summary: Some(
+                "routing: compatibility (execution_profile) - declarative manifest remains authoritative"
+                    .to_string(),
+            ),
+            context_provenance: vec!["workspace_file: docs/checkout-spec.md".to_string()],
+            latest_checkpoint_id: Some("checkpoint-7".to_string()),
+            latest_checkpoint_scope: Some("workspace".to_string()),
+            governance_next_action: Some("request Canon approval before continuing".to_string()),
+            terminal_status: TaskStatus::Failed,
+            terminal_reason: TerminalReason::new(
+                TerminalCondition::TaskNotCredible,
+                "clarification is still required before the fix can continue",
+                None,
+            ),
+            ..TraceSummaryView::default()
+        };
+
+        let text = render_trace_summary_brief(
+            &summary,
+            Some("latest-workspace-trace"),
+            "boundline inspect --trace /tmp/workspace/.boundline/traces/task.json",
+        );
+
+        assert!(text.contains("inspection_target: latest-workspace-trace"), "{text}");
+        assert!(text.contains("goal: Repair the broken checkout flow"), "{text}");
+        assert!(
+            text.contains("authored_input_sources: attached_markdown: docs/checkout-spec.md"),
+            "{text}"
+        );
+        assert!(text.contains("routing: compatibility (execution_profile) - declarative manifest remains authoritative"), "{text}");
+        assert!(text.contains("execution_condition: terminal - clarifi"), "{text}");
+        assert!(text.contains("artifacts: goal_brief_ref=.boundline/briefs/goal.md; session_plan_brief_ref=.boundline/briefs/plan.md; run_brief_ref=.boundline/briefs/run.md; trace=/tmp/workspace/.boundline/traces/task.json; latest_checkpoint_id=checkpoint-7 (workspace)"), "{text}");
+        assert!(
+            text.contains(
+                "governance: governance_next_action=request Canon approval before continuing"
+            ),
+            "{text}"
+        );
+        assert!(text.contains("latest_status: failed"), "{text}");
+        assert!(
+            text.contains(
+                "next_command: boundline inspect --trace /tmp/workspace/.boundline/traces/task.json"
+            ),
+            "{text}"
+        );
+        assert!(!text.contains("context_provenance:"), "{text}");
+        assert!(!text.contains("decision_timeline:"), "{text}");
+    }
+
+    #[test]
+    fn render_trace_summary_includes_explicit_audit_mapping_lines() {
+        let audit_projection = SessionAuditProjection::from_entries(
+            "session-audit-1",
+            vec![SessionAuditEntry::new_with_timestamp(
+                "session-audit-1",
+                1,
+                1_717_000_000_000,
+                SessionAuditEntryKind::TraceEventProjected,
+                "decision verified: collected validation evidence",
+                SessionAuditIdentity::default(),
+                SessionAuditActor {
+                    kind: SessionAuditActorKind::Agent,
+                    id: "boundline-decision-loop".to_string(),
+                    display_name: Some("Boundline Decision Loop".to_string()),
+                    role: None,
+                    runtime_kind: Some("copilot".to_string()),
+                    provider: Some("copilot".to_string()),
+                    route_slot: Some("implementation".to_string()),
+                    model_name: Some("gpt-5.4".to_string()),
+                    participant_routes: Vec::new(),
+                    mixed_routes: false,
+                },
+                SessionAuditAlgorithm::new(
+                    SessionAuditPhase::Run,
+                    "decision_loop",
+                    "run_with_options_and_context",
+                ),
+                SessionAuditOutcome::new(
+                    SessionAuditOutcomeStatus::Succeeded,
+                    "validation collected",
+                ),
+                SessionAuditSource {
+                    kind: SessionAuditSourceKind::TraceEvent,
+                    trace_ref: Some("/tmp/.boundline/traces/task.json".to_string()),
+                    trace_event_id: Some("event-1".to_string()),
+                    trace_event_type: Some("decision_verified".to_string()),
+                    step_id: Some("verify".to_string()),
+                    plan_revision: Some(1),
+                },
+                json!({"summary": "collected validation evidence"}),
+            )],
+        );
+        let summary = TraceSummaryView {
+            trace_ref: "/tmp/workspace/.boundline/traces/task.json".to_string(),
+            goal: "Validate the implementation path".to_string(),
+            session_audit: Some(audit_projection),
+            terminal_status: TaskStatus::Succeeded,
+            terminal_reason: TerminalReason::new(
+                TerminalCondition::GoalSatisfied,
+                "all checks passed",
+                None,
+            ),
+            ..TraceSummaryView::default()
+        };
+
+        let text = render_trace_summary(&summary, "latest-workspace-trace", "boundline next");
+
+        assert!(text.contains("audit_entry_count: 1"), "{text}");
+        assert!(
+            text.contains(
+                "audit_latest: event=decision_verified algorithm=run::decision_loop::run_with_options_and_context actor=agent:boundline-decision-loop outcome=succeeded"
+            ),
+            "{text}"
+        );
+        assert!(
+            text.contains(
+                "event=decision_verified algorithm=run::decision_loop::run_with_options_and_context actor=agent:boundline-decision-loop outcome=succeeded message=decision verified: collected validation evidence"
+            ),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn render_trace_summary_surfaces_multi_route_audit_actor_projection() {
+        let audit_projection = SessionAuditProjection::from_entries(
+            "session-audit-2",
+            vec![SessionAuditEntry::new_with_timestamp(
+                "session-audit-2",
+                1,
+                1_717_000_000_000,
+                SessionAuditEntryKind::TraceEventProjected,
+                "review vote resolved: council accepted with mixed routes",
+                SessionAuditIdentity::default(),
+                SessionAuditActor {
+                    kind: SessionAuditActorKind::Reviewer,
+                    id: "review-council".to_string(),
+                    display_name: Some("Review Council".to_string()),
+                    role: Some("multi-reviewer".to_string()),
+                    runtime_kind: Some("copilot".to_string()),
+                    provider: Some("copilot".to_string()),
+                    route_slot: Some("review".to_string()),
+                    model_name: Some("gpt-5.4".to_string()),
+                    participant_routes: vec![
+                        "review:copilot:gpt-5.4".to_string(),
+                        "adjudication:copilot:gpt-5.4".to_string(),
+                    ],
+                    mixed_routes: true,
+                },
+                SessionAuditAlgorithm::new(
+                    SessionAuditPhase::Review,
+                    "review_council",
+                    "resolve_vote",
+                ),
+                SessionAuditOutcome::new(SessionAuditOutcomeStatus::Completed, "review accepted"),
+                SessionAuditSource {
+                    kind: SessionAuditSourceKind::TraceEvent,
+                    trace_ref: Some("/tmp/.boundline/traces/task.json".to_string()),
+                    trace_event_id: Some("event-2".to_string()),
+                    trace_event_type: Some("review_vote_resolved".to_string()),
+                    step_id: Some("review".to_string()),
+                    plan_revision: Some(1),
+                },
+                json!({"summary": "council accepted with mixed routes"}),
+            )],
+        );
+        let summary = TraceSummaryView {
+            trace_ref: "/tmp/workspace/.boundline/traces/task.json".to_string(),
+            goal: "Validate review attribution".to_string(),
+            session_audit: Some(audit_projection),
+            terminal_status: TaskStatus::Succeeded,
+            terminal_reason: TerminalReason::new(
+                TerminalCondition::GoalSatisfied,
+                "review passed",
+                None,
+            ),
+            ..TraceSummaryView::default()
+        };
+
+        let text = render_trace_summary(&summary, "latest-workspace-trace", "boundline next");
+
+        assert!(
+            text.contains(
+                "participant_routes=review:copilot:gpt-5.4, adjudication:copilot:gpt-5.4"
+            ),
+            "{text}"
+        );
+        assert!(text.contains("mixed_routes=true"), "{text}");
+    }
+
+    #[test]
+    fn render_trace_audit_summary_focuses_on_audit_projection() {
+        let audit_projection = SessionAuditProjection::from_entries(
+            "session-audit-3",
+            vec![SessionAuditEntry::new_with_timestamp(
+                "session-audit-3",
+                1,
+                1_717_000_000_000,
+                SessionAuditEntryKind::TraceEventProjected,
+                "review vote resolved: council accepted with mixed routes",
+                SessionAuditIdentity::default(),
+                SessionAuditActor {
+                    kind: SessionAuditActorKind::Reviewer,
+                    id: "review-council".to_string(),
+                    display_name: Some("Review Council".to_string()),
+                    role: Some("multi-reviewer".to_string()),
+                    runtime_kind: Some("copilot".to_string()),
+                    provider: Some("copilot".to_string()),
+                    route_slot: Some("review".to_string()),
+                    model_name: Some("gpt-5.4".to_string()),
+                    participant_routes: vec![
+                        "review:copilot:gpt-5.4".to_string(),
+                        "adjudication:copilot:gpt-5.4".to_string(),
+                    ],
+                    mixed_routes: true,
+                },
+                SessionAuditAlgorithm::new(
+                    SessionAuditPhase::Review,
+                    "review_council",
+                    "resolve_vote",
+                ),
+                SessionAuditOutcome::new(SessionAuditOutcomeStatus::Completed, "review accepted"),
+                SessionAuditSource {
+                    kind: SessionAuditSourceKind::TraceEvent,
+                    trace_ref: Some("/tmp/.boundline/traces/task.json".to_string()),
+                    trace_event_id: Some("event-3".to_string()),
+                    trace_event_type: Some("review_vote_resolved".to_string()),
+                    step_id: Some("review".to_string()),
+                    plan_revision: Some(1),
+                },
+                json!({"summary": "council accepted with mixed routes"}),
+            )],
+        );
+        let summary = TraceSummaryView {
+            trace_ref: "/tmp/workspace/.boundline/traces/task.json".to_string(),
+            goal: "Inspect audit only".to_string(),
+            session_audit: Some(audit_projection),
+            terminal_status: TaskStatus::Succeeded,
+            terminal_reason: TerminalReason::new(
+                TerminalCondition::GoalSatisfied,
+                "audit loaded",
+                None,
+            ),
+            ..TraceSummaryView::default()
+        };
+
+        let text = render_trace_audit_summary(&summary, "latest-workspace-trace", "boundline next");
+
+        assert!(text.contains("audit_session_ref: session-audit-3"), "{text}");
+        assert!(text.contains("audit_outcomes: completed (1)"), "{text}");
+        assert!(
+            text.contains(
+                "participant_routes=review:copilot:gpt-5.4, adjudication:copilot:gpt-5.4"
+            ),
+            "{text}"
+        );
+        assert!(!text.contains("route_owner:"), "{text}");
     }
 
     #[test]
@@ -1177,7 +1568,7 @@ mod tests {
                         {
                             "role_id": "reviewer_primary",
                             "participant_id": "independent_pair_review-reviewer_primary",
-                            "effective_route": "reviewer_roles.reviewer_primary:claude:sonnet-4.6",
+                            "effective_route": "reviewer_roles.reviewer_primary:claude:sonnet-4",
                             "provider_family": "claude",
                             "context_basis": "governance_stage:bug-fix:investigate",
                             "prompting_pattern": "blind_reviewer",
@@ -1187,7 +1578,7 @@ mod tests {
                         {
                             "role_id": "reviewer_secondary",
                             "participant_id": "independent_pair_review-reviewer_secondary",
-                            "effective_route": "review:codex:gpt-5-codex",
+                            "effective_route": "review:codex:o4-mini",
                             "provider_family": "codex",
                             "context_basis": "governance_stage:bug-fix:investigate",
                             "prompting_pattern": "blind_reviewer",
@@ -1210,7 +1601,7 @@ mod tests {
                             "boundline_min": "0.62.0",
                             "boundline_max_exclusive": "0.63.0",
                             "canon_min": "0.59.0",
-                            "canon_max_exclusive": "0.60.0",
+                            "canon_max_exclusive": "0.61.0",
                             "contract_line": "governed_reasoning_posture_v1"
                         },
                         "required_profile_family": "blind_review",
@@ -1321,6 +1712,7 @@ mod tests {
             clarification_headline: None,
             clarification_prompt: None,
             clarification_missing_fields: None,
+            clarification_questions: None,
             requested_governance_runtime: None,
             requested_governance_risk: None,
             requested_governance_zone: None,
@@ -1345,6 +1737,9 @@ mod tests {
             current_step_index: None,
             latest_status: SessionStatus::Running,
             execution_path: Some("fixture_compatibility".to_string()),
+            goal_brief_ref: None,
+            session_plan_brief_ref: None,
+            run_brief_ref: None,
             latest_trace_ref: None,
             latest_decision_status: None,
             latest_decision_target: None,
@@ -1405,6 +1800,7 @@ mod tests {
             governance_lifecycle_opt_out: None,
             governance_lifecycle_mode_selection: None,
             governance_lifecycle_selected_mode: None,
+            governance_lifecycle_selected_mode_sequence: None,
             latest_reasoning_profile: None,
             project_scale_path: None,
             project_scale_current_stage: None,
@@ -1419,6 +1815,7 @@ mod tests {
             delight_feedback: None,
             next_command: Some("boundline step".to_string()),
             explanation: "review is in progress".to_string(),
+            ..SessionStatusView::default()
         };
 
         let text = render_session_status(&view);
@@ -1479,7 +1876,7 @@ mod tests {
                     crate::domain::reasoning::ParticipantAssignment {
                         role_id: "reviewer_primary".to_string(),
                         participant_id: "independent_pair_review-reviewer_primary".to_string(),
-                        effective_route: "reviewer_roles.reviewer_primary:claude:sonnet-4.6"
+                        effective_route: "reviewer_roles.reviewer_primary:claude:sonnet-4"
                             .to_string(),
                         provider_family: Some("claude".to_string()),
                         context_basis: "governance_stage:bug-fix:investigate".to_string(),
@@ -1490,7 +1887,7 @@ mod tests {
                     crate::domain::reasoning::ParticipantAssignment {
                         role_id: "reviewer_secondary".to_string(),
                         participant_id: "independent_pair_review-reviewer_secondary".to_string(),
-                        effective_route: "review:codex:gpt-5-codex".to_string(),
+                        effective_route: "review:codex:o4-mini".to_string(),
                         provider_family: Some("codex".to_string()),
                         context_basis: "governance_stage:bug-fix:investigate".to_string(),
                         prompting_pattern: "blind_reviewer".to_string(),
@@ -1569,7 +1966,7 @@ mod tests {
             text.contains("latest_reasoning_next_action: configure distinct reviewer routes"),
             "{text}"
         );
-        assert!(text.contains("latest_reasoning_participants: reviewer_primary=reviewer_roles.reviewer_primary:claude:sonnet-4.6"), "{text}");
+        assert!(text.contains("latest_reasoning_participants: reviewer_primary=reviewer_roles.reviewer_primary:claude:sonnet-4"), "{text}");
         assert!(text.contains("confidence_level: low"), "{text}");
         assert!(text.contains("next_best_action: configure distinct reviewer routes"), "{text}");
         assert!(
@@ -1612,6 +2009,12 @@ mod tests {
             governance_lifecycle_opt_out: Some(false),
             governance_lifecycle_mode_selection: Some("manual".to_string()),
             governance_lifecycle_selected_mode: Some("implementation".to_string()),
+            governance_lifecycle_selected_mode_sequence: Some(vec![
+                "requirements".to_string(),
+                "architecture".to_string(),
+                "backlog".to_string(),
+                "implementation".to_string(),
+            ]),
             governance_next_action: Some("refresh governance packet".to_string()),
             explanation: "project scale and voting metadata are active".to_string(),
             ..SessionStatusView::default()
@@ -1638,6 +2041,12 @@ mod tests {
         assert!(text.contains("governance_lifecycle_opt_out: false"), "{text}");
         assert!(text.contains("governance_lifecycle_mode_selection: manual"), "{text}");
         assert!(text.contains("governance_lifecycle_selected_mode: implementation"), "{text}");
+        assert!(
+            text.contains(
+                "governance_lifecycle_selected_mode_sequence: requirements, architecture, backlog, implementation"
+            ),
+            "{text}"
+        );
     }
 
     #[test]
@@ -1658,6 +2067,9 @@ mod tests {
             authored_input_summary: None,
             authored_input_sources: Vec::new(),
             authored_input_deduplicated_sources: Vec::new(),
+            goal_brief_ref: None,
+            session_plan_brief_ref: None,
+            run_brief_ref: None,
             context_summary: None,
             context_credibility: None,
             context_primary_inputs: Vec::new(),
@@ -1701,6 +2113,7 @@ mod tests {
                     .to_string(),
                 "review_outcome: accepted".to_string(),
             ],
+            session_audit: None,
             delight_feedback: None,
             terminal_status: TaskStatus::Succeeded,
             terminal_reason: TerminalReason::new(TerminalCondition::GoalSatisfied, "done", None),
@@ -1747,7 +2160,7 @@ mod tests {
                         boundline_min: "0.62.0".to_string(),
                         boundline_max_exclusive: "0.63.0".to_string(),
                         canon_min: "0.59.0".to_string(),
-                        canon_max_exclusive: "0.60.0".to_string(),
+                        canon_max_exclusive: "0.61.0".to_string(),
                         contract_line: "governed_reasoning_posture_v1".to_string(),
                     },
                     required_profile_family: Some(
@@ -2521,5 +2934,24 @@ mod tests {
         assert!(
             running_run.contains("execution_condition: running - bounded execution is in progress")
         );
+
+        let planned_run = render_run_execution_condition(&TaskRunResponse {
+            task_id: "task-planned".to_string(),
+            terminal_status: TaskStatus::Planned,
+            terminal_reason: TerminalReason::new(
+                TerminalCondition::GoalSatisfied,
+                "task is planned and ready",
+                None,
+            ),
+            final_context: TaskContext::new(
+                "session-planned",
+                "/tmp/workspace",
+                RunLimits::default(),
+                serde_json::Map::new(),
+            ),
+            plan_revision: 0,
+            trace_location: "/tmp/workspace/.boundline/traces/task-planned.json".to_string(),
+        });
+        assert!(planned_run.contains("execution_condition: waiting"));
     }
 }

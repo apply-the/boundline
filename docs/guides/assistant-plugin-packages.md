@@ -17,14 +17,18 @@ Global packages are different from repo-local packages:
 | Host | Package Folder | Contents | Install Shape |
 |------|----------------|----------|---------------|
 | Claude Code | `.claude-plugin/` | `manifest.json` plus command bindings | Copy or link the folder into the package location expected by Claude Code. |
+| Antigravity | `.antigravity-plugin/` | `manifest.json` plus command bindings | Use the folder as the Antigravity package root for this repository. |
 | Codex | `.codex-plugin/` | `plugin.json` with interface metadata, default prompts, capabilities, and paths | Use the folder as the Codex plugin package root for this repository. |
 | Cursor | `.cursor-plugin/` | `manifest.json` plus command bindings | Copy or link the folder into the package location expected by Cursor. |
 | Copilot | `.copilot-prompts/` and `assistant/prompts/copilot-command-pack.md` | Prompt-pack metadata and prompt guidance | `boundline init --assistant copilot` scaffolds the prompt pack metadata and mirrors the generated prompt files into `.github/prompts/` for VS Code Copilot discovery. `assistant/copilot/prompts/` remains the source copy, and this repository does not claim a universal Copilot plugin format beyond those repo-local files. |
 
 Global bootstrap assets live under `assistant/global/`. Claude, Codex, and
-Cursor are represented as copy-ready user-scoped assets. Copilot and Gemini are
-represented as manual fallback guidance because Boundline does not claim a
-universal global command installation API for those hosts.
+Cursor are represented as copy-ready user-scoped assets. Copilot and
+Antigravity are represented as manual fallback guidance for global bootstrap,
+even though Antigravity now ships a repo-local package surface after
+`boundline init --assistant antigravity`. Gemini remains available only as an
+explicit provider runtime in `--route SLOT=RUNTIME:MODEL`, not as an assistant
+host package.
 
 ## Shared Boundline Sources
 
@@ -34,6 +38,7 @@ Host packages reference shared Boundline-owned files instead of copying behavior
 - `assistant/commands/session-workflow.json`
 - `assistant/prompts/starter-prompts.md`
 - `assistant/prompts/copilot-command-pack.md`
+- `assistant/antigravity/commands/`
 - `assistant/claude/commands/`
 - `assistant/codex/commands/`
 - `assistant/copilot/prompts/`
@@ -50,25 +55,25 @@ Every supported package exposes or documents these namespaced commands:
 
 | Chat Command | Runtime Surface | Notes |
 |--------------|-----------------|-------|
-| `/boundline:start` | `boundline start --json` | Opens or resets the active session. |
-| `/boundline:capture` | `boundline capture --goal ... --json` | Persists goal or brief input into the active session. |
-| `/boundline:plan` | `boundline plan --json` | Produces or reports a bounded plan proposal; confirmation remains explicit. |
+| `/boundline:goal` | `boundline orchestrate --goal ... --until phase-request --json-stream` | Opens or refines the active session goal through runtime-owned clarification gates; resume with the emitted `request_id` and `--answer` when a goal question is active. |
+| `/boundline:plan` | `boundline plan --json` | Produces or reports a bounded plan proposal for an already captured session goal; when the goal is missing or changing, route to `/boundline:goal` instead of treating `/boundline:plan` as a goal-capture surface. |
 | `/boundline:run` | `boundline run --json` | Runs the next bounded action through the real runtime. |
 | `/boundline:status` | `boundline status --json` | Reports current state and `next_command`. |
-| `/boundline:continue` | `boundline continue --json` | Continues only from `.boundline/session.json`; reports init/start guidance when no session exists. |
+| `/boundline:continue` | `boundline continue --json` | Continues only from `.boundline/session.json`; reports init/goal guidance when no session exists. |
 | `/boundline:inspect` | `boundline inspect --json` | Reads authoritative trace and session evidence. |
 | `/boundline:recover` | `boundline status --json` then CLI-reported recovery command | Starts from runtime state and uses `next_command`, `corrected_command`, or checkpoint restore guidance. |
 | `/boundline:govern` | `boundline govern --mode <mode> --json` | Single governed stage surface for Canon modes; use without `--mode` to list choices. |
 
 ## State Handling
 
-Commands must surface blocked, clarification-required, failed, exhausted, and terminal states explicitly. They must not continue from chat-only assumptions. When shell access is unavailable, provide the exact CLI command with `--json`, wait for pasted output, and interpret that output rather than summarizing from memory.
+Commands must surface blocked, clarification-required, failed, exhausted, and terminal states explicitly. They must not continue from chat-only assumptions. When shell access is unavailable, provide the exact CLI command with `--json` or `--json-stream` as required by the surface, wait for pasted output, and interpret that output rather than summarizing from memory.
 
 Before workspace init, global commands must not assume `.boundline/session.json`
 exists. `/boundline:status` and `/boundline:continue` should report that no
-active session is available and point to `boundline init` or `boundline start`
+active session is available and point to `boundline init` or `boundline goal --goal ...`
 depending on whether the workspace has already been initialized. Use
 `--workspace <path>` only when the host is targeting a different repository.
+When goal clarification is active, route back through `boundline orchestrate --goal ... --until phase-request --json-stream` instead of falling back to the non-interactive goal capture primitive.
 
 ## Validation
 

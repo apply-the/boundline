@@ -3,7 +3,7 @@
 ## GoalPlan
 
 - **Purpose**: Remains the authoritative persisted record for inferred work on a
-  captured goal.
+  recorded goal.
 - **Existing fields reused**:
   - `goal_text`
   - `tasks`

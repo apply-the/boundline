@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-1. Install Rust 1.95.0 with `cargo`, `rustfmt`, and `clippy` available.
+1. Install Rust 1.96.0 with `cargo`, `rustfmt`, and `clippy` available.
 2. Work from the repository root on branch `002-developer-ux-orchestrator`.
 3. Use a writable workspace so Boundline can persist traces under `.boundline/traces/` and load `.boundline/fixture.json`.
 4. Build and run the CLI from the same repository checkout as the library crate.

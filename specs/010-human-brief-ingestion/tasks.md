@@ -12,7 +12,7 @@
 The v0.10.0 release now reflects the full delivered scope of this feature.
 Boundline accepts direct text, repeated Markdown briefs, referenced workspace
 Markdown, clarification-aware task drafting, and business-level governance
-intent across `capture`, direct-input `run`, `status`, and `inspect`.
+intent across `goal`, direct-input `run`, `status`, and `inspect`.
 All tasks below are complete and describe the delivered implementation.
 
 
@@ -46,11 +46,11 @@ All tasks below are complete and describe the delivered implementation.
 
 **Goal**: Let a developer start a bounded task from plain text or one authored Markdown brief without authoring an internal manifest.
 
-**Independent Test**: Start a new task from either plain text or one Markdown brief, then verify that Boundline captures the request, derives a bounded task draft, and either plans the work or stops with one explicit clarification without asking for internal files.
+**Independent Test**: Start a new task from either plain text or one Markdown brief, then verify that Boundline records the request, derives a bounded task draft, and either plans the work or stops with one explicit clarification without asking for internal files.
 
 ### Tests for User Story 1
 
-- [X] T009 [P] [US1] Add contract coverage for `capture` and direct-input `run` with direct text or one Markdown brief in tests/contract/human_input_cli_contract.rs and tests/contract/session_command_contract.rs
+- [X] T009 [P] [US1] Add contract coverage for `goal` and direct-input `run` with direct text or one Markdown brief in tests/contract/human_input_cli_contract.rs and tests/contract/session_command_contract.rs
 - [X] T010 [P] [US1] Add integration coverage for `start -> capture -> flow -> plan` with direct text and one brief in tests/integration/human_input_capture_flow.rs and tests/integration/session_cli_flow.rs
 - [X] T011 [P] [US1] Add unit coverage for brief-bundle persistence and clarification blocking in tests/unit/human_input_ingestion.rs, tests/unit/session_record.rs, and tests/unit/task_context_state.rs
 
@@ -100,7 +100,7 @@ All tasks below are complete and describe the delivered implementation.
 
 ### Implementation for User Story 3
 
-- [X] T024 [US3] Implement human governance intent parsing and normalization for `capture` and direct `run` in src/cli.rs, src/cli/session.rs, and src/domain/session.rs
+- [X] T024 [US3] Implement human governance intent parsing and normalization for `goal` and direct `run` in src/cli.rs, src/cli/session.rs, and src/domain/session.rs
 - [X] T025 [US3] Map normalized governance intent into the existing governance runtime request and task-draft flow in src/orchestrator/governance.rs, src/adapters/governance_runtime.rs, src/domain/governance.rs, and src/fixture.rs
 - [X] T026 [US3] Project governed human-input status, clarification, and next-step guidance through src/domain/session.rs, src/cli/output.rs, src/cli/session.rs, and src/cli/inspect.rs
 

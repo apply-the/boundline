@@ -9,7 +9,7 @@ Complete the first named-workflow slice by making bounded review and govern phas
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, plus Rust standard library filesystem, path, process, and collections APIs; no new runtime dependencies planned for this slice  
 **Storage**: Workspace-local `.boundline/workflows.toml`, `.boundline/session.json`, `.boundline/traces/`, optional `.boundline/execution.json`, optional `.canon/` artifacts, plus repository docs and assistant assets updated as part of rollout  
 **Testing**: `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test --no-run --all-targets`, targeted `cargo test` suites for touched workflow surfaces, `cargo nextest run --workspace --all-features`, `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`, `cargo deny check licenses advisories bans sources`  
@@ -27,7 +27,7 @@ Complete the first named-workflow slice by making bounded review and govern phas
 
 - **PASS** Delivery identity: The slice directly improves bounded engineering-task delivery by letting named workflows carry real review and governance work to completion instead of stopping short at declaration-only blockers. See Summary, Technical Context, and [spec.md](/Users/rt/workspace/boundline/specs/019-workflow-follow-through/spec.md).
 - **PASS** Delivery-first scope: The work prioritizes orchestration, execution follow-through, operator guidance, and inspectability before optimization or polish. See Summary, Technical Context, and research decisions.
-- **PASS** Primary workflow: The primary operator path remains session-native and workflow phases still compile onto `start -> capture -> plan -> run -> status -> next -> inspect`; the explicit compatibility route remains available only when the operator chooses it. See Summary, Technical Context, quickstart, and contracts.
+- **PASS** Primary workflow: The primary operator path remains session-native and workflow phases still compile onto `goal -> plan -> run -> status -> next -> inspect`; the explicit compatibility route remains available only when the operator chooses it. See Summary, Technical Context, quickstart, and contracts.
 - **PASS** Bounded execution: Start conditions, stop conditions, blocked governance, review outcomes, and existing runtime limits stay explicit; follow-through stops at the first unmet bounded condition. See Technical Context, data model, research, and quickstart.
 - **PASS** Stateful execution: Workflow follow-through remains session-owned, with progress, blocked reasons, and next actions persisted in `.boundline/session.json` and trace evidence preserved in `.boundline/traces/`. See Summary, data-model, and contracts.
 - **PASS** Mutable planning: Workflow follow-through reuses the existing mutable session-native planning and runtime control plane, so review or governance work can pause, fail, or continue based on explicit evidence rather than a rigid script. See Summary, research, and data model.

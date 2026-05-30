@@ -1,5 +1,6 @@
 use std::fs;
 
+use boundline::adapters::session_store::{FileSessionStore, SessionStore};
 use boundline::domain::session::{ActiveSessionRecord, SessionStatus};
 use boundline::domain::workflow::{WorkflowLifecycleState, WorkflowPhase};
 
@@ -17,8 +18,7 @@ fn run_boundline_in(workspace: &std::path::Path, args: &[&str]) -> std::process:
 }
 
 fn load_session_record(workspace: &std::path::Path) -> ActiveSessionRecord {
-    serde_json::from_slice(&fs::read(workspace.join(".boundline").join("session.json")).unwrap())
-        .unwrap()
+    FileSessionStore::for_workspace(workspace).load().unwrap().unwrap()
 }
 
 #[test]

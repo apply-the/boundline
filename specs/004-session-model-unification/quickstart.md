@@ -3,7 +3,7 @@
 ## Prerequisites
 
 1. Work from the repository root on branch `004-session-model-unification`.
-2. Have Rust 1.95.0 with `cargo` available.
+2. Have Rust 1.96.0 with `cargo` available.
 3. Use a writable workspace so Boundline can persist both `.boundline/session.json` and `.boundline/traces/`.
 4. Start from the workspace you want the active session to belong to.
 
@@ -23,12 +23,12 @@ Expected outcome:
 - The session becomes the active interaction state for later commands.
 - No goal or task plan is required yet.
 
-### 2. Capture a bounded goal
+### 2. Record a bounded goal
 
 Run:
 
 ```bash
-cargo run --bin boundline -- capture --goal "Summarize the current bounded developer flow"
+cargo run --bin boundline -- goal --goal "Summarize the current bounded developer flow"
 ```
 
 Expected outcome:
@@ -118,7 +118,7 @@ If a session-backed command is invoked before `start`, expected output should te
 
 ### Missing goal
 
-If `plan`, `step`, or `run` is invoked before goal capture, expected output should route the user to `capture`.
+If `plan`, `step`, or `run` is invoked before goal capture, expected output should route the user to `goal`.
 
 ### Corrupted or stale session
 
@@ -140,7 +140,7 @@ cargo test --all-targets
 
 ## Minimum Validation Scenarios
 
-1. A developer can start a session, capture a goal, plan, and run without re-entering goal context.
+1. A developer can start a session, record a goal, plan, and run without re-entering goal context.
 2. A planned session can advance through repeated `step` invocations while preserving task context and trace continuity.
 3. `status` and `next` provide explicit, aligned guidance from the same active session.
 4. Assistant commands reuse the active session instead of asking for preserved goal or trace information again.

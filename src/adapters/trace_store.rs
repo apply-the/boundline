@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
+use crate::domain::session::{active_session_pointer_ref, session_traces_root_ref};
 use crate::domain::trace::ExecutionTrace;
 
 pub trait TraceStore: Send + Sync {
@@ -14,26 +15,72 @@ pub trait TraceStore: Send + Sync {
 #[derive(Debug, Clone)]
 pub struct FileTraceStore {
     root: PathBuf,
+    workspace_root: Option<PathBuf>,
+    prefer_active_session: bool,
 }
 
 impl FileTraceStore {
     pub fn new(root: impl Into<PathBuf>) -> Self {
-        Self { root: root.into() }
+        Self { root: root.into(), workspace_root: None, prefer_active_session: false }
     }
 
     pub fn for_workspace(workspace_ref: impl AsRef<Path>) -> Self {
-        Self::new(workspace_ref.as_ref().join(".boundline").join("traces"))
+        let workspace_root = workspace_ref.as_ref().to_path_buf();
+        Self {
+            root: workspace_root.join(".boundline").join("traces"),
+            workspace_root: Some(workspace_root),
+            prefer_active_session: true,
+        }
+    }
+
+    pub fn for_session(workspace_ref: impl AsRef<Path>, session_id: &str) -> Self {
+        let workspace_root = workspace_ref.as_ref().to_path_buf();
+        Self {
+            root: workspace_root.join(session_traces_root_ref(session_id)),
+            workspace_root: Some(workspace_root),
+            prefer_active_session: false,
+        }
     }
 
     pub fn root(&self) -> &Path {
         &self.root
     }
+
+    pub fn effective_root(&self) -> Result<PathBuf, TraceStoreError> {
+        self.resolved_root()
+    }
+
+    fn resolved_root(&self) -> Result<PathBuf, TraceStoreError> {
+        if !self.prefer_active_session {
+            return Ok(self.root.clone());
+        }
+
+        let Some(workspace_root) = self.workspace_root.as_ref() else {
+            return Ok(self.root.clone());
+        };
+        let pointer_path = workspace_root.join(active_session_pointer_ref());
+        if !pointer_path.is_file() {
+            return Ok(self.root.clone());
+        }
+
+        let session_id = fs::read_to_string(&pointer_path).map_err(TraceStoreError::Read)?;
+        let session_id = session_id.trim();
+        if session_id.is_empty() {
+            return Err(TraceStoreError::InvalidActivePointer(format!(
+                "{} is empty",
+                pointer_path.display()
+            )));
+        }
+
+        Ok(workspace_root.join(session_traces_root_ref(session_id)))
+    }
 }
 
 impl TraceStore for FileTraceStore {
     fn persist(&self, trace: &ExecutionTrace) -> Result<PathBuf, TraceStoreError> {
-        fs::create_dir_all(&self.root).map_err(TraceStoreError::CreateDirectory)?;
-        let path = self.root.join(format!("{}.json", trace.task_id));
+        let root = self.resolved_root()?;
+        fs::create_dir_all(&root).map_err(TraceStoreError::CreateDirectory)?;
+        let path = root.join(format!("{}.json", trace.task_id));
         let contents = serde_json::to_vec_pretty(trace).map_err(TraceStoreError::Serialize)?;
         fs::write(&path, contents).map_err(TraceStoreError::Write)?;
         Ok(path)
@@ -45,12 +92,13 @@ impl TraceStore for FileTraceStore {
     }
 
     fn latest(&self) -> Result<Option<PathBuf>, TraceStoreError> {
-        if !self.root.exists() {
+        let root = self.resolved_root()?;
+        if !root.exists() {
             return Ok(None);
         }
 
         let mut latest: Option<(u64, String, PathBuf)> = None;
-        for entry in fs::read_dir(&self.root).map_err(TraceStoreError::ReadDirectory)? {
+        for entry in fs::read_dir(&root).map_err(TraceStoreError::ReadDirectory)? {
             let entry = entry.map_err(TraceStoreError::ReadDirectory)?;
             let path = entry.path();
 
@@ -94,6 +142,8 @@ pub enum TraceStoreError {
     Deserialize(serde_json::Error),
     #[error("failed to write trace file: {0}")]
     Write(std::io::Error),
+    #[error("invalid active session pointer: {0}")]
+    InvalidActivePointer(String),
 }
 
 #[cfg(test)]

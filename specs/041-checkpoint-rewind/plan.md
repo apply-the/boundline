@@ -23,7 +23,7 @@ cluster, and Canon detail moves into the architecture layer.
   the iteration process.
 -->
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, and `toml`; no new non-standard runtime dependency is required for checkpoint persistence  
 **Storage**: Workspace-local `.boundline/session.json`, `.boundline/traces/`, `.boundline/config.toml`, `.boundline/cluster.toml`, optional `.boundline/execution.json`, optional `.canon/` artifacts, and new workspace-local `.boundline/checkpoints/` manifests plus captured file payloads  
 **Testing**: `cargo fmt --all`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, targeted unit/integration/contract tests, `cargo test --workspace --all-targets`, `cargo nextest run --workspace --all-features`, and `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`  
@@ -41,7 +41,7 @@ cluster, and Canon detail moves into the architecture layer.
 
 - **PASS** Delivery identity: The slice directly improves bounded engineering delivery by adding reversible safety around workspace mutation and making that safety inspectable on the same delivery surfaces.
 - **PASS** Delivery-first scope: Execution safety, state persistence, restore behavior, and command-surface continuity are prioritized ahead of optimization or cleanup-only refactors.
-- **PASS** Primary workflow: The main operator path remains session-native `start -> capture -> plan -> run -> status -> next -> inspect`; explicit compatibility remains available but subordinate and does not own checkpoint control flow.
+- **PASS** Primary workflow: The main operator path remains session-native `goal -> plan -> run -> status -> next -> inspect`; explicit compatibility remains available but subordinate and does not own checkpoint control flow.
 - **PASS** Bounded execution: Checkpoints are created only before bounded mutating `run` or `step` execution, within existing step and retry limits, and restore ends in explicit success or refusal.
 - **PASS** Stateful execution: Session state, trace history, checkpoint manifests, restore records, and cluster authority all persist in workspace-owned state under `.boundline/`.
 - **PASS** Mutable planning: The plan preserves existing goal-plan and replanning behavior while adding checkpoint capture around the mutating execution phase and restore events after failure.

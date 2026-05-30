@@ -51,6 +51,10 @@ version tag. Two contract tests enforce alignment automatically:
 - **`docs/getting-started.md`** and **`docs/architecture.md`** — update any
   current Canon compatibility target named in the active product docs.
 
+- **CLI and assistant surface updates** — when `status`, `inspect`, or the
+  generated assistant command packs change, document the active usage and any
+  revised fallback guidance in the README and assistant command docs.
+
 ### Assistant plugin surface
 
 - **`assistant/plugin-metadata.json`** — `"version": "X.Y.Z"` plus any

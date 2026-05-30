@@ -146,7 +146,7 @@ the shipped story.
   ignore how work stops, fails, or becomes non-credible.
 -->
 
-- What happens when a workflow exists but no active session or captured goal is
+- What happens when a workflow exists but no active session or recorded goal is
   yet available for the current phase?
 - How does the system handle a workflow route that resolves to an assistant
   runtime outside the declared capability list?
@@ -170,7 +170,7 @@ the shipped story.
   shipped assistant families instead of leaving workflow entry to raw CLI-only
   instructions.
 - **FR-002**: System MUST keep named workflows on the same primary
-  session-native product story as direct `start -> capture -> plan -> run`
+  session-native product story as direct `goal -> plan -> run`
   execution rather than implying a separate workflow-owned runtime.
 - **FR-003**: System MUST keep explicit compatibility execution available only
   as an explicit subordinate route and MUST NOT let workflow guidance or output

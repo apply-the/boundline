@@ -60,7 +60,7 @@ inspectable value independently.
 
 **Goal**: Implement the observe→decide→act→verify→update execution loop
 
-**Independent Test**: Run `boundline run` on a session with a captured goal and verify
+**Independent Test**: Run `boundline run` on a session with a recorded goal and verify
 the engine produces a sequence of typed, inspectable decision objects in the trace
 
 ### Tests for User Story 1
@@ -103,8 +103,8 @@ referencing real workspace files, without requiring `boundline init` or executio
 - [x] T041 [US2] Implement workspace signal collector in `src/orchestrator/goal_planner.rs`: enumerate file tree (bounded depth 4), detect language from manifests, check `.boundline/config.toml` and `.canon/` presence
 - [x] T042 [US2] Implement task derivation in `src/orchestrator/goal_planner.rs`: parse goal text, match against workspace signals, generate ordered PlannedTask list with targets, expected outcomes, and decision type hints
 - [x] T043 [US2] Implement Canon artifact scanning in `src/orchestrator/goal_planner.rs`: if `.canon/` exists, scan for governed artifacts and include as source_evidence in GoalPlan
-- [x] T044 [US2] Integrate goal planner into `boundline plan` command in `src/cli/session.rs`: when session has captured goal and no execution profile, call goal planner, persist GoalPlan in session state, show plan summary to user
-- [x] T045 [US2] Handle error path in `src/cli/session.rs`: if `boundline plan` is called without a captured goal, return explicit error message
+- [x] T044 [US2] Integrate goal planner into `boundline plan` command in `src/cli/session.rs`: when session has recorded goal and no execution profile, call goal planner, persist GoalPlan in session state, show plan summary to user
+- [x] T045 [US2] Handle error path in `src/cli/session.rs`: if `boundline plan` is called without a recorded goal, return explicit error message
 
 ---
 
@@ -112,7 +112,7 @@ referencing real workspace files, without requiring `boundline init` or executio
 
 **Goal**: Propose inferred flow from goal text during `boundline plan`
 
-**Independent Test**: Capture a goal with "fix" keyword, run `boundline plan`, and verify
+**Independent Test**: Record a goal with "fix" keyword, run `boundline plan`, and verify
 bug-fix flow is proposed with confirmation prompt
 
 ### Tests for User Story 3
@@ -181,12 +181,12 @@ the file, runs verification, and feeds output as evidence for next decision
 **Goal**: Preserve fixture execution path as fallback, route correctly
 
 **Independent Test**: Verify `boundline run` with `.boundline/execution.json` uses fixture
-path; `boundline run` with captured goal uses decision loop
+path; `boundline run` with recorded goal uses decision loop
 
 ### Tests for User Story 6
 
 - [x] T069 [P] [US6] Integration test: `boundline run` with execution profile uses fixture path in `tests/integration/fixture_compat_flow.rs` and register in `tests/integration.rs`
-- [x] T070 [P] [US6] Integration test: `boundline run` with captured goal uses decision loop in `tests/integration/session_native_flow.rs` and register in `tests/integration.rs`
+- [x] T070 [P] [US6] Integration test: `boundline run` with recorded goal uses decision loop in `tests/integration/session_native_flow.rs` and register in `tests/integration.rs`
 - [x] T071 [P] [US6] Integration test: `boundline run` with both goal and profile uses decision loop unless `--profile` is explicit in `tests/integration/session_native_flow.rs`
 
 ### Implementation for User Story 6
@@ -202,7 +202,7 @@ path; `boundline run` with captured goal uses decision loop
 
 **Purpose**: Full session-native flow validation
 
-- [x] T076 Integration test: full `start → capture → plan → run → inspect` without `init` in `tests/integration/session_native_flow.rs`
+- [x] T076 Integration test: full `goal → plan → run → inspect` without `init` in `tests/integration/session_native_flow.rs`
 - [x] T077 Integration test: decision loop with flow inference, flow policy constraints, and stage transitions in `tests/integration/session_native_flow.rs`
 - [x] T078 Integration test: decision loop recovery path — verification failure triggers fix decision in `tests/integration/session_native_flow.rs`
 - [x] T079 Integration test: exhaustion terminal state at step limit in `tests/integration/session_native_flow.rs`
@@ -214,7 +214,7 @@ path; `boundline run` with captured goal uses decision loop
 **Purpose**: Documentation, coverage, formatting, and release hygiene
 
 - [x] T080 Update `ROADMAP.md`: move Priority 1 items to completed status under v0.13.0, remove the companion review reference from Priority 1 since the work is done
-- [x] T081 Update `README.md`: document the session-native flow (`start → capture → plan → run → inspect`) as the primary usage path, push `init` to optional/advanced section
+- [x] T081 Update `README.md`: document the session-native flow (`goal → plan → run → inspect`) as the primary usage path, push `init` to optional/advanced section
 - [x] T082 Update `docs/getting-started.md`: rewrite getting started around goal capture and plan instead of init templates
 - [x] T083 Update `docs/configuration.md`: document new `--flow` and `--no-flow` flags, document GoalPlan interaction with config
 - [x] T084 Update `CONTRIBUTING.md`: add new domain modules and test files to the contributor map

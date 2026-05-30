@@ -20,7 +20,7 @@ modified Rust files.
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, and `toml`, plus Rust standard library filesystem, path, and collections APIs; no new runtime dependencies planned for this slice  
 **Storage**: Workspace-local `.boundline/config.toml`, cluster-local `.boundline/cluster.toml`, user-global config at `$XDG_CONFIG_HOME/boundline/config.toml` or `$HOME/.config/boundline/config.toml`, persisted session and trace state under `.boundline/session.json` and `.boundline/traces/`, optional `.boundline/execution.json`, and repository docs plus assistant assets  
 **Testing**: `cargo fmt --all`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, targeted unit, integration, and contract tests, `cargo test --no-run --all-targets`, `cargo nextest run --workspace --all-features`, and `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`  
@@ -38,7 +38,7 @@ modified Rust files.
 
 - **PASS** Delivery identity: The slice directly improves bounded engineering-task delivery by letting Boundline apply the correct domain guidance, local standards, and supporting context before and during execution. See Summary and Technical Context.
 - **PASS** Delivery-first scope: The plan prioritizes init/config persistence, context assembly, planning gates, and execution/inspection surfaces ahead of documentation polish. See Summary, Technical Context, and research decisions.
-- **PASS** Primary workflow: The main operator path remains session-native `start -> capture -> plan -> run -> status -> next -> inspect`; explicit compatibility follow-up stays available but subordinate and trace-authoritative. See Summary, Technical Context, quickstart, and contracts.
+- **PASS** Primary workflow: The main operator path remains session-native `goal -> plan -> run -> status -> next -> inspect`; explicit compatibility follow-up stays available but subordinate and trace-authoritative. See Summary, Technical Context, quickstart, and contracts.
 - **PASS** Bounded execution: Planning stops explicitly when no credible domain guidance or required supporting input exists; execution stays inside existing step and retry limits with no background activity. See Summary, Technical Context, contracts, and quickstart.
 - **PASS** Stateful execution: Effective domain config, applied domain context, optional governed artifacts, and external input status are persisted through existing scoped config, goal-plan, task-context, and trace state rather than hidden process state. See Summary, data model, and contracts.
 - **PASS** Mutable planning: Domain guidance is derived from current bounded context and can change on replan or later task-target changes without inventing a second planning system. See Summary, Technical Context, and research.

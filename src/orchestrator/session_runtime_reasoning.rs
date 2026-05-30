@@ -3,7 +3,37 @@ use std::path::Path;
 
 use serde_json::json;
 
-use super::*;
+use crate::adapters::cluster_store::FileClusterStore;
+use crate::adapters::config_store::FileConfigStore;
+use crate::domain::configuration::{EffectiveRouting, RoutingOverrides, resolve_effective_routing};
+use crate::domain::distribution::SUPPORTED_CANON_VERSION;
+use crate::domain::governance::{
+    CanonModeSelectionPreference, GovernanceLifecycleState, GovernanceRuntimeKind,
+    GovernedSessionLifecycle,
+};
+use crate::domain::limits::TerminalCondition;
+use crate::domain::reasoning::{
+    CanonAdmissionPriority, CanonChallengePostureInput, IndependenceAssessment,
+    IndependenceAssessmentResult, IndependenceFloor, ParticipantAssignment,
+    ParticipantRoleDefinition, ProfileActivationRecord, REASONING_POSTURE_V1_CONTRACT_LINE,
+    ReasoningActivationStatus, ReasoningActivationTrigger, ReasoningAdmissionEffect,
+    ReasoningCompatibilityWindow, ReasoningConfidenceContribution, ReasoningConfidenceLevel,
+    ReasoningIterationCondition, ReasoningIterationKind, ReasoningIterationRecord,
+    ReasoningObservedDistinctness, ReasoningOutcome, ReasoningOutcomeKind,
+    ReasoningParticipantRoleKind, ReasoningParticipantStatus, ReasoningProfileDefinition,
+    ReasoningRoutePreference,
+};
+use crate::domain::session::SessionStatus;
+use crate::orchestrator::governance::governance_state_patch;
+use crate::orchestrator::review_trace::record_reasoning_profile_events;
+use crate::orchestrator::terminal::build_terminal_reason;
+
+use super::{
+    ActiveSessionRecord, ApprovalState, CanonMode, ExecutionTrace, GovernanceStepDecision,
+    GovernedStageRecord, SessionRuntime, SessionRuntimeError, Task, TaskRunResponse,
+    TraceEventType, compacted_canon_memory_for_block, current_timestamp_millis,
+    governance_next_action_for_state, governance_projection_snapshot,
+};
 
 pub(super) struct ReasoningTraceContext<'a> {
     pub(super) step_id: &'a str,
@@ -244,6 +274,7 @@ impl SessionRuntime {
                 task.plan.revision
             ),
             previous_governance_attempt_id: None,
+            stage_council: None,
             packet_ref: None,
             decision_ref: decision.as_ref().map(|decision| decision.decision_id.clone()),
             blocked_reason: Some(block.reason.clone()),
@@ -283,7 +314,7 @@ impl SessionRuntime {
                 "latest_governance_approval_provenance": projection.approval_provenance.clone(),
             }),
         );
-        let trace_location = self.persist_trace(trace)?;
+        let trace_location = self.persist_trace(&session.session_id, trace)?;
         session.latest_trace_ref = Some(trace_location);
         session.updated_at = current_timestamp_millis();
 
@@ -315,7 +346,7 @@ impl SessionRuntime {
         activation: &ProfileActivationRecord,
     ) -> Result<(), SessionRuntimeError> {
         record_reasoning_profile_events(trace, step_id, plan_revision, activation);
-        let trace_location = self.persist_trace(trace)?;
+        let trace_location = self.persist_trace(&session.session_id, trace)?;
         session.latest_status = SessionStatus::Running;
         session.latest_terminal_reason = None;
         session.latest_trace_ref = Some(trace_location);
@@ -951,6 +982,7 @@ pub(super) fn store_latest_reasoning_profile(
         stage_records: Vec::new(),
         accumulated_context: Vec::new(),
         terminal_reason: None,
+        planning_input_fingerprint: None,
     });
 }
 

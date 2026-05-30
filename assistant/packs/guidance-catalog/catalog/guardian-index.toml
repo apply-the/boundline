@@ -4,7 +4,7 @@
 [guardian.clean_code]
 pillar = "clean-code"
 kind = "llm"
-rules = ["intent-revealing-names", "no-mixed-responsibilities", "no-hidden-side-effects", "no-primitive-obsession"]
+rules = ["intent-revealing-names", "no-mixed-responsibilities", "no-hidden-side-effects", "no-primitive-obsession", "no-dead-code", "no-magic-values", "small-functions", "comments-explain-why", "no-wildcard-imports"]
 applies_to = ["implementation", "review", "refactor"]
 default_disposition = "concern"
 
@@ -30,6 +30,14 @@ rules = ["no-unwrap-in-domain-code", "no-expect-in-library-code", "no-panic-in-p
 applies_to = ["implementation", "review"]
 default_disposition = "warning"
 
+[guardian.rust_idiomatic]
+pillar = "language"
+language = "rust"
+kind = "hybrid"
+rules = ["prefer-channels-over-locks", "no-wildcard-imports"]
+applies_to = ["implementation", "review"]
+default_disposition = "concern"
+
 [guardian.ts_runtime_validation]
 pillar = "language"
 language = "typescript"
@@ -41,7 +49,7 @@ default_disposition = "concern"
 [guardian.observability]
 pillar = "observability"
 kind = "hybrid"
-rules = ["external-call-without-telemetry", "missing-correlation-id", "unstructured-log"]
+rules = ["external-call-without-telemetry", "missing-correlation-id", "unstructured-log", "no-secrets-in-logs"]
 applies_to = ["implementation", "review", "incident"]
 default_disposition = "concern"
 
@@ -106,7 +114,7 @@ default_disposition = "warning"
 [guardian.concurrency_safety]
 pillar = "resilience"
 kind = "hybrid"
-rules = ["shared-mutable-state-without-sync", "blocking-in-async-context", "missing-cancellation-handling"]
+rules = ["shared-mutable-state-without-sync", "blocking-in-async-context", "missing-cancellation-handling", "prefer-message-passing"]
 applies_to = ["architecture", "implementation", "review"]
 default_disposition = "concern"
 
@@ -115,4 +123,12 @@ pillar = "security"
 kind = "deterministic"
 rules = ["unvalidated-external-input", "missing-schema-at-boundary", "log-contains-pii"]
 applies_to = ["implementation", "review", "verification"]
+default_disposition = "warning"
+
+[guardian.rust_strict_io]
+pillar = "language"
+language = "rust"
+kind = "hybrid"
+rules = ["no-println-in-core"]
+applies_to = ["implementation", "review"]
 default_disposition = "warning"

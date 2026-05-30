@@ -1,9 +1,13 @@
+//! Validation logic for assistant plugin packages.
+//!
+//! Checks manifest schemas, host-compatibility assertions, required command
+//! coverage, and asset-integrity for plugins shipped under `assistant/`.
+
 use serde_json::Value;
 use std::path::Path;
 
 pub const REQUIRED_COMMANDS: &[&str] = &[
-    "/boundline:start",
-    "/boundline:capture",
+    "/boundline:goal",
     "/boundline:plan",
     "/boundline:run",
     "/boundline:status",

@@ -24,6 +24,31 @@ Domain concepts should be expressed as dedicated types, not raw primitives. An `
 
 Triggers: function parameters that are all `String` or `i32`, domain identifiers passed as raw primitives, quantities without units.
 
+### no-dead-code
+Remove all unused exports, unreachable branches, and commented-out blocks. Trust version control to remember history.
+
+Triggers: large blocks of commented-out code, variables assigned but never read, private functions that are never called.
+
+### no-magic-values
+Avoid unexplained magic strings or numbers in domain logic. Use named constants or typed enums instead.
+
+Triggers: inline numbers (e.g., `if count > 4`), repeated string literals without explanation, hardcoded status codes.
+
+### small-functions
+Functions must be kept small (e.g., < 50 lines). If a function becomes long or requires comments to explain its internal steps, extract those steps into well-named helper functions.
+
+Triggers: functions exceeding 50 lines, functions with multiple logical blocks separated by narrative comments.
+
+### comments-explain-why
+Comments must explain the *why*, business constraints, and invariants, rather than narrating the obvious *what* that the code already shows.
+
+Triggers: comments that simply restate the code (e.g., `// increment i by 1`), missing explanations for complex workarounds.
+
+### no-wildcard-imports
+Avoid wildcard or glob imports (e.g., `import java.util.*`, `from module import *`). Explicitly importing symbols makes dependencies clear, prevents namespace pollution, and avoids breakage when external libraries add new symbols.
+
+Triggers: wildcard imports, glob imports, importing entire namespaces instead of specific types or functions.
+
 ## Disposition
 
 Default: `concern` (raise for discussion, do not block).

@@ -20,7 +20,7 @@ binding constraints explicit.
 ## Flow
 
 1. Start a new session-native delivery story.
-2. Capture a bounded goal with optional authored brief inputs.
+2. Record a bounded goal with optional authored brief inputs.
 3. Confirm that capture output shows the negotiated outcome, acceptance
    boundary, and binding constraints.
 4. Plan the work and verify that the negotiated story remains visible.
@@ -32,7 +32,7 @@ binding constraints explicit.
 
 ```text
 cargo run --bin boundline -- start
-cargo run --bin boundline -- capture --goal "Fix the failing parser test without widening the public API" --brief docs/example-negotiation-brief.md --risk medium --owner platform
+cargo run --bin boundline -- goal --goal "Fix the failing parser test without widening the public API" --brief docs/example-negotiation-brief.md --risk medium --owner platform
 cargo run --bin boundline -- status
 cargo run --bin boundline -- plan --flow bug-fix
 cargo run --bin boundline -- run
@@ -45,7 +45,7 @@ cargo run --bin boundline -- inspect
 
 ### Negotiated capture
 
-- `capture` reports one negotiated delivery packet for the active session.
+- `goal` reports one negotiated delivery packet for the active session.
 - The packet summary makes the intended outcome, acceptance boundary, and any
   binding constraints explicit even when the operator supplied only a direct
   goal.

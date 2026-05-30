@@ -1,7 +1,5 @@
 use boundline::cli::run::{RunCommandError, execute_custom_run, execute_native_direct_run};
-use boundline::cli::session::{
-    execute_capture, execute_next, execute_plan, execute_start, execute_status,
-};
+use boundline::cli::session::{execute_goal, execute_next, execute_plan, execute_status};
 
 use crate::runtime_refoundation::temp_runtime_refoundation_compat_workspace;
 
@@ -10,18 +8,9 @@ fn status_contract_preserves_native_snapshot_and_surfaces_compatibility_follow_u
     let workspace =
         temp_runtime_refoundation_compat_workspace("compatibility-continuity-contract-mixed-route");
 
-    execute_start(Some(&workspace)).unwrap();
-    execute_capture(
-        Some(&workspace),
-        Some("fix the failing add test"),
-        &[],
-        None,
-        None,
-        None,
-        None,
-    )
-    .unwrap();
-    execute_plan(Some(&workspace), Some("bug-fix"), false, false).unwrap();
+    execute_goal(Some(&workspace), Some("fix the failing add test"), &[], None, None, None, None)
+        .unwrap();
+    execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
 
     execute_custom_run(&workspace, Some("Fix the failing add test"), &[], None, None, None, None)
         .unwrap();
@@ -83,17 +72,8 @@ fn native_direct_run_contract_refuses_to_replace_meaningful_active_session_state
         "compatibility-continuity-contract-active-session",
     );
 
-    execute_start(Some(&workspace)).unwrap();
-    execute_capture(
-        Some(&workspace),
-        Some("fix the failing add test"),
-        &[],
-        None,
-        None,
-        None,
-        None,
-    )
-    .unwrap();
+    execute_goal(Some(&workspace), Some("fix the failing add test"), &[], None, None, None, None)
+        .unwrap();
 
     let error = execute_native_direct_run(
         &workspace,

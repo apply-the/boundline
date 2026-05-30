@@ -2,7 +2,7 @@ use std::path::Path;
 
 use boundline::adapters::session_store::{FileSessionStore, SessionStore};
 use boundline::adapters::trace_store::{FileTraceStore, TraceStore};
-use boundline::cli::session::{execute_capture, execute_plan, execute_run, execute_start};
+use boundline::cli::session::{execute_goal, execute_plan, execute_run};
 use boundline::domain::goal_plan::GoalPlanStatus;
 use boundline::domain::session::SessionStatus;
 use boundline::domain::trace::TraceEventType;
@@ -15,18 +15,9 @@ use crate::runtime_refoundation::{
 fn bounded_goal_plan_handoff_is_persisted_before_native_run() {
     let workspace = temp_runtime_refoundation_workspace("runtime-refoundation-contract-handoff");
 
-    execute_start(Some(&workspace)).unwrap();
-    execute_capture(
-        Some(&workspace),
-        Some("fix the failing add test"),
-        &[],
-        None,
-        None,
-        None,
-        None,
-    )
-    .unwrap();
-    execute_plan(Some(&workspace), Some("bug-fix"), false, false).unwrap();
+    execute_goal(Some(&workspace), Some("fix the failing add test"), &[], None, None, None, None)
+        .unwrap();
+    execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
 
     let session = FileSessionStore::for_workspace(&workspace).load().unwrap().unwrap();
     let goal_plan = session.goal_plan.as_ref().expect("goal plan should persist after planning");
@@ -43,18 +34,9 @@ fn native_run_persists_decision_contract_fields_into_trace_output() {
     let workspace =
         temp_runtime_refoundation_governed_workspace("runtime-refoundation-contract-trace");
 
-    execute_start(Some(&workspace)).unwrap();
-    execute_capture(
-        Some(&workspace),
-        Some("fix the failing add test"),
-        &[],
-        None,
-        None,
-        None,
-        None,
-    )
-    .unwrap();
-    execute_plan(Some(&workspace), None, true, false).unwrap();
+    execute_goal(Some(&workspace), Some("fix the failing add test"), &[], None, None, None, None)
+        .unwrap();
+    execute_plan(Some(&workspace), None, true).unwrap();
     execute_run(Some(&workspace)).unwrap();
 
     let session = FileSessionStore::for_workspace(&workspace).load().unwrap().unwrap();

@@ -10,11 +10,10 @@ fn capture_combines_explicit_and_referenced_markdown_sources_in_stable_order() {
     write_markdown_brief(&workspace, "docs/explicit.md", "Explicit context\n");
     write_markdown_brief(&workspace, "docs/referenced.md", "Referenced context\n");
 
-    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
     let capture = run_boundline_in(
         &workspace,
         &[
-            "capture",
+            "goal",
             "--goal",
             "Use docs/referenced.md with docs/explicit.md as the primary brief",
             "--brief",
@@ -67,11 +66,8 @@ fn capture_combines_explicit_and_referenced_markdown_sources_in_stable_order() {
 fn capture_fails_when_goal_text_references_a_missing_markdown_source() {
     let workspace = temp_fixture_workspace("boundline-human-missing-reference");
 
-    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
-    let capture = run_boundline_in(
-        &workspace,
-        &["capture", "--goal", "Use docs/missing.md to drive the task"],
-    );
+    let capture =
+        run_boundline_in(&workspace, &["goal", "--goal", "Use docs/missing.md to drive the task"]);
     let text = terminal_text(&capture);
     assert_eq!(capture.status.code(), Some(1), "{text}");
     assert!(text.contains("brief source"), "{text}");

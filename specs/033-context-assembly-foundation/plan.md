@@ -23,7 +23,7 @@ coverage, clippy, and formatting closeout.
   the iteration process.
 -->
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, and `toml`, plus Rust standard library filesystem, path, collections, and process APIs; no new runtime dependencies planned for this slice  
 **Storage**: Workspace-local `.boundline/session.json`, `.boundline/config.toml`, `.boundline/workflows.toml`, persisted traces under `<workspace>/.boundline/traces/`, optional `.boundline/execution.json`, optional `.canon/` artifacts, and updated repository docs plus assistant assets  
 **Testing**: `cargo fmt --all`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, targeted unit and contract coverage for goal planning and output projection, `cargo test --no-run --all-targets`, `cargo nextest run --workspace --all-features`, and `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`  
@@ -41,7 +41,7 @@ coverage, clippy, and formatting closeout.
 
 - **PASS** Delivery identity: The slice directly improves bounded engineering-task delivery by ensuring planning can point to explicit context inputs instead of relying on ambient repository state. See Summary and Technical Context.
 - **PASS** Delivery-first scope: The plan prioritizes planning credibility, context provenance, inspectability, and bounded failure handling before release polish. See Summary, Technical Context, and research decisions.
-- **PASS** Primary workflow: The main operator path remains session-native `start -> capture -> plan -> run -> status -> next -> inspect`; explicit compatibility remains available but subordinate and trace-authoritative. See Summary, Technical Context, quickstart, and contracts.
+- **PASS** Primary workflow: The main operator path remains session-native `goal -> plan -> run -> status -> next -> inspect`; explicit compatibility remains available but subordinate and trace-authoritative. See Summary, Technical Context, quickstart, and contracts.
 - **PASS** Bounded execution: Context assembly runs once per planning step, yields an explicit credibility state, and blocks planning when no bounded context is credible; no infinite retrieval or hidden background work is introduced. See Technical Context, research, and data model.
 - **PASS** Stateful execution: Context-pack state is attached to the goal plan and projected through session and trace surfaces rather than recomputed opaquely on every render. See Summary, data model, and contracts.
 - **PASS** Mutable planning: Initial planning gains explicit context assembly while later replanning and follow-through continue to use mutable goal-plan and decision surfaces rather than a fixed scripted runner. See Summary, research, and data model.

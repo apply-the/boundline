@@ -18,7 +18,7 @@ clean `clippy`.
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, and `toml`, plus Rust standard library filesystem, path, and collections APIs; no new runtime dependencies planned for this slice  
 **Storage**: Workspace-local `.boundline/session.json`, persisted traces under `<workspace>/.boundline/traces/`, optional `.boundline/config.toml`, optional `.boundline/workflows.toml`, optional `.boundline/execution.json`, optional `.canon/` artifacts, and repository-managed docs plus assistant assets  
 **Testing**: `cargo fmt --all`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, targeted unit, integration, and contract tests, `cargo test --no-run --all-targets`, `cargo nextest run --workspace --all-features`, and `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`  
@@ -36,8 +36,8 @@ clean `clippy`.
 
 - **PASS** Delivery identity: The slice directly improves bounded engineering-task delivery by making planning inputs causal, inspectable, and less likely to target the wrong code. See Summary and Technical Context.
 - **PASS** Delivery-first scope: The plan prioritizes planning correctness, failure handling, observability, and release validation ahead of polish. See Summary, Technical Context, and research decisions.
-- **PASS** Primary workflow: The main operator path remains session-native `start -> capture -> plan -> run -> status -> next -> inspect`; explicit compatibility follow-up remains available but subordinate and trace-authoritative. See Summary, Technical Context, quickstart, and contracts.
-- **PASS** Bounded execution: Planning starts from an existing captured goal, ends in explicit credible/stale/insufficient context state, and stays under current scan and run limits. See Technical Context, research, and contracts.
+- **PASS** Primary workflow: The main operator path remains session-native `goal -> plan -> run -> status -> next -> inspect`; explicit compatibility follow-up remains available but subordinate and trace-authoritative. See Summary, Technical Context, quickstart, and contracts.
+- **PASS** Bounded execution: Planning starts from an existing recorded goal, ends in explicit credible/stale/insufficient context state, and stays under current scan and run limits. See Technical Context, research, and contracts.
 - **PASS** Stateful execution: Context-pack selection, provenance, and stop reasons remain persisted in goal-plan/session state and traces. See Summary, data model, and contracts.
 - **PASS** Mutable planning: The planner can rebuild or supersede context on repeated planning runs while keeping the latest context story explicit. See Summary, research, and data model.
 - **PASS** Sequential-first design: The slice keeps one authoritative context pack per plan revision and introduces no concurrency or hidden fan-out. See Technical Context and quickstart.

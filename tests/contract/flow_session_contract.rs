@@ -84,8 +84,7 @@ fn load_session_record(workspace: &std::path::Path) -> ActiveSessionRecord {
 #[test]
 fn delivery_flow_plan_persists_stage_tagged_steps_and_active_flow_state() {
     let workspace = temp_workspace();
-    run_boundline(&workspace, &["start"]);
-    run_boundline(&workspace, &["capture", "--goal", "Deliver the checkout fix"]);
+    run_boundline(&workspace, &["goal", "--goal", "Deliver the checkout fix"]);
     run_boundline(&workspace, &["flow", "delivery"]);
     run_boundline(&workspace, &["plan"]);
 
@@ -96,7 +95,7 @@ fn delivery_flow_plan_persists_stage_tagged_steps_and_active_flow_state() {
     assert_eq!(active_flow.flow_name, "delivery");
     assert_eq!(active_flow.current_stage_id, "requirements");
     assert_eq!(active_flow.current_stage_index, 0);
-    assert_eq!(active_flow.total_stages, 4);
+    assert_eq!(active_flow.total_stages, 5);
 
     assert!(record.active_task.is_none(), "native planning should not synthesize a fixture task");
 

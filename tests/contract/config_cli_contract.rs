@@ -22,7 +22,7 @@ fn config_show_accepts_effective_scope() {
     .unwrap();
 
     match cli.command {
-        DeveloperCommand::Config { command } => match command {
+        Some(DeveloperCommand::Config { command }) => match command {
             ConfigSubcommand::Show { workspace, cluster, scope } => {
                 assert_eq!(workspace, Some(PathBuf::from("/tmp/ws")));
                 assert_eq!(cluster, None);
@@ -47,17 +47,18 @@ fn config_set_accepts_workspace_slot_runtime_and_model() {
         "--runtime",
         "codex",
         "--model",
-        "gpt-5-codex",
+        "o4-mini",
     ])
     .unwrap();
 
     match cli.command {
-        DeveloperCommand::Config { command } => match command {
+        Some(DeveloperCommand::Config { command }) => match command {
             ConfigSubcommand::Set {
                 workspace,
                 cluster,
                 scope,
                 slot,
+                chat,
                 reviewer,
                 adjudicator,
                 runtime,
@@ -67,10 +68,11 @@ fn config_set_accepts_workspace_slot_runtime_and_model() {
                 assert!(cluster.is_none());
                 assert_eq!(scope, ConfigWriteScope::Workspace);
                 assert_eq!(slot, Some(RouteSlot::Planning));
+                assert!(!chat);
                 assert_eq!(reviewer, None);
                 assert!(!adjudicator);
                 assert_eq!(runtime, RuntimeKind::Codex);
-                assert_eq!(model, "gpt-5-codex");
+                assert_eq!(model, "o4-mini");
             }
             other => panic!("expected Set, got {other:?}"),
         },
@@ -104,7 +106,7 @@ fn config_set_capability_accepts_runtime_profile_fields() {
     .unwrap();
 
     match cli.command {
-        DeveloperCommand::Config { command } => match command {
+        Some(DeveloperCommand::Config { command }) => match command {
             ConfigSubcommand::SetCapability {
                 workspace,
                 cluster,
@@ -154,7 +156,7 @@ fn config_set_effort_accepts_slot_level_policy() {
     .unwrap();
 
     match cli.command {
-        DeveloperCommand::Config { command } => match command {
+        Some(DeveloperCommand::Config { command }) => match command {
             ConfigSubcommand::SetEffort {
                 workspace,
                 cluster,
@@ -194,7 +196,7 @@ fn config_domain_commands_accept_family_and_binding_fields() {
     ])
     .unwrap();
     match set_domain.command {
-        DeveloperCommand::Config { command } => match command {
+        Some(DeveloperCommand::Config { command }) => match command {
             ConfigSubcommand::SetDomain {
                 workspace,
                 cluster,
@@ -235,7 +237,7 @@ fn config_domain_commands_accept_family_and_binding_fields() {
     ])
     .unwrap();
     match bind_context.command {
-        DeveloperCommand::Config { command } => match command {
+        Some(DeveloperCommand::Config { command }) => match command {
             ConfigSubcommand::BindContext {
                 workspace,
                 cluster,

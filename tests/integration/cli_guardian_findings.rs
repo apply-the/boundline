@@ -1,9 +1,7 @@
 use std::fs;
 
 use boundline::adapters::session_store::{FileSessionStore, SessionStore};
-use boundline::cli::session::{
-    execute_capture, execute_plan, execute_run, execute_start, execute_status,
-};
+use boundline::cli::session::{execute_goal, execute_plan, execute_run, execute_status};
 
 use crate::workspace_fixture::temp_fixture_workspace;
 
@@ -16,18 +14,9 @@ fn run_persists_guardian_findings_and_status_projection() {
     )
     .unwrap();
 
-    execute_start(Some(&workspace)).unwrap();
-    execute_capture(
-        Some(&workspace),
-        Some("fix the failing add test"),
-        &[],
-        None,
-        None,
-        None,
-        None,
-    )
-    .unwrap();
-    execute_plan(Some(&workspace), Some("bug-fix"), false, false).unwrap();
+    execute_goal(Some(&workspace), Some("fix the failing add test"), &[], None, None, None, None)
+        .unwrap();
+    execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
     let run_report = execute_run(Some(&workspace)).unwrap();
     let status_report = execute_status(Some(&workspace)).unwrap();
 

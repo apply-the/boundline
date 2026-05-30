@@ -1,20 +1,61 @@
 #![allow(dead_code)]
 
+use std::collections::BTreeMap;
 use std::ffi::OsString;
 use std::fs;
+use std::ops::Deref;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::sync::{Mutex, MutexGuard};
 
+use boundline::SUPPORTED_CANON_VERSION;
+use boundline::adapters::config_store::FileConfigStore;
+use boundline::adapters::env_layer::{
+    ANTHROPIC_API_KEY_ENV, ANTHROPIC_BASE_URL_ENV, COPILOT_API_KEY_ENV, COPILOT_API_URL_ENV,
+    COPILOT_GITHUB_TOKEN_ENV, DEEPSEEK_API_KEY_ENV, DEEPSEEK_BASE_URL_ENV, GEMINI_API_KEY_ENV,
+    GH_TOKEN_ENV, GITHUB_COPILOT_API_TOKEN_ENV, GITHUB_MODELS_BASE_URL_ENV, GITHUB_MODELS_ORG_ENV,
+    GITHUB_MODELS_TOKEN_ENV, GITHUB_TOKEN_ENV, GROK_API_KEY_ENV, GROK_BASE_URL_ENV,
+    GROQ_API_KEY_ENV, GROQ_BASE_URL_ENV, OLLAMA_BASE_URL_ENV, OPENAI_API_KEY_ENV,
+    OPENAI_BASE_URL_ENV,
+};
+use boundline::domain::configuration::{ConfigFile, ModelRoute, RoutingConfig, RuntimeKind};
 use serde::de::DeserializeOwned;
 use uuid::Uuid;
+
+const PROVIDER_ENV_KEYS: &[&str] = &[
+    OPENAI_API_KEY_ENV,
+    OPENAI_BASE_URL_ENV,
+    DEEPSEEK_API_KEY_ENV,
+    DEEPSEEK_BASE_URL_ENV,
+    GROK_API_KEY_ENV,
+    GROK_BASE_URL_ENV,
+    GROQ_API_KEY_ENV,
+    GROQ_BASE_URL_ENV,
+    OLLAMA_BASE_URL_ENV,
+    ANTHROPIC_API_KEY_ENV,
+    ANTHROPIC_BASE_URL_ENV,
+    GEMINI_API_KEY_ENV,
+    GITHUB_MODELS_TOKEN_ENV,
+    GITHUB_MODELS_BASE_URL_ENV,
+    GITHUB_MODELS_ORG_ENV,
+    GITHUB_COPILOT_API_TOKEN_ENV,
+    COPILOT_API_URL_ENV,
+    COPILOT_GITHUB_TOKEN_ENV,
+    GH_TOKEN_ENV,
+    GITHUB_TOKEN_ENV,
+    COPILOT_API_KEY_ENV,
+];
+
+const FULL_CANON_CAPABILITIES: &str = include_str!("../fixtures/canon_capabilities_full.json");
 
 const FIXTURE_CARGO_TOML: &str = concat!(
     "[package]\n",
     "name = \"boundline-fixture\"\n",
     "version = \"0.1.0\"\n",
     "edition = \"2024\"\n",
+    "\n",
+    "[workspace]\n",
 );
 
 const FIXTURE_PYPROJECT_TOML: &str = concat!(
@@ -112,6 +153,51 @@ impl Drop for SemanticVectorStateOverrideGuard {
     }
 }
 
+pub struct TempGitWorkspace {
+    root: PathBuf,
+}
+
+impl TempGitWorkspace {
+    pub fn new(prefix: &str) -> Self {
+        Self::with_initializer(prefix, |_| {})
+    }
+
+    pub fn with_initializer(prefix: &str, initializer: impl FnOnce(&Path)) -> Self {
+        unsafe {
+            std::env::set_var("BOUNDLINE_TEST_DISABLE_RETRIES", "1");
+        }
+        let root = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        initializer(&root);
+        initialize_nested_git_repository(&root);
+        Self { root }
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.root
+    }
+}
+
+impl Deref for TempGitWorkspace {
+    type Target = Path;
+
+    fn deref(&self) -> &Self::Target {
+        self.path()
+    }
+}
+
+impl Drop for TempGitWorkspace {
+    fn drop(&mut self) {
+        if self.root.exists() {
+            let _ = fs::remove_dir_all(&self.root);
+        }
+    }
+}
+
+pub fn temp_git_workspace(prefix: &str) -> TempGitWorkspace {
+    TempGitWorkspace::new(prefix)
+}
+
 pub fn force_semantic_vector_state_override(
     value: &'static str,
 ) -> SemanticVectorStateOverrideGuard {
@@ -183,7 +269,7 @@ const DISCOVERY_WORKFLOWS_TOML: &str = concat!(
     "\n",
     "[delivery_paths.idea_to_code]\n",
     "description = \"Move from idea intake to verified code through bounded stages.\"\n",
-    "stages = [\"discovery\", \"requirements\", \"domain-language\", \"domain-model\", \"system-shaping\", \"architecture\", \"backlog\", \"implementation\", \"verification\", \"pr-review\"]\n",
+    "stages = [\"discovery\", \"requirements\", \"system-shaping\", \"architecture\", \"backlog\", \"implementation\", \"verification\", \"pr-review\"]\n",
     "adaptive = true\n",
 );
 
@@ -210,9 +296,7 @@ pub fn temp_fixture_workspace(prefix: &str) -> PathBuf {
 }
 
 pub fn temp_empty_workspace(prefix: &str) -> PathBuf {
-    let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
-    fs::create_dir_all(&workspace).unwrap();
-    workspace
+    target_test_cwd(prefix)
 }
 
 pub fn temp_python_workspace(prefix: &str) -> PathBuf {
@@ -317,6 +401,8 @@ pub fn temp_workflow_follow_through_workspace(prefix: &str) -> PathBuf {
         prefix,
         CanonFixtureScenario::VerifySecurityReusable,
     );
+    fs::write(workspace.join("tests/lib.rs"), FIXTURE_TEST_RS).unwrap();
+    write_distinct_review_routing(&workspace);
     write_workflow_definitions(&workspace, WORKFLOW_FOLLOW_THROUGH_TOML);
     write_review_profile_into_execution_profile(&workspace);
     workspace
@@ -327,6 +413,8 @@ pub fn temp_workflow_follow_through_approval_workspace(prefix: &str) -> PathBuf 
         prefix,
         CanonFixtureScenario::VerifySecurityApproval,
     );
+    fs::write(workspace.join("tests/lib.rs"), FIXTURE_TEST_RS).unwrap();
+    write_distinct_review_routing(&workspace);
     write_workflow_definitions(&workspace, WORKFLOW_FOLLOW_THROUGH_TOML);
     write_review_profile_into_execution_profile(&workspace);
     workspace
@@ -380,28 +468,63 @@ pub fn temp_replanning_execution_workspace(prefix: &str) -> PathBuf {
 }
 
 pub fn run_boundline(args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_boundline"))
-        .args(args)
-        .current_dir(env!("CARGO_MANIFEST_DIR"))
-        .output()
-        .unwrap()
+    boundline_command_in(&target_test_cwd("boundline-cli-cwd"), args).output().unwrap()
 }
 
 pub fn run_boundline_in(workspace: &Path, args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_boundline"))
-        .args(args)
-        .current_dir(workspace)
-        .output()
-        .unwrap()
+    boundline_command_in(workspace, args).output().unwrap()
 }
 
 pub fn run_boundline_in_with_env(workspace: &Path, args: &[&str], envs: &[(&str, &str)]) -> Output {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_boundline"));
-    command.args(args).current_dir(workspace);
+    let mut command = boundline_command_in(workspace, args);
     for (key, value) in envs {
         command.env(key, value);
     }
     command.output().unwrap()
+}
+
+pub fn boundline_command_in(workspace: &Path, args: &[&str]) -> Command {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_boundline"));
+    command.args(args).current_dir(workspace);
+    for env_key in PROVIDER_ENV_KEYS {
+        command.env_remove(env_key);
+    }
+    command
+}
+
+pub fn supported_canon_path() -> String {
+    path_with_fake_canon(SUPPORTED_CANON_VERSION)
+}
+
+pub fn path_with_fake_canon(version: &str) -> String {
+    let canon_dir = fake_canon_directory(version);
+    match std::env::var_os("PATH") {
+        Some(existing) if !existing.is_empty() => {
+            format!("{}:{}", canon_dir.display(), existing.to_string_lossy())
+        }
+        _ => canon_dir.display().to_string(),
+    }
+}
+
+pub fn fake_canon_directory(version: &str) -> PathBuf {
+    fake_canon_directory_with_capabilities(version, FULL_CANON_CAPABILITIES)
+}
+
+pub fn fake_canon_directory_with_capabilities(version: &str, capabilities: &str) -> PathBuf {
+    let directory = target_test_dir(&format!("boundline-fake-canon-{}", Uuid::new_v4()));
+    let canon = directory.join("canon");
+    fs::write(
+        &canon,
+        format!(
+            "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then\n  printf 'canon version {version}\\n'\n  exit 0\nfi\nif [ \"$1\" = \"governance\" ] && [ \"$2\" = \"capabilities\" ]; then\n  printf '%s' '{}'\n  exit 0\nfi\nif [ \"$1\" = \"init\" ]; then\n  shift\n  ai=''\n  while [ \"$#\" -gt 0 ]; do\n    case \"$1\" in\n      --ai)\n        ai=\"$2\"\n        shift 2\n        ;;\n      --output)\n        shift 2\n        ;;\n      *)\n        shift\n        ;;\n    esac\n  done\n  methods_materialized=16\n  policies_materialized=5\n  if [ -d .canon ]; then\n    methods_materialized=0\n    policies_materialized=0\n  else\n    mkdir -p .canon\n  fi\n  skills_materialized=0\n  if [ -n \"$ai\" ]; then\n    if [ -d .agents/skills ]; then\n      skills_materialized=0\n    else\n      mkdir -p .agents/skills\n      skills_materialized=36\n    fi\n  fi\n  claude_md_created=false\n  if [ \"$ai\" = \"claude\" ]; then\n    claude_md_created=true\n  fi\n  pwd_path=$(pwd)\n  printf '{{\"repo_root\":\"%s\",\"canon_root\":\"%s/.canon\",\"methods_materialized\":%s,\"policies_materialized\":%s,\"skills_materialized\":%s,\"claude_md_created\":%s}}' \"$pwd_path\" \"$pwd_path\" \"$methods_materialized\" \"$policies_materialized\" \"$skills_materialized\" \"$claude_md_created\"\n  exit 0\nfi\nexit 1\n",
+            capabilities
+        ),
+    )
+    .unwrap();
+    let mut permissions = fs::metadata(&canon).unwrap().permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&canon, permissions).unwrap();
+    directory
 }
 
 pub fn write_markdown_brief(
@@ -446,22 +569,104 @@ pub fn stdout_json<T: DeserializeOwned>(output: &Output) -> T {
 
 pub fn extract_trace_path(text: &str) -> Option<PathBuf> {
     text.split_whitespace().find_map(|token| {
-        let cleaned = token.trim_matches(|ch: char| ch == '"' || ch == ',' || ch == ':');
-        if cleaned.ends_with(".json") { Some(PathBuf::from(cleaned)) } else { None }
+        let cleaned = token.trim_matches(|ch: char| ch == '"' || ch == ',' || ch == ';');
+        let candidate = cleaned.rsplit_once(['=', ':']).map(|(_, value)| value).unwrap_or(cleaned);
+        if candidate.ends_with(".json") { Some(PathBuf::from(candidate)) } else { None }
     })
 }
 
-fn create_fixture_workspace(prefix: &str, attempts: Vec<serde_json::Value>) -> PathBuf {
+pub fn target_test_dir(prefix: &str) -> PathBuf {
     let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
+    fs::create_dir_all(&workspace).unwrap();
+    workspace
+}
+
+pub fn target_test_cwd(prefix: &str) -> PathBuf {
+    target_test_dir(prefix)
+}
+
+pub fn initialize_nested_git_repository(workspace: &Path) {
+    let output =
+        Command::new("/usr/bin/git").args(["init", "-q"]).current_dir(workspace).output().unwrap();
+    assert!(
+        output.status.success(),
+        "failed to initialize nested git repository at {}: {}{}",
+        workspace.display(),
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    for args in [
+        ["config", "user.name", "boundline-tests"],
+        ["config", "user.email", "boundline-tests@example.invalid"],
+    ] {
+        let output =
+            Command::new("/usr/bin/git").args(args).current_dir(workspace).output().unwrap();
+        assert!(
+            output.status.success(),
+            "failed to configure nested git repository at {}: {}{}",
+            workspace.display(),
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    let output =
+        Command::new("/usr/bin/git").args(["add", "-A"]).current_dir(workspace).output().unwrap();
+    assert!(
+        output.status.success(),
+        "failed to stage nested git repository at {}: {}{}",
+        workspace.display(),
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let output = Command::new("/usr/bin/git")
+        .args([
+            "-c",
+            "commit.gpgsign=false",
+            "commit",
+            "--allow-empty",
+            "-q",
+            "-m",
+            "Initial commit",
+        ])
+        .current_dir(workspace)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "failed to create initial commit for nested git repository at {}: {}{}",
+        workspace.display(),
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+fn write_boundline_file(
+    workspace: &Path,
+    relative_path: impl AsRef<Path>,
+    contents: impl AsRef<[u8]>,
+) -> PathBuf {
+    let path = workspace.join(".boundline").join(relative_path.as_ref());
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).unwrap();
+    }
+    fs::write(&path, contents).unwrap();
+    path
+}
+
+fn create_fixture_workspace(prefix: &str, attempts: Vec<serde_json::Value>) -> PathBuf {
+    let workspace = target_test_dir(prefix);
     fs::create_dir_all(workspace.join("src")).unwrap();
     fs::create_dir_all(workspace.join("tests")).unwrap();
-    fs::create_dir_all(workspace.join(".boundline")).unwrap();
 
     fs::write(workspace.join("Cargo.toml"), FIXTURE_CARGO_TOML).unwrap();
     fs::write(workspace.join("src/lib.rs"), RED_LIB_RS).unwrap();
     fs::write(workspace.join("tests/red_to_green.rs"), FIXTURE_TEST_RS).unwrap();
-    fs::write(
-        workspace.join(".boundline/execution.json"),
+    write_boundline_file(
+        &workspace,
+        "execution.json",
         serde_json::to_string_pretty(&serde_json::json!({
             "name": "red-to-green-execution",
             "read_targets": ["src/lib.rs", "tests/red_to_green.rs"],
@@ -472,9 +677,9 @@ fn create_fixture_workspace(prefix: &str, attempts: Vec<serde_json::Value>) -> P
             "attempts": attempts,
         }))
         .unwrap(),
-    )
-    .unwrap();
+    );
 
+    initialize_nested_git_repository(&workspace);
     debug_assert_ne!(RED_LIB_RS, GREEN_LIB_RS);
     workspace
 }
@@ -484,10 +689,9 @@ fn create_workflow_fixture_workspace(
     workflow_contents: &str,
     include_execution_profile: bool,
 ) -> PathBuf {
-    let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
+    let workspace = target_test_dir(prefix);
     fs::create_dir_all(workspace.join("src")).unwrap();
     fs::create_dir_all(workspace.join("tests")).unwrap();
-    fs::create_dir_all(workspace.join(".boundline")).unwrap();
 
     fs::write(workspace.join("Cargo.toml"), FIXTURE_CARGO_TOML).unwrap();
     fs::write(workspace.join("src/lib.rs"), RED_LIB_RS).unwrap();
@@ -498,20 +702,21 @@ fn create_workflow_fixture_workspace(
         write_basic_execution_profile(&workspace, "workflow-layer-compat-execution");
     }
 
+    initialize_nested_git_repository(&workspace);
     workspace
 }
 
 fn create_adaptive_fixture_workspace(prefix: &str, source_contents: &str) -> PathBuf {
-    let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
+    let workspace = target_test_dir(prefix);
     fs::create_dir_all(workspace.join("src")).unwrap();
     fs::create_dir_all(workspace.join("tests")).unwrap();
-    fs::create_dir_all(workspace.join(".boundline")).unwrap();
 
     fs::write(workspace.join("Cargo.toml"), FIXTURE_CARGO_TOML).unwrap();
     fs::write(workspace.join("src/lib.rs"), source_contents).unwrap();
     fs::write(workspace.join("tests/red_to_green.rs"), FIXTURE_TEST_RS).unwrap();
-    fs::write(
-        workspace.join(".boundline/execution.json"),
+    write_boundline_file(
+        &workspace,
+        "execution.json",
         serde_json::to_string_pretty(&serde_json::json!({
             "name": "adaptive-red-to-green-execution",
             "read_targets": ["src/lib.rs", "tests/red_to_green.rs"],
@@ -528,17 +733,15 @@ fn create_adaptive_fixture_workspace(prefix: &str, source_contents: &str) -> Pat
             },
         }))
         .unwrap(),
-    )
-    .unwrap();
+    );
 
     workspace
 }
 
 fn create_adaptive_guided_fixture_workspace(prefix: &str) -> PathBuf {
-    let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
+    let workspace = target_test_dir(prefix);
     fs::create_dir_all(workspace.join("src")).unwrap();
     fs::create_dir_all(workspace.join("tests")).unwrap();
-    fs::create_dir_all(workspace.join(".boundline")).unwrap();
 
     fs::write(workspace.join("Cargo.toml"), FIXTURE_CARGO_TOML).unwrap();
     fs::write(workspace.join("src/lib.rs"), GUIDED_ADAPTIVE_LIB_RS).unwrap();
@@ -551,8 +754,9 @@ fn create_adaptive_guided_fixture_workspace(prefix: &str) -> PathBuf {
     permissions.set_mode(0o755);
     fs::set_permissions(&validate_script, permissions).unwrap();
 
-    fs::write(
-        workspace.join(".boundline/execution.json"),
+    write_boundline_file(
+        &workspace,
+        "execution.json",
         serde_json::to_string_pretty(&serde_json::json!({
             "name": "adaptive-guided-replanning-execution",
             "read_targets": ["src/lib.rs", "src/helper.rs", "tests/red_to_green.rs"],
@@ -569,23 +773,22 @@ fn create_adaptive_guided_fixture_workspace(prefix: &str) -> PathBuf {
             },
         }))
         .unwrap(),
-    )
-    .unwrap();
+    );
 
     workspace
 }
 
 fn create_adaptive_ordering_boundary_workspace(prefix: &str) -> PathBuf {
-    let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
+    let workspace = target_test_dir(prefix);
     fs::create_dir_all(workspace.join("src")).unwrap();
     fs::create_dir_all(workspace.join("tests")).unwrap();
-    fs::create_dir_all(workspace.join(".boundline")).unwrap();
 
     fs::write(workspace.join("Cargo.toml"), FIXTURE_CARGO_TOML).unwrap();
     fs::write(workspace.join("src/lib.rs"), ORDERING_BOUNDARY_LIB_RS).unwrap();
     fs::write(workspace.join("tests/red_to_green.rs"), ORDERING_BOUNDARY_TEST_RS).unwrap();
-    fs::write(
-        workspace.join(".boundline/execution.json"),
+    write_boundline_file(
+        &workspace,
+        "execution.json",
         serde_json::to_string_pretty(&serde_json::json!({
             "name": "adaptive-ordering-boundary-execution",
             "read_targets": ["src/lib.rs", "tests/red_to_green.rs"],
@@ -602,15 +805,15 @@ fn create_adaptive_ordering_boundary_workspace(prefix: &str) -> PathBuf {
             },
         }))
         .unwrap(),
-    )
-    .unwrap();
+    );
 
     workspace
 }
 
 fn write_basic_execution_profile(workspace: &Path, profile_name: &str) {
-    fs::write(
-        workspace.join(".boundline/execution.json"),
+    write_boundline_file(
+        workspace,
+        "execution.json",
         serde_json::to_string_pretty(&serde_json::json!({
             "name": profile_name,
             "read_targets": ["src/lib.rs", "tests/red_to_green.rs"],
@@ -629,21 +832,20 @@ fn write_basic_execution_profile(workspace: &Path, profile_name: &str) {
             ],
         }))
         .unwrap(),
-    )
-    .unwrap();
+    );
 }
 
 fn create_governance_fixture_workspace(prefix: &str, required: bool) -> PathBuf {
-    let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
+    let workspace = target_test_dir(prefix);
     fs::create_dir_all(workspace.join("src")).unwrap();
     fs::create_dir_all(workspace.join("tests")).unwrap();
-    fs::create_dir_all(workspace.join(".boundline")).unwrap();
 
     fs::write(workspace.join("Cargo.toml"), FIXTURE_CARGO_TOML).unwrap();
     fs::write(workspace.join("src/lib.rs"), RED_LIB_RS).unwrap();
     fs::write(workspace.join("tests/red_to_green.rs"), FIXTURE_TEST_RS).unwrap();
-    fs::write(
-        workspace.join(".boundline/execution.json"),
+    write_boundline_file(
+        &workspace,
+        "execution.json",
         serde_json::to_string_pretty(&serde_json::json!({
             "name": if required {
                 "required-governance-execution"
@@ -691,8 +893,7 @@ fn create_governance_fixture_workspace(prefix: &str, required: bool) -> PathBuf 
             }
         }))
         .unwrap(),
-    )
-    .unwrap();
+    );
 
     workspace
 }
@@ -707,13 +908,13 @@ fn write_review_profile_into_execution_profile(workspace: &Path) {
             {
                 "reviewer_id": "safety",
                 "role": "Safety",
-                "source": "gpt",
+                "source": "copilot/gpt-4.1",
                 "weight": 1
             },
             {
                 "reviewer_id": "maintainability",
                 "role": "Maintainability",
-                "source": "claude",
+                "source": "claude/sonnet-4",
                 "weight": 1
             }
         ],
@@ -741,6 +942,31 @@ fn write_review_profile_into_execution_profile(workspace: &Path) {
     fs::write(path, serde_json::to_string_pretty(&profile).unwrap()).unwrap();
 }
 
+fn write_distinct_review_routing(workspace: &Path) {
+    FileConfigStore::for_workspace(workspace)
+        .save_local(&ConfigFile {
+            version: 1,
+            routing: RoutingConfig {
+                reviewer_roles: BTreeMap::from([
+                    (
+                        "safety".to_string(),
+                        ModelRoute { runtime: RuntimeKind::Copilot, model: "gpt-5.5".to_string() },
+                    ),
+                    (
+                        "maintainability".to_string(),
+                        ModelRoute {
+                            runtime: RuntimeKind::Claude,
+                            model: "sonnet-4.6".to_string(),
+                        },
+                    ),
+                ]),
+                ..RoutingConfig::default()
+            },
+            canon: None,
+        })
+        .unwrap();
+}
+
 #[derive(Clone, Copy)]
 enum CanonFixtureScenario {
     Reusable,
@@ -756,11 +982,11 @@ fn create_canon_governance_fixture_workspace(
     prefix: &str,
     scenario: CanonFixtureScenario,
 ) -> PathBuf {
-    let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
+    let workspace = target_test_dir(prefix);
     fs::create_dir_all(workspace.join("src")).unwrap();
     fs::create_dir_all(workspace.join("tests")).unwrap();
-    fs::create_dir_all(workspace.join(".boundline")).unwrap();
     fs::create_dir_all(workspace.join(".canon/runs")).unwrap();
+    initialize_nested_git_repository(&workspace);
 
     fs::write(workspace.join("Cargo.toml"), FIXTURE_CARGO_TOML).unwrap();
     fs::write(workspace.join("src/lib.rs"), RED_LIB_RS).unwrap();
@@ -773,8 +999,9 @@ fn create_canon_governance_fixture_workspace(
 
     write_canon_fixture_documents(&workspace, scenario);
 
-    fs::write(
-        workspace.join(".boundline/execution.json"),
+    write_boundline_file(
+        &workspace,
+        "execution.json",
         serde_json::to_string_pretty(&serde_json::json!({
             "name": match scenario {
                 CanonFixtureScenario::Reusable => "canon-governance-execution",
@@ -802,8 +1029,7 @@ fn create_canon_governance_fixture_workspace(
             "governance": canon_governance_profile(&command, scenario),
         }))
         .unwrap(),
-    )
-    .unwrap();
+    );
 
     workspace
 }
@@ -956,6 +1182,9 @@ fn write_canon_fixture_documents(workspace: &Path, scenario: CanonFixtureScenari
 
 fn write_canon_stub_script(workspace: &Path, scenario: CanonFixtureScenario) -> PathBuf {
     let script_path = workspace.join(".boundline/canon-stub.sh");
+    if let Some(parent) = script_path.parent() {
+        fs::create_dir_all(parent).unwrap();
+    }
     let script = match scenario {
         CanonFixtureScenario::Reusable => {
             r#"#!/bin/sh

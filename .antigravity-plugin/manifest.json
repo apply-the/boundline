@@ -1,0 +1,41 @@
+{
+  "name": "boundline",
+  "displayName": "Boundline Assistant Support for Antigravity",
+  "version": "0.64.0",
+  "description": "CLI-authoritative assistant support for bounded engineering work",
+  "author": {
+    "name": "Apply The",
+    "url": "https://github.com/apply-the"
+  },
+  "homepage": "https://github.com/apply-the/boundline",
+  "repository": "https://github.com/apply-the/boundline",
+  "license": "MIT",
+  "keywords": [
+    "boundline",
+    "delivery",
+    "bounded-engineering",
+    "session-native"
+  ],
+  "capabilities": [
+    {"id": "/boundline:goal", "label": "goal"},
+    {"id": "/boundline:plan", "label": "plan"},
+    {"id": "/boundline:run", "label": "run"},
+    {"id": "/boundline:status", "label": "status"},
+    {"id": "/boundline:inspect", "label": "inspect"},
+    {"id": "/boundline:recover", "label": "recover"},
+    {"id": "/boundline:govern", "label": "govern", "conditional": true}
+  ],
+  "positioning": [
+    "CLI-authoritative assistant support for bounded engineering work",
+    "Plan, act, verify, trace",
+    "Session-native runtime for AI-assisted software delivery"
+  ],
+  "paths": {
+    "commands": "assistant/commands/session-workflow.json",
+    "antigravityCommands": "assistant/antigravity/commands",
+    "starterPrompts": "assistant/prompts/starter-prompts.md",
+    "icon": "assistant/assets/boundline-plugin-icon.svg",
+    "logo": "assistant/assets/boundline-plugin-logo.svg"
+  },
+  "commands": ".antigravity-plugin/commands.json"
+}

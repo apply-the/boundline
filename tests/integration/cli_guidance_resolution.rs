@@ -1,7 +1,7 @@
 use std::fs;
 
 use boundline::adapters::session_store::{FileSessionStore, SessionStore};
-use boundline::cli::session::{execute_capture, execute_plan, execute_start};
+use boundline::cli::session::{execute_goal, execute_plan};
 
 use crate::workspace_fixture::temp_fixture_workspace;
 
@@ -15,8 +15,7 @@ fn plan_persists_guidance_resolution_with_workspace_precedence_and_local_only_di
     )
     .unwrap();
 
-    execute_start(Some(&workspace)).unwrap();
-    execute_capture(
+    execute_goal(
         Some(&workspace),
         Some("fix the failing add test with the local clean code rule"),
         &[],
@@ -26,7 +25,7 @@ fn plan_persists_guidance_resolution_with_workspace_precedence_and_local_only_di
         None,
     )
     .unwrap();
-    let plan_report = execute_plan(Some(&workspace), Some("bug-fix"), false, false).unwrap();
+    let plan_report = execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
 
     let session = FileSessionStore::for_workspace(&workspace).load().unwrap().unwrap();
     let plan = session.goal_plan.expect("goal plan should be persisted");
@@ -94,8 +93,7 @@ fn plan_reports_invalid_workspace_guardian_override_as_skipped_source() {
     )
     .unwrap();
 
-    execute_start(Some(&workspace)).unwrap();
-    execute_capture(
+    execute_goal(
         Some(&workspace),
         Some("fix the failing add test with explicit guardian provenance"),
         &[],
@@ -105,7 +103,7 @@ fn plan_reports_invalid_workspace_guardian_override_as_skipped_source() {
         None,
     )
     .unwrap();
-    let plan_report = execute_plan(Some(&workspace), Some("bug-fix"), false, false).unwrap();
+    let plan_report = execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
 
     let session = FileSessionStore::for_workspace(&workspace).load().unwrap().unwrap();
     let plan = session.goal_plan.expect("goal plan should be persisted");

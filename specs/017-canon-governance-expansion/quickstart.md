@@ -8,7 +8,7 @@
 ```bash
 cd /tmp/boundline-governed-security
 cargo run --bin boundline -- start
-cargo run --bin boundline -- capture --goal "fix the credential leak in the API handler"
+cargo run --bin boundline -- goal --goal "fix the credential leak in the API handler"
 cargo run --bin boundline -- flow bug-fix
 cargo run --bin boundline -- plan
 cargo run --bin boundline -- run

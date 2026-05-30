@@ -44,7 +44,7 @@ path. The target release is `0.11.0`.
 
 **Goal**: Let a developer bootstrap a bounded Boundline workspace with `boundline init` instead of manually authoring internal JSON.
 
-**Independent Test**: Run `boundline init` in a fresh repository, choose a template, confirm the preview, then verify that the workspace is ready for `doctor`, `start`, `capture`, and `run` without manual file editing; rerun init on an existing workspace and verify it previews changes instead of silently overwriting files.
+**Independent Test**: Run `boundline init` in a fresh repository, choose a template, confirm the preview, then verify that the workspace is ready for `doctor`, `start`, `goal`, and `run` without manual file editing; rerun init on an existing workspace and verify it previews changes instead of silently overwriting files.
 
 ### Tests for User Story 1
 

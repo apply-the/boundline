@@ -59,11 +59,11 @@ Expected outcome:
 
 ## Scenario 2: Use the execution engine through the session workflow
 
-1. Start and capture a goal:
+1. Start and record a goal:
 
    ```bash
    cargo run --bin boundline -- start
-   cargo run --bin boundline -- capture --goal "Fix the failing add test"
+   cargo run --bin boundline -- goal --goal "Fix the failing add test"
    ```
 
 2. Plan and run the task:

@@ -42,6 +42,110 @@ impl fmt::Display for RuntimeKind {
     }
 }
 
+/// Assistant package hosts that `boundline init --assistant` can scaffold.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "snake_case")]
+#[value(rename_all = "kebab-case")]
+pub enum AssistantHostKind {
+    Claude,
+    Codex,
+    Copilot,
+    Antigravity,
+}
+
+/// IDE setup surfaces that `boundline init --ide` can scaffold.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "kebab-case")]
+#[value(rename_all = "kebab-case")]
+pub enum IdeKind {
+    #[serde(rename = "vscode")]
+    #[value(name = "vscode")]
+    VsCode,
+    Cursor,
+    Antigravity,
+    #[serde(rename = "jetbrains")]
+    #[value(name = "jetbrains")]
+    JetBrains,
+}
+
+impl IdeKind {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::VsCode => "vscode",
+            Self::Cursor => "cursor",
+            Self::Antigravity => "antigravity",
+            Self::JetBrains => "jetbrains",
+        }
+    }
+}
+
+impl fmt::Display for IdeKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// Terminal command auto-approval profile for IDEs that expose a stable schema.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "kebab-case")]
+#[value(rename_all = "kebab-case")]
+pub enum TerminalAutoApproveProfile {
+    ReadOnly,
+    SessionSafe,
+    Trusted,
+}
+
+impl TerminalAutoApproveProfile {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::ReadOnly => "read-only",
+            Self::SessionSafe => "session-safe",
+            Self::Trusted => "trusted",
+        }
+    }
+}
+
+impl fmt::Display for TerminalAutoApproveProfile {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+impl AssistantHostKind {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Claude => "claude",
+            Self::Codex => "codex",
+            Self::Copilot => "copilot",
+            Self::Antigravity => "antigravity",
+        }
+    }
+
+    pub const fn default_runtime(self) -> Option<RuntimeKind> {
+        match self {
+            Self::Claude => Some(RuntimeKind::Claude),
+            Self::Codex => Some(RuntimeKind::Codex),
+            Self::Copilot => Some(RuntimeKind::Copilot),
+            Self::Antigravity => None,
+        }
+    }
+
+    pub const fn from_runtime(runtime: RuntimeKind) -> Option<Self> {
+        match runtime {
+            RuntimeKind::Claude => Some(Self::Claude),
+            RuntimeKind::Codex => Some(Self::Codex),
+            RuntimeKind::Copilot => Some(Self::Copilot),
+            RuntimeKind::Gemini => None,
+        }
+    }
+}
+
+impl fmt::Display for AssistantHostKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 /// Built-in init templates exposed by the CLI.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, ValueEnum)]
 #[serde(rename_all = "kebab-case")]
@@ -49,6 +153,31 @@ pub enum InitTemplate {
     BugFix,
     Change,
     Delivery,
+}
+
+/// Configuration scope targeted by init bootstrap flows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "snake_case")]
+pub enum InitConfigScope {
+    Global,
+    Workspace,
+    Both,
+}
+
+impl InitConfigScope {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Global => "global",
+            Self::Workspace => "workspace",
+            Self::Both => "both",
+        }
+    }
+}
+
+impl fmt::Display for InitConfigScope {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
 }
 
 /// Named routing slot used by effective model selection.
@@ -403,9 +532,13 @@ pub struct RoutingConfig {
     #[serde(default)]
     pub review: Option<ModelRoute>,
     #[serde(default)]
+    pub chat: Option<ModelRoute>,
+    #[serde(default)]
     pub reviewer_roles: BTreeMap<String, ModelRoute>,
     #[serde(default)]
     pub adjudication: Option<ModelRoute>,
+    #[serde(default)]
+    pub assistant_hosts: Vec<AssistantHostKind>,
     #[serde(default)]
     pub assistant_runtimes: Vec<RuntimeKind>,
     #[serde(default)]
@@ -428,6 +561,7 @@ impl RoutingConfig {
             self.implementation.as_ref(),
             self.verification.as_ref(),
             self.review.as_ref(),
+            self.chat.as_ref(),
             self.adjudication.as_ref(),
         ]
         .into_iter()
@@ -532,9 +666,9 @@ impl RoutingConfig {
 /// Returns the default model route for a given assistant runtime.
 pub fn assistant_default_model_route(runtime: RuntimeKind) -> ModelRoute {
     match runtime {
-        RuntimeKind::Claude => ModelRoute { runtime, model: "sonnet-4.6".to_string() },
-        RuntimeKind::Codex => ModelRoute { runtime, model: "gpt-5-codex".to_string() },
-        RuntimeKind::Copilot => ModelRoute { runtime, model: "gpt-5.5".to_string() },
+        RuntimeKind::Claude => ModelRoute { runtime, model: "sonnet-4".to_string() },
+        RuntimeKind::Codex => ModelRoute { runtime, model: "o4-mini".to_string() },
+        RuntimeKind::Copilot => ModelRoute { runtime, model: "gpt-4.1".to_string() },
         RuntimeKind::Gemini => ModelRoute { runtime, model: "gemini-2.5-pro".to_string() },
     }
 }
@@ -630,6 +764,7 @@ pub struct EffectiveRouting {
     pub implementation: SourcedRoute,
     pub verification: SourcedRoute,
     pub review: SourcedRoute,
+    pub chat: Option<SourcedRoute>,
     pub adjudication: SourcedRoute,
     pub reviewer_roles: BTreeMap<String, SourcedRoute>,
 }
@@ -692,6 +827,7 @@ pub struct RoutingOverrides {
     pub implementation: Option<ModelRoute>,
     pub verification: Option<ModelRoute>,
     pub review: Option<ModelRoute>,
+    pub chat: Option<ModelRoute>,
     pub adjudication: Option<ModelRoute>,
     pub reviewer_roles: BTreeMap<String, ModelRoute>,
 }
@@ -733,6 +869,12 @@ pub fn resolve_effective_routing(
         global.and_then(|cfg| cfg.review.as_ref()),
         &defaults.review,
     );
+    let chat = resolve_optional_single(
+        cli.chat.as_ref(),
+        workspace.and_then(|cfg| cfg.chat.as_ref()),
+        cluster.and_then(|cfg| cfg.chat.as_ref()),
+        global.and_then(|cfg| cfg.chat.as_ref()),
+    );
     let adjudication = resolve_single(
         cli.adjudication.as_ref(),
         workspace.and_then(|cfg| cfg.adjudication.as_ref()),
@@ -769,6 +911,7 @@ pub fn resolve_effective_routing(
         implementation,
         verification,
         review,
+        chat,
         adjudication,
         reviewer_roles,
     }
@@ -793,32 +936,35 @@ pub fn resolve_effective_runtime_capabilities(
     runtime_ids
         .into_keys()
         .filter_map(|runtime| {
-            let sourced = if let Some(profile) =
-                workspace.and_then(|cfg| cfg.runtime_capabilities.get(&runtime))
-            {
-                Some(SourcedRuntimeCapabilityProfile {
-                    profile: profile.clone(),
-                    source: ValueSource::Workspace,
-                })
-            } else if let Some(profile) =
-                cluster.and_then(|cfg| cfg.runtime_capabilities.get(&runtime))
-            {
-                Some(SourcedRuntimeCapabilityProfile {
-                    profile: profile.clone(),
-                    source: ValueSource::Cluster,
-                })
-            } else {
-                global.and_then(|cfg| cfg.runtime_capabilities.get(&runtime)).map(|profile| {
-                    SourcedRuntimeCapabilityProfile {
-                        profile: profile.clone(),
-                        source: ValueSource::Global,
-                    }
-                })
-            };
-
-            sourced.map(|profile| (runtime, profile))
+            resolve_runtime_capability_profile(runtime, workspace, cluster, global)
+                .map(|profile| (runtime, profile))
         })
         .collect()
+}
+
+fn resolve_runtime_capability_profile(
+    runtime: RuntimeKind,
+    workspace: Option<&RoutingConfig>,
+    cluster: Option<&RoutingConfig>,
+    global: Option<&RoutingConfig>,
+) -> Option<SourcedRuntimeCapabilityProfile> {
+    if let Some(profile) = workspace.and_then(|cfg| cfg.runtime_capabilities.get(&runtime)) {
+        return Some(SourcedRuntimeCapabilityProfile {
+            profile: profile.clone(),
+            source: ValueSource::Workspace,
+        });
+    }
+
+    if let Some(profile) = cluster.and_then(|cfg| cfg.runtime_capabilities.get(&runtime)) {
+        return Some(SourcedRuntimeCapabilityProfile {
+            profile: profile.clone(),
+            source: ValueSource::Cluster,
+        });
+    }
+
+    global.and_then(|cfg| cfg.runtime_capabilities.get(&runtime)).map(|profile| {
+        SourcedRuntimeCapabilityProfile { profile: profile.clone(), source: ValueSource::Global }
+    })
 }
 
 /// Resolves the effective advanced-context retrieval policy across config layers.
@@ -1036,6 +1182,24 @@ fn resolve_single(
     SourcedRoute { route: default.clone(), source: ValueSource::BuiltIn }
 }
 
+fn resolve_optional_single(
+    cli: Option<&ModelRoute>,
+    workspace: Option<&ModelRoute>,
+    cluster: Option<&ModelRoute>,
+    global: Option<&ModelRoute>,
+) -> Option<SourcedRoute> {
+    if let Some(route) = cli {
+        return Some(SourcedRoute { route: route.clone(), source: ValueSource::Cli });
+    }
+    if let Some(route) = workspace {
+        return Some(SourcedRoute { route: route.clone(), source: ValueSource::Workspace });
+    }
+    if let Some(route) = cluster {
+        return Some(SourcedRoute { route: route.clone(), source: ValueSource::Cluster });
+    }
+    global.map(|route| SourcedRoute { route: route.clone(), source: ValueSource::Global })
+}
+
 struct BuiltInDefaults {
     planning: ModelRoute,
     implementation: ModelRoute,
@@ -1046,14 +1210,11 @@ struct BuiltInDefaults {
 
 fn built_in_defaults() -> BuiltInDefaults {
     BuiltInDefaults {
-        planning: ModelRoute { runtime: RuntimeKind::Codex, model: "gpt-5-codex".to_string() },
-        implementation: ModelRoute {
-            runtime: RuntimeKind::Codex,
-            model: "gpt-5-codex".to_string(),
-        },
-        verification: ModelRoute { runtime: RuntimeKind::Copilot, model: "gpt-5.5".to_string() },
-        review: ModelRoute { runtime: RuntimeKind::Claude, model: "sonnet-4.6".to_string() },
-        adjudication: ModelRoute { runtime: RuntimeKind::Codex, model: "gpt-5-codex".to_string() },
+        planning: ModelRoute { runtime: RuntimeKind::Codex, model: "o4-mini".to_string() },
+        implementation: ModelRoute { runtime: RuntimeKind::Codex, model: "o4-mini".to_string() },
+        verification: ModelRoute { runtime: RuntimeKind::Copilot, model: "gpt-4.1".to_string() },
+        review: ModelRoute { runtime: RuntimeKind::Claude, model: "sonnet-4".to_string() },
+        adjudication: ModelRoute { runtime: RuntimeKind::Codex, model: "o4-mini".to_string() },
     }
 }
 
@@ -1098,9 +1259,9 @@ mod tests {
 
     #[test]
     fn assistant_default_routes_match_built_in_runtime_catalog() {
-        assert_eq!(assistant_default_model_route(RuntimeKind::Codex).model, "gpt-5-codex");
-        assert_eq!(assistant_default_model_route(RuntimeKind::Copilot).model, "gpt-5.5");
-        assert_eq!(assistant_default_model_route(RuntimeKind::Claude).model, "sonnet-4.6");
+        assert_eq!(assistant_default_model_route(RuntimeKind::Codex).model, "o4-mini");
+        assert_eq!(assistant_default_model_route(RuntimeKind::Copilot).model, "gpt-4.1");
+        assert_eq!(assistant_default_model_route(RuntimeKind::Claude).model, "sonnet-4");
         assert_eq!(assistant_default_model_route(RuntimeKind::Gemini).model, "gemini-2.5-pro");
     }
 
@@ -1108,7 +1269,7 @@ mod tests {
     fn seeded_routes_prefer_selected_built_in_runtime_and_fallback_to_first_assistant() {
         let seeded = seeded_routes_for_assistants(&[RuntimeKind::Copilot, RuntimeKind::Claude]);
         assert_eq!(seeded.get(&RouteSlot::Planning).unwrap().runtime, RuntimeKind::Copilot);
-        assert_eq!(seeded.get(&RouteSlot::Planning).unwrap().model, "gpt-5.5");
+        assert_eq!(seeded.get(&RouteSlot::Planning).unwrap().model, "gpt-4.1");
         assert_eq!(seeded.get(&RouteSlot::Implementation).unwrap().runtime, RuntimeKind::Copilot);
         assert_eq!(seeded.get(&RouteSlot::Verification).unwrap().runtime, RuntimeKind::Copilot);
         assert_eq!(seeded.get(&RouteSlot::Review).unwrap().runtime, RuntimeKind::Claude);
@@ -1137,7 +1298,7 @@ mod tests {
         let global = RoutingConfig {
             planning: Some(ModelRoute {
                 runtime: RuntimeKind::Codex,
-                model: "gpt-5-codex".to_string(),
+                model: "o4-mini".to_string(),
             }),
             ..RoutingConfig::default()
         };
@@ -1145,6 +1306,40 @@ mod tests {
         let resolved = resolve_effective_routing(&cli, Some(&workspace), None, Some(&global));
         assert_eq!(resolved.planning.source, ValueSource::Cli);
         assert_eq!(resolved.planning.route.runtime, RuntimeKind::Gemini);
+    }
+
+    #[test]
+    fn explicit_chat_route_prefers_workspace_over_global() {
+        let workspace = RoutingConfig {
+            chat: Some(ModelRoute {
+                runtime: RuntimeKind::Codex,
+                model: "openai/gpt-5.4".to_string(),
+            }),
+            ..RoutingConfig::default()
+        };
+        let global = RoutingConfig {
+            chat: Some(ModelRoute { runtime: RuntimeKind::Claude, model: "sonnet-4".to_string() }),
+            ..RoutingConfig::default()
+        };
+
+        let resolved = resolve_effective_routing(
+            &RoutingOverrides::default(),
+            Some(&workspace),
+            None,
+            Some(&global),
+        );
+        let chat = resolved.chat.as_ref().expect("chat route should resolve");
+        assert_eq!(chat.source, ValueSource::Workspace);
+        assert_eq!(chat.route.runtime, RuntimeKind::Codex);
+        assert_eq!(chat.route.model, "openai/gpt-5.4");
+    }
+
+    #[test]
+    fn explicit_chat_route_is_absent_when_not_configured() {
+        let resolved = resolve_effective_routing(&RoutingOverrides::default(), None, None, None);
+
+        assert!(resolved.chat.is_none());
+        assert_eq!(resolved.planning.source, ValueSource::BuiltIn);
     }
 
     #[test]
@@ -1487,11 +1682,11 @@ mod tests {
         ));
 
         let mut routing = RoutingConfig::default();
-        let planning = ModelRoute { runtime: RuntimeKind::Codex, model: "gpt-5-codex".to_string() };
+        let planning = ModelRoute { runtime: RuntimeKind::Codex, model: "o4-mini".to_string() };
         let implementation =
             ModelRoute { runtime: RuntimeKind::Claude, model: "sonnet-4".to_string() };
         let verification =
-            ModelRoute { runtime: RuntimeKind::Copilot, model: "gpt-5.4".to_string() };
+            ModelRoute { runtime: RuntimeKind::Copilot, model: "gpt-4o".to_string() };
         let review =
             ModelRoute { runtime: RuntimeKind::Gemini, model: "gemini-2.5-pro".to_string() };
         routing.set_slot(RouteSlot::Planning, planning.clone());
@@ -1662,7 +1857,7 @@ mod tests {
         let global = RoutingConfig {
             verification: Some(ModelRoute {
                 runtime: RuntimeKind::Copilot,
-                model: "gpt-5.4".to_string(),
+                model: "gpt-4o".to_string(),
             }),
             runtime_capabilities: BTreeMap::from([(
                 RuntimeKind::Copilot,
@@ -1697,6 +1892,7 @@ mod tests {
         assert_eq!(resolved.verification.source, ValueSource::Global);
         assert_eq!(resolved.verification.route.runtime, RuntimeKind::Copilot);
         assert_eq!(resolved.implementation.source, ValueSource::BuiltIn);
+        assert!(resolved.chat.is_none());
         assert_eq!(resolved.adjudication.source, ValueSource::BuiltIn);
         assert_eq!(resolved.reviewer_roles.get("security").unwrap().source, ValueSource::Cluster);
 

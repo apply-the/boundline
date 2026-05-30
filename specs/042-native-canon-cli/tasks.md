@@ -53,7 +53,7 @@ bounded, inspectable value independently.
 - [x] T013 Add `GovernedSessionLifecycle` struct (`governance_runtime: GovernanceRuntimeKind`, `explicit_opt_out: bool`, `mode_selection_preference: CanonModeSelectionPreference`, `selected_mode: Option<CanonMode>`, `selected_mode_sequence: Vec<CanonMode>`, `current_stage_index: usize`, `stage_records: Vec<GovernedStageRecord>`, `accumulated_context: Vec<GovernedDocumentRef>`, `terminal_reason: Option<String>`) with serde derives in `src/domain/governance.rs`
 - [x] T014 Extend `ActiveSessionRecord` in `src/domain/session.rs` with `governance_lifecycle: Option<GovernedSessionLifecycle>` field; update serde and default impls
 - [x] T015 Update `FileConfigStore` in `src/adapters/config_store.rs` to serialize/deserialize the expanded `ConfigFile` with the `[canon]` TOML section; verify round-trip for configs with and without canon preferences
-- [x] T016 Migrate all CLI commands that accept `--workspace` (`init`, `run`, `status`, `next`, `inspect`, `config`, `doctor`, `capture`, `plan`) to use the shared `resolve_workspace()` from `src/cli/workspace.rs` instead of their local implementations
+- [x] T016 Migrate all CLI commands that accept `--workspace` (`init`, `run`, `status`, `next`, `inspect`, `config`, `doctor`, `goal`, `plan`) to use the shared `resolve_workspace()` from `src/cli/workspace.rs` instead of their local implementations
 - [x] T017 Implement `verify_canon_surface()` in `src/domain/distribution.rs` as shared foundation, taking a `CanonCapabilitySnapshot` and returning `CanonSurfaceVerification`: verify operations include `"start"` and `"refresh"`, verify `supported_modes` contains all 15 `CANONICAL_MODES`, compute `missing_modes`, `missing_operations`, `unsupported_modes`, set `ready`, and generate `repair_actions`
 - [x] T018 Extend `evaluate_canon_install()` in `src/domain/distribution.rs` to call `query_canon_capabilities()` after version check passes, call `verify_canon_surface()`, and attach the result as `surface_verification` on `CanonInstallStatus`
 
@@ -137,7 +137,7 @@ bounded, inspectable value independently.
 - [x] T049 [P] [US3] Create `assistant/copilot/prompts/boundline-doctor.prompt.md` for the `/boundline-doctor` command mapping to `boundline doctor --install` with Canon surface verification output interpretation
 - [x] T050 [P] [US3] Create `assistant/copilot/prompts/boundline-config-show.prompt.md` for the `/boundline-config-show` command mapping to `boundline config show`
 - [x] T051 [P] [US3] Create `assistant/copilot/prompts/boundline-config-set-canon.prompt.md` for the `/boundline-config-set-canon` command mapping to `boundline config set-canon --mode-selection <preference>`
-- [x] T052 [P] [US3] Create `assistant/copilot/prompts/boundline-capture.prompt.md` for the `/boundline-capture` command mapping to `boundline capture --goal --brief`
+- [x] T052 [P] [US3] Create `assistant/copilot/prompts/boundline-goal.prompt.md` for the `/boundline-goal` command mapping to `boundline goal --goal --brief`
 - [x] T053 [US3] Update `assistant/copilot/prompts/boundline-run.prompt.md` to document Canon-default behavior, `--mode`, `--no-canon`, governance field flags, and mode-selection preference semantics; remove any language suggesting manual manifest editing as the primary path
 - [x] T054 [US3] Update `assistant/copilot/prompts/boundline-status.prompt.md` to include governance lifecycle output interpretation: `governance_runtime`, `mode_selection_preference`, `selected_mode`, `approval_state`, `blocked_reason`, `next_action`
 - [x] T055 [US3] Update `assistant/copilot/prompts/boundline-next.prompt.md` and `assistant/copilot/prompts/boundline-inspect.prompt.md` to include governance lifecycle output fields and Canon-specific follow-through guidance
@@ -204,7 +204,7 @@ bounded, inspectable value independently.
 
 - [x] T076 [P] Update `docs/getting-started.md` to document Canon-default workspace setup, guided init, and the primary governed development workflow
 - [x] T077 [P] Update `docs/configuration.md` to document the `[canon]` config section, mode-selection preferences, and `config set-canon` command
-- [x] T078 [P] Update `assistant/README.md` to list all new assistant commands (`/boundline-init`, `/boundline-doctor`, `/boundline-config-show`, `/boundline-config-set-canon`, `/boundline-capture`, mode aliases) and document the Canon-default path as primary
+- [x] T078 [P] Update `assistant/README.md` to list all new assistant commands (`/boundline-init`, `/boundline-doctor`, `/boundline-config-show`, `/boundline-config-set-canon`, `/boundline-goal`, mode aliases) and document the Canon-default path as primary
 - [x] T079 [P] Update `CHANGELOG.md` with feature 042 entry covering Canon-default governance, CanonMode expansion, config commands, install diagnostics surface verification, and assistant command parity
 - [x] T080 [P] Add unit tests in `tests/unit/` for `resolve_workspace()` covering: explicit path, `.boundline/` upward search, git root fallback, CWD fallback, and ambiguous-workspace error
 - [x] T081 [P] Add unit tests in `tests/unit/` for all seven new `CanonMode` variants: `Display`, `FromStr` round-trip, serde round-trip, and `canon_mode_primary_document()` mapping

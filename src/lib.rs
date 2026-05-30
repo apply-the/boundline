@@ -1,3 +1,16 @@
+//! Boundline: local delivery orchestrator for bounded engineering work.
+//!
+//! This root crate re-exports the workspace member crates into a unified
+//! public surface:
+//!
+//! - [`domain`] -- Pure domain model (value objects, aggregates, algorithms)
+//! - [`adapters`] -- Infrastructure I/O adapters (stores, runtimes, env)
+//! - [`orchestrator`] -- Session-native orchestration engine
+//! - [`cli`] -- User-facing CLI command surface
+//! - [`registry`] -- Agent and tool adapter registries
+//! - [`fixture`] -- Test fixtures and execution-profile loaders
+//! - [`assistant_plugin_validation`] -- Plugin package validation
+
 pub mod assistant_plugin_validation;
 
 pub use boundline_adapters::adapters;
@@ -31,8 +44,8 @@ pub use domain::cluster::{
     WorkspaceParticipationKind, WorkspaceParticipationRecord,
 };
 pub use domain::configuration::{
-    ConfigFile, ConfigShowScope, ConfigWriteScope, EffectiveRouting, InitTemplate, ModelRoute,
-    RouteSlot, RoutingConfig, RoutingOverrides, RuntimeKind, SourcedRoute, ValueSource,
+    ConfigFile, ConfigShowScope, ConfigWriteScope, EffectiveRouting, InitConfigScope, InitTemplate,
+    ModelRoute, RouteSlot, RoutingConfig, RoutingOverrides, RuntimeKind, SourcedRoute, ValueSource,
     resolve_effective_routing,
 };
 pub use domain::distribution::{
@@ -61,10 +74,10 @@ pub use domain::governance::{
     GovernanceRuntimeState, GovernanceStartupContext, GovernanceTransitionDirection,
     GovernedStageCatalogEntry, GovernedStageCategory, GovernedStagePacket, GovernedStageRecord,
     PacketReadiness, PacketReuseBinding, SEMANTIC_ARTIFACT_DESCRIPTOR_V1_CONTRACT_LINE,
-    StageGovernancePolicy, StopSemantics, SystemContextBinding, autopilot_action_text,
-    candidate_canon_modes, classify_packet_readiness, governed_stage_catalog,
-    resolve_governance_startup_posture, resolved_canon_mode, supported_canon_modes_for_stage,
-    validate_canon_capabilities_for_mode,
+    StageGovernancePolicy, StopSemantics, SystemContextBinding, assess_backlog_quality,
+    autopilot_action_text, candidate_canon_modes, classify_packet_readiness,
+    governed_stage_catalog, resolve_governance_startup_posture, resolved_canon_mode,
+    supported_canon_modes_for_stage, validate_canon_capabilities_for_mode,
 };
 pub use domain::guidance::{
     CapabilityPhase, CapabilityResolutionRecord, FindingConfidence, GuardianCapability,

@@ -12,7 +12,7 @@ command.
 **Rationale**: The roadmap and spec both position negotiation as the boundary
 between captured intent and planning, not as a separate operator workflow.
 Running negotiation during capture keeps the slice small, preserves the current
-`start -> capture -> plan` story, and ensures that plan gating can rely on one
+`goal -> plan` story, and ensures that plan gating can rely on one
 authoritative negotiation result.
 
 **Alternatives Considered**:
@@ -40,7 +40,7 @@ without adding reconciliation complexity.
 
 ## R3: Reuse authored brief, clarification, and governance intent as negotiation evidence
 
-**Decision**: Build the negotiation packet from the existing captured goal,
+**Decision**: Build the negotiation packet from the existing recorded goal,
 authored brief bundle, clarification model, governance intent, workspace
 signals, and current run limits instead of introducing a broader questionnaire
 system.

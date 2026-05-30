@@ -9,7 +9,7 @@ use boundline::adapters::session_store::{FileSessionStore, SessionStore};
 use boundline::adapters::trace_store::{FileTraceStore, TraceStore};
 use boundline::cli::inspect::summarize_trace;
 use boundline::cli::output::{render_trace_summary, trace_execution_condition_text};
-use boundline::cli::session::{execute_capture, execute_plan, execute_run, execute_start};
+use boundline::cli::session::{execute_goal, execute_plan, execute_run};
 use boundline::domain::configuration::{ConfigFile, ModelRoute, RoutingConfig, RuntimeKind};
 
 #[test]
@@ -193,7 +193,7 @@ fn trace_summary_projects_route_owner_and_effective_routing_snapshot() {
     assert!(rendered.contains("route_owner: compatibility"), "{rendered}");
     assert!(
         rendered.contains(
-            "route_config_projection: effective_routing: planning=codex/gpt-5-codex [built-in], implementation=codex/gpt-5-codex [built-in], verification=copilot/gpt-5.5 [built-in], review=claude/reviewer-1 [workspace], adjudication=codex/gpt-5-codex [built-in]"
+            "route_config_projection: effective_routing: planning=codex/o4-mini [built-in], implementation=codex/o4-mini [built-in], verification=copilot/gpt-4.1 [built-in], review=claude/reviewer-1 [workspace], adjudication=codex/o4-mini [built-in]"
         ),
         "{rendered}"
     );
@@ -267,11 +267,9 @@ fn trace_summary_surfaces_context_pack_for_native_runs() {
     )
     .unwrap();
 
-    execute_start(Some(&workspace)).unwrap();
-    execute_capture(Some(&workspace), Some("build a context router"), &[], None, None, None, None)
+    execute_goal(Some(&workspace), Some("build a context router"), &[], None, None, None, None)
         .unwrap();
-    execute_plan(Some(&workspace), None, false, false).unwrap();
-    execute_plan(Some(&workspace), None, false, true).unwrap();
+    execute_plan(Some(&workspace), None, false).unwrap();
     execute_run(Some(&workspace)).unwrap();
 
     let record = FileSessionStore::for_workspace(&workspace).load().unwrap().unwrap();

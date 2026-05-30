@@ -15,7 +15,7 @@ workspace-owned config surfaces.
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: Existing CLI/runtime stack (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`) plus `dialoguer` for guided prompts and `indicatif` for spinner/progress feedback in the CLI crate  
 **Storage**: Existing workspace-local `.boundline/execution.json`, `.boundline/config.toml`, repository-managed assistant asset files under `assistant/`, and a bundled catalog asset at `assistant/catalog/model-catalog.toml` compiled into the CLI; no new user-writable persistence surface  
 **Testing**: Focused unit tests in `src/cli/init.rs` and adjacent CLI modules, contract tests for CLI flags and summary output under `tests/contract/`, integration tests for bootstrap flows under `tests/integration/`, `cargo test --no-run --all-targets --all-features`, `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, and `cargo fmt --check`  
@@ -33,7 +33,7 @@ workspace-owned config surfaces.
 
 - **PASS** Delivery identity: The slice improves the explicit bootstrap path required before Boundline can perform bounded delivery work in a repository. A usable `init` flow is delivery-enabling setup, not generic terminal ornamentation. See Summary and Technical Context.
 - **PASS** Delivery-first scope: The plan focuses on workspace bootstrap reliability, route selection, and progress visibility rather than branding or speculative interface work. See Summary and Constraints.
-- **PASS** Primary workflow: The main operator workflow after bootstrap remains the existing session-native path (`start -> capture -> plan -> run -> status -> next -> inspect`). This feature only improves the bounded setup surface that precedes that workflow. See Summary and Scope/Constraints.
+- **PASS** Primary workflow: The main operator workflow after bootstrap remains the existing session-native path (`goal -> plan -> run -> status -> next -> inspect`). This feature only improves the bounded setup surface that precedes that workflow. See Summary and Scope/Constraints.
 - **PASS** Bounded execution: Init starts from explicit CLI invocation, terminates in confirmed write, preview stop, cancellation, validation failure, or write failure, and does not add retries or hidden background work. See Execution Model and Observability Surface.
 - **PASS** Stateful execution: The wizard accumulates transient in-memory answers for one init run, then writes the existing workspace-owned config and execution files only after final confirmation. See Storage and Summary.
 - **PASS** Mutable planning: This slice does not change session planning semantics; it makes bootstrap route choices editable before persistence and keeps route defaults explicit. See Summary and data model.

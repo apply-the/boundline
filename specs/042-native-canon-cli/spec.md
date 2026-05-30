@@ -323,7 +323,7 @@ second orchestration path.
 | Show workspace config | `boundline config show [--workspace <path>]` | `/boundline-config-show` |
 | Change Canon mode selection | `boundline config set-canon [--workspace <path>] --mode-selection <manual|auto-confirm|auto>` | `/boundline-config-set-canon` |
 | Change model routing | `boundline config set [--workspace <path>] --slot <slot> --runtime <runtime> --model <model>` | `/boundline-config-set` |
-| Capture goal and documents | `boundline capture [--workspace <path>] --goal "<goal>" --brief <path>...` | `/boundline-capture` or `/boundline-plan` |
+| Capture goal and documents | `boundline goal [--workspace <path>] --goal "<goal>" --brief <path>...` | `/boundline-goal` or `/boundline-plan` |
 | Plan without execution | `boundline plan [--workspace <path>]` | `/boundline-plan` |
 | Confirm plan | `boundline plan [--workspace <path>] --confirm` | `/boundline-plan --confirm` |
 | Run default Canon route | `boundline run [--workspace <path>]` | `/boundline-run` |

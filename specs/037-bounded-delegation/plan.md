@@ -19,7 +19,7 @@ coverage for modified Rust files.
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, and `toml`, plus Rust standard library filesystem, path, process, and collections APIs; no new runtime dependencies planned for this slice  
 **Storage**: Workspace-local `.boundline/session.json`, `.boundline/config.toml`, optional `.boundline/workflows.toml`, persisted traces under `<workspace>/.boundline/traces/`, optional `.boundline/execution.json`, task-context state embedded in session tasks, and repository-managed docs plus assistant assets  
 **Testing**: `cargo fmt --all`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, targeted unit, integration, and contract tests, `cargo test --no-run --all-targets`, `cargo nextest run --workspace --all-features`, and `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`  
@@ -37,7 +37,7 @@ coverage for modified Rust files.
 
 - **PASS** Delivery identity: The slice directly improves bounded engineering-task delivery by making route capability, effort policy, and continuity ownership explicit before and during execution. See Summary and Technical Context.
 - **PASS** Delivery-first scope: The plan prioritizes execution control, continuity state, stuck recovery, and inspectability ahead of optimization or polish. See Summary, Technical Context, and research decisions.
-- **PASS** Primary workflow: The main operator path remains session-native `start -> capture -> plan -> run -> status -> next -> inspect`; explicit compatibility follow-up remains available but subordinate and trace-authoritative. See Summary, Technical Context, quickstart, and contracts.
+- **PASS** Primary workflow: The main operator path remains session-native `goal -> plan -> run -> status -> next -> inspect`; explicit compatibility follow-up remains available but subordinate and trace-authoritative. See Summary, Technical Context, quickstart, and contracts.
 - **PASS** Bounded execution: The design keeps existing step and retry limits, adds explicit handoff and escalation packets, and treats stuck delegation as an explicit bounded stop or recovery path with no hidden background activity. See Technical Context, research, and contracts.
 - **PASS** Stateful execution: Runtime capability policy, delegation packets, and stuck evidence remain persisted in existing configuration, session, task-context, and trace state rather than transient runtime flags. See Summary, data model, and contracts.
 - **PASS** Mutable planning: Capability-aware routing and delegation packets can influence planning, replanning, and later decision updates while keeping continuity changes traceable to explicit evidence. See Summary, research, and data model.

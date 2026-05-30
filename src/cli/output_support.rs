@@ -135,6 +135,31 @@ pub fn render_guidance_projection_lines(
     lines
 }
 
+/// Returns the concise guidance story used by default human-readable session output.
+pub fn render_guidance_projection_brief_lines(
+    guidance_guardian: &GuidanceGuardianProjection,
+) -> Vec<String> {
+    let mut lines = Vec::new();
+
+    if let Some(summary) = &guidance_guardian.capability_resolution_summary {
+        lines.push(format!("guidance_resolution_summary: {summary}"));
+    }
+    if !guidance_guardian.guardian_timeline.is_empty() {
+        lines.push(format!(
+            "guardian_timeline: {}",
+            guidance_guardian.guardian_timeline.join(" | ")
+        ));
+    }
+    if let Some(summary) = &guidance_guardian.guardian_findings_summary {
+        lines.push(format!("guardian_findings_summary: {summary}"));
+    }
+    if let Some(outcome) = &guidance_guardian.guardian_blocking_outcome {
+        lines.push(format!("guardian_blocking_outcome: {outcome}"));
+    }
+
+    lines
+}
+
 /// Returns the next recommended command after a `run` response.
 pub const fn next_command_after_run(status: TaskStatus) -> &'static str {
     match status {

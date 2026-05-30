@@ -16,7 +16,7 @@ surface.
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024, plus repository-managed Markdown and JSON assistant assets  
+**Language/Version**: Rust 1.96.0, edition 2024, plus repository-managed Markdown and JSON assistant assets  
 **Primary Dependencies**: existing workspace crates and runtime dependencies (`clap`, `dialoguer`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, `rusqlite`); no new runtime dependencies planned for the first slice  
 **Storage**: workspace-local `.boundline/session.json`, persisted traces under `.boundline/traces/`, and repository-managed assistant asset manifests and host docs under `assistant/`  
 **Testing**: focused `cargo test` unit, integration, and contract suites; especially inspect or output projections, session state, and assistant command pack contracts; use `cargo test --no-run --all-targets` if shared view structs change  
@@ -41,7 +41,7 @@ surface.
   prioritize optimization-only or polish-only work ahead of delivery behavior
   (see Summary and Phase Plan).
 - PASS Primary workflow: The main operator path remains session-native
-  `start -> capture -> plan -> run -> status -> next -> inspect`; assistant
+  `goal -> plan -> run -> status -> next -> inspect`; assistant
   hosts remain wrappers over CLI and session authority, with Cursor and Gemini
   fallback paths explicit rather than implied (see Technical Context and
   [contracts/assistant-host-parity.md](./contracts/assistant-host-parity.md)).

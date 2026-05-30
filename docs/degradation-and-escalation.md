@@ -1,4 +1,4 @@
-# Degradation And Escalation In Boundline 0.63.0
+# Degradation And Escalation In Boundline 0.64.0
 
 Boundline must not silently weaken governance when runtime conditions are no
 longer sufficient.

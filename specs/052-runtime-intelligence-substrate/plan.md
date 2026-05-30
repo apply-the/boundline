@@ -17,7 +17,7 @@ formatting, focused tests, and coverage on modified files.
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: Existing workspace dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, and `toml`, plus Rust standard library filesystem, path, collections, and synchronization-free runtime primitives; no new runtime dependencies planned for this slice  
 **Storage**: Workspace-local `.boundline/` session and runtime state, persisted traces under `.boundline/traces/`, existing goal-plan state, repo-visible project context such as `project.boundline.toml`, local repository files, and optional `.canon/` or repo-visible Canon artifacts as enrichment only  
 **Testing**: `cargo fmt --all`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, targeted unit and integration tests for `goal_planner`, `session_runtime`, and CLI projection, `cargo test --no-run --all-targets`, `cargo nextest run --workspace --all-features`, and file-scoped coverage validation for modified files  
@@ -35,7 +35,7 @@ formatting, focused tests, and coverage on modified files.
 
 - **PASS** Delivery identity: The feature directly improves bounded engineering delivery by making planning depend on an explicit, inspectable context substrate instead of ambient repository assumptions. See Summary and Technical Context.
 - **PASS** Delivery-first scope: The slice prioritizes context credibility, stop behavior, runtime state, and inspectability before optimization or polish. See Summary and Constraints.
-- **PASS** Primary workflow: The main operator path remains session-native `start -> capture -> plan -> run -> status -> next -> inspect`, with Canon enrichment available only as an explicit compatibility input. See Summary, Execution Model, and Constraints.
+- **PASS** Primary workflow: The main operator path remains session-native `goal -> plan -> run -> status -> next -> inspect`, with Canon enrichment available only as an explicit compatibility input. See Summary, Execution Model, and Constraints.
 - **PASS** Bounded execution: Substrate construction runs as a bounded sequential step, yields explicit credible or non-credible outcomes, and stops or replans before execution when context is not credible. See Execution Model, Performance Goals, and Constraints.
 - **PASS** Stateful execution: Runtime indexes, context-pack credibility, and traceable provenance are written into existing Boundline runtime and plan surfaces rather than recomputed opaquely. See Storage, Observability Surface, and Summary.
 - **PASS** Mutable planning: The substrate feeds existing planning and replanning behavior, allowing step insertion or replacement when context changes without introducing a second planner. See Summary and Execution Model.

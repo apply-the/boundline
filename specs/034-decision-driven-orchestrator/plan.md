@@ -19,7 +19,7 @@ per-file coverage above 95% for modified Rust files.
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, and `toml`, plus Rust standard library filesystem, path, process, and collections APIs; no new runtime dependencies planned for this slice  
 **Storage**: Workspace-local `.boundline/session.json`, `.boundline/config.toml`, optional `.boundline/workflows.toml`, persisted traces under `<workspace>/.boundline/traces/`, optional `.boundline/execution.json`, optional `.canon/` artifacts, and repository-managed docs plus assistant assets  
 **Testing**: `cargo fmt --all`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test --no-run --all-targets`, targeted unit, integration, and contract tests, `cargo nextest run --workspace --all-features`, and `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`  
@@ -37,7 +37,7 @@ per-file coverage above 95% for modified Rust files.
 
 - **PASS** Delivery identity: The slice directly changes how Boundline delivers bounded engineering work by making next-action selection an explicit runtime control surface. See Summary and Technical Context.
 - **PASS** Delivery-first scope: The plan prioritizes execution control, recovery, verification, observability, and release closure ahead of optimization or polish. See Summary, Technical Context, and research decisions.
-- **PASS** Primary workflow: The primary operator path remains session-native `start -> capture -> plan -> run -> status -> next -> inspect`; explicit compatibility follow-up stays available but subordinate and trace-authoritative. See Summary, Technical Context, quickstart, and contracts.
+- **PASS** Primary workflow: The primary operator path remains session-native `goal -> plan -> run -> status -> next -> inspect`; explicit compatibility follow-up stays available but subordinate and trace-authoritative. See Summary, Technical Context, quickstart, and contracts.
 - **PASS** Bounded execution: The design keeps one selector per loop iteration, uses existing run limits, and makes ask/replan/terminal conditions explicit instead of hidden fallbacks. See Technical Context, research, and contracts.
 - **PASS** Stateful execution: Selector choice, evidence basis, verification intent, and recovery state remain persisted in decisions, session projections, and traces. See Summary, data model, and contracts.
 - **PASS** Mutable planning: The slice keeps replanning explicit through selector-driven recovery instead of freezing execution into a static task order. See Summary, research, and data model.

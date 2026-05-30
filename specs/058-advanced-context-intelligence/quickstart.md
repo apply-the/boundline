@@ -32,7 +32,7 @@ Expected result:
 Run:
 
 ```bash
-boundline capture --goal "stabilize the delivery context for a bounded change" --workspace <workspace>
+boundline goal --goal "stabilize the delivery context for a bounded change" --workspace <workspace>
 ```
 
 Expected result:

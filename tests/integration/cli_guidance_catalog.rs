@@ -2,7 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use boundline::adapters::session_store::{FileSessionStore, SessionStore};
-use boundline::cli::session::{execute_capture, execute_plan, execute_start};
+use boundline::cli::session::{execute_goal, execute_plan};
 use uuid::Uuid;
 
 use crate::workspace_fixture::{run_boundline_in_with_env, temp_fixture_workspace, terminal_text};
@@ -68,8 +68,7 @@ fn write_pack_without_catalog_manifest(assistant_root: &Path, pack_name: &str) {
 fn plan_surfaces_catalog_pack_loading_and_keeps_validation_findings_empty() {
     let workspace = temp_fixture_workspace("boundline-cli-guidance-catalog");
 
-    execute_start(Some(&workspace)).unwrap();
-    execute_capture(
+    execute_goal(
         Some(&workspace),
         Some("fix the failing rust tests with explicit clean code and resilience guidance"),
         &[],
@@ -79,7 +78,7 @@ fn plan_surfaces_catalog_pack_loading_and_keeps_validation_findings_empty() {
         None,
     )
     .unwrap();
-    let plan_report = execute_plan(Some(&workspace), Some("bug-fix"), false, false).unwrap();
+    let plan_report = execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
 
     let session = FileSessionStore::for_workspace(&workspace).load().unwrap().unwrap();
     let plan = session.goal_plan.expect("goal plan should be persisted");
@@ -120,14 +119,12 @@ fn plan_discovers_valid_catalog_packs_and_skips_missing_catalog_manifests() {
     let assistant_root_value = assistant_root.to_string_lossy().into_owned();
     let env = [(ASSISTANT_ROOT_OVERRIDE_ENV, assistant_root_value.as_str())];
 
-    let start = run_boundline_in_with_env(&workspace, &["start"], &env);
-    assert_eq!(start.status.code(), Some(0), "{}", terminal_text(&start));
-    let capture = run_boundline_in_with_env(
+    let goal = run_boundline_in_with_env(
         &workspace,
-        &["capture", "--goal", "apply the custom clean code planning guidance"],
+        &["goal", "--goal", "apply the custom clean code planning guidance"],
         &env,
     );
-    assert_eq!(capture.status.code(), Some(0), "{}", terminal_text(&capture));
+    assert_eq!(goal.status.code(), Some(0), "{}", terminal_text(&goal));
     let plan_report = run_boundline_in_with_env(&workspace, &["plan"], &env);
     let plan_text = terminal_text(&plan_report);
     assert_eq!(plan_report.status.code(), Some(0), "{plan_text}");
@@ -169,8 +166,7 @@ fn plan_discloses_when_canon_guidance_supersedes_catalog_pack_guidance() {
     )
     .unwrap();
 
-    execute_start(Some(&workspace)).unwrap();
-    execute_capture(
+    execute_goal(
         Some(&workspace),
         Some("fix the rust bug with the governed clean code guidance"),
         &[],
@@ -180,7 +176,7 @@ fn plan_discloses_when_canon_guidance_supersedes_catalog_pack_guidance() {
         None,
     )
     .unwrap();
-    let plan_report = execute_plan(Some(&workspace), Some("bug-fix"), false, false).unwrap();
+    let plan_report = execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
 
     let session = FileSessionStore::for_workspace(&workspace).load().unwrap().unwrap();
     let plan = session.goal_plan.expect("goal plan should be persisted");
@@ -232,14 +228,12 @@ fn plan_surfaces_catalog_warning_and_error_findings_from_custom_assistant_root()
     let assistant_root_value = assistant_root.to_string_lossy().into_owned();
     let env = [(ASSISTANT_ROOT_OVERRIDE_ENV, assistant_root_value.as_str())];
 
-    let start = run_boundline_in_with_env(&workspace, &["start"], &env);
-    assert_eq!(start.status.code(), Some(0), "{}", terminal_text(&start));
-    let capture = run_boundline_in_with_env(
+    let goal = run_boundline_in_with_env(
         &workspace,
-        &["capture", "--goal", "plan the resilience fix with explicit catalog findings"],
+        &["goal", "--goal", "plan the resilience fix with explicit catalog findings"],
         &env,
     );
-    assert_eq!(capture.status.code(), Some(0), "{}", terminal_text(&capture));
+    assert_eq!(goal.status.code(), Some(0), "{}", terminal_text(&goal));
     let plan_report = run_boundline_in_with_env(&workspace, &["plan"], &env);
     let plan_text = terminal_text(&plan_report);
     assert_eq!(plan_report.status.code(), Some(0), "{plan_text}");

@@ -15,7 +15,7 @@ coverage, clippy, and formatting.
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: existing crate dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, plus Rust standard library filesystem and process APIs  
 **Storage**: workspace-local `.boundline/session.json`, `.boundline/traces/`, optional `.boundline/execution.json`, and Canon-managed `.canon/` artifacts when governed runtime is selected  
 **Testing**: `cargo test --all-targets`, focused unit/integration/contract tests, `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo fmt --all`  
@@ -33,7 +33,7 @@ coverage, clippy, and formatting.
 
 - **PASS** Delivery identity: Sections Summary and Technical Context keep the slice anchored to one real bounded code-delivery flow rather than platform abstraction.
 - **PASS** Delivery-first scope: Sections Summary and Project Structure prioritize runtime gating, governed reuse, and validation before polish.
-- **PASS** Primary workflow: Sections Summary and Project Structure keep the primary operator path session-native (`start -> capture -> plan -> run -> status -> next -> inspect`); explicit compatibility remains available but subordinate.
+- **PASS** Primary workflow: Sections Summary and Project Structure keep the primary operator path session-native (`goal -> plan -> run -> status -> next -> inspect`); explicit compatibility remains available but subordinate.
 - **PASS** Bounded execution: Sections Summary, Technical Context, and research decisions keep explicit stop conditions for governance block, pending approval, no material diff, no credible validation evidence, and existing step or replan limits.
 - **PASS** Stateful execution: Sections Technical Context and data model rely on `.boundline/session.json`, task context state, and persisted traces as the authoritative shared state.
 - **PASS** Mutable planning: The plan reuses the existing sequential runtime with current retry and replan behavior, only tightening terminal success conditions.

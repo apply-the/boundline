@@ -52,7 +52,7 @@ fn parses_delivery_paths_inside_workflow_registry() {
         "allow_governance = false\n\n",
         "[delivery_paths.idea_to_code]\n",
         "description = \"Move from idea intake to verified code through bounded stages.\"\n",
-        "stages = [\"discovery\", \"requirements\", \"domain-language\", \"domain-model\", \"system-shaping\", \"architecture\", \"backlog\", \"implementation\", \"verification\", \"pr-review\"]\n",
+        "stages = [\"discovery\", \"requirements\", \"system-shaping\", \"architecture\", \"backlog\", \"implementation\", \"verification\", \"pr-review\"]\n",
         "adaptive = true\n",
     ))
     .unwrap();
@@ -62,7 +62,7 @@ fn parses_delivery_paths_inside_workflow_registry() {
     let delivery_path = registry.delivery_path("idea_to_code").unwrap();
     assert_eq!(
         delivery_path.stage_names(),
-        "discovery -> requirements -> domain-language -> domain-model -> system-shaping -> architecture -> backlog -> implementation -> verification -> pr-review"
+        "discovery -> requirements -> system-shaping -> architecture -> backlog -> implementation -> verification -> pr-review"
     );
     assert!(delivery_path.adaptive);
 }

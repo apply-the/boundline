@@ -12,14 +12,14 @@
 An operator can point Boundline at an empty repository or a non-Rust repository
 and enter the primary session-native workflow without first creating a
 language-specific manifest, so Boundline can discover the task boundaries from
-captured goal text, authored briefs, and bounded repository evidence instead of
+recorded goal text, authored briefs, and bounded repository evidence instead of
 silently assuming one stack.
 
 **Why this priority**: The primary operator path is not credible for a
 multi-language product if empty or non-Rust repositories are rejected before
 Boundline can even capture the task and decide what stack fits.
 
-**Independent Test**: Run the primary `start -> capture -> plan -> confirm ->
+**Independent Test**: Run the primary `goal -> plan -> confirm ->
 run` flow and the direct native entry flow on an empty repository, a Python
 repository, and a Node repository. Each case must either proceed on the native
 route or stop explicitly because the task context is not credible, without
@@ -129,12 +129,12 @@ defaults while leaving unrelated ecosystem patterns absent.
 - **FR-001**: System MUST accept any existing writable local workspace for the
   primary session-native path without requiring a language-specific manifest as a
   generic readiness prerequisite.
-- **FR-002**: System MUST keep the session-native `start -> capture -> plan ->
+- **FR-002**: System MUST keep the session-native `goal -> plan ->
   confirm -> run` path primary for empty, single-stack, and mixed-stack
   workspaces.
 - **FR-003**: System MUST let the direct native entry flow bootstrap from the
   same stack-neutral workspace assumptions as the explicit session-native path.
-- **FR-004**: System MUST stop planning explicitly when captured goal text,
+- **FR-004**: System MUST stop planning explicitly when recorded goal text,
   authored briefs, and bounded repository evidence are insufficient to choose a
   credible stack or domain, instead of silently preferring Rust.
 - **FR-005**: System MUST preserve and surface the reason a workspace is ready,

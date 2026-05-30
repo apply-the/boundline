@@ -66,7 +66,7 @@ As a developer tackling a broader engineering request, I want Boundline to guide
 - **FR-002**: Boundline MUST persist the selected flow, the current stage identifier, and the current stage position within session state.
 - **FR-003**: Boundline MUST define each supported flow as a deterministic ordered list of stages that does not change during normal execution.
 - **FR-004**: Boundline MUST execute work against the current stage only and MUST advance to the next stage only after the current stage reaches a successful terminal outcome.
-- **FR-005**: Boundline MUST keep stage execution on top of the existing session model so previously captured goal, context, plan state, and traces remain available across stage transitions.
+- **FR-005**: Boundline MUST keep stage execution on top of the existing session model so previously recorded goal, context, plan state, and traces remain available across stage transitions.
 - **FR-006**: Boundline MUST allow bounded retry or bounded replanning within the current stage after a failed step without replacing the selected flow or skipping stages.
 - **FR-007**: Boundline MUST expose the active flow, current stage, stage progress, and current step progress through status-oriented session output.
 - **FR-008**: Boundline MUST provide next-action guidance that reflects the active flow, current stage, and current execution state.

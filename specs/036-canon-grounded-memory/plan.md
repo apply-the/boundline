@@ -20,7 +20,7 @@ files.
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, and `toml`, plus Rust standard library filesystem, path, process, and collections APIs; no new runtime dependencies planned for the first slice  
 **Storage**: Workspace-local `.boundline/session.json`, `.boundline/config.toml`, optional `.boundline/workflows.toml`, persisted traces under `<workspace>/.boundline/traces/`, optional `.boundline/execution.json`, task-context state embedded in session tasks, optional `.canon/` governed artifacts, and repository-managed docs plus assistant assets  
 **Testing**: `cargo fmt --all`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, targeted unit, integration, and contract tests, `cargo test --no-run --all-targets`, `cargo nextest run --workspace --all-features`, and `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`  
@@ -38,7 +38,7 @@ files.
 
 - **PASS** Delivery identity: The slice directly improves bounded engineering-task delivery by making Canon-grounded evidence influence planning and later decisions on the native path. See Summary and Technical Context.
 - **PASS** Delivery-first scope: The plan prioritizes bounded planning, execution follow-through, memory credibility, and inspectable recovery ahead of release polish. See Summary, Technical Context, and research decisions.
-- **PASS** Primary workflow: The main operator path remains session-native `start -> capture -> plan -> run -> status -> next -> inspect`; explicit compatibility follow-up remains available but subordinate and trace-authoritative. See Summary, Technical Context, quickstart, and contracts.
+- **PASS** Primary workflow: The main operator path remains session-native `goal -> plan -> run -> status -> next -> inspect`; explicit compatibility follow-up remains available but subordinate and trace-authoritative. See Summary, Technical Context, quickstart, and contracts.
 - **PASS** Bounded execution: The design keeps existing step and retry limits, requires explicit stop or refresh when Canon-grounded memory is non-credible, and introduces no hidden background activity. See Technical Context, research, and contracts.
 - **PASS** Stateful execution: Canon-grounded context snapshots and compact memory remain persisted in existing goal-plan, session, task-context, and trace state rather than transient runtime flags. See Summary, data model, and contracts.
 - **PASS** Mutable planning: Canon-grounded memory can influence initial planning, replanning, and later decision updates while keeping plan and decision changes traceable to explicit evidence. See Summary, research, and data model.

@@ -18,7 +18,7 @@ on all modified files.
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: Existing workspace dependencies `clap`, `serde`, `serde_json`, `thiserror`, `toml`, `uuid`, and Rust standard-library collections, filesystem, and path types; no new runtime dependencies planned for this slice  
 **Storage**: Workspace-local `.boundline/` config and session state, persisted goal-plan data, local and cluster routing config stores, local repository cues, and optional Canon-governed expertise artifacts discovered through compatible publication and lineage surfaces  
 **Testing**: `cargo fmt --all`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, targeted unit and integration tests for domain selection and session projection, `cargo test --no-run --all-targets`, `cargo nextest run --workspace --all-features` when feasible, and modified-file coverage validation at 95% or higher  
@@ -36,7 +36,7 @@ on all modified files.
 
 - **PASS** Delivery identity: The feature directly improves bounded engineering delivery by making runtime role selection explicit before planning instead of leaving expertise implicit. See Summary and Technical Context.
 - **PASS** Delivery-first scope: The slice prioritizes built-in catalog definition, deterministic selection, rejection handling, and inspectability before any future pack distribution or polish. See Summary and Constraints.
-- **PASS** Primary workflow: The main operator path remains session-native `start -> capture -> plan -> run -> status -> next -> inspect`, with Canon expertise input available only as an explicit optional enrichment path. See Execution Model and Constraints.
+- **PASS** Primary workflow: The main operator path remains session-native `goal -> plan -> run -> status -> next -> inspect`, with Canon expertise input available only as an explicit optional enrichment path. See Execution Model and Constraints.
 - **PASS** Bounded execution: Expert-pack selection starts when planning has a bounded workspace or target, ends with explicit selected or none-selected state, and does not add unbounded retries or hidden loops. See Execution Model and Scale/Scope.
 - **PASS** Stateful execution: Selection outcome, provenance, and rejection reasons are persisted in existing goal-plan and trace surfaces rather than recomputed opaquely for every read-side command. See Storage and Observability Surface.
 - **PASS** Mutable planning: Selection may be recomputed when the bounded target, effective config, or supporting context changes, but the active planning path reuses the persisted outcome until a bounded replan occurs. See Summary and Execution Model.

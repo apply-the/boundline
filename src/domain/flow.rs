@@ -46,8 +46,9 @@ const CHANGE_STAGES: [FlowStageDefinition; 3] = [
     FlowStageDefinition { id: "verify", display_name: "Verify" },
 ];
 
-const DELIVERY_STAGES: [FlowStageDefinition; 4] = [
+const DELIVERY_STAGES: [FlowStageDefinition; 5] = [
     FlowStageDefinition { id: "requirements", display_name: "Requirements" },
+    FlowStageDefinition { id: "system-shaping", display_name: "System Shaping" },
     FlowStageDefinition { id: "architecture", display_name: "Architecture" },
     FlowStageDefinition { id: "backlog", display_name: "Backlog" },
     FlowStageDefinition { id: "implementation", display_name: "Implementation" },

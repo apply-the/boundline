@@ -9,11 +9,10 @@ fn status_surface_reports_compact_authored_input_summary_and_deduplicated_source
     write_markdown_brief(&workspace, "docs/explicit.md", "Explicit context\n");
     write_markdown_brief(&workspace, "docs/referenced.md", "Referenced context\n");
 
-    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
-    let capture = run_boundline_in(
+    let goal = run_boundline_in(
         &workspace,
         &[
-            "capture",
+            "goal",
             "--goal",
             "Use docs/referenced.md and docs/explicit.md together",
             "--brief",
@@ -22,7 +21,7 @@ fn status_surface_reports_compact_authored_input_summary_and_deduplicated_source
             "docs/explicit.md",
         ],
     );
-    assert_eq!(capture.status.code(), Some(0), "{}", terminal_text(&capture));
+    assert_eq!(goal.status.code(), Some(0), "{}", terminal_text(&goal));
 
     let status = run_boundline_in(&workspace, &["status"]);
     let text = terminal_text(&status);

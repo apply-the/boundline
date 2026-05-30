@@ -27,7 +27,7 @@ Rust files.
   the iteration process.
 -->
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: Existing workspace dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `toml`, `uuid`, and Rust standard-library collections, filesystem, path, and process APIs; no new runtime dependencies planned for this slice  
 **Storage**: Repository-managed built-in guidance and guardian assets under `assistant/`, workspace-local overrides under `.boundline/guidance/` and `.boundline/guardians/`, existing workspace-local `.boundline/session.json` and `.boundline/traces/`, and optional Canon-governed repo-visible standards discovered through existing project-memory and governed-artifact surfaces  
 **Testing**: `cargo fmt --all`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, targeted unit, integration, and contract tests for resolution, findings, routing degradation, and trace projection, `cargo test --no-run --all-targets`, `cargo nextest run --workspace --all-features` when feasible, and modified-file coverage validation at 95% or higher  
@@ -45,7 +45,7 @@ Rust files.
 
 - **PASS** Delivery identity: The feature directly improves bounded engineering delivery by turning engineering standards into resolved planning inputs and explicit post-step verification outputs instead of passive documents. See Summary and Technical Context.
 - **PASS** Delivery-first scope: The slice prioritizes capability resolution, guardian execution, findings, and trace projection ahead of docs polish or broader pack distribution. See Summary and Constraints.
-- **PASS** Primary workflow: The main operator path remains session-native `start -> capture -> plan -> run -> status -> next -> inspect`, with optional Canon standards only as bounded supporting inputs rather than a parallel runtime. See Execution Model and Constraints.
+- **PASS** Primary workflow: The main operator path remains session-native `goal -> plan -> run -> status -> next -> inspect`, with optional Canon standards only as bounded supporting inputs rather than a parallel runtime. See Execution Model and Constraints.
 - **PASS** Bounded execution: Guidance resolution runs at bounded planning or phase-entry points, guardian execution runs with explicit per-phase limits and timeout boundaries, and every invocation ends with a success, degraded, skipped, or failure outcome. See Execution Model, Constraints, and Scale/Scope.
 - **PASS** Stateful execution: Resolved guidance, skipped sources, finding summaries, and degraded outcomes are persisted in existing goal-plan and trace surfaces rather than recomputed opaquely on every read-side command. See Storage and Observability Surface.
 - **PASS** Mutable planning: Planning can reuse or recompute resolved guidance when the bounded target, available sources, or effective routing changes, while the active session continues to project the persisted outcome until an explicit bounded replan occurs. See Summary and Execution Model.

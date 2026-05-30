@@ -38,7 +38,7 @@ At least one shipped example MUST be sufficient for a maintainer to author or up
 
 ```text
 workflow name: governed-delivery
-phases: capture -> plan -> run -> review -> govern -> inspect
+phases: goal -> plan -> run -> review -> govern -> inspect
 result: accepted as a bounded sequential workflow example
 ```
 

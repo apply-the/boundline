@@ -1,15 +1,17 @@
 #![allow(dead_code)]
 
+use crate::workspace_fixture::target_test_cwd;
+
 use std::fs;
 use std::path::{Path, PathBuf};
-
-use uuid::Uuid;
 
 const RUNTIME_CARGO_TOML: &str = concat!(
     "[package]\n",
     "name = \"runtime_refoundation_fixture\"\n",
     "version = \"0.1.0\"\n",
     "edition = \"2024\"\n",
+    "\n",
+    "[workspace]\n",
 );
 
 const RED_LIB_RS: &str =
@@ -74,11 +76,23 @@ pub fn write_canon_artifact(workspace: &Path, relative_path: &Path, contents: &s
     path
 }
 
+fn write_boundline_file(
+    workspace: &Path,
+    relative_path: impl AsRef<Path>,
+    contents: impl AsRef<[u8]>,
+) -> PathBuf {
+    let path = workspace.join(".boundline").join(relative_path.as_ref());
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).unwrap();
+    }
+    fs::write(&path, contents).unwrap();
+    path
+}
+
 fn create_runtime_workspace(prefix: &str, source_contents: &str) -> PathBuf {
-    let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
+    let workspace = target_test_cwd(prefix);
     fs::create_dir_all(workspace.join("src")).unwrap();
     fs::create_dir_all(workspace.join("tests")).unwrap();
-    fs::create_dir_all(workspace.join(".boundline")).unwrap();
 
     fs::write(workspace.join("Cargo.toml"), RUNTIME_CARGO_TOML).unwrap();
     fs::write(workspace.join("src/lib.rs"), source_contents).unwrap();
@@ -93,8 +107,9 @@ fn create_runtime_workspace(prefix: &str, source_contents: &str) -> PathBuf {
 }
 
 fn write_execution_profile(workspace: &Path) {
-    fs::write(
-        workspace.join(".boundline/execution.json"),
+    write_boundline_file(
+        workspace,
+        "execution.json",
         serde_json::to_string_pretty(&serde_json::json!({
             "name": "runtime-refoundation-compat-profile",
             "read_targets": ["src/lib.rs", "tests/red_to_green.rs"],
@@ -118,6 +133,5 @@ fn write_execution_profile(workspace: &Path) {
             ]
         }))
         .unwrap(),
-    )
-    .unwrap();
+    );
 }

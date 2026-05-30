@@ -9,7 +9,7 @@ Add one thin named-workflow layer above Boundline's existing session-native runt
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, plus Rust standard library filesystem, path, process, and collections APIs; no new runtime dependencies planned for the first slice  
 **Storage**: Workspace-local `.boundline/workflows.toml`, `.boundline/session.json`, `.boundline/traces/`, optional `.boundline/execution.json`, optional `.canon/` artifacts, plus repository docs and assistant assets updated as part of rollout  
 **Testing**: `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test --no-run --all-targets`, `cargo nextest run --workspace --all-features`, `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`, `cargo deny check licenses advisories bans sources`  
@@ -27,7 +27,7 @@ Add one thin named-workflow layer above Boundline's existing session-native runt
 
 - **PASS** Delivery identity: The slice directly improves bounded engineering task delivery by turning repeatable phase sequences into a session-owned workflow entrypoint rather than adding generic automation. See Summary, Technical Context, and [spec.md](/Users/rt/workspace/boundline/specs/018-workflow-layer/spec.md).
 - **PASS** Delivery-first scope: The work is about execution ergonomics, orchestration, workflow validation, session state, and inspectability before optimization or polish. See Summary, Technical Context, and research decisions.
-- **PASS** Primary workflow: The main operator path remains session-native, with workflow phases compiling onto `start -> capture -> plan -> run -> status -> next -> inspect`; the explicit compatibility route through `.boundline/execution.json` remains available but opt-in. See Summary, Technical Context, quickstart, and contracts.
+- **PASS** Primary workflow: The main operator path remains session-native, with workflow phases compiling onto `goal -> plan -> run -> status -> next -> inspect`; the explicit compatibility route through `.boundline/execution.json` remains available but opt-in. See Summary, Technical Context, quickstart, and contracts.
 - **PASS** Bounded execution: Workflow start conditions, stop conditions, invalid-definition blocking, and existing runtime step or retry limits remain explicit; workflows pause or terminate at the first unmet bounded condition. See Technical Context, data model, quickstart, and contracts.
 - **PASS** Stateful execution: Workflow identity, phase progress, and blocked or resume state live inside the shared session record and traces rather than in a separate stateless runner. See Summary, data-model, and contracts.
 - **PASS** Mutable planning: Workflows compile onto existing mutable session planning and execution, so planning, replanning, and phase satisfaction remain evidence-driven rather than scripted replay. See Summary, research, and data-model.

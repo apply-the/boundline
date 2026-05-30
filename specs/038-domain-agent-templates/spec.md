@@ -19,7 +19,7 @@ approaches repository work with one generic expert, the rest of the feature is
 just configuration without delivery value.
 
 **Independent Test**: Use a repository that contains multiple supported stacks,
-run the primary `capture -> plan -> run` flow against different task targets,
+run the primary `goal -> plan -> run` flow against different task targets,
 and verify that Boundline identifies and surfaces the matching domain expert before
 the first modifying step.
 

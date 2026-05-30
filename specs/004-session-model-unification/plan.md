@@ -5,17 +5,17 @@
 
 ## Summary
 
-Introduce a workspace-scoped session layer that sits between Boundline's CLI and the existing orchestrator runtime so goal capture, planning state, current execution position, latest outcome, and latest trace survive across invocations. The plan preserves the current Rust crate and bounded sequential orchestration semantics, adds a file-backed session record under `<workspace>/.boundline/session.json`, introduces session-backed CLI commands for `start`, `capture`, `plan`, `step`, `run`, `status`, and `next`, and updates assistant continuity rules so chat and CLI operate against the same explicit interaction state.
+Introduce a workspace-scoped session layer that sits between Boundline's CLI and the existing orchestrator runtime so goal capture, planning state, current execution position, latest outcome, and latest trace survive across invocations. The plan preserves the current Rust crate and bounded sequential orchestration semantics, adds a file-backed session record under `<workspace>/.boundline/session.json`, introduces session-backed CLI commands for `start`, `goal`, `plan`, `step`, `run`, `status`, and `next`, and updates assistant continuity rules so chat and CLI operate against the same explicit interaction state.
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024 for the existing CLI and orchestrator backend  
+**Language/Version**: Rust 1.96.0, edition 2024 for the existing CLI and orchestrator backend  
 **Primary Dependencies**: Existing runtime dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`); no new runtime dependencies for this slice  
 **Storage**: Workspace-local JSON session record at `<workspace>/.boundline/session.json` plus the existing file-backed traces under `<workspace>/.boundline/traces/`  
 **Testing**: `cargo test` with new unit, integration, and contract tests for session persistence, CLI continuity, assistant continuity, recovery handling, and status routing  
 **Target Platform**: macOS and Linux developer workstations plus Linux CI for formatting, linting, and test validation  
 **Project Type**: Single Rust package with a local CLI, orchestrator engine, and repository-managed assistant command assets  
-**Execution Model**: Sequential session-backed command flow where `start` establishes workspace state, `capture` and `plan` prepare bounded work, `step` advances one executable step, `run` continues to a terminal state, and `status`/`next` inspect the same persisted session without hidden background execution  
+**Execution Model**: Sequential session-backed command flow where `start` establishes workspace state, `goal` and `plan` prepare bounded work, `step` advances one executable step, `run` continues to a terminal state, and `status`/`next` inspect the same persisted session without hidden background execution  
 **Observability Surface**: Human-readable CLI output, persisted session JSON, persisted execution traces, trace inspection summaries, and assistant routing cues that must stay explicit and aligned with session state  
 **Performance Goals**: Session resolution and status/next inspection remain interactive for local use, with no material overhead beyond the current CLI runtime and with session read/write work staying negligible relative to orchestration execution  
 **Constraints**: No new runtime services, no background workers, no Canon dependency, no multi-session support, no long-term memory beyond the current workspace, preserve existing orchestrator terminal and recovery semantics, and keep session state human-readable and debuggable  

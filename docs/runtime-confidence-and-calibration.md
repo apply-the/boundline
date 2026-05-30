@@ -1,4 +1,4 @@
-# Runtime Confidence And Calibration In Boundline 0.63.0
+# Runtime Confidence And Calibration In Boundline 0.64.0
 
 Boundline computes governance confidence locally from runtime evidence.
 
@@ -10,7 +10,7 @@ confidence, trust, or calibration. Those remain Boundline runtime concerns.
 Confidence is the runtime estimate of whether the currently available evidence
 justifies stronger or weaker governance behavior for a governed boundary.
 
-For the active `0.63.0` line, Boundline still treats confidence as
+For the active `0.64.0` line, Boundline still treats confidence as
 evidence-derived, not as a static configuration flag.
 
 ## Calibration Inputs

@@ -9,7 +9,7 @@ Add a minimal developer-facing CLI to the existing Rust package so contributors 
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: Existing runtime dependencies (`serde`, `serde_json`, `thiserror`, `tracing`, `uuid`) plus `clap` 4.x for a stable subcommand-based CLI surface  
 **Storage**: In-memory task state during execution and local file-backed traces under `<workspace>/.boundline/traces/` through the existing trace store  
 **Testing**: `cargo test` with unit, integration, and contract tests, plus CLI-focused integration coverage over deterministic fixture-backed runs and custom goals  

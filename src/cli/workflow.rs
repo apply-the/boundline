@@ -173,8 +173,8 @@ pub fn execute_inspect(
         return Ok(workflow_report);
     }
 
-    let inspect_report =
-        inspect::execute_inspect(None, Some(&workspace)).map_err(WorkflowCommandError::Inspect)?;
+    let inspect_report = inspect::execute_inspect(None, Some(&workspace), None, false)
+        .map_err(WorkflowCommandError::Inspect)?;
 
     Ok(WorkflowCommandReport {
         exit_status: inspect_report.exit_status,
@@ -250,14 +250,11 @@ fn advance_workflow(
                         WorkflowLifecycleState::Paused,
                         Some(WorkflowPhase::Capture),
                         completed_phases.clone(),
-                        Some(
-                            "workflow is waiting for a captured goal before it can continue"
-                                .to_string(),
-                        ),
-                        Some(capture_command(runtime.workspace_ref())),
+                        Some("workflow is waiting for a goal before it can continue".to_string()),
+                        Some(goal_command(runtime.workspace_ref())),
                     );
                     return Ok(format!(
-                        "started workflow `{}` and paused at the capture phase because no goal was available",
+                        "started workflow `{}` and paused at the goal phase because no goal was available",
                         workflow.workflow_name
                     ));
                 }
@@ -281,7 +278,7 @@ fn advance_workflow(
                             "clarification is still required before workflow planning can continue"
                                 .to_string(),
                         ),
-                        Some(capture_command(runtime.workspace_ref())),
+                        Some(goal_command(runtime.workspace_ref())),
                     );
                     return Ok(format!(
                         "workflow `{}` paused at the clarification phase because the current input is still underspecified",
@@ -646,7 +643,7 @@ fn workflow_next_command(workspace: &Path, record: &ActiveSessionRecord) -> Opti
         && matches!(progress.current_phase, Some(WorkflowPhase::Capture))
     {
         if record.goal.as_deref().map(str::trim).unwrap_or_default().is_empty() {
-            return Some(capture_command(workspace));
+            return Some(goal_command(workspace));
         }
 
         return Some(workflow_resume_command(workspace));
@@ -656,7 +653,7 @@ fn workflow_next_command(workspace: &Path, record: &ActiveSessionRecord) -> Opti
         && matches!(progress.current_phase, Some(WorkflowPhase::Clarify))
         && record.authored_brief.as_ref().and_then(|bundle| bundle.clarification.as_ref()).is_some()
     {
-        return Some(capture_command(workspace));
+        return Some(goal_command(workspace));
     }
 
     record.active_workflow_next_action().or_else(|| default_next_command(workspace, record))
@@ -688,9 +685,10 @@ fn workflow_exit_status(record: &ActiveSessionRecord) -> CommandExitStatus {
     }
 
     match record.latest_status {
-        SessionStatus::Failed | SessionStatus::Exhausted | SessionStatus::Aborted => {
-            CommandExitStatus::NonSuccess
-        }
+        SessionStatus::Blocked
+        | SessionStatus::Failed
+        | SessionStatus::Exhausted
+        | SessionStatus::Aborted => CommandExitStatus::NonSuccess,
         _ => CommandExitStatus::Succeeded,
     }
 }
@@ -948,6 +946,7 @@ fn terminal_lifecycle(status: SessionStatus) -> WorkflowLifecycleState {
         SessionStatus::Initialized
         | SessionStatus::GoalCaptured
         | SessionStatus::Planned
+        | SessionStatus::Blocked
         | SessionStatus::Running => WorkflowLifecycleState::Active,
     }
 }
@@ -956,8 +955,8 @@ fn terminal_reason(record: &ActiveSessionRecord) -> Option<String> {
     record.latest_terminal_reason.as_ref().map(|terminal_reason| terminal_reason.message.clone())
 }
 
-fn capture_command(workspace: &Path) -> String {
-    format!("boundline capture --workspace {} --goal <goal>", workspace.display())
+fn goal_command(workspace: &Path) -> String {
+    format!("boundline goal --update --workspace {} --goal <goal>", workspace.display())
 }
 
 fn workflow_resume_command(workspace: &Path) -> String {
@@ -981,9 +980,9 @@ mod tests {
     use uuid::Uuid;
 
     use super::{
-        WorkflowCommandError, advance_workflow, blocked_runtime_report, capture_command,
-        condition_is_met, default_next_command, execute_inspect, execute_list, execute_resume,
-        execute_run, execute_status, govern_phase_completed, governance_state_in,
+        WorkflowCommandError, advance_workflow, blocked_runtime_report, condition_is_met,
+        default_next_command, execute_inspect, execute_list, execute_resume, execute_run,
+        execute_status, goal_command, govern_phase_completed, governance_state_in,
         initialize_session, latest_governance_blocked_reason, latest_governance_state,
         latest_review_outcome, latest_review_trigger, load_active_workflow_session,
         load_workflow_definition, next_pending_phase, push_completed_phase,
@@ -1138,11 +1137,13 @@ mod tests {
             deduplicated_sources: Vec::new(),
             governance_intent: None,
             resolution_state: AuthoredBriefResolutionState::ClarificationRequired,
+            goal_quality: Default::default(),
             clarification: Some(ClarificationRecord {
                 clarification_id: "clarification-1".to_string(),
                 reason_kind: ClarificationReasonKind::MissingContext,
                 prompt: "Need more context".to_string(),
                 missing_fields: vec!["scope".to_string()],
+                questions: Vec::new(),
                 blocking_sources: Vec::new(),
                 turn_index: 1,
                 status: ClarificationStatus::Open,
@@ -1185,6 +1186,7 @@ mod tests {
             previous_governance_attempt_id: None,
             packet_ref: None,
             decision_ref: None,
+            stage_council: None,
             blocked_reason: blocked_reason.map(str::to_string),
         }
     }
@@ -1263,7 +1265,7 @@ recommended_when = "bounded delivery needs follow-through"
 
         assert_eq!(
             workflow_next_command(workspace.path(), &record).as_deref(),
-            Some(capture_command(workspace.path()).as_str())
+            Some(goal_command(workspace.path()).as_str())
         );
 
         record.goal = Some("Deliver workflow coverage".to_string());
@@ -1276,7 +1278,7 @@ recommended_when = "bounded delivery needs follow-through"
         record.workflow_progress.as_mut().unwrap().current_phase = Some(WorkflowPhase::Clarify);
         assert_eq!(
             workflow_next_command(workspace.path(), &record).as_deref(),
-            Some(capture_command(workspace.path()).as_str())
+            Some(goal_command(workspace.path()).as_str())
         );
 
         record.workflow_progress.as_mut().unwrap().current_phase = Some(WorkflowPhase::Run);
@@ -1792,7 +1794,7 @@ summary = "Default workflow"
             Some(WorkflowPhase::Clarify),
             vec![WorkflowPhase::Capture],
             Some("need clarification".to_string()),
-            Some(capture_command(workspace.path())),
+            Some(goal_command(workspace.path())),
         );
         refresh_routing_summary(&mut record);
 
@@ -1832,7 +1834,7 @@ summary = "Default workflow"
             Some(TerminalReason::new(TerminalCondition::GoalSatisfied, "done", None));
         assert_eq!(terminal_reason(&record).as_deref(), Some("done"));
 
-        assert!(capture_command(workspace.path()).contains("boundline capture --workspace"));
+        assert!(goal_command(workspace.path()).contains("boundline goal --update --workspace"));
         assert!(workflow_resume_command(workspace.path()).contains("boundline workflow resume"));
         assert!(workflow_status_command(workspace.path()).contains("boundline workflow status"));
         assert!(workflow_inspect_command(workspace.path()).contains("boundline workflow inspect"));

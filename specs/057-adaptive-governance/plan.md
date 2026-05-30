@@ -22,7 +22,7 @@ promotion metadata stay distinct from Boundline runtime decisions.
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: Existing workspace dependencies `clap`, `dialoguer`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, and Rust standard-library collections, filesystem, path, and process APIs; no new runtime dependencies planned for this slice  
 **Storage**: Workspace-local `.boundline/session.json`, persisted traces under `.boundline/traces/`, optional `.boundline/execution.json` and `.boundline/config.toml`, plus Canon-governed packet metadata already consumed through the governance runtime boundary  
 **Testing**: `cargo fmt --all`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, targeted unit and integration tests for governance state resolution and projection, `cargo test --no-run --all-targets`, focused package tests such as `cargo test -p boundline-core ...`, `cargo test -p boundline-adapters ...`, and `cargo test -p boundline-cli ...`, `cargo nextest run --workspace --all-features` when feasible, and modified-file coverage validation at 95% or higher  
@@ -40,7 +40,7 @@ promotion metadata stay distinct from Boundline runtime decisions.
 
 - **PASS** Delivery identity: The slice improves bounded engineering delivery by making governance progression, degradation, and escalation explicit at real stage boundaries instead of leaving them implicit. See Summary and Technical Context.
 - **PASS** Delivery-first scope: The plan prioritizes runtime execution behavior, state handling, failure control, and inspectability ahead of polish or speculative expansion. See Summary, Constraints, and Scale/Scope.
-- **PASS** Primary workflow: The main operator path remains the session-native `start -> capture -> plan -> run -> status -> next -> inspect` workflow, with explicit local compatibility behavior when Canon semantics are absent and governance is not required. See Execution Model and Constraints.
+- **PASS** Primary workflow: The main operator path remains the session-native `goal -> plan -> run -> status -> next -> inspect` workflow, with explicit local compatibility behavior when Canon semantics are absent and governance is not required. See Execution Model and Constraints.
 - **PASS** Bounded execution: Governed evaluation starts at a stage boundary and ends in explicit continue, degrade, escalate, wait, or stop states with no hidden looping or background governance worker. See Execution Model and Scale/Scope.
 - **PASS** Stateful execution: Governance-state, confidence, trust, degradation, escalation, and override outcomes are persisted in existing session and trace surfaces so later commands reuse the same explicit state. See Storage and Observability Surface.
 - **PASS** Mutable planning: Degradation, escalation, and accepted follow-up obligations can create explicit remediation or human-gate next steps while preserving the same bounded session plan. See Summary and Observability Surface.

@@ -15,12 +15,18 @@ fn bug_fix_keywords_infer_bug_fix_flow() {
 
 #[test]
 fn change_keywords_infer_change_flow() {
-    for keyword in &["add", "implement", "feature", "new", "create", "extend", "refactor"] {
-        let goal = format!("I want to {keyword} a dashboard");
-        let result = infer_flow(&goal);
-        assert!(result.is_some(), "keyword '{keyword}' should infer a flow");
+    for goal in &[
+        "I want to change the existing dashboard flow",
+        "I want to update the existing dashboard flow",
+        "I want to modify the existing dashboard flow",
+        "I want to extend the dashboard flow",
+        "I want to refactor the dashboard flow",
+        "I want to prepare the existing dashboard flow for rollout",
+    ] {
+        let result = infer_flow(goal);
+        assert!(result.is_some(), "goal '{goal}' should infer a flow");
         let flow = result.unwrap();
-        assert_eq!(flow.flow_name, "change", "keyword '{keyword}' should map to change");
+        assert_eq!(flow.flow_name, "change", "goal '{goal}' should map to change");
     }
 }
 
@@ -37,7 +43,7 @@ fn delivery_keywords_infer_delivery_flow() {
 
 #[test]
 fn no_keywords_returns_none() {
-    assert!(infer_flow("update the README documentation").is_none());
+    assert!(infer_flow("document the README usage notes").is_none());
     assert!(infer_flow("review the pull request").is_none());
     assert!(infer_flow("check formatting").is_none());
 }

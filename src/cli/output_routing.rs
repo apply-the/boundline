@@ -1,4 +1,14 @@
-use super::*;
+use std::path::Path;
+
+use serde_json::Value;
+
+use super::{
+    ExecutionTrace, FileClusterStore, FileConfigStore, GoalPlanFlowState, ModelRoute,
+    ProfileActivationRecord, RoutingConfig, RoutingDecisionProjection, RoutingMode, RoutingOutcome,
+    RoutingOverrides, RoutingSource, SessionStatus, SessionStatusView, TaskRunResponse, TaskStatus,
+    TraceEventType, TraceSummaryView, resolve_effective_routing,
+    resolve_effective_runtime_capabilities, resolve_effective_slot_effort_policies,
+};
 use crate::domain::session::ContinuityAuthority;
 
 pub fn render_route_outcome(outcome: &RoutingOutcome) -> String {
@@ -54,6 +64,11 @@ fn routing_outcome_for_status_view(view: &SessionStatusView) -> RoutingOutcome {
                 mode: RoutingMode::Blocked,
                 source: RoutingSource::GoalCapture,
                 reason: "goal captured but a goal plan is not ready yet".to_string(),
+            },
+            SessionStatus::Blocked => RoutingOutcome {
+                mode: RoutingMode::Blocked,
+                source: RoutingSource::SessionState,
+                reason: "planning or governance is blocked and needs repaired input".to_string(),
             },
             SessionStatus::Invalid => RoutingOutcome {
                 mode: RoutingMode::Blocked,
@@ -228,6 +243,8 @@ pub(crate) fn run_trace_route_owner(trace: &ExecutionTrace) -> &'static str {
             TraceEventType::ReviewStarted
             | TraceEventType::ReviewTriggerIgnored
             | TraceEventType::ReviewerCompleted
+            | TraceEventType::ReviewCouncilAssembled
+            | TraceEventType::ReviewStopSemanticsRecorded
             | TraceEventType::ReviewVoteResolved
             | TraceEventType::ReviewAdjudicated
             | TraceEventType::ReviewTerminalRecorded => saw_review_signal = true,
@@ -456,17 +473,8 @@ pub(crate) fn session_execution_condition_parts(
         }
     }
 
-    match view.execution_path.as_deref() {
-        Some("native_goal_plan_pending_plan_confirmation") => {
-            return (
-                "blocked",
-                "plan confirmation is still pending before native execution".to_string(),
-            );
-        }
-        Some("native_session_pending_plan") => {
-            return ("blocked", "goal captured but a goal plan is not ready yet".to_string());
-        }
-        _ => {}
+    if let Some("native_session_pending_plan") = view.execution_path.as_deref() {
+        return ("blocked", "goal captured but a goal plan is not ready yet".to_string());
     }
 
     match view.latest_status {
@@ -484,6 +492,9 @@ pub(crate) fn session_execution_condition_parts(
                 "planning is complete and execution can begin".to_string()
             },
         ),
+        SessionStatus::Blocked => {
+            ("blocked", "planning or governance is blocked and needs repaired input".to_string())
+        }
         SessionStatus::Running => ("running", running_condition_reason(view).to_string()),
         SessionStatus::Succeeded => ("terminal", "work completed successfully".to_string()),
         SessionStatus::Failed => {

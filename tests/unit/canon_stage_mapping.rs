@@ -34,6 +34,10 @@ fn first_slice_canon_stage_mapping_matches_supported_flows() {
         &[CanonMode::Requirements]
     );
     assert_eq!(
+        supported_canon_modes_for_stage("delivery", "system-shaping"),
+        &[CanonMode::SystemShaping]
+    );
+    assert_eq!(
         supported_canon_modes_for_stage("delivery", "architecture"),
         &[CanonMode::Architecture]
     );

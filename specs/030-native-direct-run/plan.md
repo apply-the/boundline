@@ -17,7 +17,7 @@
   the iteration process.
 -->
 
-**Language/Version**: [e.g., Rust 1.95.0, Python 3.11 or NEEDS CLARIFICATION]  
+**Language/Version**: [e.g., Rust 1.96.0, Python 3.11 or NEEDS CLARIFICATION]  
 **Primary Dependencies**: [core libraries and runtime dependencies or NEEDS CLARIFICATION]  
 **Storage**: [e.g., in-memory state, files, database, or N/A]  
 **Testing**: [e.g., cargo test, pytest, contract tests or NEEDS CLARIFICATION]  
@@ -35,7 +35,7 @@
 
 - Delivery identity: Explain how this feature directly improves bounded engineering task delivery.
 - Delivery-first scope: Confirm execution, orchestration, decomposition, or validation work is prioritized ahead of optimization or polish.
-- Primary workflow: State whether the main operator path is session-native (`start -> capture -> plan -> run -> status -> next -> inspect`) and identify any explicit compatibility path that remains available.
+- Primary workflow: State whether the main operator path is session-native (`goal -> plan -> run -> status -> next -> inspect`) and identify any explicit compatibility path that remains available.
 - Bounded execution: Identify explicit start conditions, terminal conditions, and max step or retry limits.
 - Stateful execution: Describe shared task context, read and write points, and justify any stateless segment.
 - Mutable planning: Describe initial planning plus replanning, step insertion, or replacement behavior.

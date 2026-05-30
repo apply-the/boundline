@@ -9,7 +9,7 @@ Broaden Boundline beyond fixed pre-authored delivery attempts by introducing a b
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: Existing runtime dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`) plus Rust standard library filesystem, path, process, and collections APIs; no new runtime dependencies for the initial adaptive slice  
 **Storage**: Workspace-local JSON session record at `<workspace>/.boundline/session.json`, persisted execution traces under `<workspace>/.boundline/traces/`, and workspace execution manifests under `<workspace>/.boundline/execution.json` with legacy fallback to `<workspace>/.boundline/fixture.json`  
 **Testing**: `cargo test --all-targets`, focused contract and integration coverage for adaptive profile loading, planner behavior, adaptive traces, and CLI surfaces, `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, and `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`  

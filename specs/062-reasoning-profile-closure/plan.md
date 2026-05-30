@@ -39,7 +39,7 @@ are no longer implied as more shipped than the runtime actually supports.
   the iteration process.
 -->
 
-**Language/Version**: Rust 1.95.0, edition 2024 in Boundline; Markdown, TOML, and JSON repository artifacts; required Canon companion publication updates for the new supported release pair  
+**Language/Version**: Rust 1.96.0, edition 2024 in Boundline; Markdown, TOML, and JSON repository artifacts; required Canon companion publication updates for the new supported release pair  
 **Primary Dependencies**: Existing workspace dependencies only (`serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, `clap`, `dialoguer`, `rusqlite` already present in workspace); no new runtime crates planned  
 **Storage**: Existing `.boundline/session.json`, trace files, configuration state, spec artifacts under `specs/062-reasoning-profile-closure/`, and release-facing docs or changelog files in Boundline plus the required Canon companion publication artifacts  
 **Testing**: `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, focused `cargo test --test contract <filter>`, `cargo test --test integration <filter>`, and `cargo test --test unit <filter>` runs, `cargo nextest run --workspace --all-features`, `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`, and the existing SonarCloud quality gate in `.github/workflows/quality.yml` for the touched cognitive-complexity findings  
@@ -57,7 +57,7 @@ are no longer implied as more shipped than the runtime actually supports.
 
 - **PASS** Delivery identity: The feature directly improves bounded delivery by closing the residual reasoning profiles that developers are already expected to trust in the session-native workflow. See Summary and Technical Context.
 - **PASS** Delivery-first scope: The plan prioritizes executable runtime evidence, bounded failure handling, release alignment, and validation before polish-only work. See Summary and Constraints.
-- **PASS** Primary workflow: The main operator path remains `start -> capture -> plan -> run -> status -> next -> inspect`; compatibility validation is explicit and secondary. See Summary and Execution Model.
+- **PASS** Primary workflow: The main operator path remains `goal -> plan -> run -> status -> next -> inspect`; compatibility validation is explicit and secondary. See Summary and Execution Model.
 - **PASS** Bounded execution: Every residual profile remains governed by explicit participant, budget, interruption, degradation, and blocked-stop conditions. See Technical Context and research.
 - **PASS** Stateful execution: The feature reads and writes existing session, task-context, governance, reasoning, and trace state instead of creating a stateless side path. See Technical Context and Project Structure.
 - **PASS** Mutable planning: The feature closes profile behavior inside the existing replanning-capable runtime and does not freeze the workflow into a second plan carrier. See Summary and research.

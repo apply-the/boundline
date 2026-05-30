@@ -1,9 +1,7 @@
 use std::path::PathBuf;
 
 use boundline::cli::inspect::execute_inspect;
-use boundline::cli::session::{
-    execute_capture, execute_plan, execute_run, execute_start, execute_status,
-};
+use boundline::cli::session::{execute_goal, execute_plan, execute_run, execute_status};
 
 use crate::workspace_fixture::temp_fixture_workspace;
 
@@ -17,21 +15,12 @@ fn write_flow_workspace(prefix: &str) -> PathBuf {
 fn plan_status_and_inspect_surface_selected_local_evidence() {
     let workspace = write_flow_workspace("boundline-context-intelligence-flow");
 
-    execute_start(Some(&workspace)).unwrap();
-    execute_capture(
-        Some(&workspace),
-        Some("fix the failing add path"),
-        &[],
-        None,
-        None,
-        None,
-        None,
-    )
-    .unwrap();
-    let plan = execute_plan(Some(&workspace), Some("bug-fix"), false, false).unwrap();
+    execute_goal(Some(&workspace), Some("fix the failing add path"), &[], None, None, None, None)
+        .unwrap();
+    let plan = execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
     let status = execute_status(Some(&workspace)).unwrap();
     execute_run(Some(&workspace)).unwrap();
-    let inspect = execute_inspect(None, Some(&workspace)).unwrap();
+    let inspect = execute_inspect(None, Some(&workspace), None, false).unwrap();
 
     for output in [plan.terminal_output.as_str(), status.terminal_output.as_str()] {
         assert!(output.contains("retrieval_mode: local"), "{output}");
@@ -50,21 +39,12 @@ fn plan_status_and_inspect_surface_selected_local_evidence() {
 fn plan_status_and_inspect_surface_cognitive_lenses_when_advanced_context_is_available() {
     let workspace = write_flow_workspace("boundline-context-intelligence-cognitive-lenses");
 
-    execute_start(Some(&workspace)).unwrap();
-    execute_capture(
-        Some(&workspace),
-        Some("fix the failing add path"),
-        &[],
-        None,
-        None,
-        None,
-        None,
-    )
-    .unwrap();
-    let plan = execute_plan(Some(&workspace), Some("bug-fix"), false, false).unwrap();
+    execute_goal(Some(&workspace), Some("fix the failing add path"), &[], None, None, None, None)
+        .unwrap();
+    let plan = execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
     let status = execute_status(Some(&workspace)).unwrap();
     execute_run(Some(&workspace)).unwrap();
-    let inspect = execute_inspect(None, Some(&workspace)).unwrap();
+    let inspect = execute_inspect(None, Some(&workspace), None, false).unwrap();
 
     for output in [
         plan.terminal_output.as_str(),
