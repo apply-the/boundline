@@ -27,12 +27,12 @@ Boundline forces an explicit, inspectable workflow:
 3. `run` -> Execute the next approved step.
 4. `inspect` -> Report the authoritative runtime state.
 
-## ⚡ Quick Start
+## Quick Start
 
 ```bash
 boundline doctor --install
 cd my-project
-boundline init --assistant codex --ide vscode 
+boundline init --assistant codex --route planning=copilot:gpt-4o
 boundline goal --goal "Fix the failing add test"
 boundline plan
 boundline run
@@ -42,7 +42,9 @@ boundline run
 
 Install the assistant pack for your host with `boundline init --assistant <host>` or
 `boundline assistant install --host <host> --scope user`, then drive the same
-session-native lifecycle from chat. The assistant surface should keep
+session-native lifecycle from chat. Use `/boundline:init` for global bootstrap,
+`/boundline:continue` when you need the runtime-owned follow-up, and repo-local
+session commands once the workspace is initialized. The assistant surface should keep
 `.boundline/session.json` authoritative, surface the runtime `next_command`, and
 stop cleanly on blocked, clarification-required, failed, exhausted, and terminal
 states instead of inventing parallel workflow state.
@@ -63,6 +65,11 @@ Chat command packs are thin wrappers over the Rust runtime. `/boundline:goal`,
 same persisted session and trace state under `.boundline/session.json` and
 `.boundline/traces/`. Chat history is advisory only; the CLI runtime and its
 persisted outputs remain authoritative.
+
+The primary product story is session-native: start a session with `goal`, shape
+it with `plan`, and continue with `run`, `status`, `next`, and `inspect`.
+Manifest-backed execution remains available as an explicit compatibility path
+when the operator deliberately asks for `--compatibility`.
 
 ## 🛠️ Key Commands
 

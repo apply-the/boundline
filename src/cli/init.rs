@@ -4912,17 +4912,15 @@ mod tests {
             .unwrap();
         fs::create_dir_all(workspace.join("design")).unwrap();
 
-        let report = execute_init(InitRequest {
+        let report = execute_successful_init(InitRequest {
             domain_standards: &["react=workspace react rules".to_string()],
             context_bindings: &["react|design_system|mcp:design-system".to_string()],
             required_context_bindings: &["react|design_reference|design/reference.md".to_string()],
             assistants: &[crate::domain::configuration::AssistantHostKind::Copilot],
             canon_mode_selection: Some(CanonModeSelectionPreference::AutoConfirm),
             ..base_init_request(&workspace)
-        })
-        .unwrap();
+        });
 
-        assert_eq!(report.exit_status, CommandExitStatus::Succeeded);
         assert!(report.terminal_output.contains("domain_templates:"));
         assert!(report.terminal_output.contains("- react: enabled=true"));
 
@@ -4973,7 +4971,7 @@ mod tests {
     fn execute_init_reports_empty_domain_templates_when_no_detection_matches() {
         let workspace = temp_workspace("boundline-init-empty-domain");
 
-        let report = execute_init(InitRequest {
+        let report = execute_successful_init(InitRequest {
             workspace: &workspace,
             scope: InitConfigScope::Workspace,
             non_interactive: true,
@@ -4997,10 +4995,8 @@ mod tests {
             docs_diff: false,
             docs_output_dir: None,
             force: true,
-        })
-        .unwrap();
+        });
 
-        assert_eq!(report.exit_status, CommandExitStatus::Succeeded);
         assert!(report.terminal_output.contains("template: change"));
         assert!(report.terminal_output.contains("domain_templates: none"));
         assert!(report.terminal_output.contains("canon_bootstrap: ready"));
@@ -5167,7 +5163,7 @@ mod tests {
     fn execute_init_seeds_missing_routes_from_selected_assistant_defaults() {
         let workspace = temp_workspace("boundline-init-default-routes");
 
-        let report = execute_init(InitRequest {
+        let report = execute_successful_init(InitRequest {
             workspace: &workspace,
             scope: InitConfigScope::Workspace,
             non_interactive: true,
@@ -5191,8 +5187,7 @@ mod tests {
             docs_diff: false,
             docs_output_dir: None,
             force: true,
-        })
-        .unwrap();
+        });
 
         assert!(report.terminal_output.contains("route_setup:"));
         assert!(report.terminal_output.contains("assistant_defaults: copilot"));

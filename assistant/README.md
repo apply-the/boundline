@@ -294,8 +294,7 @@ workspace:
 - `boundline inspect --cluster <primary-workspace>`
 
 When a workspace defines `.boundline/workflows.toml`, assistants may invoke the
-bounded named-workflow CLI surface directly: `workflow list -> workflow run -> workflow
-status -> workflow resume -> workflow inspect`. Those commands reuse the same session and trace
+bounded named-workflow CLI surface directly: `workflow list -> workflow run -> workflow status -> workflow resume -> workflow inspect`. Those commands reuse the same session and trace
 story instead of opening a second runtime, including governed `bug-fix:investigate`
 approval waits, blocked outcomes, and later packet reuse toward governed verify.
 Do not expose dedicated `/boundline-workflow-*` prompt surfaces; use the workflow
