@@ -1,6 +1,6 @@
 # Implementation Plan: Decision-Driven Orchestrator
 
-**Branch**: `034-decision-driven-orchestrator` | **Date**: 2026-05-02 | **Spec**: [/Users/rt/workspace/boundline/specs/034-decision-driven-orchestrator/spec.md](/Users/rt/workspace/boundline/specs/034-decision-driven-orchestrator/spec.md)
+**Branch**: `034-decision-driven-orchestrator` | **Date**: 2026-05-02 | **Spec**: [specs/034-decision-driven-orchestrator/spec.md](specs/034-decision-driven-orchestrator/spec.md)
 **Input**: Feature specification from `/specs/034-decision-driven-orchestrator/spec.md`
 
 **Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.

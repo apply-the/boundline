@@ -24,9 +24,9 @@ implemented and validated independently.
 
 **Purpose**: Establish the release move and provider-doc baseline for the branch
 
-- [ ] T001 Bump the Boundline workspace version from `0.55.0` to `0.56.0` in `/Users/rt/workspace/apply-the/boundline/Cargo.toml` and update `/Users/rt/workspace/apply-the/boundline/CHANGELOG.md`
-- [ ] T002 [P] Re-check current OpenAI, Anthropic, and Google provider docs against `/Users/rt/workspace/apply-the/boundline/assistant/catalog/model-catalog.toml` and record the explicit no-change result in `/Users/rt/workspace/apply-the/boundline/specs/056-authority-zoned-councils/research.md`
-- [ ] T003 [P] Align `/Users/rt/workspace/apply-the/boundline/specs/056-authority-zoned-councils/contracts/authority-governance-consumer-contract.md`, `/Users/rt/workspace/apply-the/boundline/specs/056-authority-zoned-councils/contracts/council-projection-contract.md`, and `/Users/rt/workspace/apply-the/boundline/specs/056-authority-zoned-councils/quickstart.md` with the released Canon `authority-governance-v1` surface
+- [ ] T001 Bump the Boundline workspace version from `0.55.0` to `0.56.0` in `Cargo.toml` and update `CHANGELOG.md`
+- [ ] T002 [P] Re-check current OpenAI, Anthropic, and Google provider docs against `assistant/catalog/model-catalog.toml` and record the explicit no-change result in `specs/056-authority-zoned-councils/research.md`
+- [ ] T003 [P] Align `specs/056-authority-zoned-councils/contracts/authority-governance-consumer-contract.md`, `specs/056-authority-zoned-councils/contracts/council-projection-contract.md`, and `specs/056-authority-zoned-councils/quickstart.md` with the released Canon `authority-governance-v1` surface
 
 ---
 
@@ -36,11 +36,11 @@ implemented and validated independently.
 
 **⚠️ CRITICAL**: No user story work should begin until this phase is complete
 
-- [ ] T004 Extend shared authority-control, council-profile, and stop-semantics primitives in `/Users/rt/workspace/apply-the/boundline/src/domain/governance.rs` and `/Users/rt/workspace/apply-the/boundline/crates/boundline-core/src/domain.rs`
-- [ ] T005 [P] Extend Canon governance adapter consumption and compatibility gates in `/Users/rt/workspace/apply-the/boundline/src/adapters/governance_runtime.rs` and `/Users/rt/workspace/apply-the/boundline/tests/unit/governance_runtime.rs`
-- [ ] T029 [P] Add explicit local-governance fallback coverage for sessions where Canon input is absent and governance is not required in `/Users/rt/workspace/apply-the/boundline/src/adapters/governance_runtime.rs`, `/Users/rt/workspace/apply-the/boundline/tests/unit/governance_runtime.rs`, and `/Users/rt/workspace/apply-the/boundline/tests/integration/session_governance_flow.rs`
-- [ ] T006 [P] Extend persisted review, producer-response, and adjudication state in `/Users/rt/workspace/apply-the/boundline/src/domain/review.rs`, `/Users/rt/workspace/apply-the/boundline/src/domain/session.rs`, and `/Users/rt/workspace/apply-the/boundline/src/orchestrator/review_trace.rs`
-- [ ] T007 [P] Reuse governance test entry points in `/Users/rt/workspace/apply-the/boundline/tests/unit/governance_policy.rs`, `/Users/rt/workspace/apply-the/boundline/tests/unit/review_voting.rs`, `/Users/rt/workspace/apply-the/boundline/tests/contract/governance_session_contract.rs`, `/Users/rt/workspace/apply-the/boundline/tests/contract/governance_trace_contract.rs`, and `/Users/rt/workspace/apply-the/boundline/tests/integration/session_governance_flow.rs`
+- [ ] T004 Extend shared authority-control, council-profile, and stop-semantics primitives in `src/domain/governance.rs` and `crates/boundline-core/src/domain.rs`
+- [ ] T005 [P] Extend Canon governance adapter consumption and compatibility gates in `src/adapters/governance_runtime.rs` and `tests/unit/governance_runtime.rs`
+- [ ] T029 [P] Add explicit local-governance fallback coverage for sessions where Canon input is absent and governance is not required in `src/adapters/governance_runtime.rs`, `tests/unit/governance_runtime.rs`, and `tests/integration/session_governance_flow.rs`
+- [ ] T006 [P] Extend persisted review, producer-response, and adjudication state in `src/domain/review.rs`, `src/domain/session.rs`, and `src/orchestrator/review_trace.rs`
+- [ ] T007 [P] Reuse governance test entry points in `tests/unit/governance_policy.rs`, `tests/unit/review_voting.rs`, `tests/contract/governance_session_contract.rs`, `tests/contract/governance_trace_contract.rs`, and `tests/integration/session_governance_flow.rs`
 
 **Checkpoint**: Shared authority and council primitives are ready
 
@@ -54,17 +54,17 @@ implemented and validated independently.
 
 ### Validation for User Story 1
 
-- [ ] T008 [P] [US1] Add required-field, unsupported-contract, and optional-provenance coverage in `/Users/rt/workspace/apply-the/boundline/src/adapters/governance_runtime.rs` and `/Users/rt/workspace/apply-the/boundline/tests/unit/governance_runtime.rs`
-- [ ] T009 [P] [US1] Add effective-control and council-profile resolution coverage in `/Users/rt/workspace/apply-the/boundline/src/domain/governance.rs` and `/Users/rt/workspace/apply-the/boundline/tests/unit/governance_policy.rs`
-- [ ] T030 [P] [US1] Add runtime-role and domain-expert selection coverage in `/Users/rt/workspace/apply-the/boundline/src/domain/governance.rs`, `/Users/rt/workspace/apply-the/boundline/tests/unit/governance_policy.rs`, and `/Users/rt/workspace/apply-the/boundline/tests/integration/governance_autopilot_flow.rs`
+- [ ] T008 [P] [US1] Add required-field, unsupported-contract, and optional-provenance coverage in `src/adapters/governance_runtime.rs` and `tests/unit/governance_runtime.rs`
+- [ ] T009 [P] [US1] Add effective-control and council-profile resolution coverage in `src/domain/governance.rs` and `tests/unit/governance_policy.rs`
+- [ ] T030 [P] [US1] Add runtime-role and domain-expert selection coverage in `src/domain/governance.rs`, `tests/unit/governance_policy.rs`, and `tests/integration/governance_autopilot_flow.rs`
 
 ### Implementation for User Story 1
 
-- [x] T010 [P] [US1] Implement Canon `authority-governance-v1` consumer parsing and fail-closed compatibility rules in `/Users/rt/workspace/apply-the/boundline/src/adapters/governance_runtime.rs`
-- [x] T011 [US1] Implement effective control-class and bounded council-profile resolution in `/Users/rt/workspace/apply-the/boundline/src/domain/governance.rs`
-- [ ] T031 [US1] Implement inspectable runtime-role and domain-expert selection with local rationale capture in `/Users/rt/workspace/apply-the/boundline/src/domain/governance.rs`, `/Users/rt/workspace/apply-the/boundline/src/orchestrator/governance.rs`, and `/Users/rt/workspace/apply-the/boundline/src/domain/session.rs`
-- [ ] T012 [US1] Persist resolved governance outcomes in `/Users/rt/workspace/apply-the/boundline/src/domain/session.rs` and register shared projection types through `/Users/rt/workspace/apply-the/boundline/crates/boundline-core/src/domain.rs`
-- [ ] T013 [US1] Align the MVP consumer wording in `/Users/rt/workspace/apply-the/boundline/specs/056-authority-zoned-councils/data-model.md` and `/Users/rt/workspace/apply-the/boundline/specs/056-authority-zoned-councils/contracts/authority-governance-consumer-contract.md`
+- [x] T010 [P] [US1] Implement Canon `authority-governance-v1` consumer parsing and fail-closed compatibility rules in `src/adapters/governance_runtime.rs`
+- [x] T011 [US1] Implement effective control-class and bounded council-profile resolution in `src/domain/governance.rs`
+- [ ] T031 [US1] Implement inspectable runtime-role and domain-expert selection with local rationale capture in `src/domain/governance.rs`, `src/orchestrator/governance.rs`, and `src/domain/session.rs`
+- [ ] T012 [US1] Persist resolved governance outcomes in `src/domain/session.rs` and register shared projection types through `crates/boundline-core/src/domain.rs`
+- [ ] T013 [US1] Align the MVP consumer wording in `specs/056-authority-zoned-councils/data-model.md` and `specs/056-authority-zoned-councils/contracts/authority-governance-consumer-contract.md`
 
 **Checkpoint**: User Story 1 is independently valid as the authority-resolution MVP
 
@@ -78,14 +78,14 @@ implemented and validated independently.
 
 ### Validation for User Story 2
 
-- [ ] T014 [P] [US2] Add finding, producer-response, and adjudication coverage in `/Users/rt/workspace/apply-the/boundline/src/domain/review.rs` and `/Users/rt/workspace/apply-the/boundline/tests/unit/review_voting.rs`
-- [ ] T015 [P] [US2] Add blocked and adjudication flow coverage in `/Users/rt/workspace/apply-the/boundline/tests/integration/session_governance_flow.rs` and `/Users/rt/workspace/apply-the/boundline/tests/integration/workflow_follow_through.rs`
+- [ ] T014 [P] [US2] Add finding, producer-response, and adjudication coverage in `src/domain/review.rs` and `tests/unit/review_voting.rs`
+- [ ] T015 [P] [US2] Add blocked and adjudication flow coverage in `tests/integration/session_governance_flow.rs` and `tests/integration/workflow_follow_through.rs`
 
 ### Implementation for User Story 2
 
-- [ ] T016 [P] [US2] Extend structured finding and producer-response state in `/Users/rt/workspace/apply-the/boundline/src/domain/review.rs`
-- [ ] T017 [US2] Persist adjudication, remediation, and blocked-stop results in `/Users/rt/workspace/apply-the/boundline/src/domain/session.rs` and `/Users/rt/workspace/apply-the/boundline/src/orchestrator/review_trace.rs`
-- [ ] T018 [US2] Project findings, producer responses, adjudication summaries, and stop semantics through `/Users/rt/workspace/apply-the/boundline/src/cli/output.rs` and `/Users/rt/workspace/apply-the/boundline/src/cli/session.rs`
+- [ ] T016 [P] [US2] Extend structured finding and producer-response state in `src/domain/review.rs`
+- [ ] T017 [US2] Persist adjudication, remediation, and blocked-stop results in `src/domain/session.rs` and `src/orchestrator/review_trace.rs`
+- [ ] T018 [US2] Project findings, producer responses, adjudication summaries, and stop semantics through `src/cli/output.rs` and `src/cli/session.rs`
 
 **Checkpoint**: User Stories 1 and 2 both work independently and preserve the same session-native story
 
@@ -99,15 +99,15 @@ implemented and validated independently.
 
 ### Validation for User Story 3
 
-- [ ] T019 [P] [US3] Add advisory-only provenance and `stage_role_hints` coverage in `/Users/rt/workspace/apply-the/boundline/src/adapters/governance_runtime.rs` and `/Users/rt/workspace/apply-the/boundline/tests/contract/governance_trace_contract.rs`
-- [ ] T020 [P] [US3] Add reviewer-independence and mandatory-role failure coverage in `/Users/rt/workspace/apply-the/boundline/tests/integration/governance_autopilot_flow.rs` and `/Users/rt/workspace/apply-the/boundline/tests/integration/governed_stage_depth_workflow.rs`
+- [ ] T019 [P] [US3] Add advisory-only provenance and `stage_role_hints` coverage in `src/adapters/governance_runtime.rs` and `tests/contract/governance_trace_contract.rs`
+- [ ] T020 [P] [US3] Add reviewer-independence and mandatory-role failure coverage in `tests/integration/governance_autopilot_flow.rs` and `tests/integration/governed_stage_depth_workflow.rs`
 
 ### Implementation for User Story 3
 
-- [x] T021 [P] [US3] Keep optional Canon provenance separated from required control inputs in `/Users/rt/workspace/apply-the/boundline/src/adapters/governance_runtime.rs` and `/Users/rt/workspace/apply-the/boundline/src/domain/governance.rs`
-- [ ] T022 [US3] Enforce reviewer independence, mandatory-role failures, and restricted-gate projection in `/Users/rt/workspace/apply-the/boundline/src/domain/governance.rs` and `/Users/rt/workspace/apply-the/boundline/src/orchestrator/governance.rs`
-- [ ] T032 [US3] Keep councils, deterministic validation, security scanning, and human approval as separate inspectable controls in `/Users/rt/workspace/apply-the/boundline/src/orchestrator/governance.rs`, `/Users/rt/workspace/apply-the/boundline/src/cli/output.rs`, `/Users/rt/workspace/apply-the/boundline/src/cli/session.rs`, and `/Users/rt/workspace/apply-the/boundline/tests/integration/workflow_follow_through.rs`
-- [ ] T023 [US3] Refresh `/Users/rt/workspace/apply-the/boundline/specs/056-authority-zoned-councils/quickstart.md` and `/Users/rt/workspace/apply-the/boundline/specs/056-authority-zoned-councils/contracts/council-projection-contract.md` to match the implemented consumer boundary
+- [x] T021 [P] [US3] Keep optional Canon provenance separated from required control inputs in `src/adapters/governance_runtime.rs` and `src/domain/governance.rs`
+- [ ] T022 [US3] Enforce reviewer independence, mandatory-role failures, and restricted-gate projection in `src/domain/governance.rs` and `src/orchestrator/governance.rs`
+- [ ] T032 [US3] Keep councils, deterministic validation, security scanning, and human approval as separate inspectable controls in `src/orchestrator/governance.rs`, `src/cli/output.rs`, `src/cli/session.rs`, and `tests/integration/workflow_follow_through.rs`
+- [ ] T023 [US3] Refresh `specs/056-authority-zoned-councils/quickstart.md` and `specs/056-authority-zoned-councils/contracts/council-projection-contract.md` to match the implemented consumer boundary
 
 **Checkpoint**: All user stories are independently functional and preserve the Canon/Boundline ownership boundary
 
@@ -117,11 +117,11 @@ implemented and validated independently.
 
 **Purpose**: Finish docs, formatting, lint, tests, and coverage
 
-- [ ] T024 [P] Update operator-facing docs in `/Users/rt/workspace/apply-the/boundline/README.md`, `/Users/rt/workspace/apply-the/boundline/ROADMAP.md`, `/Users/rt/workspace/apply-the/boundline/docs/authority-zones-and-stop-semantics.md`, `/Users/rt/workspace/apply-the/boundline/docs/council-adoption-guide.md`, and `/Users/rt/workspace/apply-the/boundline/docs/review-council-algorithms.md`
-- [ ] T025 Run `cargo fmt --all` in `/Users/rt/workspace/apply-the/boundline`
-- [ ] T026 Run `cargo clippy --workspace --all-targets --all-features -- -D warnings` in `/Users/rt/workspace/apply-the/boundline`
-- [ ] T027 Run `cargo test --no-run --all-targets` and `cargo nextest run --workspace --all-features` in `/Users/rt/workspace/apply-the/boundline`
-- [ ] T028 Run focused modified-file coverage in `/Users/rt/workspace/apply-the/boundline` and confirm at least 95% coverage for every modified file
+- [ ] T024 [P] Update operator-facing docs in `README.md`, `ROADMAP.md`, `docs/authority-zones-and-stop-semantics.md`, `docs/council-adoption-guide.md`, and `docs/review-council-algorithms.md`
+- [ ] T025 Run `cargo fmt --all` in `repo root`
+- [ ] T026 Run `cargo clippy --workspace --all-targets --all-features -- -D warnings` in `repo root`
+- [ ] T027 Run `cargo test --no-run --all-targets` and `cargo nextest run --workspace --all-features` in `repo root`
+- [ ] T028 Run focused modified-file coverage in `repo root` and confirm at least 95% coverage for every modified file
 
 ---
 

@@ -40,10 +40,10 @@ promotion semantics untouched
   guidance, fallback, or bounded stop behavior rather than silent guesswork.
 
 **External Contract Dependency**: Canon contract line `v1` at
-`/Users/rt/workspace/apply-the/canon/docs/integration/project-memory-promotion-contract.md`
+`../canon/docs/integration/project-memory-promotion-contract.md`
 is the authoritative source for producer semantics. Supporting owner-side
 shape briefs remain versioned under
-`/Users/rt/workspace/apply-the/canon/specs/050-project-memory-control/contracts/`.
+`../canon/specs/050-project-memory-control/contracts/`.
 
 ## User Scenarios & Testing *(mandatory)*
 

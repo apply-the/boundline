@@ -95,11 +95,81 @@ fn status_and_inspect_surface_semantic_explanation_lines() {
     for output in [status.terminal_output.as_str(), inspect.terminal_output.as_str()] {
         assert!(output.contains("semantic_policy_state: local"), "{output}");
         assert!(output.contains("semantic_capability_state: ready"), "{output}");
+        assert!(output.contains("semantic_engine: sqlite_vec"), "{output}");
         assert!(output.contains("retrieval_mode: local"), "{output}");
         assert!(output.contains("hybrid_outcome:"), "{output}");
+        assert!(output.contains("vector_query_count: 1"), "{output}");
+        assert!(output.contains("vector_candidates_returned:"), "{output}");
         assert!(output.contains("selected_evidence_count:"), "{output}");
         assert!(output.contains("semantic_rejected_count:"), "{output}");
         assert!(output.contains("origin=semantic_expand"), "{output}");
         assert!(output.contains("rejected_candidate:"), "{output}");
+    }
+}
+
+#[test]
+fn status_and_inspect_surface_recovery_guidance_for_corrupt_index() {
+    let workspace =
+        write_semantic_inspect_workspace("boundline-context-intelligence-semantic-inspect-corrupt");
+    let index_dir = workspace.join(".boundline/context-intelligence");
+    fs::create_dir_all(&index_dir).unwrap();
+    fs::write(index_dir.join("retrieval-index.sqlite3"), b"fake-db").unwrap();
+
+    execute_goal(
+        Some(&workspace),
+        Some("planner reconcile configuration state"),
+        &[],
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
+    execute_run(Some(&workspace)).unwrap();
+    let status = execute_status(Some(&workspace)).unwrap();
+    let inspect = execute_inspect(None, Some(&workspace), None, false).unwrap();
+
+    for output in [status.terminal_output.as_str(), inspect.terminal_output.as_str()] {
+        assert!(output.contains("retrieval_index_state: stale"), "{output}");
+        assert!(
+            output.contains(
+                "retrieval_recovery_guidance: run boundline index doctor to inspect vector capability, hooks, and tracked-file hygiene"
+            ),
+            "{output}"
+        );
+    }
+}
+
+#[test]
+fn status_and_inspect_surface_recovery_guidance_for_degraded_semantic_capability() {
+    let _env_guard = force_semantic_vector_state_override("degraded");
+    let workspace = write_semantic_inspect_workspace(
+        "boundline-context-intelligence-semantic-inspect-degraded",
+    );
+
+    execute_goal(
+        Some(&workspace),
+        Some("planner reconcile configuration state"),
+        &[],
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
+    execute_run(Some(&workspace)).unwrap();
+    let status = execute_status(Some(&workspace)).unwrap();
+    let inspect = execute_inspect(None, Some(&workspace), None, false).unwrap();
+
+    for output in [status.terminal_output.as_str(), inspect.terminal_output.as_str()] {
+        assert!(output.contains("semantic_capability_state: degraded"), "{output}");
+        assert!(
+            output.contains(
+                "retrieval_recovery_guidance: run boundline index doctor to inspect vector capability, hooks, and tracked-file hygiene"
+            ),
+            "{output}"
+        );
     }
 }

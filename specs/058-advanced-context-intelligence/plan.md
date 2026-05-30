@@ -1,6 +1,6 @@
 # Implementation Plan: Advanced Context Intelligence
 
-**Branch**: `058-advanced-context-intelligence` | **Date**: 2026-05-16 | **Spec**: [/Users/rt/workspace/apply-the/boundline/specs/058-advanced-context-intelligence/spec.md](/Users/rt/workspace/apply-the/boundline/specs/058-advanced-context-intelligence/spec.md)
+**Branch**: `058-advanced-context-intelligence` | **Date**: 2026-05-16 | **Spec**: [specs/058-advanced-context-intelligence/spec.md](specs/058-advanced-context-intelligence/spec.md)
 **Input**: Feature specification from `/specs/058-advanced-context-intelligence/spec.md`
 
 ## Summary

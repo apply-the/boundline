@@ -1,8 +1,10 @@
 # boundline Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2026-05-19
+Auto-generated from all feature plans. Last updated: 2026-05-30
 
 ## Active Technologies
+- Rust 1.96.0, edition 2024 + existing workspace dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, `rusqlite` with bundled SQLite support), existing workspace crates (`boundline-core`, `boundline-adapters`, `boundline-cli`), and one optional trusted `sqlite-vec` extension-loading path for local vector tables (065-activate-sqlite-vec)
+- existing workspace-local `.boundline/session.json`, `.boundline/traces/`, `.boundline/config.toml`, and `.boundline/context-intelligence/retrieval-index.sqlite3`, extended with a companion `.boundline/context-intelligence/manifest.json`, managed `.gitignore` entries, and vector-backed semantic tables inside the same derived SQLite store (065-activate-sqlite-vec)
 
 - Rust 1.96.0, edition 2024 + `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, `rusqlite`, `dialoguer`
 - Workspace-local config and traces: `.boundline/session.json`, `.boundline/traces/`, `.boundline/config.toml`, `.boundline/execution.json`, `.boundline/workflows.toml`
@@ -35,6 +37,7 @@ Crate versioning follows Semantic Versioning.
 Before 1.0.0, breaking changes MAY occur in minor versions.
 
 ## Recent Changes
+- 065-activate-sqlite-vec: Added Rust 1.96.0, edition 2024 + existing workspace dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, `rusqlite` with bundled SQLite support), existing workspace crates (`boundline-core`, `boundline-adapters`, `boundline-cli`), and one optional trusted `sqlite-vec` extension-loading path for local vector tables
 - 063-assistant-delight-followthrough: Added Rust 1.96.0, edition 2024, plus repository-managed Markdown and JSON assistant assets + existing workspace crates and runtime dependencies (`clap`, `dialoguer`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, `rusqlite`); no new runtime dependencies planned for the first slice
 - 062-reasoning-profile-closure: Added Rust 1.96.0, edition 2024 in Boundline; Markdown, TOML, and JSON repository artifacts; companion Canon updates only if the supported release pair changes + Existing workspace dependencies only (`serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, `clap`, `dialoguer`, `rusqlite` already present in workspace); no new runtime crates planned
 
@@ -74,6 +77,7 @@ Before 1.0.0, breaking changes MAY occur in minor versions.
 
 ## Repo Safety Rules
 
+- NEVER save fully qualified paths in any file, but use relative paths and only related to this git repo. Other repos must be referenced by url (or if working locally by git project name).
 - NEVER run `boundline` CLI commands against this repository root as a working
 	workspace. Doing so writes workspace-local `.boundline/` session state,
 	pollutes tracked repo history, and can dirty the developer worktree. Use a

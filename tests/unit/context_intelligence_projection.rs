@@ -6,7 +6,7 @@ use std::sync::Mutex;
 use boundline::domain::configuration::{AdvancedContextConfig, SemanticAccelerationPolicyState};
 use boundline::domain::context_intelligence::{
     HybridOutcome, ImpactFindingKind, RelationshipKind, RetrievalBudgets, RetrievalMode,
-    RetrievalState, SemanticPolicyState,
+    RetrievalState, SemanticCapabilityState, SemanticPolicyState,
 };
 use boundline::domain::goal_plan::{ContextInput, ContextInputKind};
 use boundline::orchestrator::context_intelligence::{
@@ -17,6 +17,8 @@ use uuid::Uuid;
 
 const SEMANTIC_VECTOR_STATE_OVERRIDE_ENV: &str = "BOUNDLINE_SEMANTIC_VECTOR_STATE_OVERRIDE";
 const SEMANTIC_VECTOR_STATE_READY_VALUE: &str = "ready";
+const SEMANTIC_VECTOR_STATE_DEGRADED_VALUE: &str = "degraded";
+const SEMANTIC_VECTOR_STATE_CORRUPT_VALUE: &str = "corrupt";
 
 static SEMANTIC_VECTOR_STATE_OVERRIDE_LOCK: Mutex<()> = Mutex::new(());
 
@@ -320,4 +322,128 @@ fn build_context_pack_records_semantic_selection_and_rejection_annotations() {
                 .selection_reason
                 .contains("bounded evidence limit kept the V1 set unchanged")
     }));
+}
+
+#[test]
+fn build_context_pack_persists_derived_index_manifest_sidecar() {
+    let workspace = temp_workspace("boundline-context-intelligence-manifest");
+    fs::create_dir_all(workspace.join("src")).unwrap();
+    fs::write(
+        workspace.join("src/lib.rs"),
+        "pub fn add(left: i32, right: i32) -> i32 { left + right }\n",
+    )
+    .unwrap();
+
+    let advanced_context = build_advanced_context_projection(
+        "Fix the add implementation",
+        &workspace,
+        &[ContextInput {
+            kind: ContextInputKind::WorkspaceFile,
+            reference: "src/lib.rs".to_string(),
+            rationale: "selected bounded implementation surface".to_string(),
+            source: "workspace_scan".to_string(),
+            primary: true,
+        }],
+        &[],
+        AdvancedContextBuildState {
+            credibility: boundline::domain::goal_plan::ContextPackCredibility::Credible,
+            staleness_reason: None,
+            semantic_policy: SemanticAccelerationPolicyState::Local,
+        },
+        &AdvancedContextConfig::default(),
+    );
+
+    assert_eq!(advanced_context.retrieval_state, RetrievalState::Selected);
+    let manifest_path = workspace.join(".boundline/context-intelligence/manifest.json");
+    assert!(manifest_path.is_file());
+    let manifest = fs::read_to_string(manifest_path).unwrap();
+    assert!(manifest.contains("\"schema_version\": \"retrieval-index-v3\""));
+    assert!(manifest.contains("\"workspace_fingerprint\""));
+}
+
+#[test]
+fn build_context_pack_surfaces_degraded_and_corrupt_semantic_capability_states() {
+    for (override_value, expected_state, expected_reason) in [
+        (SEMANTIC_VECTOR_STATE_DEGRADED_VALUE, SemanticCapabilityState::Degraded, "degraded"),
+        (SEMANTIC_VECTOR_STATE_CORRUPT_VALUE, SemanticCapabilityState::Corrupt, "corrupt"),
+    ] {
+        let _guard = SEMANTIC_VECTOR_STATE_OVERRIDE_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let _env_guard = set_env_var(SEMANTIC_VECTOR_STATE_OVERRIDE_ENV, override_value);
+        let workspace = temp_workspace("boundline-context-intelligence-semantic-fallback");
+        fs::create_dir_all(workspace.join("src")).unwrap();
+        fs::write(
+            workspace.join("src/lib.rs"),
+            "pub fn add(left: i32, right: i32) -> i32 { left + right }\n",
+        )
+        .unwrap();
+
+        let advanced_context = build_advanced_context_projection(
+            "Fix the add implementation",
+            &workspace,
+            &[ContextInput {
+                kind: ContextInputKind::WorkspaceFile,
+                reference: "src/lib.rs".to_string(),
+                rationale: "selected bounded implementation surface".to_string(),
+                source: "workspace_scan".to_string(),
+                primary: true,
+            }],
+            &[],
+            AdvancedContextBuildState {
+                credibility: boundline::domain::goal_plan::ContextPackCredibility::Credible,
+                staleness_reason: None,
+                semantic_policy: SemanticAccelerationPolicyState::Local,
+            },
+            &AdvancedContextConfig::default(),
+        );
+
+        assert_eq!(advanced_context.semantic_policy_state, SemanticPolicyState::Local);
+        assert_eq!(advanced_context.semantic_capability_state, expected_state);
+        assert!(
+            advanced_context
+                .terminal_reason
+                .as_deref()
+                .is_some_and(|reason| reason.contains(expected_reason))
+        );
+    }
+}
+
+#[test]
+fn build_context_pack_handles_empty_fts_query_for_short_goal_and_path_tokens() {
+    let _guard =
+        SEMANTIC_VECTOR_STATE_OVERRIDE_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _env_guard =
+        set_env_var(SEMANTIC_VECTOR_STATE_OVERRIDE_ENV, SEMANTIC_VECTOR_STATE_READY_VALUE);
+    let workspace = temp_workspace("boundline-context-intelligence-empty-query");
+    fs::create_dir_all(workspace.join("aa")).unwrap();
+    fs::write(workspace.join("aa/bb.c"), "int ok(void) { return 1; }\n").unwrap();
+
+    let advanced_context = build_advanced_context_projection(
+        "go",
+        &workspace,
+        &[ContextInput {
+            kind: ContextInputKind::WorkspaceFile,
+            reference: "aa/bb.c".to_string(),
+            rationale: "short-path empty-query fixture".to_string(),
+            source: "workspace_scan".to_string(),
+            primary: true,
+        }],
+        &[],
+        AdvancedContextBuildState {
+            credibility: boundline::domain::goal_plan::ContextPackCredibility::Credible,
+            staleness_reason: None,
+            semantic_policy: SemanticAccelerationPolicyState::Local,
+        },
+        &AdvancedContextConfig::default(),
+    );
+
+    assert_eq!(advanced_context.retrieval_mode, RetrievalMode::Local);
+    assert_ne!(advanced_context.retrieval_state, RetrievalState::Unavailable);
+    assert!(
+        advanced_context
+            .selected_evidence
+            .iter()
+            .any(|candidate| candidate.source_ref == "aa/bb.c")
+    );
 }

@@ -90,26 +90,10 @@ checksum = "c4512299f36f043ab09a583e57bceb5a5aab7a73db1805848e8fef3c9e8c78b3"
 
 [[package]]
 name = "boundline"
-version = "0.64.0"
+version = "0.65.0"
 dependencies = [
  "boundline-adapters",
  "boundline-cli",
- "boundline-core",
- "clap",
- "dotenvy",
- "reqwest",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "toml",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "boundline-adapters"
-version = "0.64.0"
-dependencies = [
  "boundline-core",
  "clap",
  "dotenvy",
@@ -124,8 +108,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "boundline-adapters"
+version = "0.65.0"
+dependencies = [
+ "boundline-core",
+ "clap",
+ "dotenvy",
+ "reqwest",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sqlite-vec",
+ "thiserror 2.0.18",
+ "toml",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "boundline-cli"
-version = "0.64.0"
+version = "0.65.0"
 dependencies = [
  "boundline-adapters",
  "boundline-core",
@@ -142,7 +144,7 @@ dependencies = [
 
 [[package]]
 name = "boundline-core"
-version = "0.64.0"
+version = "0.65.0"
 dependencies = [
  "clap",
  "serde",
@@ -1186,6 +1188,15 @@ checksum = "3a766e1110788c36f4fa1c2b71b387a7815aa65f88ce0229841826633d93723e"
 dependencies = [
  "libc",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "sqlite-vec"
+version = "0.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d0ba424237a9a5db2f6071f193319e2b6a32f7f3961debb2fbbfe67067abce3f"
+dependencies = [
+ "cc",
 ]
 
 [[package]]

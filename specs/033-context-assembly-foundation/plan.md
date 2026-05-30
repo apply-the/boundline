@@ -1,6 +1,6 @@
 # Implementation Plan: Context Assembly Foundation
 
-**Branch**: `033-context-assembly-foundation` | **Date**: 2026-05-02 | **Spec**: [/Users/rt/workspace/boundline/specs/033-context-assembly-foundation/spec.md](/Users/rt/workspace/boundline/specs/033-context-assembly-foundation/spec.md)
+**Branch**: `033-context-assembly-foundation` | **Date**: 2026-05-02 | **Spec**: [specs/033-context-assembly-foundation/spec.md](specs/033-context-assembly-foundation/spec.md)
 **Input**: Feature specification from `/specs/033-context-assembly-foundation/spec.md`
 
 **Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.

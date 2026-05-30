@@ -67,6 +67,74 @@ fn init_reports_seeded_routes_and_hygiene_actions() {
 }
 
 #[test]
+fn init_tracks_derived_index_manifest_and_wal_shm_hygiene() {
+    let workspace = temp_git_workspace("boundline-stack-neutral-derived-index-hygiene");
+
+    let init = run_boundline_in(
+        &workspace,
+        &[
+            "init",
+            "--non-interactive",
+            "--workspace",
+            workspace.to_string_lossy().as_ref(),
+            "--assistant",
+            "copilot",
+        ],
+    );
+    let init_text = terminal_text(&init);
+    let gitignore = fs::read_to_string(workspace.join(".gitignore")).unwrap();
+
+    assert_eq!(init.status.code(), Some(0), "{init_text}");
+    assert!(
+        init_text.contains(
+            "derived_index_hygiene: disposable retrieval DB, manifest, and SQLite WAL/SHM sidecars stay ignored"
+        ),
+        "{init_text}"
+    );
+    assert!(
+        gitignore.contains(".boundline/context-intelligence/retrieval-index.sqlite3"),
+        "{gitignore}"
+    );
+    assert!(gitignore.contains(".boundline/context-intelligence/manifest.json"), "{gitignore}");
+    assert!(
+        gitignore.contains(".boundline/context-intelligence/retrieval-index.sqlite3-wal"),
+        "{gitignore}"
+    );
+    assert!(
+        gitignore.contains(".boundline/context-intelligence/retrieval-index.sqlite3-shm"),
+        "{gitignore}"
+    );
+}
+
+#[test]
+fn init_can_install_mark_stale_semantic_index_hooks() {
+    let workspace = temp_git_workspace("boundline-stack-neutral-hook-init");
+
+    let init = run_boundline_in(
+        &workspace,
+        &[
+            "init",
+            "--non-interactive",
+            "--workspace",
+            workspace.to_string_lossy().as_ref(),
+            "--assistant",
+            "copilot",
+            "--semantic-index-hook-action",
+            "mark-stale",
+        ],
+    );
+    let init_text = terminal_text(&init);
+    let config = fs::read_to_string(workspace.join(".boundline/config.toml")).unwrap();
+
+    assert_eq!(init.status.code(), Some(0), "{init_text}");
+    assert!(config.contains("policy = \"local\""), "{config}");
+    assert!(config.contains("index_hook_action = \"mark_stale\""), "{config}");
+    assert!(workspace.join(".git/hooks/post-checkout").is_file());
+    assert!(workspace.join(".git/hooks/post-merge").is_file());
+    assert!(workspace.join(".git/hooks/post-rewrite").is_file());
+}
+
+#[test]
 fn init_reports_assistant_fallback_when_selected_runtime_is_unavailable() {
     let workspace = temp_git_workspace("boundline-stack-neutral-init-fallback-contract");
 

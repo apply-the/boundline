@@ -18,7 +18,7 @@ Keep this boundary explicit:
 Canon is not the orchestrator and not the product entrypoint. A Boundline
 install can stay fully usable without Canon on the default local path.
 
-The current Boundline adapter documents Canon `0.61.0` support for the
+The current Boundline adapter documents Canon `0.62.0` support for the
 `canon governance start|refresh|capabilities --json` `v1` surface. That is a
 bounded compatibility target, not a claim of total Canon feature parity.
 
@@ -46,6 +46,8 @@ Boundline keeps runtime state and repo-visible delivery knowledge separate:
 
 - `.boundline/` owns session state, traces, checkpoints, and transient
   governance artifacts.
+- `.boundline/context-intelligence/` owns the derived retrieval DB, companion
+  manifest, and SQLite WAL/SHM sidecars used by local semantic retrieval.
 - `.canon/` owns raw Canon run packets and Canon runtime payloads.
 - `docs/project/` owns stable repo-visible project memory that planning and
   governed delivery can reuse.
@@ -63,6 +65,8 @@ them:
 
 - `boundline models auth ...` for user-scoped provider credential setup
 - `boundline probe` for a read-only readiness answer before orchestration
+- `boundline index ...` for explicit derived-index status, refresh, rebuild,
+  cleanup, and doctor operations when local semantic retrieval is enabled
 
 `probe` is intentionally non-mutating. It helps operators and assistant hosts
 decide whether the next honest step is bootstrap, repair, or session work.

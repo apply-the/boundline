@@ -2,7 +2,7 @@
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-05-18
-**Feature**: [spec.md](/Users/rt/workspace/apply-the/boundline/specs/061-reasoning-profile-contracts/spec.md)
+**Feature**: [spec.md](specs/061-reasoning-profile-contracts/spec.md)
 
 ## Content Quality
 

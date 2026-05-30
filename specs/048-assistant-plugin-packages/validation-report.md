@@ -24,21 +24,21 @@ assistant plugin package slice.
   380 unit tests, and doctests.
 - Coverage: `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`
   passed and wrote `lcov.info`. The touched production Rust file
-  `/Users/rt/workspace/apply-the/boundline/src/assistant_plugin_validation.rs`
-  reports 100.00% line coverage (101/101). `/Users/rt/workspace/apply-the/boundline/src/lib.rs`
+  `src/assistant_plugin_validation.rs`
+  reports 100.00% line coverage (101/101). `src/lib.rs`
   only exports the module and does not emit LCOV line records.
 - Modified Rust test files were executed by the passing suites:
-  `/Users/rt/workspace/apply-the/boundline/tests/assistant_plugin_packages.rs`,
-  `/Users/rt/workspace/apply-the/boundline/tests/contract/distribution_metadata_contract.rs`,
-  `/Users/rt/workspace/apply-the/boundline/tests/contract/distribution_release_surface_contract.rs`,
-  and `/Users/rt/workspace/apply-the/boundline/tests/unit/assistant_assets.rs`.
+  `tests/assistant_plugin_packages.rs`,
+  `tests/contract/distribution_metadata_contract.rs`,
+  `tests/contract/distribution_release_surface_contract.rs`,
+  and `tests/unit/assistant_assets.rs`.
 
 ## Additional Fixes From Verification
 
 - `cargo llvm-cov` reproduced an offline/restricted-network failure in
-  `/Users/rt/workspace/apply-the/boundline/scripts/sync-distribution-metadata.sh`.
+  `scripts/sync-distribution-metadata.sh`.
   The script already intended to fall back to
-  `/Users/rt/workspace/apply-the/boundline/distribution/channel-metadata.toml`,
+  `distribution/channel-metadata.toml`,
   but `set -euo pipefail` exited before the fallback. The script now guards the
   remote tag lookup so the fallback path is real and the release metadata test
   stays green without network access.

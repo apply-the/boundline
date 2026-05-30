@@ -125,3 +125,29 @@ fn probe_initialized_workspace_with_provider_credentials_routes_to_goal() {
         "{text}"
     );
 }
+
+#[test]
+fn probe_reports_semantic_index_health_for_corrupt_index() {
+    let workspace = temp_empty_workspace("boundline-probe-contract-semantic-health");
+    let index_dir = workspace.join(".boundline/context-intelligence");
+    let mkdir = fs::create_dir_all(&index_dir);
+    assert!(mkdir.is_ok(), "failed to create semantic index dir: {mkdir:?}");
+    let write_db = fs::write(index_dir.join("retrieval-index.sqlite3"), b"fake-db");
+    assert!(write_db.is_ok(), "failed to write semantic index fixture: {write_db:?}");
+
+    let output = run_boundline_in(
+        &workspace,
+        &["probe", "--workspace", workspace.to_string_lossy().as_ref()],
+    );
+    let text = terminal_text(&output);
+
+    assert_eq!(output.status.code(), Some(0), "{text}");
+
+    let report: Value = stdout_json(&output);
+    assert_eq!(report["capabilities"]["semantic_index"], Value::Bool(true), "{text}");
+    assert_eq!(
+        report["capabilities"]["semantic_index_health"],
+        Value::String("failed".into()),
+        "{text}"
+    );
+}

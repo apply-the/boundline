@@ -92,6 +92,22 @@ If you do not need a repo-local assistant surface yet, you can still run:
 boundline init
 ```
 
+If you want local semantic expansion plus explicit derived-index lifecycle
+management in the same workspace, enable it deliberately after init:
+
+```bash
+boundline config set-semantic-acceleration --scope workspace --policy local
+boundline index status --workspace <workspace>
+boundline index refresh --workspace <workspace>
+```
+
+If you also want Git freshness events to mark the derived index stale, rerun
+init with:
+
+```bash
+boundline init --workspace <workspace> --semantic-index-hook-action mark-stale
+```
+
 ## 4. Optional Provider Auth
 
 Use provider auth when the selected runtime needs a credential that is not
@@ -131,6 +147,10 @@ boundline probe
 `probe` does not mutate session state, and it is not a repo-local
 `/boundline:*` command.
 
+When the workspace uses local semantic acceleration, `probe` also surfaces
+derived-index capability signals so assistants can tell the difference between
+missing bootstrap, degraded vector capability, and a healthy local index.
+
 ## 6. Start One Bounded Session
 
 The primary product story is explicit:
@@ -152,6 +172,11 @@ Read the runtime output literally:
 - `status` reports the active state, next command, and any blocked or degraded
   follow-up.
 - `inspect` shows the trace-backed explanation.
+
+When semantic acceleration is enabled, `status` and `inspect` also show
+`retrieval_index_state`, `semantic_capability_state`,
+`semantic_fallback_reason`, and `retrieval_recovery_guidance` so local vector
+health stays explicit.
 
 Planning and execution may stop instead of guessing. In particular, the runtime
 can surface planning-gate outcomes such as `goal_quality_state`,

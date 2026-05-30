@@ -1,6 +1,6 @@
 # Implementation Plan: Guidance And Guardian Capabilities
 
-**Branch**: `054-guidance-guardian-capabilities` | **Date**: 2026-05-14 | **Spec**: [/Users/rt/workspace/apply-the/boundline/specs/054-guidance-guardian-capabilities/spec.md](/Users/rt/workspace/apply-the/boundline/specs/054-guidance-guardian-capabilities/spec.md)
+**Branch**: `054-guidance-guardian-capabilities` | **Date**: 2026-05-14 | **Spec**: [specs/054-guidance-guardian-capabilities/spec.md](specs/054-guidance-guardian-capabilities/spec.md)
 **Input**: Feature specification from `/specs/054-guidance-guardian-capabilities/spec.md`
 
 **Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.

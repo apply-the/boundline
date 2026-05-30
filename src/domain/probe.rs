@@ -68,6 +68,10 @@ pub struct CapabilitiesState {
     pub guardians: bool,
     pub canon_governance: bool,
     pub semantic_index: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub semantic_index_health: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub semantic_index_hooks: Option<String>,
     pub cluster: bool,
 }
 

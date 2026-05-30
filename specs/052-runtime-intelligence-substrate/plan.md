@@ -1,6 +1,6 @@
 # Implementation Plan: Runtime Intelligence Substrate
 
-**Branch**: `052-runtime-intelligence-substrate` | **Date**: 2026-05-14 | **Spec**: [/Users/rt/workspace/apply-the/boundline/specs/052-runtime-intelligence-substrate/spec.md](/Users/rt/workspace/apply-the/boundline/specs/052-runtime-intelligence-substrate/spec.md)
+**Branch**: `052-runtime-intelligence-substrate` | **Date**: 2026-05-14 | **Spec**: [specs/052-runtime-intelligence-substrate/spec.md](specs/052-runtime-intelligence-substrate/spec.md)
 **Input**: Feature specification from `/specs/052-runtime-intelligence-substrate/spec.md`
 
 **Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.

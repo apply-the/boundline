@@ -17,8 +17,8 @@
 
 **Purpose**: Reserve the `0.28.0` release boundary and register the new test surfaces
 
-- [X] T001 Bump crate version to `0.28.0` in `/Users/rt/workspace/boundline/Cargo.toml` and `/Users/rt/workspace/boundline/Cargo.lock`
-- [X] T002 Reuse the existing test harness surfaces and extend focused follow-through coverage in `/Users/rt/workspace/boundline/tests/unit/cli_output.rs`, `/Users/rt/workspace/boundline/tests/unit/compatibility_continuity.rs`, `/Users/rt/workspace/boundline/tests/contract/trace_summary_contract.rs`, `/Users/rt/workspace/boundline/tests/contract/assistant_command_definition_contract.rs`, and `/Users/rt/workspace/boundline/tests/contract/assistant_session_continuity_contract.rs`
+- [X] T001 Bump crate version to `0.28.0` in `Cargo.toml` and `Cargo.lock`
+- [X] T002 Reuse the existing test harness surfaces and extend focused follow-through coverage in `tests/unit/cli_output.rs`, `tests/unit/compatibility_continuity.rs`, `tests/contract/trace_summary_contract.rs`, `tests/contract/assistant_command_definition_contract.rs`, and `tests/contract/assistant_session_continuity_contract.rs`
 
 ---
 
@@ -28,10 +28,10 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [X] T003 Create shared follow-through and continuity-evidence models in `/Users/rt/workspace/boundline/src/domain/follow_through.rs`, `/Users/rt/workspace/boundline/src/domain.rs`, and `/Users/rt/workspace/boundline/src/lib.rs`
-- [X] T004 [P] Integrate continuity-evidence precedence helpers for session-native versus compatibility authority in `/Users/rt/workspace/boundline/src/domain/follow_through.rs` and `/Users/rt/workspace/boundline/src/cli/output.rs`
-- [X] T005 [P] Add shared rendering helpers for guided follow-through in `/Users/rt/workspace/boundline/src/cli/output.rs`
-- [X] T006 [P] Add foundational unit coverage for follow-through projection and compatibility continuity in `/Users/rt/workspace/boundline/src/domain/follow_through.rs`, `/Users/rt/workspace/boundline/tests/unit/compatibility_continuity.rs`, and `/Users/rt/workspace/boundline/tests/unit/cli_output.rs`
+- [X] T003 Create shared follow-through and continuity-evidence models in `src/domain/follow_through.rs`, `src/domain.rs`, and `src/lib.rs`
+- [X] T004 [P] Integrate continuity-evidence precedence helpers for session-native versus compatibility authority in `src/domain/follow_through.rs` and `src/cli/output.rs`
+- [X] T005 [P] Add shared rendering helpers for guided follow-through in `src/cli/output.rs`
+- [X] T006 [P] Add foundational unit coverage for follow-through projection and compatibility continuity in `src/domain/follow_through.rs`, `tests/unit/compatibility_continuity.rs`, and `tests/unit/cli_output.rs`
 
 **Checkpoint**: Shared follow-through primitives exist, one winning evidence source can be projected, and CLI surfaces can render the guidance without changing the operator workflow.
 
@@ -45,14 +45,14 @@
 
 ### Tests for User Story 1
 
-- [X] T007 [P] [US1] Add focused contract coverage for guided next-action projection on runtime follow-up surfaces in `/Users/rt/workspace/boundline/tests/contract/trace_summary_contract.rs`
-- [X] T008 [P] [US1] Add focused unit coverage for retry-style and inspect-style follow-through rendering in `/Users/rt/workspace/boundline/tests/unit/cli_output.rs`
+- [X] T007 [P] [US1] Add focused contract coverage for guided next-action projection on runtime follow-up surfaces in `tests/contract/trace_summary_contract.rs`
+- [X] T008 [P] [US1] Add focused unit coverage for retry-style and inspect-style follow-through rendering in `tests/unit/cli_output.rs`
 
 ### Implementation for User Story 1
 
-- [X] T009 [US1] Project guided next-action and evidence headlines into session status rendering in `/Users/rt/workspace/boundline/src/domain/follow_through.rs` and `/Users/rt/workspace/boundline/src/cli/output.rs`
-- [X] T010 [US1] Extend trace summaries and inspect rendering with the same guided follow-through story in `/Users/rt/workspace/boundline/src/domain/follow_through.rs` and `/Users/rt/workspace/boundline/src/cli/output.rs`
-- [X] T011 [US1] Replace generic follow-up wording with bounded guidance or explicit stop conditions in `/Users/rt/workspace/boundline/src/domain/follow_through.rs` and `/Users/rt/workspace/boundline/tests/unit/cli_output.rs`
+- [X] T009 [US1] Project guided next-action and evidence headlines into session status rendering in `src/domain/follow_through.rs` and `src/cli/output.rs`
+- [X] T010 [US1] Extend trace summaries and inspect rendering with the same guided follow-through story in `src/domain/follow_through.rs` and `src/cli/output.rs`
+- [X] T011 [US1] Replace generic follow-up wording with bounded guidance or explicit stop conditions in `src/domain/follow_through.rs` and `tests/unit/cli_output.rs`
 
 **Checkpoint**: Operators can identify one credible next bounded action or explicit stop condition from the same follow-up surfaces they already use.
 
@@ -66,14 +66,14 @@
 
 ### Tests for User Story 2
 
-- [X] T012 [P] [US2] Add coverage for continuity-evidence precedence and compatibility authority boundaries in `/Users/rt/workspace/boundline/tests/contract/trace_summary_contract.rs` and `/Users/rt/workspace/boundline/tests/unit/compatibility_continuity.rs`
-- [X] T013 [P] [US2] Add focused compatibility follow-up continuity coverage in `/Users/rt/workspace/boundline/tests/unit/compatibility_continuity.rs` and `/Users/rt/workspace/boundline/tests/unit/cli_output.rs`
+- [X] T012 [P] [US2] Add coverage for continuity-evidence precedence and compatibility authority boundaries in `tests/contract/trace_summary_contract.rs` and `tests/unit/compatibility_continuity.rs`
+- [X] T013 [P] [US2] Add focused compatibility follow-up continuity coverage in `tests/unit/compatibility_continuity.rs` and `tests/unit/cli_output.rs`
 
 ### Implementation for User Story 2
 
-- [X] T014 [US2] Reuse existing persisted session continuity fields through the shared follow-through projection in `/Users/rt/workspace/boundline/src/domain/follow_through.rs` and `/Users/rt/workspace/boundline/src/cli/output.rs`
-- [X] T015 [US2] Reuse authoritative trace evidence for compatibility follow-up without losing route or continuity ownership in `/Users/rt/workspace/boundline/src/domain/follow_through.rs` and `/Users/rt/workspace/boundline/src/cli/output.rs`
-- [X] T016 [US2] Align compatibility follow-up presentation with explicit evidence precedence and authority boundaries in `/Users/rt/workspace/boundline/src/domain/follow_through.rs`, `/Users/rt/workspace/boundline/src/cli/output.rs`, and `/Users/rt/workspace/boundline/tests/unit/compatibility_continuity.rs`
+- [X] T014 [US2] Reuse existing persisted session continuity fields through the shared follow-through projection in `src/domain/follow_through.rs` and `src/cli/output.rs`
+- [X] T015 [US2] Reuse authoritative trace evidence for compatibility follow-up without losing route or continuity ownership in `src/domain/follow_through.rs` and `src/cli/output.rs`
+- [X] T016 [US2] Align compatibility follow-up presentation with explicit evidence precedence and authority boundaries in `src/domain/follow_through.rs`, `src/cli/output.rs`, and `tests/unit/compatibility_continuity.rs`
 
 **Checkpoint**: Session reloads and explicit compatibility follow-up preserve one coherent guidance story with visible continuity authority.
 
@@ -87,12 +87,12 @@
 
 ### Tests for User Story 3
 
-- [X] T017 [P] [US3] Extend assistant-guidance and continuity contract coverage for the new follow-through vocabulary in `/Users/rt/workspace/boundline/tests/contract/assistant_session_continuity_contract.rs`, `/Users/rt/workspace/boundline/tests/contract/assistant_command_definition_contract.rs`, and `/Users/rt/workspace/boundline/tests/contract/assistant_command_pack_contract.rs`
+- [X] T017 [P] [US3] Extend assistant-guidance and continuity contract coverage for the new follow-through vocabulary in `tests/contract/assistant_session_continuity_contract.rs`, `tests/contract/assistant_command_definition_contract.rs`, and `tests/contract/assistant_command_pack_contract.rs`
 
 ### Implementation for User Story 3
 
-- [X] T018 [US3] Update the guided follow-through operator story and release notes in `/Users/rt/workspace/boundline/README.md`, `/Users/rt/workspace/boundline/docs/configuration.md`, `/Users/rt/workspace/boundline/docs/getting-started.md`, `/Users/rt/workspace/boundline/CONTRIBUTING.md`, `/Users/rt/workspace/boundline/ROADMAP.md`, and `/Users/rt/workspace/boundline/CHANGELOG.md`
-- [X] T019 [US3] Update assistant guidance and generated agent context for the follow-through surface in `/Users/rt/workspace/boundline/assistant/README.md`, `/Users/rt/workspace/boundline/assistant/claude/commands/boundline-status.md`, `/Users/rt/workspace/boundline/assistant/claude/commands/boundline-next.md`, `/Users/rt/workspace/boundline/assistant/claude/commands/boundline-inspect.md`, `/Users/rt/workspace/boundline/assistant/codex/commands/boundline-status.md`, `/Users/rt/workspace/boundline/assistant/codex/commands/boundline-next.md`, `/Users/rt/workspace/boundline/assistant/codex/commands/boundline-inspect.md`, `/Users/rt/workspace/boundline/assistant/copilot/prompts/boundline-status.prompt.md`, `/Users/rt/workspace/boundline/assistant/copilot/prompts/boundline-next.prompt.md`, `/Users/rt/workspace/boundline/assistant/copilot/prompts/boundline-inspect.prompt.md`, and `/Users/rt/workspace/boundline/AGENTS.md`
+- [X] T018 [US3] Update the guided follow-through operator story and release notes in `README.md`, `docs/configuration.md`, `docs/getting-started.md`, `CONTRIBUTING.md`, `ROADMAP.md`, and `CHANGELOG.md`
+- [X] T019 [US3] Update assistant guidance and generated agent context for the follow-through surface in `assistant/README.md`, `assistant/claude/commands/boundline-status.md`, `assistant/claude/commands/boundline-next.md`, `assistant/claude/commands/boundline-inspect.md`, `assistant/codex/commands/boundline-status.md`, `assistant/codex/commands/boundline-next.md`, `assistant/codex/commands/boundline-inspect.md`, `assistant/copilot/prompts/boundline-status.prompt.md`, `assistant/copilot/prompts/boundline-next.prompt.md`, `assistant/copilot/prompts/boundline-inspect.prompt.md`, and `AGENTS.md`
 
 **Checkpoint**: Maintainers and assistants have one coherent `0.28.0` story for guided follow-through, continuity authority, and release behavior.
 
@@ -102,7 +102,7 @@
 
 **Purpose**: Finish release-quality validation and closeout
 
-- [X] T020 Run focused coverage for modified or created Rust files, refresh `/Users/rt/workspace/boundline/lcov.info`, resolve remaining `cargo clippy` issues, run `cargo fmt --all`, and finish with clean validation for touched files under `/Users/rt/workspace/boundline/src/` and `/Users/rt/workspace/boundline/tests/`
+- [X] T020 Run focused coverage for modified or created Rust files, refresh `lcov.info`, resolve remaining `cargo clippy` issues, run `cargo fmt --all`, and finish with clean validation for touched files under `src/` and `tests/`
 
 ---
 

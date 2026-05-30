@@ -1,6 +1,6 @@
 # Implementation Plan: Guidance Catalog And Guardian Rule Packs
 
-**Branch**: `055-guidance-catalog-packs` | **Date**: 2026-05-15 | **Spec**: [/Users/rt/workspace/apply-the/boundline/specs/055-guidance-catalog-packs/spec.md](/Users/rt/workspace/apply-the/boundline/specs/055-guidance-catalog-packs/spec.md)
+**Branch**: `055-guidance-catalog-packs` | **Date**: 2026-05-15 | **Spec**: [specs/055-guidance-catalog-packs/spec.md](specs/055-guidance-catalog-packs/spec.md)
 **Input**: Feature specification from `/specs/055-guidance-catalog-packs/spec.md`
 
 **Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.

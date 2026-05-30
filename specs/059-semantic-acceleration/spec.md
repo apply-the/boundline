@@ -3,7 +3,7 @@
 **Feature Branch**: `059-semantic-acceleration`  
 **Created**: 2026-05-17  
 **Status**: Draft  
-**Input**: User description: "procediamo con S5v2, prossima spec. Se serve modificare canon, crea una spec anche in /Users/rt/workspace/apply-the/canon e allinea le due spec con un contract"
+**Input**: User description: "procediamo con S5v2, prossima spec. Se serve modificare canon, crea una spec anche in ../canon e allinea le due spec con un contract"
 
 ## User Scenarios & Testing *(mandatory)*
 

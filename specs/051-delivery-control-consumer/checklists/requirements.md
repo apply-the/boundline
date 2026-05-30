@@ -2,7 +2,7 @@
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning  
 **Created**: 2026-05-13  
-**Feature**: [/Users/rt/workspace/apply-the/boundline/specs/051-delivery-control-consumer/spec.md](/Users/rt/workspace/apply-the/boundline/specs/051-delivery-control-consumer/spec.md)
+**Feature**: [specs/051-delivery-control-consumer/spec.md](specs/051-delivery-control-consumer/spec.md)
 
 ## Content Quality
 

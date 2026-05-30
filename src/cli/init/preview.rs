@@ -3,13 +3,16 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
+const DERIVED_INDEX_HYGIENE_SOURCE: &str = "boundline:derived_index";
+
 use super::{
     AssistantAsset, AssistantInitAction, BOUNDLINE_DIR_RELATIVE, CanonInitAssistantHost,
     ConfigFile, DocsExportFileStatus, DocsExportPlanEntry, EXECUTION_PROFILE_FILE_NAME,
     FileConfigStore, InitCommandError, InitConfigScope, InitPreferenceOverrides, InitRequest,
     PlannedHygieneEntry, PlannedIdeEntry, ProviderEnvTemplateScope, ResolvedInitInputs,
     ScaffoldFileStatus, apply_init_preferences, apply_requested_domain_templates,
-    assets_for_assistants, build_workspace_scaffold_manifest, canon_workspace_planned_changes,
+    apply_requested_semantic_index_hook_action, assets_for_assistants,
+    build_workspace_scaffold_manifest, canon_workspace_planned_changes,
     collect_workspace_scaffold_artifacts, docs_assets_for_assistants,
     docs_assets_for_assistants_under, load_scaffold_manifest, plan_assistant_setup,
     plan_docs_export, plan_docs_setup, plan_ide_setup, plan_workspace_hygiene_defaults,
@@ -133,6 +136,19 @@ pub(super) fn build_init_planned_changes(input: InitPlannedChangesInput<'_>) -> 
                 )
             }));
         }
+        let hygiene_files =
+            preview.hygiene_plan.iter().filter(|entry| entry.action.status != "skipped").count();
+        if hygiene_files > 0 {
+            planned.push(format!("- apply workspace hygiene defaults ({hygiene_files} file(s))"));
+        }
+        if preview.hygiene_plan.iter().any(|entry| {
+            entry.action.sources.iter().any(|source| source == DERIVED_INDEX_HYGIENE_SOURCE)
+        }) {
+            planned.push(
+                "- keep the derived retrieval index, manifest, and SQLite WAL/SHM sidecars disposable"
+                    .to_string(),
+            );
+        }
         if workspace_canon_selected && let Some(workspace) = workspace {
             planned.extend(canon_workspace_planned_changes(workspace, canon_init_assistant));
         }
@@ -191,6 +207,10 @@ pub(super) fn prepare_workspace_init_preview(
     apply_requested_domain_templates(
         &mut local_config.routing.domain_templates,
         resolved.requested_domain_templates.clone(),
+    );
+    apply_requested_semantic_index_hook_action(
+        &mut local_config,
+        request.semantic_index_hook_action,
     );
     local_config
         .routing

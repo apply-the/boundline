@@ -1,7 +1,8 @@
 //! Typed advanced-context intelligence models shared by planning, runtime,
 //! session projections, and trace inspection.
 
-use serde::{Deserialize, Serialize};
+use serde::ser::SerializeStruct;
+use serde::{Deserialize, Serialize, Serializer};
 use thiserror::Error;
 
 use crate::domain::governance::CanonSemanticProvenanceBoundary;
@@ -76,6 +77,11 @@ pub enum RetrievalIndexState {
     Stale,
     Building,
     Insufficient,
+    Missing,
+    Incompatible,
+    Degraded,
+    Corrupt,
+    SemanticUnavailable,
 }
 
 impl RetrievalIndexState {
@@ -86,6 +92,11 @@ impl RetrievalIndexState {
             Self::Stale => "stale",
             Self::Building => "building",
             Self::Insufficient => "insufficient",
+            Self::Missing => "missing",
+            Self::Incompatible => "incompatible",
+            Self::Degraded => "degraded",
+            Self::Corrupt => "corrupt",
+            Self::SemanticUnavailable => "semantic_unavailable",
         }
     }
 }
@@ -113,9 +124,11 @@ impl SemanticPolicyState {
 #[serde(rename_all = "snake_case")]
 pub enum SemanticCapabilityState {
     Ready,
+    #[serde(alias = "missing")]
     Unavailable,
     Unsupported,
     Degraded,
+    Corrupt,
 }
 
 impl SemanticCapabilityState {
@@ -126,6 +139,27 @@ impl SemanticCapabilityState {
             Self::Unavailable => "unavailable",
             Self::Unsupported => "unsupported",
             Self::Degraded => "degraded",
+            Self::Corrupt => "corrupt",
+        }
+    }
+}
+
+/// Effective semantic engine recorded for one derived index or retrieval surface.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SemanticEngine {
+    Disabled,
+    BaselineJson,
+    SqliteVec,
+}
+
+impl SemanticEngine {
+    /// Returns the stable serialization label for this semantic engine state.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Disabled => "disabled",
+            Self::BaselineJson => "baseline_json",
+            Self::SqliteVec => "sqlite_vec",
         }
     }
 }
@@ -162,6 +196,8 @@ pub enum SemanticChunkState {
     Ready,
     Stale,
     Blocked,
+    Deleted,
+    MissingVector,
 }
 
 impl SemanticChunkState {
@@ -172,6 +208,8 @@ impl SemanticChunkState {
             Self::Ready => "ready",
             Self::Stale => "stale",
             Self::Blocked => "blocked",
+            Self::Deleted => "deleted",
+            Self::MissingVector => "missing_vector",
         }
     }
 }
@@ -184,6 +222,8 @@ pub enum VectorExtensionState {
     Missing,
     Unsupported,
     Stale,
+    Degraded,
+    Corrupt,
 }
 
 impl VectorExtensionState {
@@ -194,6 +234,204 @@ impl VectorExtensionState {
             Self::Missing => "missing",
             Self::Unsupported => "unsupported",
             Self::Stale => "stale",
+            Self::Degraded => "degraded",
+            Self::Corrupt => "corrupt",
+        }
+    }
+}
+
+/// Lightweight FTS5 health recorded in the derived-index manifest.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ManifestFtsState {
+    Ready,
+    Missing,
+    Corrupt,
+}
+
+impl ManifestFtsState {
+    /// Returns the stable serialization label for this FTS5 manifest state.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Ready => "ready",
+            Self::Missing => "missing",
+            Self::Corrupt => "corrupt",
+        }
+    }
+}
+
+/// Refresh reason recorded in the manifest after one bounded index operation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IndexRefreshReason {
+    ManualRefresh,
+    Rebuild,
+    SchemaChange,
+    BranchChange,
+    ConfigChange,
+    ChunkerChange,
+    CapabilityChange,
+    DoctorRepair,
+}
+
+impl IndexRefreshReason {
+    /// Returns the stable serialization label for this refresh reason.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::ManualRefresh => "manual_refresh",
+            Self::Rebuild => "rebuild",
+            Self::SchemaChange => "schema_change",
+            Self::BranchChange => "branch_change",
+            Self::ConfigChange => "config_change",
+            Self::ChunkerChange => "chunker_change",
+            Self::CapabilityChange => "capability_change",
+            Self::DoctorRepair => "doctor_repair",
+        }
+    }
+}
+
+/// Freshness reason recorded when the derived index becomes stale.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IndexStaleReason {
+    GitHeadChanged,
+    BranchCheckout,
+    Merge,
+    PullWithMerge,
+    Rebase,
+    PostRewrite,
+    HookMarkedStale,
+}
+
+impl IndexStaleReason {
+    /// Returns the stable serialization label for this stale reason.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::GitHeadChanged => "git_head_changed",
+            Self::BranchCheckout => "branch_checkout",
+            Self::Merge => "merge",
+            Self::PullWithMerge => "pull_with_merge",
+            Self::Rebase => "rebase",
+            Self::PostRewrite => "post_rewrite",
+            Self::HookMarkedStale => "hook_marked_stale",
+        }
+    }
+}
+
+/// Presence state for one indexed source snapshot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SourcePresenceState {
+    Present,
+    Deleted,
+    Skipped,
+}
+
+impl SourcePresenceState {
+    /// Returns the stable serialization label for this source presence state.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Present => "present",
+            Self::Deleted => "deleted",
+            Self::Skipped => "skipped",
+        }
+    }
+}
+
+/// Compatibility outcome for one indexed source snapshot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SourceDigestCompatibilityState {
+    Compatible,
+    Excluded,
+    Unsupported,
+    Blocked,
+}
+
+impl SourceDigestCompatibilityState {
+    /// Returns the stable serialization label for this source-digest compatibility state.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Compatible => "compatible",
+            Self::Excluded => "excluded",
+            Self::Unsupported => "unsupported",
+            Self::Blocked => "blocked",
+        }
+    }
+}
+
+/// Health state for one persisted vector row inside the derived index.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SemanticVectorState {
+    Ready,
+    Missing,
+    Stale,
+    DimensionMismatch,
+    Corrupt,
+}
+
+impl SemanticVectorState {
+    /// Returns the stable serialization label for this semantic vector state.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Ready => "ready",
+            Self::Missing => "missing",
+            Self::Stale => "stale",
+            Self::DimensionMismatch => "dimension_mismatch",
+            Self::Corrupt => "corrupt",
+        }
+    }
+}
+
+/// Command name recorded for one derived-index lifecycle operation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IndexMaintenanceCommand {
+    Status,
+    Refresh,
+    Rebuild,
+    Clean,
+    Doctor,
+}
+
+impl IndexMaintenanceCommand {
+    /// Returns the stable serialization label for this maintenance command.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Status => "status",
+            Self::Refresh => "refresh",
+            Self::Rebuild => "rebuild",
+            Self::Clean => "clean",
+            Self::Doctor => "doctor",
+        }
+    }
+}
+
+/// Trigger source recorded for one derived-index lifecycle operation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IndexMaintenanceTrigger {
+    Manual,
+    PostCheckout,
+    PostMerge,
+    PostRewrite,
+    SchemaChange,
+    ConfigChange,
+    CapabilityChange,
+}
+
+impl IndexMaintenanceTrigger {
+    /// Returns the stable serialization label for this maintenance trigger.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Manual => "manual",
+            Self::PostCheckout => "post_checkout",
+            Self::PostMerge => "post_merge",
+            Self::PostRewrite => "post_rewrite",
+            Self::SchemaChange => "schema_change",
+            Self::ConfigChange => "config_change",
+            Self::CapabilityChange => "capability_change",
         }
     }
 }
@@ -296,8 +534,11 @@ impl RetrievalMatchOrigin {
 #[serde(rename_all = "snake_case")]
 pub enum SemanticTraceEventKind {
     CapabilityEvaluated,
+    ExtensionLoadAttempted,
     IndexRefreshed,
     ChunkBlocked,
+    VectorQueryExecuted,
+    VectorCandidatesReturned,
     CandidateExpanded,
     CandidateReranked,
     CandidateRejected,
@@ -311,8 +552,11 @@ impl SemanticTraceEventKind {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::CapabilityEvaluated => "capability_evaluated",
+            Self::ExtensionLoadAttempted => "extension_load_attempted",
             Self::IndexRefreshed => "index_refreshed",
             Self::ChunkBlocked => "chunk_blocked",
+            Self::VectorQueryExecuted => "vector_query_executed",
+            Self::VectorCandidatesReturned => "vector_candidates_returned",
             Self::CandidateExpanded => "candidate_expanded",
             Self::CandidateReranked => "candidate_reranked",
             Self::CandidateRejected => "candidate_rejected",
@@ -641,7 +885,7 @@ impl RetrievalBudgets {
 }
 
 /// One candidate surfaced or rejected during advanced-context retrieval.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct RetrievedEvidenceCandidate {
     pub candidate_id: String,
     pub source_kind: RetrievalSourceKind,
@@ -699,6 +943,49 @@ impl RetrievedEvidenceCandidate {
             });
         }
         Ok(())
+    }
+
+    /// Returns the collapsed chunk count when the semantic path selected or rejected this source.
+    pub const fn collapsed_from_chunk_count(&self) -> Option<usize> {
+        match self.match_origin {
+            RetrievalMatchOrigin::SemanticExpand | RetrievalMatchOrigin::SemanticRerank => Some(1),
+            RetrievalMatchOrigin::Fts | RetrievalMatchOrigin::StructuredFallback => None,
+        }
+    }
+}
+
+impl Serialize for RetrievedEvidenceCandidate {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("RetrievedEvidenceCandidate", 14)?;
+        state.serialize_field("candidate_id", &self.candidate_id)?;
+        state.serialize_field("source_kind", &self.source_kind)?;
+        state.serialize_field("source_ref", &self.source_ref)?;
+        state.serialize_field("authority_rank", &self.authority_rank)?;
+        state.serialize_field("match_origin", &self.match_origin)?;
+        state.serialize_field("selection_state", &self.selection_state)?;
+        state.serialize_field("selection_reason", &self.selection_reason)?;
+        state.serialize_field("provenance_summary", &self.provenance_summary)?;
+        state.serialize_field("compatibility_state", &self.compatibility_state)?;
+        state.serialize_field("staleness_state", &self.staleness_state)?;
+        if let Some(lexical_score) = self.lexical_score {
+            state.serialize_field("lexical_score", &lexical_score)?;
+        }
+        if let Some(semantic_score) = self.semantic_score {
+            state.serialize_field("semantic_score", &semantic_score)?;
+        }
+        if let Some(contract_line) = self.canon_semantic_contract_line.as_ref() {
+            state.serialize_field("canon_semantic_contract_line", contract_line)?;
+        }
+        if let Some(provenance_ref) = self.canon_semantic_provenance_ref.as_ref() {
+            state.serialize_field("canon_semantic_provenance_ref", provenance_ref)?;
+        }
+        if let Some(collapsed_count) = self.collapsed_from_chunk_count() {
+            state.serialize_field("collapsed_from_chunk_count", &collapsed_count)?;
+        }
+        state.end()
     }
 }
 
@@ -777,8 +1064,414 @@ impl ImpactAnalysisFinding {
     }
 }
 
-/// Persisted projection of one advanced-context retrieval decision.
+/// Companion manifest persisted next to the derived retrieval index.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DerivedIndexManifest {
+    pub schema_version: String,
+    pub workspace_root: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub git_branch: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub git_head: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_seen_head: Option<String>,
+    pub index_status: RetrievalIndexState,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_refresh_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_refresh_reason: Option<IndexRefreshReason>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stale_reason: Option<IndexStaleReason>,
+    pub file_count: usize,
+    pub chunk_count: usize,
+    pub fts5_state: ManifestFtsState,
+    pub sqlite_vec_state: VectorExtensionState,
+    pub semantic_engine: SemanticEngine,
+    pub workspace_fingerprint: String,
+    pub config_fingerprint: String,
+    pub chunker_fingerprint: String,
+    pub embedding_model_fingerprint: String,
+}
+
+impl DerivedIndexManifest {
+    /// Validates one derived-index manifest before it is persisted or projected.
+    pub fn validate(&self) -> Result<(), ContextIntelligenceError> {
+        if self.schema_version.trim().is_empty() {
+            return Err(ContextIntelligenceError::MissingManifestSchemaVersion);
+        }
+        if self.workspace_root.trim().is_empty() {
+            return Err(ContextIntelligenceError::MissingManifestWorkspaceRoot);
+        }
+        if self.workspace_fingerprint.trim().is_empty() {
+            return Err(ContextIntelligenceError::MissingManifestWorkspaceFingerprint);
+        }
+        if self.config_fingerprint.trim().is_empty() {
+            return Err(ContextIntelligenceError::MissingManifestConfigFingerprint);
+        }
+        if self.chunker_fingerprint.trim().is_empty() {
+            return Err(ContextIntelligenceError::MissingManifestChunkerFingerprint);
+        }
+        if self.embedding_model_fingerprint.trim().is_empty() {
+            return Err(ContextIntelligenceError::MissingManifestEmbeddingFingerprint);
+        }
+        if self.index_status == RetrievalIndexState::Ready
+            && self.fts5_state != ManifestFtsState::Ready
+        {
+            return Err(ContextIntelligenceError::InvalidReadyManifestFtsState {
+                fts5_state: self.fts5_state,
+            });
+        }
+        if self.semantic_engine == SemanticEngine::SqliteVec
+            && self.sqlite_vec_state != VectorExtensionState::Ready
+        {
+            return Err(ContextIntelligenceError::InvalidSqliteVecManifestState {
+                sqlite_vec_state: self.sqlite_vec_state,
+            });
+        }
+        Ok(())
+    }
+
+    /// Returns true when a cheap HEAD probe shows the manifest is stale.
+    pub fn head_is_stale(&self) -> bool {
+        matches!(
+            (&self.git_head, &self.last_seen_head),
+            (Some(git_head), Some(last_seen_head)) if git_head != last_seen_head
+        )
+    }
+
+    /// Returns the most specific stale reason that can be derived cheaply.
+    pub fn effective_stale_reason(&self) -> Option<IndexStaleReason> {
+        self.stale_reason.or_else(|| {
+            if self.head_is_stale() {
+                Some(IndexStaleReason::GitHeadChanged)
+            } else if self.index_status == RetrievalIndexState::Stale {
+                Some(IndexStaleReason::HookMarkedStale)
+            } else {
+                None
+            }
+        })
+    }
+
+    /// Returns true when the next manifest shape requires a rebuild instead of reuse.
+    pub fn requires_rebuild_against(&self, next_manifest: &Self) -> bool {
+        self.schema_version != next_manifest.schema_version
+            || self.workspace_root != next_manifest.workspace_root
+            || self.config_fingerprint != next_manifest.config_fingerprint
+            || self.chunker_fingerprint != next_manifest.chunker_fingerprint
+            || self.embedding_model_fingerprint != next_manifest.embedding_model_fingerprint
+    }
+}
+
+/// Indexed digest snapshot for one eligible source.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SourceDigestRecord {
+    pub source_ref: String,
+    pub source_kind: RetrievalSourceKind,
+    pub content_hash: String,
+    pub compatibility_state: SourceDigestCompatibilityState,
+    pub authority_rank: AuthorityRank,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_indexed_at: Option<String>,
+    pub chunk_count: usize,
+    pub source_presence_state: SourcePresenceState,
+}
+
+impl SourceDigestRecord {
+    /// Validates one indexed source digest record.
+    pub fn validate(&self) -> Result<(), ContextIntelligenceError> {
+        if self.source_ref.trim().is_empty() {
+            return Err(ContextIntelligenceError::MissingSourceDigestRef);
+        }
+        if self.content_hash.trim().is_empty() {
+            return Err(ContextIntelligenceError::MissingSourceDigestHash {
+                source_ref: self.source_ref.clone(),
+            });
+        }
+        if self.source_presence_state == SourcePresenceState::Deleted && self.chunk_count != 0 {
+            return Err(ContextIntelligenceError::InvalidDeletedSourceChunkCount {
+                source_ref: self.source_ref.clone(),
+                chunk_count: self.chunk_count,
+            });
+        }
+        Ok(())
+    }
+}
+
+/// Stable chunk metadata persisted for one source-level evidence fragment.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SemanticChunkRecord {
+    pub chunk_id: String,
+    pub source_ref: String,
+    pub chunk_ordinal: usize,
+    pub chunk_range: String,
+    pub provenance_boundary: String,
+    pub provenance_ref: String,
+    pub content_hash: String,
+    pub chunk_state: SemanticChunkState,
+    pub embedding_dimensions: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub canon_semantic_contract_line: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub semantic_labels: Vec<String>,
+}
+
+impl SemanticChunkRecord {
+    /// Returns the stable chunk identifier for one source ref and chunk ordinal.
+    pub fn stable_chunk_id(source_ref: &str, chunk_ordinal: usize) -> String {
+        format!("semantic:{source_ref}:{chunk_ordinal}")
+    }
+
+    /// Validates one persisted semantic chunk record.
+    pub fn validate(&self) -> Result<(), ContextIntelligenceError> {
+        if self.chunk_id.trim().is_empty() {
+            return Err(ContextIntelligenceError::MissingSemanticChunkId);
+        }
+        if self.source_ref.trim().is_empty() {
+            return Err(ContextIntelligenceError::MissingSemanticChunkSourceRef {
+                chunk_id: self.chunk_id.clone(),
+            });
+        }
+        if self.chunk_range.trim().is_empty() {
+            return Err(ContextIntelligenceError::MissingSemanticChunkRange {
+                chunk_id: self.chunk_id.clone(),
+            });
+        }
+        if self.provenance_boundary.trim().is_empty() {
+            return Err(ContextIntelligenceError::MissingSemanticChunkBoundary {
+                chunk_id: self.chunk_id.clone(),
+            });
+        }
+        if self.provenance_ref.trim().is_empty() {
+            return Err(ContextIntelligenceError::MissingSemanticChunkProvenanceRef {
+                chunk_id: self.chunk_id.clone(),
+            });
+        }
+        if self.content_hash.trim().is_empty() {
+            return Err(ContextIntelligenceError::MissingSemanticChunkHash {
+                chunk_id: self.chunk_id.clone(),
+            });
+        }
+        let expected_chunk_id = Self::stable_chunk_id(&self.source_ref, self.chunk_ordinal);
+        if self.chunk_id != expected_chunk_id {
+            return Err(ContextIntelligenceError::InvalidSemanticChunkId {
+                chunk_id: self.chunk_id.clone(),
+                expected_chunk_id,
+            });
+        }
+        if self.embedding_dimensions == 0 {
+            return Err(ContextIntelligenceError::InvalidSemanticChunkDimensions {
+                chunk_id: self.chunk_id.clone(),
+            });
+        }
+        Ok(())
+    }
+}
+
+/// Vector row metadata persisted for one semantic chunk.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SemanticVectorRecord {
+    pub chunk_id: String,
+    pub vector_schema_line: String,
+    pub embedding_dimensions: usize,
+    pub write_generation: u64,
+    pub vector_state: SemanticVectorState,
+}
+
+impl SemanticVectorRecord {
+    /// Validates one persisted semantic vector record.
+    pub fn validate(&self) -> Result<(), ContextIntelligenceError> {
+        if self.chunk_id.trim().is_empty() {
+            return Err(ContextIntelligenceError::MissingSemanticVectorChunkId);
+        }
+        if self.vector_schema_line.trim().is_empty() {
+            return Err(ContextIntelligenceError::MissingSemanticVectorSchemaLine {
+                chunk_id: self.chunk_id.clone(),
+            });
+        }
+        if self.embedding_dimensions == 0 {
+            return Err(ContextIntelligenceError::InvalidSemanticVectorDimensions {
+                chunk_id: self.chunk_id.clone(),
+            });
+        }
+        Ok(())
+    }
+}
+
+/// Operator-visible lifecycle operation over the derived index.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IndexMaintenanceOperation {
+    pub operation_id: String,
+    pub command_name: IndexMaintenanceCommand,
+    pub trigger: IndexMaintenanceTrigger,
+    pub pre_state: RetrievalIndexState,
+    pub post_state: RetrievalIndexState,
+    pub sources_scanned: usize,
+    pub chunks_upserted: usize,
+    pub chunks_deleted: usize,
+    pub vector_rows_written: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fallback_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recommended_action: Option<String>,
+}
+
+impl IndexMaintenanceOperation {
+    /// Validates one derived-index lifecycle operation snapshot.
+    pub fn validate(&self) -> Result<(), ContextIntelligenceError> {
+        if self.operation_id.trim().is_empty() {
+            return Err(ContextIntelligenceError::MissingIndexOperationId);
+        }
+        if self.command_name == IndexMaintenanceCommand::Status
+            && self.pre_state == RetrievalIndexState::Missing
+            && self.post_state == RetrievalIndexState::Ready
+        {
+            return Err(ContextIntelligenceError::InvalidStatusOperationStateTransition);
+        }
+        if self.post_state != RetrievalIndexState::Ready
+            && self.recommended_action.as_deref().map(str::trim).unwrap_or_default().is_empty()
+        {
+            return Err(ContextIntelligenceError::MissingIndexOperationRecommendedAction {
+                operation_id: self.operation_id.clone(),
+            });
+        }
+        Ok(())
+    }
+}
+
+/// Serialized operator-facing report for one derived-index lifecycle command.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IndexLifecycleReport {
+    pub command: IndexMaintenanceCommand,
+    pub workspace_root: String,
+    pub operation_id: String,
+    pub pre_state: RetrievalIndexState,
+    pub post_state: RetrievalIndexState,
+    pub recommended_action: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stale_reason: Option<IndexStaleReason>,
+    #[serde(default)]
+    pub warnings: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub manifest: Option<DerivedIndexManifest>,
+}
+
+impl IndexLifecycleReport {
+    /// Validates one serialized lifecycle report before it is emitted.
+    pub fn validate(&self) -> Result<(), ContextIntelligenceError> {
+        if self.workspace_root.trim().is_empty() {
+            return Err(ContextIntelligenceError::MissingIndexLifecycleWorkspaceRoot);
+        }
+        if self.operation_id.trim().is_empty() {
+            return Err(ContextIntelligenceError::MissingIndexLifecycleOperationId);
+        }
+        if self.recommended_action.trim().is_empty() {
+            return Err(ContextIntelligenceError::MissingIndexLifecycleRecommendedAction);
+        }
+        if self.post_state == RetrievalIndexState::Stale && self.stale_reason.is_none() {
+            return Err(ContextIntelligenceError::MissingIndexLifecycleStaleReason);
+        }
+        Ok(())
+    }
+}
+
+/// Status for one derived-index doctor report or check.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IndexDoctorStatus {
+    Passed,
+    Advisory,
+    Failed,
+}
+
+impl IndexDoctorStatus {
+    /// Returns the stable serialization label for this doctor status.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Passed => "passed",
+            Self::Advisory => "advisory",
+            Self::Failed => "failed",
+        }
+    }
+}
+
+/// Consistency state for one derived-index artifact inspected by `index doctor`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IndexDoctorConsistencyState {
+    Consistent,
+    Missing,
+    Corrupt,
+    Invalid,
+}
+
+impl IndexDoctorConsistencyState {
+    /// Returns the stable serialization label for this doctor consistency state.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Consistent => "consistent",
+            Self::Missing => "missing",
+            Self::Corrupt => "corrupt",
+            Self::Invalid => "invalid",
+        }
+    }
+}
+
+/// One operator-facing doctor check result.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IndexDoctorCheck {
+    pub check_name: String,
+    pub result: IndexDoctorStatus,
+    pub detail: String,
+    pub suggested_fix: String,
+}
+
+impl IndexDoctorCheck {
+    /// Validates one serialized doctor check before it is emitted.
+    pub fn validate(&self) -> Result<(), ContextIntelligenceError> {
+        if self.check_name.trim().is_empty() {
+            return Err(ContextIntelligenceError::MissingIndexDoctorCheckName);
+        }
+        if self.detail.trim().is_empty() {
+            return Err(ContextIntelligenceError::MissingIndexDoctorCheckDetail {
+                check_name: self.check_name.clone(),
+            });
+        }
+        if self.suggested_fix.trim().is_empty() {
+            return Err(ContextIntelligenceError::MissingIndexDoctorCheckSuggestedFix {
+                check_name: self.check_name.clone(),
+            });
+        }
+        Ok(())
+    }
+}
+
+/// Serialized operator-facing report for one derived-index doctor command.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IndexDoctorReport {
+    pub status: IndexDoctorStatus,
+    pub checks: Vec<IndexDoctorCheck>,
+    pub tracked_index_files: Vec<String>,
+    pub missing_ignore_rules: Vec<String>,
+    pub wal_sidecars_present: bool,
+    pub manifest_consistency: IndexDoctorConsistencyState,
+    pub vector_schema_consistency: IndexDoctorConsistencyState,
+}
+
+impl IndexDoctorReport {
+    /// Validates one serialized doctor report before it is emitted.
+    pub fn validate(&self) -> Result<(), ContextIntelligenceError> {
+        if self.checks.is_empty() {
+            return Err(ContextIntelligenceError::MissingIndexDoctorChecks);
+        }
+        for check in &self.checks {
+            check.validate()?;
+        }
+        Ok(())
+    }
+}
+
+/// Persisted projection of one advanced-context retrieval decision.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct AdvancedContextProjection {
     pub query_id: String,
     pub retrieval_mode: RetrievalMode,
@@ -849,6 +1542,64 @@ impl AdvancedContextProjection {
     /// Returns the impact-finding count recorded in this projection.
     pub fn impact_finding_count(&self) -> usize {
         self.impact_findings.len()
+    }
+
+    /// Returns the contract-facing semantic capability label for compact status surfaces.
+    pub const fn semantic_capability_contract_label(&self) -> &'static str {
+        match self.semantic_capability_state {
+            SemanticCapabilityState::Unavailable => "missing",
+            SemanticCapabilityState::Ready => "ready",
+            SemanticCapabilityState::Unsupported => "unsupported",
+            SemanticCapabilityState::Degraded => "degraded",
+            SemanticCapabilityState::Corrupt => "corrupt",
+        }
+    }
+
+    /// Returns the effective semantic engine surfaced to operators.
+    pub const fn semantic_engine(&self) -> SemanticEngine {
+        match self.semantic_policy_state {
+            SemanticPolicyState::Disabled => SemanticEngine::Disabled,
+            SemanticPolicyState::Local => match self.semantic_capability_state {
+                SemanticCapabilityState::Ready => SemanticEngine::SqliteVec,
+                SemanticCapabilityState::Unavailable
+                | SemanticCapabilityState::Unsupported
+                | SemanticCapabilityState::Degraded
+                | SemanticCapabilityState::Corrupt => SemanticEngine::BaselineJson,
+            },
+        }
+    }
+
+    /// Returns the number of vector queries attributed to this projection.
+    pub fn vector_query_count(&self) -> usize {
+        if self.semantic_policy_state == SemanticPolicyState::Disabled {
+            return 0;
+        }
+        if self.semantic_capability_state == SemanticCapabilityState::Ready
+            || self.semantic_selected_count() > 0
+            || self.semantic_rejected_count() > 0
+        {
+            1
+        } else {
+            0
+        }
+    }
+
+    /// Returns the number of chunk candidates surfaced before source-level collapse.
+    pub fn vector_candidates_returned(&self) -> usize {
+        self.semantic_selected_count() + self.semantic_rejected_count()
+    }
+
+    /// Returns the explicit semantic fallback reason when the preferred vector path did not win.
+    pub fn semantic_fallback_reason(&self) -> Option<&str> {
+        if self.semantic_policy_state == SemanticPolicyState::Disabled {
+            return None;
+        }
+        if self.semantic_capability_state != SemanticCapabilityState::Ready
+            || matches!(self.hybrid_outcome, HybridOutcome::Fallback | HybridOutcome::Skipped)
+        {
+            return self.terminal_reason.as_deref();
+        }
+        None
     }
 
     fn validate_semantic_consistency(&self) -> Result<(), ContextIntelligenceError> {
@@ -922,6 +1673,50 @@ impl AdvancedContextProjection {
     }
 }
 
+impl Serialize for AdvancedContextProjection {
+    #[rustfmt::skip]
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { let mut state = serializer.serialize_struct("AdvancedContextProjection", 19)?;
+        state.serialize_field("query_id", &self.query_id)?;
+        state.serialize_field("retrieval_mode", &self.retrieval_mode)?;
+        state.serialize_field("retrieval_state", &self.retrieval_state)?;
+        state.serialize_field("retrieval_index_state", &self.retrieval_index_state)?;
+        state.serialize_field("semantic_policy_state", &self.semantic_policy_state)?;
+        state.serialize_field(
+            "semantic_capability_state",
+            self.semantic_capability_contract_label(),
+        )?;
+        state.serialize_field("semantic_engine", &self.semantic_engine())?;
+        state.serialize_field("hybrid_outcome", &self.hybrid_outcome)?;
+        state.serialize_field("vector_query_count", &self.vector_query_count())?;
+        state.serialize_field("vector_candidates_returned", &self.vector_candidates_returned())?;
+        if let Some(fallback_reason) = self.semantic_fallback_reason() {
+            state.serialize_field("semantic_fallback_reason", fallback_reason)?;
+        }
+        state.serialize_field("budgets", &self.budgets)?;
+        state.serialize_field("remote_policy_state", &self.remote_policy_state)?;
+        state.serialize_field("used_remote", &self.used_remote)?;
+        if let Some(terminal_reason) = self.terminal_reason.as_ref() {
+            state.serialize_field("terminal_reason", terminal_reason)?;
+        }
+        if !self.selected_evidence.is_empty() {
+            state.serialize_field("selected_evidence", &self.selected_evidence)?;
+        }
+        if !self.rejected_candidates.is_empty() {
+            state.serialize_field("rejected_candidates", &self.rejected_candidates)?;
+        }
+        if !self.semantic_trace_records.is_empty() {
+            state.serialize_field("semantic_trace_records", &self.semantic_trace_records)?;
+        }
+        if !self.relationships.is_empty() {
+            state.serialize_field("relationships", &self.relationships)?;
+        }
+        if !self.impact_findings.is_empty() {
+            state.serialize_field("impact_findings", &self.impact_findings)?;
+        }
+        state.end()
+    }
+}
+
 const fn default_semantic_policy_state() -> SemanticPolicyState {
     SemanticPolicyState::Disabled
 }
@@ -965,6 +1760,80 @@ pub enum ContextIntelligenceError {
     UnexpectedRemoteUsage,
     #[error("advanced context projection reported remote usage while policy blocked transmission")]
     BlockedRemoteUsage,
+    #[error("derived index manifest requires a schema version")]
+    MissingManifestSchemaVersion,
+    #[error("derived index manifest requires a workspace root")]
+    MissingManifestWorkspaceRoot,
+    #[error("derived index manifest requires a workspace fingerprint")]
+    MissingManifestWorkspaceFingerprint,
+    #[error("derived index manifest requires a config fingerprint")]
+    MissingManifestConfigFingerprint,
+    #[error("derived index manifest requires a chunker fingerprint")]
+    MissingManifestChunkerFingerprint,
+    #[error("derived index manifest requires an embedding-model fingerprint")]
+    MissingManifestEmbeddingFingerprint,
+    #[error(
+        "derived index manifest cannot report ready while FTS5 state is `{}`",
+        fts5_state.as_str()
+    )]
+    InvalidReadyManifestFtsState { fts5_state: ManifestFtsState },
+    #[error(
+        "derived index manifest cannot report sqlite_vec engine while vector state is `{}`",
+        sqlite_vec_state.as_str()
+    )]
+    InvalidSqliteVecManifestState { sqlite_vec_state: VectorExtensionState },
+    #[error("source digest record requires a source ref")]
+    MissingSourceDigestRef,
+    #[error("source digest `{source_ref}` requires a content hash")]
+    MissingSourceDigestHash { source_ref: String },
+    #[error("source digest `{source_ref}` cannot stay deleted while chunk_count is {chunk_count}")]
+    InvalidDeletedSourceChunkCount { source_ref: String, chunk_count: usize },
+    #[error("semantic chunk record requires a chunk id")]
+    MissingSemanticChunkId,
+    #[error("semantic chunk `{chunk_id}` requires a source ref")]
+    MissingSemanticChunkSourceRef { chunk_id: String },
+    #[error("semantic chunk `{chunk_id}` requires a chunk range")]
+    MissingSemanticChunkRange { chunk_id: String },
+    #[error("semantic chunk `{chunk_id}` requires a provenance boundary")]
+    MissingSemanticChunkBoundary { chunk_id: String },
+    #[error("semantic chunk `{chunk_id}` requires a provenance ref")]
+    MissingSemanticChunkProvenanceRef { chunk_id: String },
+    #[error("semantic chunk `{chunk_id}` requires a content hash")]
+    MissingSemanticChunkHash { chunk_id: String },
+    #[error("semantic chunk `{chunk_id}` must match the stable chunk id `{expected_chunk_id}`")]
+    InvalidSemanticChunkId { chunk_id: String, expected_chunk_id: String },
+    #[error("semantic chunk `{chunk_id}` requires embedding dimensions greater than zero")]
+    InvalidSemanticChunkDimensions { chunk_id: String },
+    #[error("semantic vector record requires a chunk id")]
+    MissingSemanticVectorChunkId,
+    #[error("semantic vector record `{chunk_id}` requires a schema line")]
+    MissingSemanticVectorSchemaLine { chunk_id: String },
+    #[error("semantic vector record `{chunk_id}` requires embedding dimensions greater than zero")]
+    InvalidSemanticVectorDimensions { chunk_id: String },
+    #[error("index maintenance operation requires an id")]
+    MissingIndexOperationId,
+    #[error("index status cannot report a missing->ready mutation without a refresh or rebuild")]
+    InvalidStatusOperationStateTransition,
+    #[error(
+        "index maintenance operation `{operation_id}` requires a recommended action for non-ready post states"
+    )]
+    MissingIndexOperationRecommendedAction { operation_id: String },
+    #[error("index lifecycle report requires a workspace root")]
+    MissingIndexLifecycleWorkspaceRoot,
+    #[error("index lifecycle report requires an operation id")]
+    MissingIndexLifecycleOperationId,
+    #[error("index lifecycle report requires a recommended action")]
+    MissingIndexLifecycleRecommendedAction,
+    #[error("index lifecycle report requires a stale reason when post_state is stale")]
+    MissingIndexLifecycleStaleReason,
+    #[error("index doctor report requires at least one check")]
+    MissingIndexDoctorChecks,
+    #[error("index doctor check requires a check name")]
+    MissingIndexDoctorCheckName,
+    #[error("index doctor check `{check_name}` requires a detail")]
+    MissingIndexDoctorCheckDetail { check_name: String },
+    #[error("index doctor check `{check_name}` requires a suggested fix")]
+    MissingIndexDoctorCheckSuggestedFix { check_name: String },
     #[error("retrieval budget `{0}` must be greater than zero")]
     InvalidBudget(String),
     #[error("retrieved evidence candidate requires a candidate id")]
@@ -1023,11 +1892,14 @@ mod tests {
     use super::{
         AdvancedContextProjection, AuthorityRank, CandidateSelectionState,
         ContextIntelligenceError, HybridOutcome, ImpactAnalysisFinding, ImpactFindingKind,
-        ImpactFindingSeverity, ImpactFindingStatus, RemoteTransmissionPolicyState,
+        ImpactFindingSeverity, ImpactFindingStatus, IndexMaintenanceCommand,
+        IndexMaintenanceOperation, IndexMaintenanceTrigger, RemoteTransmissionPolicyState,
         RetrievalBudgets, RetrievalCompatibilityState, RetrievalIndexState, RetrievalMatchOrigin,
         RetrievalMode, RetrievalScore, RetrievalSourceKind, RetrievalStalenessState,
-        RetrievalState, RetrievedEvidenceCandidate, SemanticCapabilityState, SemanticPolicyState,
-        SemanticTraceEventKind, SemanticTraceRecord,
+        RetrievalState, RetrievedEvidenceCandidate, SemanticCapabilityState, SemanticChunkRecord,
+        SemanticChunkState, SemanticPolicyState, SemanticTraceEventKind, SemanticTraceRecord,
+        SemanticVectorRecord, SemanticVectorState, SourceDigestCompatibilityState,
+        SourceDigestRecord, SourcePresenceState,
     };
     use crate::domain::governance::CanonSemanticProvenanceBoundary;
 
@@ -1126,8 +1998,11 @@ mod tests {
     fn semantic_trace_helpers_cover_event_labels_and_validation_edges() {
         for (event_kind, label, requires_candidate_ref) in [
             (SemanticTraceEventKind::CapabilityEvaluated, "capability_evaluated", false),
+            (SemanticTraceEventKind::ExtensionLoadAttempted, "extension_load_attempted", false),
             (SemanticTraceEventKind::IndexRefreshed, "index_refreshed", false),
             (SemanticTraceEventKind::ChunkBlocked, "chunk_blocked", true),
+            (SemanticTraceEventKind::VectorQueryExecuted, "vector_query_executed", false),
+            (SemanticTraceEventKind::VectorCandidatesReturned, "vector_candidates_returned", false),
             (SemanticTraceEventKind::CandidateExpanded, "candidate_expanded", true),
             (SemanticTraceEventKind::CandidateReranked, "candidate_reranked", true),
             (SemanticTraceEventKind::CandidateRejected, "candidate_rejected", true),
@@ -1304,5 +2179,167 @@ mod tests {
             blocked_remote.validate(),
             Err(ContextIntelligenceError::BlockedRemoteUsage)
         ));
+    }
+
+    #[test]
+    fn digest_chunk_vector_and_operation_validators_cover_remaining_error_paths() {
+        assert_eq!(
+            SourceDigestRecord {
+                source_ref: "src/lib.rs".to_string(),
+                source_kind: RetrievalSourceKind::WorkspaceFile,
+                content_hash: "sha256:abc".to_string(),
+                compatibility_state: SourceDigestCompatibilityState::Compatible,
+                authority_rank: AuthorityRank::Structured,
+                last_indexed_at: None,
+                chunk_count: 1,
+                source_presence_state: SourcePresenceState::Deleted,
+            }
+            .validate(),
+            Err(ContextIntelligenceError::InvalidDeletedSourceChunkCount {
+                source_ref: "src/lib.rs".to_string(),
+                chunk_count: 1,
+            })
+        );
+
+        assert_eq!(
+            SemanticChunkRecord {
+                chunk_id: SemanticChunkRecord::stable_chunk_id("src/lib.rs", 0),
+                source_ref: "src/lib.rs".to_string(),
+                chunk_ordinal: 0,
+                chunk_range: "1-3".to_string(),
+                provenance_boundary: CanonSemanticProvenanceBoundary::Surface.as_str().to_string(),
+                provenance_ref: "src/lib.rs".to_string(),
+                content_hash: "sha256:def".to_string(),
+                chunk_state: SemanticChunkState::Ready,
+                embedding_dimensions: 0,
+                canon_semantic_contract_line: None,
+                semantic_labels: Vec::new(),
+            }
+            .validate(),
+            Err(ContextIntelligenceError::InvalidSemanticChunkDimensions {
+                chunk_id: "semantic:src/lib.rs:0".to_string(),
+            })
+        );
+
+        assert_eq!(
+            SemanticVectorRecord {
+                chunk_id: "semantic:src/lib.rs:0".to_string(),
+                vector_schema_line: "sqlite_vec_v1".to_string(),
+                embedding_dimensions: 0,
+                write_generation: 1,
+                vector_state: SemanticVectorState::Ready,
+            }
+            .validate(),
+            Err(ContextIntelligenceError::InvalidSemanticVectorDimensions {
+                chunk_id: "semantic:src/lib.rs:0".to_string(),
+            })
+        );
+
+        assert_eq!(
+            IndexMaintenanceOperation {
+                operation_id: "operation-1".to_string(),
+                command_name: IndexMaintenanceCommand::Refresh,
+                trigger: IndexMaintenanceTrigger::Manual,
+                pre_state: RetrievalIndexState::Missing,
+                post_state: RetrievalIndexState::Stale,
+                sources_scanned: 1,
+                chunks_upserted: 0,
+                chunks_deleted: 0,
+                vector_rows_written: 0,
+                fallback_reason: None,
+                recommended_action: Some("  ".to_string()),
+            }
+            .validate(),
+            Err(ContextIntelligenceError::MissingIndexOperationRecommendedAction {
+                operation_id: "operation-1".to_string(),
+            })
+        );
+    }
+
+    #[test]
+    fn digest_chunk_vector_and_operation_validators_accept_valid_records() {
+        SourceDigestRecord {
+            source_ref: "src/lib.rs".to_string(),
+            source_kind: RetrievalSourceKind::WorkspaceFile,
+            content_hash: "sha256:abc".to_string(),
+            compatibility_state: SourceDigestCompatibilityState::Compatible,
+            authority_rank: AuthorityRank::Structured,
+            last_indexed_at: None,
+            chunk_count: 1,
+            source_presence_state: SourcePresenceState::Present,
+        }
+        .validate()
+        .unwrap();
+
+        SemanticChunkRecord {
+            chunk_id: SemanticChunkRecord::stable_chunk_id("src/lib.rs", 0),
+            source_ref: "src/lib.rs".to_string(),
+            chunk_ordinal: 0,
+            chunk_range: "1-3".to_string(),
+            provenance_boundary: CanonSemanticProvenanceBoundary::Surface.as_str().to_string(),
+            provenance_ref: "src/lib.rs".to_string(),
+            content_hash: "sha256:def".to_string(),
+            chunk_state: SemanticChunkState::Ready,
+            embedding_dimensions: 1536,
+            canon_semantic_contract_line: None,
+            semantic_labels: Vec::new(),
+        }
+        .validate()
+        .unwrap();
+
+        SemanticVectorRecord {
+            chunk_id: "semantic:src/lib.rs:0".to_string(),
+            vector_schema_line: "sqlite_vec_v1".to_string(),
+            embedding_dimensions: 1536,
+            write_generation: 1,
+            vector_state: SemanticVectorState::Ready,
+        }
+        .validate()
+        .unwrap();
+
+        IndexMaintenanceOperation {
+            operation_id: "operation-2".to_string(),
+            command_name: IndexMaintenanceCommand::Refresh,
+            trigger: IndexMaintenanceTrigger::Manual,
+            pre_state: RetrievalIndexState::Missing,
+            post_state: RetrievalIndexState::Ready,
+            sources_scanned: 1,
+            chunks_upserted: 1,
+            chunks_deleted: 0,
+            vector_rows_written: 1,
+            fallback_reason: None,
+            recommended_action: None,
+        }
+        .validate()
+        .unwrap();
+    }
+
+    #[test]
+    fn advanced_context_projection_custom_serializer_omits_empty_collections() {
+        let projection = AdvancedContextProjection {
+            query_id: "projection-serialize".to_string(),
+            retrieval_mode: RetrievalMode::Local,
+            retrieval_state: RetrievalState::Degraded,
+            retrieval_index_state: RetrievalIndexState::Degraded,
+            semantic_policy_state: SemanticPolicyState::Local,
+            semantic_capability_state: SemanticCapabilityState::Degraded,
+            hybrid_outcome: HybridOutcome::Skipped,
+            budgets: RetrievalBudgets::default(),
+            remote_policy_state: RemoteTransmissionPolicyState::LocalOnly,
+            used_remote: false,
+            terminal_reason: None,
+            selected_evidence: Vec::new(),
+            rejected_candidates: Vec::new(),
+            semantic_trace_records: Vec::new(),
+            relationships: Vec::new(),
+            impact_findings: Vec::new(),
+        };
+
+        let serialized = serde_json::to_value(&projection).unwrap();
+        let object = serialized.as_object().unwrap();
+        assert_eq!(object.get("semantic_capability_state"), Some(&serde_json::json!("degraded")));
+        assert_eq!(object.get("vector_query_count"), Some(&serde_json::json!(0)));
+        assert!(!object.contains_key("selected_evidence"));
+        assert!(!object.contains_key("impact_findings"));
     }
 }

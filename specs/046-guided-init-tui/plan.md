@@ -1,6 +1,6 @@
 # Implementation Plan: Guided Init TUI and Runtime Catalog
 
-**Branch**: `046-guided-init-tui` | **Date**: 2026-05-09 | **Spec**: [/Users/rt/workspace/apply-the/boundline/specs/046-guided-init-tui/spec.md](/Users/rt/workspace/apply-the/boundline/specs/046-guided-init-tui/spec.md)
+**Branch**: `046-guided-init-tui` | **Date**: 2026-05-09 | **Spec**: [specs/046-guided-init-tui/spec.md](specs/046-guided-init-tui/spec.md)
 **Input**: Feature specification from `/specs/046-guided-init-tui/spec.md`
 
 ## Summary

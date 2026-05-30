@@ -1,6 +1,6 @@
 # Implementation Plan: Authority-Zoned Delivery Councils
 
-**Branch**: `056-authority-zoned-councils` | **Date**: 2026-05-15 | **Spec**: [/Users/rt/workspace/apply-the/boundline/specs/056-authority-zoned-councils/spec.md](/Users/rt/workspace/apply-the/boundline/specs/056-authority-zoned-councils/spec.md)
+**Branch**: `056-authority-zoned-councils` | **Date**: 2026-05-15 | **Spec**: [specs/056-authority-zoned-councils/spec.md](specs/056-authority-zoned-councils/spec.md)
 **Input**: Feature specification from `/specs/056-authority-zoned-councils/spec.md`
 
 **Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.

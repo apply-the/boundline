@@ -1,6 +1,6 @@
 # Implementation Plan: Product Unification And Surface Closure
 
-**Branch**: `032-workflow-surface-closure` | **Date**: 2026-05-02 | **Spec**: [/Users/rt/workspace/boundline/specs/032-workflow-surface-closure/spec.md](/Users/rt/workspace/boundline/specs/032-workflow-surface-closure/spec.md)
+**Branch**: `032-workflow-surface-closure` | **Date**: 2026-05-02 | **Spec**: [specs/032-workflow-surface-closure/spec.md](specs/032-workflow-surface-closure/spec.md)
 **Input**: Feature specification from `/specs/032-workflow-surface-closure/spec.md`
 
 **Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.
@@ -40,7 +40,7 @@ clippy cleanup, and formatting.
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- **PASS** Delivery identity: The slice directly improves bounded engineering-task delivery by letting operators enter and continue the same Boundline delivery story through workflows without losing route or next-step credibility. See Summary, Technical Context, and [/Users/rt/workspace/boundline/specs/032-workflow-surface-closure/spec.md](/Users/rt/workspace/boundline/specs/032-workflow-surface-closure/spec.md).
+- **PASS** Delivery identity: The slice directly improves bounded engineering-task delivery by letting operators enter and continue the same Boundline delivery story through workflows without losing route or next-step credibility. See Summary, Technical Context, and [specs/032-workflow-surface-closure/spec.md](specs/032-workflow-surface-closure/spec.md).
 - **PASS** Delivery-first scope: The plan prioritizes execution ownership, route clarity, workflow follow-through, and inspectability ahead of release polish. See Summary, Technical Context, and research decisions.
 - **PASS** Primary workflow: The main operator path remains session-native, with named workflows compiling onto the same `goal -> plan -> run -> status -> next -> inspect` story; explicit compatibility remains available only as an opt-in subordinate route. See Summary, Technical Context, quickstart, and contracts.
 - **PASS** Bounded execution: Workflow discovery, run, status, resume, and inspect keep explicit stop conditions for missing input, invalid definitions, blocked governance, assistant-binding mismatch, and terminal outcome; no new loops or retries are introduced beyond current runtime limits. See Technical Context, research, data model, and quickstart.
@@ -49,7 +49,7 @@ clippy cleanup, and formatting.
 - **PASS** Sequential-first design: One workflow phase remains active at a time and the slice introduces no concurrency, background workers, or hidden branches. See Technical Context and research.
 - **PASS** Tool-agent symmetry: Workflow guidance, route projection, and continuation remain explicit through CLI output and assistant guidance rather than hidden inside backend-specific behavior. See Summary, research, quickstart, and contracts.
 - **PASS** Observability and explicit intelligence: Workflow identity, phase, route authority, assistant binding, compatibility ownership, blocked conditions, and next commands remain surfaced on the same operator-facing outputs. See Technical Context, contracts, and quickstart.
-- **PASS** Non-goals and external separation: The plan does not create a new provider abstraction layer, UI surface, long-term memory, deployment work, or Canon-owned control flow. See Constraints, research, and [/Users/rt/workspace/boundline/specs/032-workflow-surface-closure/spec.md](/Users/rt/workspace/boundline/specs/032-workflow-surface-closure/spec.md).
+- **PASS** Non-goals and external separation: The plan does not create a new provider abstraction layer, UI surface, long-term memory, deployment work, or Canon-owned control flow. See Constraints, research, and [specs/032-workflow-surface-closure/spec.md](specs/032-workflow-surface-closure/spec.md).
 - **PASS** Minimal slice: The smallest independently valuable capability is one workflow-first assistant and output closure that makes the primary Boundline product story explicit without inventing another runtime. See Summary and research.
 
 Mark each line as PASS or FAIL in the completed plan and reference the section that satisfies it.

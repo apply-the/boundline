@@ -1,6 +1,6 @@
 # Tasks: Product Unification And Surface Closure
 
-**Input**: Design documents from `/Users/rt/workspace/boundline/specs/032-workflow-surface-closure/`  
+**Input**: Design documents from `specs/032-workflow-surface-closure/`
 **Prerequisites**: plan.md, spec.md, research.md, data-model.md, contracts/, quickstart.md
 
 **Tests**: Validation tasks are required because this feature changes assistant
@@ -23,8 +23,8 @@ release closeout can each be implemented and validated independently.
 **Purpose**: Reserve the `0.32.0` release boundary and register the workflow
 surface validation targets for this slice.
 
-- [x] T001 Bump crate version to `0.32.0` in `/Users/rt/workspace/boundline/Cargo.toml` and `/Users/rt/workspace/boundline/Cargo.lock`
-- [x] T002 Register workflow-surface validation coverage in `/Users/rt/workspace/boundline/tests/contract/assistant_command_definition_contract.rs`, `/Users/rt/workspace/boundline/tests/contract/assistant_session_continuity_contract.rs`, `/Users/rt/workspace/boundline/tests/contract/workflow_command_surface_contract.rs`, and `/Users/rt/workspace/boundline/tests/unit/workflow_session_projection.rs`
+- [x] T001 Bump crate version to `0.32.0` in `Cargo.toml` and `Cargo.lock`
+- [x] T002 Register workflow-surface validation coverage in `tests/contract/assistant_command_definition_contract.rs`, `tests/contract/assistant_session_continuity_contract.rs`, `tests/contract/workflow_command_surface_contract.rs`, and `tests/unit/workflow_session_projection.rs`
 
 ---
 
@@ -35,8 +35,8 @@ this slice depends on.
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [x] T003 Add explicit workflow product-surface cues and workflow-discovery explanation updates in `/Users/rt/workspace/boundline/src/cli/workflow.rs`
-- [x] T004 [P] Add foundational unit or contract coverage for workflow route projection and primary-versus-subordinate path cues in `/Users/rt/workspace/boundline/tests/unit/workflow_session_projection.rs` and `/Users/rt/workspace/boundline/tests/contract/workflow_command_surface_contract.rs`
+- [x] T003 Add explicit workflow product-surface cues and workflow-discovery explanation updates in `src/cli/workflow.rs`
+- [x] T004 [P] Add foundational unit or contract coverage for workflow route projection and primary-versus-subordinate path cues in `tests/unit/workflow_session_projection.rs` and `tests/contract/workflow_command_surface_contract.rs`
 
 **Checkpoint**: Workflow output now states the same primary Boundline product story
 as direct native execution before assistant-pack work begins.
@@ -54,15 +54,15 @@ than raw undocumented fallback instructions.
 
 ### Tests for User Story 1
 
-- [x] T005 [P] [US1] Extend assistant asset contract coverage for workflow discovery and continuation commands in `/Users/rt/workspace/boundline/tests/contract/assistant_command_definition_contract.rs`
-- [x] T006 [P] [US1] Extend assistant continuity coverage for workflow-first follow-through guidance in `/Users/rt/workspace/boundline/tests/contract/assistant_session_continuity_contract.rs`
+- [x] T005 [P] [US1] Extend assistant asset contract coverage for workflow discovery and continuation commands in `tests/contract/assistant_command_definition_contract.rs`
+- [x] T006 [P] [US1] Extend assistant continuity coverage for workflow-first follow-through guidance in `tests/contract/assistant_session_continuity_contract.rs`
 
 ### Implementation for User Story 1
 
-- [x] T007 [US1] Add workflow assistant guidance to `/Users/rt/workspace/boundline/assistant/README.md` and `/Users/rt/workspace/boundline/assistant/gemini/README.md`
-- [x] T008 [P] [US1] Add Claude workflow assistant command files in `/Users/rt/workspace/boundline/assistant/claude/commands/boundline-workflow-list.md`, `/Users/rt/workspace/boundline/assistant/claude/commands/boundline-workflow-run.md`, `/Users/rt/workspace/boundline/assistant/claude/commands/boundline-workflow-status.md`, `/Users/rt/workspace/boundline/assistant/claude/commands/boundline-workflow-resume.md`, and `/Users/rt/workspace/boundline/assistant/claude/commands/boundline-workflow-inspect.md`
-- [x] T009 [P] [US1] Add Codex workflow assistant command files in `/Users/rt/workspace/boundline/assistant/codex/commands/boundline-workflow-list.md`, `/Users/rt/workspace/boundline/assistant/codex/commands/boundline-workflow-run.md`, `/Users/rt/workspace/boundline/assistant/codex/commands/boundline-workflow-status.md`, `/Users/rt/workspace/boundline/assistant/codex/commands/boundline-workflow-resume.md`, and `/Users/rt/workspace/boundline/assistant/codex/commands/boundline-workflow-inspect.md`
-- [x] T010 [P] [US1] Add Copilot workflow prompt files in `/Users/rt/workspace/boundline/assistant/copilot/prompts/boundline-workflow-list.prompt.md`, `/Users/rt/workspace/boundline/assistant/copilot/prompts/boundline-workflow-run.prompt.md`, `/Users/rt/workspace/boundline/assistant/copilot/prompts/boundline-workflow-status.prompt.md`, `/Users/rt/workspace/boundline/assistant/copilot/prompts/boundline-workflow-resume.prompt.md`, and `/Users/rt/workspace/boundline/assistant/copilot/prompts/boundline-workflow-inspect.prompt.md`
+- [x] T007 [US1] Add workflow assistant guidance to `assistant/README.md` and `assistant/gemini/README.md`
+- [x] T008 [P] [US1] Add Claude workflow assistant command files in `assistant/claude/commands/boundline-workflow-list.md`, `assistant/claude/commands/boundline-workflow-run.md`, `assistant/claude/commands/boundline-workflow-status.md`, `assistant/claude/commands/boundline-workflow-resume.md`, and `assistant/claude/commands/boundline-workflow-inspect.md`
+- [x] T009 [P] [US1] Add Codex workflow assistant command files in `assistant/codex/commands/boundline-workflow-list.md`, `assistant/codex/commands/boundline-workflow-run.md`, `assistant/codex/commands/boundline-workflow-status.md`, `assistant/codex/commands/boundline-workflow-resume.md`, and `assistant/codex/commands/boundline-workflow-inspect.md`
+- [x] T010 [P] [US1] Add Copilot workflow prompt files in `assistant/copilot/prompts/boundline-workflow-list.prompt.md`, `assistant/copilot/prompts/boundline-workflow-run.prompt.md`, `assistant/copilot/prompts/boundline-workflow-status.prompt.md`, `assistant/copilot/prompts/boundline-workflow-resume.prompt.md`, and `assistant/copilot/prompts/boundline-workflow-inspect.prompt.md`
 
 **Checkpoint**: A workflow can now be discovered and continued from any shipped
 assistant surface without dropping to undocumented raw CLI usage.
@@ -80,13 +80,13 @@ assistant-binding context explicitly.
 
 ### Tests for User Story 2
 
-- [x] T011 [P] [US2] Extend workflow command-surface and discovery contracts for route projection cues in `/Users/rt/workspace/boundline/tests/contract/workflow_command_surface_contract.rs` and `/Users/rt/workspace/boundline/tests/contract/workflow_discovery_contract.rs`
-- [x] T012 [P] [US2] Extend workflow integration coverage for route projection and assistant-binding visibility in `/Users/rt/workspace/boundline/tests/integration/workflow_discovery.rs`, `/Users/rt/workspace/boundline/tests/integration/workflow_layer_resume.rs`, and `/Users/rt/workspace/boundline/tests/integration/workflow_follow_through.rs`
+- [x] T011 [P] [US2] Extend workflow command-surface and discovery contracts for route projection cues in `tests/contract/workflow_command_surface_contract.rs` and `tests/contract/workflow_discovery_contract.rs`
+- [x] T012 [P] [US2] Extend workflow integration coverage for route projection and assistant-binding visibility in `tests/integration/workflow_discovery.rs`, `tests/integration/workflow_layer_resume.rs`, and `tests/integration/workflow_follow_through.rs`
 
 ### Implementation for User Story 2
 
-- [x] T013 [US2] Keep workflow reports explicitly aligned with session route projection and bounded next-step cues in `/Users/rt/workspace/boundline/src/cli/workflow.rs` and `/Users/rt/workspace/boundline/src/cli/output.rs`
-- [x] T014 [US2] Extend workflow-facing wording for assistant-binding mismatch and route authority in `/Users/rt/workspace/boundline/src/cli/workflow.rs` and `/Users/rt/workspace/boundline/src/orchestrator/session_runtime.rs`
+- [x] T013 [US2] Keep workflow reports explicitly aligned with session route projection and bounded next-step cues in `src/cli/workflow.rs` and `src/cli/output.rs`
+- [x] T014 [US2] Extend workflow-facing wording for assistant-binding mismatch and route authority in `src/cli/workflow.rs` and `src/orchestrator/session_runtime.rs`
 
 **Checkpoint**: Workflow-native output is inspectable enough that operators do
 not need to reconstruct route or binding state from config files.
@@ -104,11 +104,11 @@ output and assistant guidance.
 
 ### Tests for User Story 3
 
-- [x] T015 [P] [US3] Extend compatibility-boundary coverage in `/Users/rt/workspace/boundline/tests/integration/workflow_layer_compat.rs`, `/Users/rt/workspace/boundline/tests/integration/workflow_follow_through_compat.rs`, and `/Users/rt/workspace/boundline/tests/contract/assistant_session_continuity_contract.rs`
+- [x] T015 [P] [US3] Extend compatibility-boundary coverage in `tests/integration/workflow_layer_compat.rs`, `tests/integration/workflow_follow_through_compat.rs`, and `tests/contract/assistant_session_continuity_contract.rs`
 
 ### Implementation for User Story 3
 
-- [x] T016 [US3] Align compatibility-boundary and product-identity wording in `/Users/rt/workspace/boundline/assistant/README.md`, `/Users/rt/workspace/boundline/src/cli/workflow.rs`, and `/Users/rt/workspace/boundline/src/cli/session.rs`
+- [x] T016 [US3] Align compatibility-boundary and product-identity wording in `assistant/README.md`, `src/cli/workflow.rs`, and `src/cli/session.rs`
 
 **Checkpoint**: Operators can tell from one glance whether they are on a
 primary Boundline path or on the subordinate compatibility route.
@@ -125,8 +125,8 @@ workspace and confirm the release surfaces match the shipped runtime behavior.
 
 ### Implementation for User Story 4
 
-- [x] T017 [US4] Update the `0.32.0` release story in `/Users/rt/workspace/boundline/README.md`, `/Users/rt/workspace/boundline/docs/getting-started.md`, `/Users/rt/workspace/boundline/docs/configuration.md`, `/Users/rt/workspace/boundline/CONTRIBUTING.md`, `/Users/rt/workspace/boundline/ROADMAP.md`, and `/Users/rt/workspace/boundline/CHANGELOG.md`
-- [x] T018 [US4] Regenerate assistant or agent context for product closure in `/Users/rt/workspace/boundline/AGENTS.md`
+- [x] T017 [US4] Update the `0.32.0` release story in `README.md`, `docs/getting-started.md`, `docs/configuration.md`, `CONTRIBUTING.md`, `ROADMAP.md`, and `CHANGELOG.md`
+- [x] T018 [US4] Regenerate assistant or agent context for product closure in `AGENTS.md`
 
 **Checkpoint**: Maintainers and assistants now describe one coherent `0.32.0`
 story where Boundline owns the product surface and Canon remains secondary.
@@ -137,7 +137,7 @@ story where Boundline owns the product surface and Canon remains secondary.
 
 **Purpose**: Finish release-quality validation and closeout.
 
-- [x] T019 Run focused validation for `/Users/rt/workspace/boundline/src/cli/workflow.rs` and any other modified or newly created Rust files, refresh `/Users/rt/workspace/boundline/lcov.info`, verify modified-Rust coverage remains above 95%, resolve remaining `cargo clippy` issues, and run `cargo fmt --all`
+- [x] T019 Run focused validation for `src/cli/workflow.rs` and any other modified or newly created Rust files, refresh `lcov.info`, verify modified-Rust coverage remains above 95%, resolve remaining `cargo clippy` issues, and run `cargo fmt --all`
 
 ---
 

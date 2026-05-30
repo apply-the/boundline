@@ -17,8 +17,8 @@
 
 **Purpose**: Prepare the 034 feature pack and validation surfaces.
 
-- [x] T001 Confirm 034 feature artifacts and update `/Users/rt/workspace/boundline/specs/034-decision-driven-orchestrator/plan.md`, `/Users/rt/workspace/boundline/specs/034-decision-driven-orchestrator/research.md`, `/Users/rt/workspace/boundline/specs/034-decision-driven-orchestrator/data-model.md`, `/Users/rt/workspace/boundline/specs/034-decision-driven-orchestrator/contracts/`, and `/Users/rt/workspace/boundline/specs/034-decision-driven-orchestrator/quickstart.md`
-- [x] T002 [P] Add or update top-level test harness references if new 034 test files require entries in `/Users/rt/workspace/boundline/tests/unit.rs`, `/Users/rt/workspace/boundline/tests/contract.rs`, or `/Users/rt/workspace/boundline/tests/integration.rs`
+- [x] T001 Confirm 034 feature artifacts and update `specs/034-decision-driven-orchestrator/plan.md`, `specs/034-decision-driven-orchestrator/research.md`, `specs/034-decision-driven-orchestrator/data-model.md`, `specs/034-decision-driven-orchestrator/contracts/`, and `specs/034-decision-driven-orchestrator/quickstart.md`
+- [x] T002 [P] Add or update top-level test harness references if new 034 test files require entries in `tests/unit.rs`, `tests/contract.rs`, or `tests/integration.rs`
 
 ---
 
@@ -28,10 +28,10 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [x] T003 Extend `/Users/rt/workspace/boundline/src/domain/decision.rs` with explicit selector primitives, selector rationale, evidence-basis, verification-intent, and clarification-aware decision validation
-- [x] T004 [P] Extend `/Users/rt/workspace/boundline/src/orchestrator/recovery.rs` and `/Users/rt/workspace/boundline/src/orchestrator/terminal.rs` with selector-aware retry, ask, replan, and stop-precedence primitives
-- [x] T005 [P] Extend `/Users/rt/workspace/boundline/src/domain/session.rs`, `/Users/rt/workspace/boundline/src/domain/trace.rs`, and `/Users/rt/workspace/boundline/src/domain/follow_through.rs` with selector-driven projection fields shared by runtime and CLI surfaces
-- [x] T006 [P] Extend `/Users/rt/workspace/boundline/tests/unit/decision_model.rs`, `/Users/rt/workspace/boundline/tests/unit/runtime_routing.rs`, and `/Users/rt/workspace/boundline/tests/unit/session_model.rs` with foundational coverage for selector primitives and projection invariants
+- [x] T003 Extend `src/domain/decision.rs` with explicit selector primitives, selector rationale, evidence-basis, verification-intent, and clarification-aware decision validation
+- [x] T004 [P] Extend `src/orchestrator/recovery.rs` and `src/orchestrator/terminal.rs` with selector-aware retry, ask, replan, and stop-precedence primitives
+- [x] T005 [P] Extend `src/domain/session.rs`, `src/domain/trace.rs`, and `src/domain/follow_through.rs` with selector-driven projection fields shared by runtime and CLI surfaces
+- [x] T006 [P] Extend `tests/unit/decision_model.rs`, `tests/unit/runtime_routing.rs`, and `tests/unit/session_model.rs` with foundational coverage for selector primitives and projection invariants
 
 **Checkpoint**: Selector primitives, recovery rules, and projection fields exist and can support all user stories.
 
@@ -45,15 +45,15 @@
 
 ### Tests for User Story 1
 
-- [x] T007 [P] [US1] Add contract coverage for selector-driven decision payloads in `/Users/rt/workspace/boundline/tests/contract/decision_loop_contract.rs`
-- [x] T008 [P] [US1] Add integration coverage for selector ordering on the native path in `/Users/rt/workspace/boundline/tests/integration/session_native_flow.rs`
-- [x] T009 [P] [US1] Add unit coverage for selector choice and evidence-first ordering in `/Users/rt/workspace/boundline/tests/unit/decision_loop.rs`
+- [x] T007 [P] [US1] Add contract coverage for selector-driven decision payloads in `tests/contract/decision_loop_contract.rs`
+- [x] T008 [P] [US1] Add integration coverage for selector ordering on the native path in `tests/integration/session_native_flow.rs`
+- [x] T009 [P] [US1] Add unit coverage for selector choice and evidence-first ordering in `tests/unit/decision_loop.rs`
 
 ### Implementation for User Story 1
 
-- [x] T010 [US1] Extend `/Users/rt/workspace/boundline/src/orchestrator/decision_loop.rs` so observation state and decision rules choose explicit selectors from current evidence, decision history, and goal-plan targets
-- [x] T011 [US1] Extend `/Users/rt/workspace/boundline/src/orchestrator/session_runtime.rs` native adapter registries and dispatch helpers so selector-driven actions execute through read/search/modify/test/ask/replan semantics on the native path
-- [x] T012 [US1] Extend `/Users/rt/workspace/boundline/src/domain/decision.rs` and `/Users/rt/workspace/boundline/src/domain/trace.rs` so selector rationale, evidence basis, verification intent, and recovery linkage persist in decision and trace payloads
+- [x] T010 [US1] Extend `src/orchestrator/decision_loop.rs` so observation state and decision rules choose explicit selectors from current evidence, decision history, and goal-plan targets
+- [x] T011 [US1] Extend `src/orchestrator/session_runtime.rs` native adapter registries and dispatch helpers so selector-driven actions execute through read/search/modify/test/ask/replan semantics on the native path
+- [x] T012 [US1] Extend `src/domain/decision.rs` and `src/domain/trace.rs` so selector rationale, evidence basis, verification intent, and recovery linkage persist in decision and trace payloads
 
 **Checkpoint**: The native loop now selects and executes one explicit bounded selector per iteration.
 
@@ -67,15 +67,15 @@
 
 ### Tests for User Story 2
 
-- [x] T013 [P] [US2] Add contract coverage for selector projection on trace summaries in `/Users/rt/workspace/boundline/tests/contract/trace_summary_contract.rs`
-- [x] T014 [P] [US2] Add integration coverage for selector-driven `status`, `next`, and `inspect` output in `/Users/rt/workspace/boundline/tests/integration/session_native_flow.rs`
-- [x] T015 [P] [US2] Add unit coverage for selector rendering and follow-through projection in `/Users/rt/workspace/boundline/tests/unit/cli_output.rs`, `/Users/rt/workspace/boundline/tests/unit/session_record.rs`, and `/Users/rt/workspace/boundline/tests/unit/workflow_session_projection.rs`
+- [x] T013 [P] [US2] Add contract coverage for selector projection on trace summaries in `tests/contract/trace_summary_contract.rs`
+- [x] T014 [P] [US2] Add integration coverage for selector-driven `status`, `next`, and `inspect` output in `tests/integration/session_native_flow.rs`
+- [x] T015 [P] [US2] Add unit coverage for selector rendering and follow-through projection in `tests/unit/cli_output.rs`, `tests/unit/session_record.rs`, and `tests/unit/workflow_session_projection.rs`
 
 ### Implementation for User Story 2
 
-- [x] T016 [US2] Extend `/Users/rt/workspace/boundline/src/cli/inspect.rs` and `/Users/rt/workspace/boundline/src/domain/trace.rs` so authoritative traces summarize selector kind, selector rationale, evidence basis, verification intent, and recovery state
-- [x] T017 [US2] Extend `/Users/rt/workspace/boundline/src/cli/output.rs` and `/Users/rt/workspace/boundline/src/domain/follow_through.rs` to render selector-driven headlines, guidance, and stop reasons on run, status, next, and inspect output
-- [x] T018 [US2] Extend `/Users/rt/workspace/boundline/src/cli/session.rs` and `/Users/rt/workspace/boundline/src/domain/session.rs` to surface selector-driven session state while preserving explicit compatibility authority and next-command continuity
+- [x] T016 [US2] Extend `src/cli/inspect.rs` and `src/domain/trace.rs` so authoritative traces summarize selector kind, selector rationale, evidence basis, verification intent, and recovery state
+- [x] T017 [US2] Extend `src/cli/output.rs` and `src/domain/follow_through.rs` to render selector-driven headlines, guidance, and stop reasons on run, status, next, and inspect output
+- [x] T018 [US2] Extend `src/cli/session.rs` and `src/domain/session.rs` to surface selector-driven session state while preserving explicit compatibility authority and next-command continuity
 
 **Checkpoint**: Operators can understand decision-driven state from normal CLI surfaces.
 
@@ -89,15 +89,15 @@
 
 ### Tests for User Story 3
 
-- [x] T019 [P] [US3] Add contract coverage for selector-aware recovery and stop behavior in `/Users/rt/workspace/boundline/tests/contract/runtime_refoundation_contract.rs`
-- [x] T020 [P] [US3] Add integration coverage for explicit ask, replan, and exhaustion behavior in `/Users/rt/workspace/boundline/tests/integration/runtime_refoundation_failure.rs` and `/Users/rt/workspace/boundline/tests/integration/retry_and_replan.rs`
-- [x] T021 [P] [US3] Add unit coverage for selector-aware recovery, clarification, and terminal precedence in `/Users/rt/workspace/boundline/tests/unit/decision_loop.rs` and `/Users/rt/workspace/boundline/tests/unit/runtime_routing.rs`
+- [x] T019 [P] [US3] Add contract coverage for selector-aware recovery and stop behavior in `tests/contract/runtime_refoundation_contract.rs`
+- [x] T020 [P] [US3] Add integration coverage for explicit ask, replan, and exhaustion behavior in `tests/integration/runtime_refoundation_failure.rs` and `tests/integration/retry_and_replan.rs`
+- [x] T021 [P] [US3] Add unit coverage for selector-aware recovery, clarification, and terminal precedence in `tests/unit/decision_loop.rs` and `tests/unit/runtime_routing.rs`
 
 ### Implementation for User Story 3
 
-- [x] T022 [US3] Extend `/Users/rt/workspace/boundline/src/orchestrator/recovery.rs` and `/Users/rt/workspace/boundline/src/orchestrator/decision_loop.rs` to derive retry, ask, replan, and terminal outcomes from decision state and verification evidence
-- [x] T023 [US3] Extend `/Users/rt/workspace/boundline/src/orchestrator/session_runtime.rs` and `/Users/rt/workspace/boundline/src/domain/follow_through.rs` to persist clarification-style ask state and bounded next-command guidance
-- [x] T024 [US3] Ensure `/Users/rt/workspace/boundline/src/cli/output.rs` and `/Users/rt/workspace/boundline/src/cli/inspect.rs` surface selector-driven ask, stop, and exhaustion reasons instead of generic lifecycle fallbacks
+- [x] T022 [US3] Extend `src/orchestrator/recovery.rs` and `src/orchestrator/decision_loop.rs` to derive retry, ask, replan, and terminal outcomes from decision state and verification evidence
+- [x] T023 [US3] Extend `src/orchestrator/session_runtime.rs` and `src/domain/follow_through.rs` to persist clarification-style ask state and bounded next-command guidance
+- [x] T024 [US3] Ensure `src/cli/output.rs` and `src/cli/inspect.rs` surface selector-driven ask, stop, and exhaustion reasons instead of generic lifecycle fallbacks
 
 **Checkpoint**: Non-success decision-driven behavior is explicit, bounded, and inspectable.
 
@@ -111,14 +111,14 @@
 
 ### Tests for User Story 4
 
-- [x] T025 [P] [US4] Refresh focused coverage assertions for touched Rust files via `/Users/rt/workspace/boundline/lcov.info` and supporting validation commands
+- [x] T025 [P] [US4] Refresh focused coverage assertions for touched Rust files via `lcov.info` and supporting validation commands
 
 ### Implementation for User Story 4
 
-- [x] T026 [US4] Bump crate version to `0.34.0` in `/Users/rt/workspace/boundline/Cargo.toml` and `/Users/rt/workspace/boundline/Cargo.lock`
-- [x] T027 [US4] Update impacted docs and release narrative in `/Users/rt/workspace/boundline/README.md`, `/Users/rt/workspace/boundline/docs/getting-started.md`, `/Users/rt/workspace/boundline/docs/configuration.md`, `/Users/rt/workspace/boundline/CONTRIBUTING.md`, `/Users/rt/workspace/boundline/CHANGELOG.md`, and `/Users/rt/workspace/boundline/AGENTS.md`
-- [x] T028 [US4] Update `/Users/rt/workspace/boundline/ROADMAP.md` to mark Spec 034 as delivered and remove it from the remaining future macrofeature line
-- [x] T029 [US4] Update assistant guidance impacted by selector-driven execution in `/Users/rt/workspace/boundline/assistant/README.md`, `/Users/rt/workspace/boundline/assistant/claude/commands/boundline-status.md`, `/Users/rt/workspace/boundline/assistant/claude/commands/boundline-next.md`, `/Users/rt/workspace/boundline/assistant/codex/commands/boundline-status.md`, `/Users/rt/workspace/boundline/assistant/codex/commands/boundline-next.md`, `/Users/rt/workspace/boundline/assistant/copilot/prompts/boundline-status.prompt.md`, `/Users/rt/workspace/boundline/assistant/copilot/prompts/boundline-next.prompt.md`, `/Users/rt/workspace/boundline/assistant/gemini/README.md`, and `/Users/rt/workspace/boundline/specs/034-decision-driven-orchestrator/quickstart.md`
+- [x] T026 [US4] Bump crate version to `0.34.0` in `Cargo.toml` and `Cargo.lock`
+- [x] T027 [US4] Update impacted docs and release narrative in `README.md`, `docs/getting-started.md`, `docs/configuration.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, and `AGENTS.md`
+- [x] T028 [US4] Update `ROADMAP.md` to mark Spec 034 as delivered and remove it from the remaining future macrofeature line
+- [x] T029 [US4] Update assistant guidance impacted by selector-driven execution in `assistant/README.md`, `assistant/claude/commands/boundline-status.md`, `assistant/claude/commands/boundline-next.md`, `assistant/codex/commands/boundline-status.md`, `assistant/codex/commands/boundline-next.md`, `assistant/copilot/prompts/boundline-status.prompt.md`, `assistant/copilot/prompts/boundline-next.prompt.md`, `assistant/gemini/README.md`, and `specs/034-decision-driven-orchestrator/quickstart.md`
 
 **Checkpoint**: Release artifacts describe `0.34.0` consistently.
 
@@ -132,7 +132,7 @@
 - [x] T031 [P] Run lint validation with `cargo clippy --workspace --all-targets --all-features -- -D warnings`
 - [x] T032 Run compile-oriented and broader Rust validation for the slice with `cargo test --no-run --all-targets` and `cargo nextest run --workspace --all-features`
 - [x] T033 Refresh line coverage with `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info` and confirm modified or new Rust files stay above 95%
-- [x] T034 Mark completed tasks in `/Users/rt/workspace/boundline/specs/034-decision-driven-orchestrator/tasks.md` and capture the final descriptive commit message in the implementation summary
+- [x] T034 Mark completed tasks in `specs/034-decision-driven-orchestrator/tasks.md` and capture the final descriptive commit message in the implementation summary
 
 ---
 

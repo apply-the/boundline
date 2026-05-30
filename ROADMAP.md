@@ -7,12 +7,26 @@ persists structured artifacts that Boundline can reuse for reasoning.
 Delivered release history belongs in [CHANGELOG.md](CHANGELOG.md). This file is
 for current direction, future feature sequencing, and product boundaries.
 
-## Current Status: v0.64.0
+## Current Status: v0.65.0
 
-Boundline currently ships a session-native CLI/runtime with assistant command
-packs, governed delivery, and trace-backed inspection surfaces. The CLI and
-persisted workspace state remain authoritative, and there is no separate
-terminal UI product line on the forward roadmap.
+Boundline currently ships the session-native CLI/runtime plus the sqlite-vec
+derived-index lifecycle surface: bounded local semantic retrieval, explicit
+manifest-backed `index` maintenance commands, hook-aware stale detection, and
+diagnostic recovery guidance all remain owned by the CLI and persisted
+workspace state. There is still no separate terminal UI product line on the
+forward roadmap.
+
+### Delivered in 0.65.0
+
+- sqlite-vec-backed local semantic retrieval over the single derived SQLite
+  store is now active, with explicit fallback and bounded authority order
+  preserved on normal runtime surfaces
+- `boundline index status|refresh|rebuild|clean|doctor` now provides manifest-
+  backed lifecycle control, incremental refresh, and tracked-artifact or
+  corruption diagnosis
+- derived-index hygiene now includes managed manifest plus WAL/SHM ignore rules,
+  optional stale-mark Git hooks, and probe or diagnostics visibility into index
+  health and hook state
 
 ### Delivered in 0.64.0
 

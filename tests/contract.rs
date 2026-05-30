@@ -37,12 +37,6 @@ mod reasoning_profile_contract;
 #[path = "contract/reasoning_profile_trace_contract.rs"]
 mod reasoning_profile_trace_contract;
 
-#[path = "contract/delivery_model_docs_contract.rs"]
-mod delivery_model_docs_contract;
-
-#[path = "contract/assistant_delivery_docs_contract.rs"]
-mod assistant_delivery_docs_contract;
-
 #[path = "contract/diagnostics_report_contract.rs"]
 mod diagnostics_report_contract;
 
@@ -51,9 +45,6 @@ mod distribution_cli_contract;
 
 #[path = "contract/distribution_metadata_contract.rs"]
 mod distribution_metadata_contract;
-
-#[path = "contract/distribution_docs_contract.rs"]
-mod distribution_docs_contract;
 
 #[path = "contract/distribution_release_surface_contract.rs"]
 mod distribution_release_surface_contract;
@@ -162,6 +153,12 @@ mod context_intelligence_semantic_inspect_contract;
 
 #[path = "contract/context_intelligence_semantic_projection_contract.rs"]
 mod context_intelligence_semantic_projection_contract;
+
+#[path = "contract/context_intelligence_index_lifecycle_contract.rs"]
+mod context_intelligence_index_lifecycle_contract;
+
+#[path = "contract/context_intelligence_index_doctor_contract.rs"]
+mod context_intelligence_index_doctor_contract;
 
 #[path = "contract/context_intelligence_canon_semantic_contract.rs"]
 mod context_intelligence_canon_semantic_contract;

@@ -1,6 +1,6 @@
 # Implementation Plan: Runtime Refoundation
 
-**Branch**: `015-runtime-refoundation` | **Date**: 2026-04-29 | **Spec**: [/Users/rt/workspace/boundline/specs/015-runtime-refoundation/spec.md](/Users/rt/workspace/boundline/specs/015-runtime-refoundation/spec.md)
+**Branch**: `015-runtime-refoundation` | **Date**: 2026-04-29 | **Spec**: [specs/015-runtime-refoundation/spec.md](specs/015-runtime-refoundation/spec.md)
 **Input**: Feature specification from `/specs/015-runtime-refoundation/spec.md`
 
 ## Summary
@@ -25,15 +25,15 @@ Refound Boundline's primary delivery path around session-native runtime control 
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- **PASS** Delivery identity: The slice directly improves bounded engineering delivery by making session-native planning and live-state execution the primary path rather than a declarative profile replay. See Summary, Technical Context, and [spec.md](/Users/rt/workspace/boundline/specs/015-runtime-refoundation/spec.md).
+- **PASS** Delivery identity: The slice directly improves bounded engineering delivery by making session-native planning and live-state execution the primary path rather than a declarative profile replay. See Summary, Technical Context, and [spec.md](specs/015-runtime-refoundation/spec.md).
 - **PASS** Delivery-first scope: The work is about execution control, planning, recovery, routing, validation, and inspectability before documentation polish or secondary ergonomics. See Summary and Constraints.
-- **PASS** Bounded execution: Start conditions, explicit route selection, max steps or retries, and terminal states remain first-class runtime behavior for both success and non-success paths. See Technical Context, research decisions, quickstart scenarios, and [spec.md](/Users/rt/workspace/boundline/specs/015-runtime-refoundation/spec.md).
+- **PASS** Bounded execution: Start conditions, explicit route selection, max steps or retries, and terminal states remain first-class runtime behavior for both success and non-success paths. See Technical Context, research decisions, quickstart scenarios, and [spec.md](specs/015-runtime-refoundation/spec.md).
 - **PASS** Stateful execution: The runtime persists bounded task drafts, decision history, flow constraint state, routing outcome, and terminal evidence in session and trace surfaces. See Summary, data-model, and contracts.
 - **PASS** Mutable planning: The initial bounded task draft remains explicit and later recovery or replanning decisions mutate runtime intent through inspectable state transitions rather than hidden heuristics. See Summary, research, and data-model.
 - **PASS** Sequential-first design: Execution remains one bounded decision at a time; no concurrency, background workers, or hidden fan-out are introduced. See Execution Model and Constraints.
 - **PASS** Tool-agent symmetry: Reasoning, file mutation, validation, and route selection all remain explicit and observable through decision and evidence records rather than hiding action behind text-only planning. See Summary, research, and contracts.
 - **PASS** Observability and explicit intelligence: Route choice, bounded task draft content, decision selection, failure evidence, recovery decisions, and terminal reasoning stay visible through session and trace output. See Observability Surface, quickstart, and contracts.
-- **PASS** Non-goals and external separation: Canon remains a bounded planning or stage-boundary input; provider expansion, distributed execution, UI, long-term memory, and review councils stay out of scope. See Constraints and [spec.md](/Users/rt/workspace/boundline/specs/015-runtime-refoundation/spec.md).
+- **PASS** Non-goals and external separation: Canon remains a bounded planning or stage-boundary input; provider expansion, distributed execution, UI, long-term memory, and review councils stay out of scope. See Constraints and [spec.md](specs/015-runtime-refoundation/spec.md).
 - **PASS** Minimal slice: The smallest independently valuable capability is a single coherent refoundation where the primary session path plans and runs from live state without requiring init-first or fixture-first mental models. See Summary.
 
 ## Project Structure

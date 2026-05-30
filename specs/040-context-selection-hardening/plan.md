@@ -1,6 +1,6 @@
 # Implementation Plan: Context Selection Hardening
 
-**Branch**: `040-context-selection-hardening` | **Date**: 2026-05-03 | **Spec**: [/Users/rt/workspace/synod/specs/040-context-selection-hardening/spec.md](/Users/rt/workspace/synod/specs/040-context-selection-hardening/spec.md)
+**Branch**: `040-context-selection-hardening` | **Date**: 2026-05-03 | **Spec**: [specs/040-context-selection-hardening/spec.md](specs/040-context-selection-hardening/spec.md)
 **Input**: Feature specification from `/specs/040-context-selection-hardening/spec.md`
 
 **Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.

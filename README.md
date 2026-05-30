@@ -57,6 +57,13 @@ bootstrap a workspace, then run `boundline goal`, `boundline plan`,
 `boundline run`, `boundline status`, `boundline next`, and
 `boundline inspect` as the bounded session advances.
 
+When local semantic retrieval is enabled, manage the derived evidence index
+explicitly with `boundline index status`, `boundline index refresh`,
+`boundline index rebuild`, `boundline index clean`, and
+`boundline index doctor`. The derived SQLite store and manifest under
+`.boundline/context-intelligence/` remain disposable workspace-local runtime
+state rather than Git-merge artifacts.
+
 ## How chat commands map to CLI/runtime state
 
 Chat command packs are thin wrappers over the Rust runtime. `/boundline:goal`,
@@ -80,6 +87,8 @@ when the operator deliberately asks for `--compatibility`.
 | `boundline run` | Execute the next pending step in the plan. |
 | `boundline status` | Check the current session status and next actions. |
 | `boundline inspect` | View detailed execution traces and evidence. |
+| `boundline index status` | Report manifest-backed derived-index lifecycle state. |
+| `boundline index doctor` | Diagnose tracked, stale, corrupt, or degraded derived-index state. |
 
 ## 📚 Deep Dive Documentation
 

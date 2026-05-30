@@ -20,8 +20,8 @@ independently testable while still closing one full release-aligned feature.
 
 **Purpose**: Finalize the 040 feature pack and confirm any new test entry points.
 
-- [x] T001 Keep `/Users/rt/workspace/synod/specs/040-context-selection-hardening/spec.md`, `/Users/rt/workspace/synod/specs/040-context-selection-hardening/plan.md`, `/Users/rt/workspace/synod/specs/040-context-selection-hardening/research.md`, `/Users/rt/workspace/synod/specs/040-context-selection-hardening/data-model.md`, `/Users/rt/workspace/synod/specs/040-context-selection-hardening/contracts/`, and `/Users/rt/workspace/synod/specs/040-context-selection-hardening/quickstart.md` synchronized with the implementation
-- [x] T002 [P] Add or update top-level test harness references in `/Users/rt/workspace/synod/tests/unit.rs`, `/Users/rt/workspace/synod/tests/contract.rs`, and `/Users/rt/workspace/synod/tests/integration.rs` if 040 introduces new test modules
+- [x] T001 Keep `specs/040-context-selection-hardening/spec.md`, `specs/040-context-selection-hardening/plan.md`, `specs/040-context-selection-hardening/research.md`, `specs/040-context-selection-hardening/data-model.md`, `specs/040-context-selection-hardening/contracts/`, and `specs/040-context-selection-hardening/quickstart.md` synchronized with the implementation
+- [x] T002 [P] Add or update top-level test harness references in `tests/unit.rs`, `tests/contract.rs`, and `tests/integration.rs` if 040 introduces new test modules
 
 ---
 
@@ -31,10 +31,10 @@ independently testable while still closing one full release-aligned feature.
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [x] T003 Extend `/Users/rt/workspace/synod/src/domain/goal_plan.rs` with stronger context-input validation and provenance helpers for evidence-backed context selection
-- [x] T004 [P] Extend `/Users/rt/workspace/synod/src/domain/session.rs` and `/Users/rt/workspace/synod/src/domain/trace.rs` with any shared projection fields or invariants needed for richer context credibility and recovery cues
-- [x] T005 [P] Extend `/Users/rt/workspace/synod/src/cli/output.rs` and `/Users/rt/workspace/synod/src/cli/inspect.rs` to support richer provenance projection and consistent stale or insufficient context wording
-- [x] T006 [P] Extend `/Users/rt/workspace/synod/tests/unit/goal_plan_model.rs`, `/Users/rt/workspace/synod/tests/unit/session_model.rs`, and `/Users/rt/workspace/synod/tests/contract/trace_summary_contract.rs` with foundational coverage for context-pack validation and projection invariants
+- [x] T003 Extend `src/domain/goal_plan.rs` with stronger context-input validation and provenance helpers for evidence-backed context selection
+- [x] T004 [P] Extend `src/domain/session.rs` and `src/domain/trace.rs` with any shared projection fields or invariants needed for richer context credibility and recovery cues
+- [x] T005 [P] Extend `src/cli/output.rs` and `src/cli/inspect.rs` to support richer provenance projection and consistent stale or insufficient context wording
+- [x] T006 [P] Extend `tests/unit/goal_plan_model.rs`, `tests/unit/session_model.rs`, and `tests/contract/trace_summary_contract.rs` with foundational coverage for context-pack validation and projection invariants
 
 **Checkpoint**: Shared context-pack validation and output projection primitives exist for all user stories.
 
@@ -48,15 +48,15 @@ independently testable while still closing one full release-aligned feature.
 
 ### Tests for User Story 1
 
-- [x] T007 [P] [US1] Add contract coverage for evidence-backed context selection in `/Users/rt/workspace/synod/tests/contract/goal_plan_contract.rs`
-- [x] T008 [P] [US1] Add integration coverage for evidence-selected `goal -> plan` behavior in `/Users/rt/workspace/synod/tests/integration/session_native_flow.rs`
-- [x] T009 [P] [US1] Add unit coverage for evidence candidate construction and bounded selection in `/Users/rt/workspace/synod/tests/unit/goal_planner.rs`
+- [x] T007 [P] [US1] Add contract coverage for evidence-backed context selection in `tests/contract/goal_plan_contract.rs`
+- [x] T008 [P] [US1] Add integration coverage for evidence-selected `goal -> plan` behavior in `tests/integration/session_native_flow.rs`
+- [x] T009 [P] [US1] Add unit coverage for evidence candidate construction and bounded selection in `tests/unit/goal_planner.rs`
 
 ### Implementation for User Story 1
 
-- [x] T010 [US1] Replace keyword-first workspace target admission in `/Users/rt/workspace/synod/src/orchestrator/goal_planner.rs` with explicit-evidence candidate selection for files and artifacts
-- [x] T011 [US1] Extend `/Users/rt/workspace/synod/src/orchestrator/goal_planner.rs` and `/Users/rt/workspace/synod/src/orchestrator/flow_inference.rs` so context-selected targets and rationale drive later planning behavior consistently
-- [x] T012 [US1] Extend `/Users/rt/workspace/synod/src/orchestrator/session_runtime.rs` so persisted goal-plan and trace payloads record the evidence-selected context pack on the native path
+- [x] T010 [US1] Replace keyword-first workspace target admission in `src/orchestrator/goal_planner.rs` with explicit-evidence candidate selection for files and artifacts
+- [x] T011 [US1] Extend `src/orchestrator/goal_planner.rs` and `src/orchestrator/flow_inference.rs` so context-selected targets and rationale drive later planning behavior consistently
+- [x] T012 [US1] Extend `src/orchestrator/session_runtime.rs` so persisted goal-plan and trace payloads record the evidence-selected context pack on the native path
 
 **Checkpoint**: Native planning builds an evidence-selected context pack or an explicit non-credible result.
 
@@ -70,15 +70,15 @@ independently testable while still closing one full release-aligned feature.
 
 ### Tests for User Story 2
 
-- [x] T013 [P] [US2] Add contract coverage for provenance projection in `/Users/rt/workspace/synod/tests/contract/trace_summary_contract.rs` and `/Users/rt/workspace/synod/tests/contract/session_command_contract.rs`
-- [x] T014 [P] [US2] Add integration coverage for provenance on `status`, `next`, and `inspect` in `/Users/rt/workspace/synod/tests/integration/cli_trace_inspection.rs` and `/Users/rt/workspace/synod/tests/integration/session_native_flow.rs`
-- [x] T015 [P] [US2] Add unit coverage for CLI rendering and session projection in `/Users/rt/workspace/synod/tests/unit/cli_output.rs` and `/Users/rt/workspace/synod/tests/unit/session_model.rs`
+- [x] T013 [P] [US2] Add contract coverage for provenance projection in `tests/contract/trace_summary_contract.rs` and `tests/contract/session_command_contract.rs`
+- [x] T014 [P] [US2] Add integration coverage for provenance on `status`, `next`, and `inspect` in `tests/integration/cli_trace_inspection.rs` and `tests/integration/session_native_flow.rs`
+- [x] T015 [P] [US2] Add unit coverage for CLI rendering and session projection in `tests/unit/cli_output.rs` and `tests/unit/session_model.rs`
 
 ### Implementation for User Story 2
 
-- [x] T016 [US2] Extend `/Users/rt/workspace/synod/src/cli/output.rs`, `/Users/rt/workspace/synod/src/cli/inspect.rs`, and `/Users/rt/workspace/synod/src/cli/session.rs` to render richer context provenance and credibility cues
-- [x] T017 [US2] Extend `/Users/rt/workspace/synod/src/domain/session.rs`, `/Users/rt/workspace/synod/src/domain/trace.rs`, and `/Users/rt/workspace/synod/src/domain/goal_plan.rs` to keep one authoritative provenance vocabulary across session and trace projections
-- [x] T018 [US2] Extend `/Users/rt/workspace/synod/src/orchestrator/session_runtime.rs` so the same authoritative context projection is emitted on run, replanning, and inspectable trace events
+- [x] T016 [US2] Extend `src/cli/output.rs`, `src/cli/inspect.rs`, and `src/cli/session.rs` to render richer context provenance and credibility cues
+- [x] T017 [US2] Extend `src/domain/session.rs`, `src/domain/trace.rs`, and `src/domain/goal_plan.rs` to keep one authoritative provenance vocabulary across session and trace projections
+- [x] T018 [US2] Extend `src/orchestrator/session_runtime.rs` so the same authoritative context projection is emitted on run, replanning, and inspectable trace events
 
 **Checkpoint**: Operators can explain why each admitted input shaped the current bounded work.
 
@@ -92,15 +92,15 @@ independently testable while still closing one full release-aligned feature.
 
 ### Tests for User Story 3
 
-- [x] T019 [P] [US3] Add contract coverage for insufficient or stale context behavior in `/Users/rt/workspace/synod/tests/contract/goal_plan_contract.rs` and `/Users/rt/workspace/synod/tests/contract/session_command_contract.rs`
-- [x] T020 [P] [US3] Add integration coverage for insufficient-context and cluster-boundary scenarios in `/Users/rt/workspace/synod/tests/integration/session_native_flow.rs` and `/Users/rt/workspace/synod/tests/integration/cluster_delivery_flow.rs`
-- [x] T021 [P] [US3] Add unit coverage for stale or scope-unsafe candidate rejection in `/Users/rt/workspace/synod/tests/unit/goal_planner.rs` and `/Users/rt/workspace/synod/tests/unit/session_model.rs`
+- [x] T019 [P] [US3] Add contract coverage for insufficient or stale context behavior in `tests/contract/goal_plan_contract.rs` and `tests/contract/session_command_contract.rs`
+- [x] T020 [P] [US3] Add integration coverage for insufficient-context and cluster-boundary scenarios in `tests/integration/session_native_flow.rs` and `tests/integration/cluster_delivery_flow.rs`
+- [x] T021 [P] [US3] Add unit coverage for stale or scope-unsafe candidate rejection in `tests/unit/goal_planner.rs` and `tests/unit/session_model.rs`
 
 ### Implementation for User Story 3
 
-- [x] T022 [US3] Extend `/Users/rt/workspace/synod/src/orchestrator/goal_planner.rs` to downgrade or reject context packs when evidence is stale, contradictory, or too broad
-- [x] T023 [US3] Extend `/Users/rt/workspace/synod/src/orchestrator/session_runtime.rs` and `/Users/rt/workspace/synod/src/domain/session.rs` so non-credible context states persist one bounded recovery cue for status and next
-- [x] T024 [US3] Extend `/Users/rt/workspace/synod/src/cli/output.rs`, `/Users/rt/workspace/synod/src/cli/inspect.rs`, and `/Users/rt/workspace/synod/src/domain/trace.rs` to surface non-credible context without falling back to generic wording
+- [x] T022 [US3] Extend `src/orchestrator/goal_planner.rs` to downgrade or reject context packs when evidence is stale, contradictory, or too broad
+- [x] T023 [US3] Extend `src/orchestrator/session_runtime.rs` and `src/domain/session.rs` so non-credible context states persist one bounded recovery cue for status and next
+- [x] T024 [US3] Extend `src/cli/output.rs`, `src/cli/inspect.rs`, and `src/domain/trace.rs` to surface non-credible context without falling back to generic wording
 
 **Checkpoint**: Non-credible context becomes an explicit, inspectable stop path.
 
@@ -114,14 +114,14 @@ independently testable while still closing one full release-aligned feature.
 
 ### Tests for User Story 4
 
-- [x] T025 [P] [US4] Refresh focused coverage checks for touched Rust files through `/Users/rt/workspace/synod/lcov.info` and the supporting validation commands
+- [x] T025 [P] [US4] Refresh focused coverage checks for touched Rust files through `lcov.info` and the supporting validation commands
 
 ### Implementation for User Story 4
 
-- [x] T026 [US4] Bump the crate version to `0.40.0` in `/Users/rt/workspace/synod/Cargo.toml` and `/Users/rt/workspace/synod/Cargo.lock`
-- [x] T027 [US4] Update impacted docs and the changelog in `/Users/rt/workspace/synod/README.md`, `/Users/rt/workspace/synod/docs/`, `/Users/rt/workspace/synod/CONTRIBUTING.md`, `/Users/rt/workspace/synod/CHANGELOG.md`, and `/Users/rt/workspace/synod/assistant/README.md`
-- [x] T028 [US4] Update `/Users/rt/workspace/synod/ROADMAP.md` to remove the completed context-selection-hardening work from the future roadmap and record it as delivered
-- [x] T029 [US4] Refresh assistant guidance impacted by the new context-selection story in `/Users/rt/workspace/synod/assistant/claude/commands/`, `/Users/rt/workspace/synod/assistant/codex/commands/`, `/Users/rt/workspace/synod/assistant/copilot/prompts/`, and `/Users/rt/workspace/synod/AGENTS.md`
+- [x] T026 [US4] Bump the crate version to `0.40.0` in `Cargo.toml` and `Cargo.lock`
+- [x] T027 [US4] Update impacted docs and the changelog in `README.md`, `docs/`, `CONTRIBUTING.md`, `CHANGELOG.md`, and `assistant/README.md`
+- [x] T028 [US4] Update `ROADMAP.md` to remove the completed context-selection-hardening work from the future roadmap and record it as delivered
+- [x] T029 [US4] Refresh assistant guidance impacted by the new context-selection story in `assistant/claude/commands/`, `assistant/codex/commands/`, `assistant/copilot/prompts/`, and `AGENTS.md`
 
 **Checkpoint**: Release artifacts describe `0.40.0` consistently and the README first-run flow is less intimidating.
 
@@ -135,7 +135,7 @@ independently testable while still closing one full release-aligned feature.
 - [x] T031 [P] Run lint validation with `cargo clippy --workspace --all-targets --all-features -- -D warnings`
 - [x] T032 Run compile-oriented and broader Rust validation for the slice with `cargo test --no-run --all-targets` and `cargo nextest run --workspace --all-features`
 - [x] T033 Refresh line coverage with `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info` and confirm modified or new Rust files stay above 95%
-- [x] T034 Mark completed tasks in `/Users/rt/workspace/synod/specs/040-context-selection-hardening/tasks.md` and capture the final descriptive commit message in the implementation summary
+- [x] T034 Mark completed tasks in `specs/040-context-selection-hardening/tasks.md` and capture the final descriptive commit message in the implementation summary
 
 ---
 

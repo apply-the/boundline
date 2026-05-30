@@ -2,7 +2,7 @@
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-04-25
-**Feature**: [spec.md](/Users/rt/workspace/boundline/specs/005-delivery-flows/spec.md)
+**Feature**: [spec.md](specs/005-delivery-flows/spec.md)
 
 ## Content Quality
 

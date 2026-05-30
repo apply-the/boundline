@@ -7,8 +7,9 @@ mod report;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::{self, IsTerminal, Write};
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
-#[cfg(not(test))]
 use std::process::Command;
 use std::sync::{
     Arc,
@@ -36,7 +37,8 @@ use crate::adapters::env_layer::{
 use crate::cli::CommandExitStatus;
 use crate::domain::configuration::{
     AssistantHostKind, CanonPreferences, ConfigFile, IdeKind, InitConfigScope, InitTemplate,
-    ModelRoute, RouteSlot, RoutingOverrides, RuntimeKind, TerminalAutoApproveProfile,
+    ModelRoute, RouteSlot, RoutingOverrides, RuntimeKind, SemanticAccelerationPolicy,
+    SemanticAccelerationPolicyState, SemanticIndexHookAction, TerminalAutoApproveProfile,
     built_in_default_route, resolve_effective_routing, seeded_routes_for_assistants,
 };
 use crate::domain::distribution::CanonInstallStatus;
@@ -103,6 +105,15 @@ const CANON_SAFETY_REVIEWER_ROLE_ID: &str = "safety";
 const CANON_MAINTAINABILITY_REVIEWER_ROLE_ID: &str = "maintainability";
 const CANON_REVIEWER_ROUTE_REPAIR_ACTION: &str =
     "set distinct routing.reviewer_roles entries for safety and maintainability";
+const SEMANTIC_INDEX_HOOK_TRIGGER_ENV: &str = "BOUNDLINE_INDEX_HOOK_TRIGGER";
+const SEMANTIC_INDEX_HOOK_TRIGGER_POST_CHECKOUT: &str = "post_checkout";
+const SEMANTIC_INDEX_HOOK_TRIGGER_POST_MERGE: &str = "post_merge";
+const SEMANTIC_INDEX_HOOK_TRIGGER_POST_REWRITE: &str = "post_rewrite";
+const SEMANTIC_INDEX_HOOK_MANAGED_MARKER: &str = "# Boundline semantic index stale hook";
+const SEMANTIC_INDEX_HOOK_BOUNDLINE_COMMAND: &str = "boundline";
+const POST_CHECKOUT_HOOK_NAME: &str = "post-checkout";
+const POST_MERGE_HOOK_NAME: &str = "post-merge";
+const POST_REWRITE_HOOK_NAME: &str = "post-rewrite";
 const CANON_SAFETY_REVIEWER_SLOT_ORDER: [RouteSlot; 4] =
     [RouteSlot::Verification, RouteSlot::Review, RouteSlot::Planning, RouteSlot::Implementation];
 const CANON_MAINTAINABILITY_REVIEWER_SLOT_ORDER: [RouteSlot; 4] =
@@ -627,6 +638,7 @@ pub struct InitRequest<'a> {
     pub owner: Option<&'a str>,
     pub ide: &'a [IdeKind],
     pub auto_approve: Option<TerminalAutoApproveProfile>,
+    pub semantic_index_hook_action: Option<SemanticIndexHookAction>,
     pub export_docs: bool,
     pub docs_refresh: bool,
     pub docs_diff: bool,
@@ -965,6 +977,11 @@ fn apply_init_scaffold_changes(
                 store.save_local(local)?;
                 Ok(())
             })?;
+            if semantic_index_hook_action(local) == SemanticIndexHookAction::MarkStale {
+                run_init_activity("installing semantic index hooks", interactive_terminal, || {
+                    install_semantic_index_hooks(workspace)
+                })?;
+            }
         }
 
         if let (Some(path), Some(contents)) = (local_env_template_path, local_env_template_contents)
@@ -2066,6 +2083,9 @@ fn validate_init_scope_options(request: &InitRequest<'_>) -> Result<(), InitComm
     if request.auto_approve.is_some() {
         invalid_arguments.push("--auto-approve");
     }
+    if request.semantic_index_hook_action.is_some() {
+        invalid_arguments.push("--semantic-index-hook-action");
+    }
 
     if invalid_arguments.is_empty() {
         Ok(())
@@ -2444,6 +2464,109 @@ fn apply_missing_canon_defaults(canon: &mut CanonPreferences) {
     {
         canon.default_system_context = Some(DEFAULT_CANON_SYSTEM_CONTEXT.to_string());
     }
+}
+
+fn apply_requested_semantic_index_hook_action(
+    config: &mut ConfigFile,
+    hook_action: Option<SemanticIndexHookAction>,
+) {
+    let Some(hook_action) = hook_action else {
+        return;
+    };
+
+    let policy = SemanticAccelerationPolicy {
+        policy: match hook_action {
+            SemanticIndexHookAction::Disabled => SemanticAccelerationPolicyState::Disabled,
+            SemanticIndexHookAction::MarkStale => SemanticAccelerationPolicyState::Local,
+        },
+        index_hook_action: hook_action,
+    };
+    config.routing.set_semantic_acceleration_policy(policy);
+}
+
+fn semantic_index_hook_action(config: &ConfigFile) -> SemanticIndexHookAction {
+    config
+        .routing
+        .semantic_acceleration
+        .as_ref()
+        .map(|policy| policy.index_hook_action)
+        .unwrap_or(SemanticIndexHookAction::Disabled)
+}
+
+fn install_semantic_index_hooks(workspace: &Path) -> Result<(), InitCommandError> {
+    let Some(hooks_directory) = git_hooks_directory(workspace) else {
+        return Ok(());
+    };
+    fs::create_dir_all(&hooks_directory)
+        .map_err(|source| InitCommandError::WriteFile { path: hooks_directory.clone(), source })?;
+
+    for (hook_name, trigger) in semantic_index_hook_specs() {
+        let hook_path = hooks_directory.join(hook_name);
+        let should_write = match fs::read_to_string(&hook_path) {
+            Ok(existing) => existing.contains(SEMANTIC_INDEX_HOOK_MANAGED_MARKER),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => true,
+            Err(error) => {
+                return Err(InitCommandError::ReadFile { path: hook_path.clone(), source: error });
+            }
+        };
+        if !should_write {
+            continue;
+        }
+
+        fs::write(&hook_path, render_semantic_index_hook_script(trigger))
+            .map_err(|source| InitCommandError::WriteFile { path: hook_path.clone(), source })?;
+        set_hook_executable(&hook_path)?;
+    }
+
+    Ok(())
+}
+
+fn git_hooks_directory(workspace: &Path) -> Option<PathBuf> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(workspace)
+        .args(["rev-parse", "--git-path", "hooks"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let relative = String::from_utf8(output.stdout).ok()?;
+    let trimmed = relative.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let hook_path = PathBuf::from(trimmed);
+    if hook_path.is_absolute() { Some(hook_path) } else { Some(workspace.join(hook_path)) }
+}
+
+fn semantic_index_hook_specs() -> [(&'static str, &'static str); 3] {
+    [
+        (POST_CHECKOUT_HOOK_NAME, SEMANTIC_INDEX_HOOK_TRIGGER_POST_CHECKOUT),
+        (POST_MERGE_HOOK_NAME, SEMANTIC_INDEX_HOOK_TRIGGER_POST_MERGE),
+        (POST_REWRITE_HOOK_NAME, SEMANTIC_INDEX_HOOK_TRIGGER_POST_REWRITE),
+    ]
+}
+
+fn render_semantic_index_hook_script(trigger: &str) -> String {
+    format!(
+        "#!/bin/sh\n{SEMANTIC_INDEX_HOOK_MANAGED_MARKER}\nrepo_root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)\nif command -v {SEMANTIC_INDEX_HOOK_BOUNDLINE_COMMAND} >/dev/null 2>&1; then\n  {SEMANTIC_INDEX_HOOK_TRIGGER_ENV}={trigger} {SEMANTIC_INDEX_HOOK_BOUNDLINE_COMMAND} index status --workspace \"$repo_root\" >/dev/null 2>&1 || true\nfi\nexit 0\n"
+    )
+}
+
+#[cfg(unix)]
+fn set_hook_executable(path: &Path) -> Result<(), InitCommandError> {
+    let mut permissions = fs::metadata(path)
+        .map_err(|source| InitCommandError::ReadFile { path: path.to_path_buf(), source })?
+        .permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(path, permissions)
+        .map_err(|source| InitCommandError::WriteFile { path: path.to_path_buf(), source })
+}
+
+#[cfg(not(unix))]
+fn set_hook_executable(_path: &Path) -> Result<(), InitCommandError> {
+    Ok(())
 }
 
 fn canon_preference_or_default<'a>(value: Option<&'a str>, fallback: &'static str) -> &'a str {
@@ -4591,20 +4714,26 @@ mod tests {
         BOUNDLINE_DIR_RELATIVE, BOUNDLINE_VERSION, BundledModelCatalog,
         CANON_MAINTAINABILITY_REVIEWER_ROLE_ID, CANON_SAFETY_REVIEWER_ROLE_ID,
         EXECUTION_PROFILE_FILE_NAME, GuidedRouteSource, InitCommandError, InitInteractor,
-        InitRequest, UpdateRequest, UpdateTarget, canon_reviewer_route_readiness,
+        InitRequest, POST_CHECKOUT_HOOK_NAME, POST_MERGE_HOOK_NAME, POST_REWRITE_HOOK_NAME,
+        SEMANTIC_INDEX_HOOK_MANAGED_MARKER, SEMANTIC_INDEX_HOOK_TRIGGER_POST_MERGE,
+        SEMANTIC_INDEX_HOOK_TRIGGER_POST_REWRITE, UpdateRequest, UpdateTarget,
+        apply_requested_semantic_index_hook_action, canon_reviewer_route_readiness,
         collect_guided_init_answers_with_interactor, command_in_path,
         ensure_workspace_project_doc_roots, execute_init, execute_update, execution_template,
-        format_runtime_list, format_slot_list, initial_guided_route_selections,
+        format_runtime_list, format_slot_list, git_hooks_directory,
+        initial_guided_route_selections, install_semantic_index_hooks, merge_hygiene_content,
         parse_canon_mode_selection, parse_context_binding, parse_domain_family,
         parse_domain_standard, parse_external_context_kind, parse_model_route,
-        render_guided_route_review, resolve_seeded_routes, resolve_workspace_root,
+        plan_hygiene_defaults, render_guided_route_review, resolve_seeded_routes,
+        resolve_workspace_root, semantic_index_hook_action, set_hook_executable,
         supported_route_slots, supported_runtime_choices, template_label, upsert_binding,
+        validate_init_scope_options,
     };
     use crate::adapters::config_store::FileConfigStore;
     use crate::cli::CommandExitStatus;
     use crate::domain::configuration::{
         CanonPreferences, ConfigFile, InitConfigScope, InitTemplate, ModelRoute, RouteSlot,
-        RoutingConfig, RuntimeKind,
+        RoutingConfig, RuntimeKind, SemanticAccelerationPolicyState, SemanticIndexHookAction,
     };
     use crate::domain::domain_templates::{
         DomainFamily, ExternalContextBinding, ExternalContextKind,
@@ -4644,6 +4773,7 @@ mod tests {
             owner: None,
             ide: &[],
             auto_approve: None,
+            semantic_index_hook_action: None,
             export_docs: false,
             docs_refresh: false,
             docs_diff: false,
@@ -4968,6 +5098,24 @@ mod tests {
     }
 
     #[test]
+    fn execute_init_preview_mentions_derived_index_wal_and_shm_hygiene() {
+        let workspace = temp_workspace("boundline-init-preview-derived-index");
+        fs::create_dir_all(workspace.join(".git")).unwrap();
+        fs::create_dir_all(workspace.join(".boundline")).unwrap();
+        fs::write(workspace.join(".boundline/execution.json"), "{}\n").unwrap();
+        FileConfigStore::for_workspace(&workspace).save_local(&Default::default()).unwrap();
+
+        let report = execute_init(InitRequest {
+            template: Some(InitTemplate::Delivery),
+            force: false,
+            ..base_init_request(&workspace)
+        })
+        .unwrap();
+
+        assert!(report.terminal_output.contains("SQLite WAL/SHM sidecars disposable"));
+    }
+
+    #[test]
     fn execute_init_reports_empty_domain_templates_when_no_detection_matches() {
         let workspace = temp_workspace("boundline-init-empty-domain");
 
@@ -4990,6 +5138,7 @@ mod tests {
             owner: None,
             ide: &[],
             auto_approve: None,
+            semantic_index_hook_action: None,
             export_docs: false,
             docs_refresh: false,
             docs_diff: false,
@@ -5022,6 +5171,25 @@ mod tests {
         assert!(
             execution_profile.contains("\"default_owner\": \"platform\""),
             "{execution_profile}"
+        );
+    }
+
+    #[test]
+    fn execute_init_reports_derived_index_wal_and_shm_hygiene() {
+        let workspace = temp_workspace("boundline-init-derived-index-hygiene");
+        fs::create_dir_all(workspace.join(".git")).unwrap();
+
+        let report = execute_successful_init(InitRequest {
+            template: Some(InitTemplate::Change),
+            ..base_init_request(&workspace)
+        });
+
+        assert!(
+            report
+                .terminal_output
+                .contains("derived_index_hygiene: disposable retrieval DB, manifest, and SQLite WAL/SHM sidecars stay ignored"),
+            "{}",
+            report.terminal_output
         );
     }
 
@@ -5072,6 +5240,7 @@ mod tests {
                 owner: None,
                 ide: &[],
                 auto_approve: None,
+                semantic_index_hook_action: None,
                 export_docs: false,
                 docs_refresh: false,
                 docs_diff: false,
@@ -5134,6 +5303,7 @@ mod tests {
                 owner: None,
                 ide: &[],
                 auto_approve: None,
+                semantic_index_hook_action: None,
                 export_docs: false,
                 docs_refresh: false,
                 docs_diff: false,
@@ -5182,6 +5352,7 @@ mod tests {
             owner: None,
             ide: &[],
             auto_approve: None,
+            semantic_index_hook_action: None,
             export_docs: false,
             docs_refresh: false,
             docs_diff: false,
@@ -5276,6 +5447,7 @@ mod tests {
             owner: None,
             ide: &[],
             auto_approve: None,
+            semantic_index_hook_action: None,
             export_docs: false,
             docs_refresh: false,
             docs_diff: false,
@@ -5465,6 +5637,7 @@ mod tests {
             owner: None,
             ide: &[],
             auto_approve: None,
+            semantic_index_hook_action: None,
             export_docs: false,
             docs_refresh: false,
             docs_diff: false,
@@ -5529,11 +5702,12 @@ mod tests {
     fn execute_init_reports_hygiene_unchanged_when_files_already_contain_patterns() {
         let workspace = temp_workspace("boundline-init-hygiene-unchanged");
         fs::create_dir_all(workspace.join(".git")).unwrap();
-        fs::write(
-            workspace.join(".gitignore"),
-            "# Boundline universal defaults\n.boundline/traces/\n.boundline/checkpoints/\n",
-        )
-        .unwrap();
+        let gitignore_plan = plan_hygiene_defaults(&workspace, &BTreeSet::new())
+            .into_iter()
+            .find(|plan| plan.path == ".gitignore")
+            .expect("git workspace should plan .gitignore defaults");
+        let gitignore = merge_hygiene_content(None, &gitignore_plan).content;
+        fs::write(workspace.join(".gitignore"), gitignore).unwrap();
 
         let report = execute_init(InitRequest {
             workspace: &workspace,
@@ -5554,6 +5728,7 @@ mod tests {
             owner: None,
             ide: &[],
             auto_approve: None,
+            semantic_index_hook_action: None,
             export_docs: false,
             docs_refresh: false,
             docs_diff: false,
@@ -5599,6 +5774,7 @@ mod tests {
             owner: None,
             ide: &[],
             auto_approve: None,
+            semantic_index_hook_action: None,
             export_docs: false,
             docs_refresh: false,
             docs_diff: false,
@@ -5654,6 +5830,119 @@ mod tests {
         let _ = super::runtime_available(RuntimeKind::Codex);
         let _ = super::runtime_available(RuntimeKind::Gemini);
         assert!(!command_in_path("boundline-command-that-should-not-exist"));
+    }
+
+    #[test]
+    fn validate_scope_and_apply_semantic_index_hook_action_cover_requested_semantics() {
+        let workspace = temp_workspace("init-semantic-hook-action");
+        let request = InitRequest {
+            scope: InitConfigScope::Global,
+            semantic_index_hook_action: Some(SemanticIndexHookAction::MarkStale),
+            ..base_init_request(&workspace)
+        };
+        let error = validate_init_scope_options(&request).unwrap_err();
+        assert!(matches!(
+            error,
+            InitCommandError::InvalidScopeArgument(message)
+                if message.contains("--semantic-index-hook-action")
+        ));
+
+        let mut config = ConfigFile::default();
+        assert_eq!(semantic_index_hook_action(&config), SemanticIndexHookAction::Disabled);
+
+        apply_requested_semantic_index_hook_action(
+            &mut config,
+            Some(SemanticIndexHookAction::MarkStale),
+        );
+        let policy = config.routing.semantic_acceleration.as_ref().unwrap();
+        assert_eq!(policy.policy, SemanticAccelerationPolicyState::Local);
+        assert_eq!(policy.index_hook_action, SemanticIndexHookAction::MarkStale);
+
+        apply_requested_semantic_index_hook_action(
+            &mut config,
+            Some(SemanticIndexHookAction::Disabled),
+        );
+        let policy = config.routing.semantic_acceleration.as_ref().unwrap();
+        assert_eq!(policy.policy, SemanticAccelerationPolicyState::Disabled);
+        assert_eq!(policy.index_hook_action, SemanticIndexHookAction::Disabled);
+    }
+
+    #[test]
+    #[rustfmt::skip]
+    fn install_semantic_index_hooks_preserves_user_hooks_and_handles_git_edge_cases() { let workspace = temp_workspace("init-semantic-hooks");
+        assert!(git_hooks_directory(&workspace).is_none());
+        install_semantic_index_hooks(&workspace).unwrap();
+
+        let init_output =
+            std::process::Command::new("git").arg("init").current_dir(&workspace).output().unwrap();
+        assert!(
+            init_output.status.success(),
+            "git init failed: {}",
+            String::from_utf8_lossy(&init_output.stderr)
+        );
+
+        let hooks_directory = git_hooks_directory(&workspace).unwrap();
+        let user_hook_path = hooks_directory.join(POST_CHECKOUT_HOOK_NAME);
+        let user_hook_contents = "#!/bin/sh\necho user-hook\n";
+        fs::write(&user_hook_path, user_hook_contents).unwrap();
+
+        let managed_rewrite_path = hooks_directory.join(POST_REWRITE_HOOK_NAME);
+        fs::write(&managed_rewrite_path, format!("{SEMANTIC_INDEX_HOOK_MANAGED_MARKER}\nold\n"))
+            .unwrap();
+
+        install_semantic_index_hooks(&workspace).unwrap();
+
+        assert_eq!(fs::read_to_string(&user_hook_path).unwrap(), user_hook_contents);
+
+        let merge_hook = fs::read_to_string(hooks_directory.join(POST_MERGE_HOOK_NAME)).unwrap();
+        assert!(merge_hook.contains(SEMANTIC_INDEX_HOOK_MANAGED_MARKER));
+        assert!(merge_hook.contains(SEMANTIC_INDEX_HOOK_TRIGGER_POST_MERGE));
+
+        let rewrite_hook = fs::read_to_string(&managed_rewrite_path).unwrap();
+        assert!(rewrite_hook.contains(SEMANTIC_INDEX_HOOK_MANAGED_MARKER));
+        assert!(rewrite_hook.contains(SEMANTIC_INDEX_HOOK_TRIGGER_POST_REWRITE));
+        assert!(!rewrite_hook.contains("old"));
+
+        let fake_bin = temp_workspace("init-empty-git-bin");
+        let fake_git = fake_bin.join("git");
+        fs::write(&fake_git, "#!/bin/sh\nexit 0\n").unwrap();
+        set_hook_executable(&fake_git).unwrap();
+
+        let lock = acquire_process_state_lock();
+        let original_path = std::env::var_os("PATH");
+        let fake_path = std::env::join_paths([fake_bin.as_path()]).unwrap();
+        unsafe {
+            std::env::set_var("PATH", &fake_path);
+        }
+        let empty_stdout_result = git_hooks_directory(&workspace);
+        if let Some(value) = original_path.as_ref() { unsafe { std::env::set_var("PATH", value); } } else { unsafe { std::env::remove_var("PATH"); } }
+        drop(lock);
+
+        assert!(empty_stdout_result.is_none());
+    }
+
+    #[test]
+    #[rustfmt::skip]
+    fn install_semantic_index_hooks_reports_read_errors_for_directory_placeholders() { let workspace = temp_workspace("init-semantic-hook-read-error");
+        let init_output =
+            std::process::Command::new("git").arg("init").current_dir(&workspace).output().unwrap();
+        assert!(
+            init_output.status.success(),
+            "git init failed: {}",
+            String::from_utf8_lossy(&init_output.stderr)
+        );
+
+        let hooks_directory = git_hooks_directory(&workspace).unwrap();
+        let unreadable_hook_path = hooks_directory.join(POST_MERGE_HOOK_NAME);
+        fs::create_dir_all(&unreadable_hook_path).unwrap();
+
+        let error = install_semantic_index_hooks(&workspace).unwrap_err();
+        assert!(matches!(
+            error,
+            InitCommandError::ReadFile { path, source }
+                if path == unreadable_hook_path
+                    && source.kind() != std::io::ErrorKind::NotFound
+        ));
     }
 
     #[test]

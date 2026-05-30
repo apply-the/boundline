@@ -1,6 +1,6 @@
 # Implementation Plan: Unify Route Summaries And Config Projection
 
-**Branch**: `024-unify-route-summaries` | **Date**: 2026-05-01 | **Spec**: [/Users/rt/workspace/boundline/specs/024-unify-route-summaries/spec.md](/Users/rt/workspace/boundline/specs/024-unify-route-summaries/spec.md)
+**Branch**: `024-unify-route-summaries` | **Date**: 2026-05-01 | **Spec**: [specs/024-unify-route-summaries/spec.md](specs/024-unify-route-summaries/spec.md)
 **Input**: Feature specification from `/specs/024-unify-route-summaries/spec.md`
 
 **Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.
@@ -41,16 +41,16 @@ Unify Boundline's operator-facing route summaries by projecting more native, wor
 
 Mark each line as PASS or FAIL in the completed plan and reference the section that satisfies it.
 
-- **PASS** Delivery identity: The slice directly improves bounded engineering-task delivery by making route follow-up summaries easier to understand across existing execution paths without changing orchestration ownership. See Summary, Technical Context, and [spec.md](/Users/rt/workspace/boundline/specs/024-unify-route-summaries/spec.md).
+- **PASS** Delivery identity: The slice directly improves bounded engineering-task delivery by making route follow-up summaries easier to understand across existing execution paths without changing orchestration ownership. See Summary, Technical Context, and [spec.md](specs/024-unify-route-summaries/spec.md).
 - **PASS** Delivery-first scope: The work prioritizes operator understanding of execution, follow-up authority, and routing/config interpretation ahead of polish. See Summary, Technical Context, and research decisions.
 - **PASS** Primary workflow: Session-native remains the main operator path, while workflow, review/governance, and explicit compatibility follow-up stay available and explicit within the same summary family. See Summary, Technical Context, quickstart, and contracts.
 - **PASS** Bounded execution: The slice does not broaden execution budgets; it keeps existing start, stop, and authority rules and makes them more legible through aligned summaries. See Technical Context, data model, and quickstart.
 - **PASS** Stateful execution: The design reuses existing persisted session, trace, workflow, and config state and projects them through a shared follow-up model. See Summary, Technical Context, data model, and contracts.
 - **PASS** Mutable planning: The slice does not add a new planning engine; it aligns the read-side representation of planning outcomes, route ownership, and next-step guidance after the existing bounded planning/replanning behaviors. See Summary, research, and data model.
-- **PASS** Sequential-first design: One authoritative follow-up state remains active at a time; the slice does not introduce concurrency or background work. See Technical Context, research, and [spec.md](/Users/rt/workspace/boundline/specs/024-unify-route-summaries/spec.md).
+- **PASS** Sequential-first design: One authoritative follow-up state remains active at a time; the slice does not introduce concurrency or background work. See Technical Context, research, and [spec.md](specs/024-unify-route-summaries/spec.md).
 - **PASS** Tool-agent symmetry: Reasoning, planning, governance pauses, compatibility follow-up, and corrective guidance remain visible through explicit summary fields rather than hidden route-specific heuristics. See Summary, research, quickstart, and contracts.
 - **PASS** Observability and explicit intelligence: Route owner, authority, execution condition, config inputs, and next-step guidance remain inspectable across CLI and trace-derived surfaces. See Technical Context, quickstart, and contracts.
-- **PASS** Non-goals and external separation: The plan does not add Canon-owned orchestration, provider abstraction, long-term memory, UI, or distributed execution, and it reuses existing bounded route surfaces only. See Constraints, research, and [spec.md](/Users/rt/workspace/boundline/specs/024-unify-route-summaries/spec.md).
+- **PASS** Non-goals and external separation: The plan does not add Canon-owned orchestration, provider abstraction, long-term memory, UI, or distributed execution, and it reuses existing bounded route surfaces only. See Constraints, research, and [spec.md](specs/024-unify-route-summaries/spec.md).
 - **PASS** Minimal slice: The smallest independently valuable capability is a unified summary and config projection model across existing routes with explicit route ownership preserved. See Summary and research.
 
 ## Project Structure

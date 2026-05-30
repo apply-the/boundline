@@ -2,7 +2,7 @@
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-05-03
-**Feature**: [spec.md](/Users/rt/workspace/boundline/specs/037-bounded-delegation/spec.md)
+**Feature**: [spec.md](specs/037-bounded-delegation/spec.md)
 
 ## Content Quality
 

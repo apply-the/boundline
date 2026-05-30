@@ -2,7 +2,7 @@
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning  
 **Created**: 2026-04-26  
-**Feature**: [spec.md](/Users/rt/workspace/boundline/specs/009-canon-governance-adapter/spec.md)
+**Feature**: [spec.md](specs/009-canon-governance-adapter/spec.md)
 
 ## Content Quality
 

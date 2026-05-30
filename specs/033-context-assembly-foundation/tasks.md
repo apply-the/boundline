@@ -17,8 +17,8 @@
 
 **Purpose**: Prepare the 033 feature pack and validation surfaces.
 
-- [x] T001 Confirm 033 feature artifacts and update `/Users/rt/workspace/boundline/specs/033-context-assembly-foundation/plan.md`, `/Users/rt/workspace/boundline/specs/033-context-assembly-foundation/research.md`, `/Users/rt/workspace/boundline/specs/033-context-assembly-foundation/data-model.md`, `/Users/rt/workspace/boundline/specs/033-context-assembly-foundation/contracts/`, and `/Users/rt/workspace/boundline/specs/033-context-assembly-foundation/quickstart.md`
-- [x] T002 [P] Add or update top-level test harness references if new 033 test files require entries in `/Users/rt/workspace/boundline/tests/unit.rs`, `/Users/rt/workspace/boundline/tests/contract.rs`, or `/Users/rt/workspace/boundline/tests/integration.rs`
+- [x] T001 Confirm 033 feature artifacts and update `specs/033-context-assembly-foundation/plan.md`, `specs/033-context-assembly-foundation/research.md`, `specs/033-context-assembly-foundation/data-model.md`, `specs/033-context-assembly-foundation/contracts/`, and `specs/033-context-assembly-foundation/quickstart.md`
+- [x] T002 [P] Add or update top-level test harness references if new 033 test files require entries in `tests/unit.rs`, `tests/contract.rs`, or `tests/integration.rs`
 
 ---
 
@@ -28,9 +28,9 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [x] T003 Extend `/Users/rt/workspace/boundline/src/domain/goal_plan.rs` with context-pack, context-input, and credibility-state models plus serde validation
-- [x] T004 [P] Extend `/Users/rt/workspace/boundline/src/orchestrator/goal_planner.rs` with bounded context-assembly helpers for workspace files, authored inputs, recent traces, and Canon artifacts
-- [x] T005 [P] Extend `/Users/rt/workspace/boundline/tests/unit/goal_plan_model.rs` and `/Users/rt/workspace/boundline/tests/unit/goal_planner.rs` with model and planner coverage for the new context-pack primitives
+- [x] T003 Extend `src/domain/goal_plan.rs` with context-pack, context-input, and credibility-state models plus serde validation
+- [x] T004 [P] Extend `src/orchestrator/goal_planner.rs` with bounded context-assembly helpers for workspace files, authored inputs, recent traces, and Canon artifacts
+- [x] T005 [P] Extend `tests/unit/goal_plan_model.rs` and `tests/unit/goal_planner.rs` with model and planner coverage for the new context-pack primitives
 
 **Checkpoint**: The goal planner can create a context pack and the core model is validated.
 
@@ -44,15 +44,15 @@
 
 ### Tests for User Story 1
 
-- [x] T006 [P] [US1] Add contract coverage for context-pack creation in `/Users/rt/workspace/boundline/tests/contract/goal_plan_contract.rs`
-- [x] T007 [P] [US1] Add integration coverage for session-native planning with explicit context assembly in `/Users/rt/workspace/boundline/tests/integration/session_native_flow.rs`
-- [x] T008 [P] [US1] Add unit coverage for session-runtime planning inputs in `/Users/rt/workspace/boundline/tests/unit/session_model.rs` or `/Users/rt/workspace/boundline/tests/unit/runtime_routing.rs`
+- [x] T006 [P] [US1] Add contract coverage for context-pack creation in `tests/contract/goal_plan_contract.rs`
+- [x] T007 [P] [US1] Add integration coverage for session-native planning with explicit context assembly in `tests/integration/session_native_flow.rs`
+- [x] T008 [P] [US1] Add unit coverage for session-runtime planning inputs in `tests/unit/session_model.rs` or `tests/unit/runtime_routing.rs`
 
 ### Implementation for User Story 1
 
-- [x] T009 [US1] Update `/Users/rt/workspace/boundline/src/orchestrator/session_runtime.rs` to pass authored brief, negotiated delivery, and trace state into goal planning
-- [x] T010 [US1] Update `/Users/rt/workspace/boundline/src/orchestrator/goal_planner.rs` so planned task targets and evidence derive from the assembled context pack instead of coarse ambient defaults alone
-- [x] T011 [US1] Update `/Users/rt/workspace/boundline/src/orchestrator/decision_loop.rs` and `/Users/rt/workspace/boundline/src/domain/trace.rs` so `GoalPlanCreated` persists context-pack state and provenance
+- [x] T009 [US1] Update `src/orchestrator/session_runtime.rs` to pass authored brief, negotiated delivery, and trace state into goal planning
+- [x] T010 [US1] Update `src/orchestrator/goal_planner.rs` so planned task targets and evidence derive from the assembled context pack instead of coarse ambient defaults alone
+- [x] T011 [US1] Update `src/orchestrator/decision_loop.rs` and `src/domain/trace.rs` so `GoalPlanCreated` persists context-pack state and provenance
 
 **Checkpoint**: Planning creates a credible bounded context pack and traces it.
 
@@ -66,15 +66,15 @@
 
 ### Tests for User Story 2
 
-- [x] T012 [P] [US2] Add unit coverage for context-pack rendering in `/Users/rt/workspace/boundline/tests/unit/cli_output.rs`
-- [x] T013 [P] [US2] Add contract coverage for inspect projection in `/Users/rt/workspace/boundline/tests/contract/trace_summary_contract.rs`
-- [x] T014 [P] [US2] Add integration or session projection coverage in `/Users/rt/workspace/boundline/tests/unit/workflow_session_projection.rs` and `/Users/rt/workspace/boundline/tests/unit/session_record.rs`
+- [x] T012 [P] [US2] Add unit coverage for context-pack rendering in `tests/unit/cli_output.rs`
+- [x] T013 [P] [US2] Add contract coverage for inspect projection in `tests/contract/trace_summary_contract.rs`
+- [x] T014 [P] [US2] Add integration or session projection coverage in `tests/unit/workflow_session_projection.rs` and `tests/unit/session_record.rs`
 
 ### Implementation for User Story 2
 
-- [x] T015 [US2] Extend `/Users/rt/workspace/boundline/src/domain/session.rs` with context-pack projection fields used by session-native status surfaces
-- [x] T016 [US2] Extend `/Users/rt/workspace/boundline/src/cli/output.rs` to render context summary, credibility, primary inputs, and provenance on plan, run, status, next, and inspect outputs
-- [x] T017 [US2] Extend `/Users/rt/workspace/boundline/src/cli/inspect.rs` to recover context-pack data from goal-plan and trace payloads while preserving explicit compatibility authority
+- [x] T015 [US2] Extend `src/domain/session.rs` with context-pack projection fields used by session-native status surfaces
+- [x] T016 [US2] Extend `src/cli/output.rs` to render context summary, credibility, primary inputs, and provenance on plan, run, status, next, and inspect outputs
+- [x] T017 [US2] Extend `src/cli/inspect.rs` to recover context-pack data from goal-plan and trace payloads while preserving explicit compatibility authority
 
 **Checkpoint**: Operators can inspect bounded context from normal CLI surfaces.
 
@@ -88,15 +88,15 @@
 
 ### Tests for User Story 3
 
-- [x] T018 [P] [US3] Add unit coverage for insufficient or stale context packs in `/Users/rt/workspace/boundline/tests/unit/goal_planner.rs`
-- [x] T019 [P] [US3] Add contract coverage for failure projection in `/Users/rt/workspace/boundline/tests/contract/runtime_refoundation_contract.rs` or `/Users/rt/workspace/boundline/tests/contract/goal_plan_contract.rs`
-- [x] T020 [P] [US3] Add integration coverage for blocked planning or follow-through in `/Users/rt/workspace/boundline/tests/integration/runtime_refoundation_failure.rs`
+- [x] T018 [P] [US3] Add unit coverage for insufficient or stale context packs in `tests/unit/goal_planner.rs`
+- [x] T019 [P] [US3] Add contract coverage for failure projection in `tests/contract/runtime_refoundation_contract.rs` or `tests/contract/goal_plan_contract.rs`
+- [x] T020 [P] [US3] Add integration coverage for blocked planning or follow-through in `tests/integration/runtime_refoundation_failure.rs`
 
 ### Implementation for User Story 3
 
-- [x] T021 [US3] Add explicit insufficient and stale credibility handling in `/Users/rt/workspace/boundline/src/orchestrator/goal_planner.rs` and `/Users/rt/workspace/boundline/src/orchestrator/session_runtime.rs`
-- [x] T022 [US3] Extend `/Users/rt/workspace/boundline/src/domain/follow_through.rs` and related session or trace projections to surface bounded recovery guidance when context is not credible
-- [x] T023 [US3] Ensure `/Users/rt/workspace/boundline/src/cli/output.rs` and `/Users/rt/workspace/boundline/src/cli/inspect.rs` surface explicit context-credibility failures instead of generic planning errors
+- [x] T021 [US3] Add explicit insufficient and stale credibility handling in `src/orchestrator/goal_planner.rs` and `src/orchestrator/session_runtime.rs`
+- [x] T022 [US3] Extend `src/domain/follow_through.rs` and related session or trace projections to surface bounded recovery guidance when context is not credible
+- [x] T023 [US3] Ensure `src/cli/output.rs` and `src/cli/inspect.rs` surface explicit context-credibility failures instead of generic planning errors
 
 **Checkpoint**: Non-credible context blocks planning and follow-through explicitly.
 
@@ -110,14 +110,14 @@
 
 ### Tests for User Story 4
 
-- [x] T024 [P] [US4] Refresh focused coverage assertions for touched Rust files via `/Users/rt/workspace/boundline/lcov.info` and supporting validation commands
+- [x] T024 [P] [US4] Refresh focused coverage assertions for touched Rust files via `lcov.info` and supporting validation commands
 
 ### Implementation for User Story 4
 
-- [x] T025 [US4] Bump crate version to `0.33.0` in `/Users/rt/workspace/boundline/Cargo.toml` and `/Users/rt/workspace/boundline/Cargo.lock`
-- [x] T026 [US4] Update impacted docs and release narrative in `/Users/rt/workspace/boundline/README.md`, `/Users/rt/workspace/boundline/docs/getting-started.md`, `/Users/rt/workspace/boundline/docs/configuration.md`, `/Users/rt/workspace/boundline/CONTRIBUTING.md`, `/Users/rt/workspace/boundline/CHANGELOG.md`, and `/Users/rt/workspace/boundline/AGENTS.md`
-- [x] T027 [US4] Update `/Users/rt/workspace/boundline/ROADMAP.md` to mark Spec 033 as delivered and remove it from the remaining future macrofeature line
-- [x] T028 [US4] Update assistant or quickstart guidance impacted by the new context-pack story in `/Users/rt/workspace/boundline/assistant/README.md` and `/Users/rt/workspace/boundline/specs/033-context-assembly-foundation/quickstart.md`
+- [x] T025 [US4] Bump crate version to `0.33.0` in `Cargo.toml` and `Cargo.lock`
+- [x] T026 [US4] Update impacted docs and release narrative in `README.md`, `docs/getting-started.md`, `docs/configuration.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, and `AGENTS.md`
+- [x] T027 [US4] Update `ROADMAP.md` to mark Spec 033 as delivered and remove it from the remaining future macrofeature line
+- [x] T028 [US4] Update assistant or quickstart guidance impacted by the new context-pack story in `assistant/README.md` and `specs/033-context-assembly-foundation/quickstart.md`
 
 **Checkpoint**: Release artifacts describe `0.33.0` consistently.
 
@@ -131,7 +131,7 @@
 - [x] T030 [P] Run lint validation with `cargo clippy --workspace --all-targets --all-features -- -D warnings`
 - [x] T031 Run targeted and broader Rust validation for the slice with `cargo test --no-run --all-targets` and selected `cargo nextest run` coverage
 - [x] T032 Refresh line coverage with `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info` and confirm modified or new Rust files stay above 95%
-- [x] T033 Mark completed tasks in `/Users/rt/workspace/boundline/specs/033-context-assembly-foundation/tasks.md` and capture the final descriptive commit message in the implementation summary
+- [x] T033 Mark completed tasks in `specs/033-context-assembly-foundation/tasks.md` and capture the final descriptive commit message in the implementation summary
 
 ---
 

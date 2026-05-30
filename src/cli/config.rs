@@ -360,7 +360,10 @@ pub fn execute_set_canon(
 pub fn execute_set_semantic_acceleration(
     request: SetSemanticAccelerationRequest<'_>,
 ) -> Result<ConfigCommandReport, ConfigCommandError> {
-    let policy = SemanticAccelerationPolicy { policy: request.policy };
+    let policy = SemanticAccelerationPolicy {
+        policy: request.policy,
+        ..SemanticAccelerationPolicy::default()
+    };
     policy.validate().map_err(|source| ConfigCommandError::InvalidPolicy(source.to_string()))?;
 
     if request.scope == ConfigWriteScope::Cluster {
@@ -1324,6 +1327,7 @@ mod tests {
         config.routing.semantic_acceleration =
             Some(crate::domain::configuration::SemanticAccelerationPolicy {
                 policy: crate::domain::configuration::SemanticAccelerationPolicyState::Local,
+                ..crate::domain::configuration::SemanticAccelerationPolicy::default()
             });
 
         assert_eq!(route_text(config.routing.review.as_ref().unwrap()), "gemini:gemini-2.5-pro");
@@ -1520,11 +1524,9 @@ mod tests {
         );
         assert!(effective_view.terminal_output.contains("runtime_capabilities:"));
         assert!(effective_view.terminal_output.contains("slot_effort_policies:"));
-        assert!(
-            effective_view
-                .terminal_output
-                .contains("semantic_acceleration: policy=disabled [built-in]")
-        );
+        assert!(effective_view.terminal_output.contains(
+            "semantic_acceleration: policy=disabled, index_hook_action=disabled [built-in]"
+        ));
         assert!(effective_view
             .terminal_output
             .contains("- verification: level=high, fallback=preserve, rationale=cluster validation bar [cluster]"));
@@ -1842,11 +1844,9 @@ mod tests {
             Some(ConfigShowScope::Effective),
         )
         .unwrap();
-        assert!(
-            effective_view
-                .terminal_output
-                .contains("semantic_acceleration: policy=local [workspace]")
-        );
+        assert!(effective_view.terminal_output.contains(
+            "semantic_acceleration: policy=local, index_hook_action=disabled [workspace]"
+        ));
     }
 
     #[test]

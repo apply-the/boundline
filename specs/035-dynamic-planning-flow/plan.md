@@ -1,6 +1,6 @@
 # Implementation Plan: Dynamic Planning And Flow Inference
 
-**Branch**: `035-dynamic-planning-flow` | **Date**: 2026-05-02 | **Spec**: [/Users/rt/workspace/boundline/specs/035-dynamic-planning-flow/spec.md](/Users/rt/workspace/boundline/specs/035-dynamic-planning-flow/spec.md)
+**Branch**: `035-dynamic-planning-flow` | **Date**: 2026-05-02 | **Spec**: [specs/035-dynamic-planning-flow/spec.md](specs/035-dynamic-planning-flow/spec.md)
 **Input**: Feature specification from `/specs/035-dynamic-planning-flow/spec.md`
 
 **Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.

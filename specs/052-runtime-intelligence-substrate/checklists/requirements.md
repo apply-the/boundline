@@ -2,7 +2,7 @@
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-05-14
-**Feature**: [/Users/rt/workspace/apply-the/boundline/specs/052-runtime-intelligence-substrate/spec.md](/Users/rt/workspace/apply-the/boundline/specs/052-runtime-intelligence-substrate/spec.md)
+**Feature**: [specs/052-runtime-intelligence-substrate/spec.md](specs/052-runtime-intelligence-substrate/spec.md)
 
 ## Content Quality
 

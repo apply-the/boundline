@@ -10,6 +10,8 @@ pub mod config;
 pub mod diagnostics;
 #[path = "../../../src/cli/govern.rs"]
 pub mod govern;
+#[path = "../../../src/cli/index.rs"]
+pub mod index;
 #[path = "../../../src/cli/init.rs"]
 pub mod init;
 #[path = "../../../src/cli/inspect.rs"]

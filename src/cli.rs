@@ -11,15 +11,15 @@ use crate::adapters::env_layer;
 use crate::domain::configuration::{
     AssistantHostKind, CapabilityState, ConfigShowScope, ConfigWriteScope, EffortFallbackPolicy,
     EffortLevel, IdeKind, InitConfigScope, InitTemplate, RouteSlot, RuntimeKind,
-    SemanticAccelerationPolicyState, TerminalAutoApproveProfile,
+    SemanticAccelerationPolicyState, SemanticIndexHookAction, TerminalAutoApproveProfile,
 };
 use crate::domain::domain_templates::{DomainFamily, ExternalContextKind};
 use crate::domain::governance::{CanonMode, CanonModeSelectionPreference, GovernanceRuntimeKind};
 use crate::domain::trace::current_timestamp_millis;
 
 use super::{
-    assistant_assets, checkpoint, cluster, config, diagnostics, govern, init, inspect, models_auth,
-    orchestrate, output, probe, run, session, workflow, workspace as cli_workspace,
+    assistant_assets, checkpoint, cluster, config, diagnostics, govern, index, init, inspect,
+    models_auth, orchestrate, output, probe, run, session, workflow, workspace as cli_workspace,
 };
 
 /// Top-level CLI parser for the Boundline executable.
@@ -56,6 +56,7 @@ pub enum CommandName {
     Orchestrate,
     Run,
     Workflow,
+    Index,
     Inspect,
     Goal,
     Flow,
@@ -83,6 +84,7 @@ impl CommandName {
             Self::Orchestrate => "orchestrate",
             Self::Run => "run",
             Self::Workflow => "workflow",
+            Self::Index => "index",
             Self::Inspect => "inspect",
             Self::Goal => "goal",
             Self::Flow => "flow",
@@ -262,6 +264,10 @@ pub enum DeveloperCommand {
         #[command(subcommand)]
         command: WorkflowSubcommand,
     },
+    Index {
+        #[command(subcommand)]
+        command: IndexSubcommand,
+    },
     Checkpoint {
         #[command(subcommand)]
         command: CheckpointSubcommand,
@@ -389,6 +395,9 @@ pub enum DeveloperCommand {
         /// Terminal auto-approval profile for IDEs with a stable settings schema.
         #[arg(long = "auto-approve", requires = "ide")]
         auto_approve: Option<TerminalAutoApproveProfile>,
+        /// Optional lightweight Git hook action for the semantic derived index.
+        #[arg(long = "semantic-index-hook-action", value_enum)]
+        semantic_index_hook_action: Option<SemanticIndexHookAction>,
         /// Export stable repo-local Canon and assistant reference docs under docs/boundline/.
         #[arg(long = "export-docs")]
         export_docs: bool,
@@ -512,6 +521,31 @@ pub enum AssistantSubcommand {
         host: assistant_assets::AssistantHost,
         #[arg(long, value_enum)]
         scope: assistant_assets::AssistantInstallScope,
+    },
+}
+
+/// Derived-index lifecycle subcommands.
+#[derive(Debug, Subcommand)]
+pub enum IndexSubcommand {
+    Status {
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+    },
+    Refresh {
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+    },
+    Rebuild {
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+    },
+    Clean {
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+    },
+    Doctor {
+        #[arg(long)]
+        workspace: Option<PathBuf>,
     },
 }
 
@@ -789,6 +823,7 @@ impl DeveloperCommand {
             Self::Step { .. } => CommandName::Step,
             Self::Run { .. } => CommandName::Run,
             Self::Workflow { .. } => CommandName::Workflow,
+            Self::Index { .. } => CommandName::Index,
             Self::Inspect { .. } => CommandName::Inspect,
             Self::Status { .. } => CommandName::Status,
             Self::Next { .. } => CommandName::Next,
@@ -829,6 +864,28 @@ impl DeveloperCommandSession {
                 workspace_ref: workspace.as_ref().map(|path| path.to_string_lossy().into_owned()),
                 requires_workspace_ref: false,
                 install_check: *install,
+                goal: None,
+                trace_ref: None,
+                started_at: current_timestamp_millis(),
+                completed_at: None,
+                exit_status: None,
+                trace_location: None,
+            },
+            DeveloperCommand::Index { command } => Self {
+                command_name: CommandName::Index,
+                workspace_ref: match command {
+                    IndexSubcommand::Status { workspace } => {
+                        workspace.as_ref().map(|path| path.to_string_lossy().into_owned())
+                    }
+                    IndexSubcommand::Refresh { workspace }
+                    | IndexSubcommand::Rebuild { workspace }
+                    | IndexSubcommand::Clean { workspace }
+                    | IndexSubcommand::Doctor { workspace } => {
+                        workspace.as_ref().map(|path| path.to_string_lossy().into_owned())
+                    }
+                },
+                requires_workspace_ref: false,
+                install_check: false,
                 goal: None,
                 trace_ref: None,
                 started_at: current_timestamp_millis(),
@@ -1256,6 +1313,7 @@ impl DeveloperCommandSession {
             | CommandName::Plan
             | CommandName::Step
             | CommandName::Workflow
+            | CommandName::Index
             | CommandName::Status
             | CommandName::Next
             | CommandName::Continue
@@ -1662,6 +1720,15 @@ fn command_environment_workspace(command: &DeveloperCommand) -> Option<PathBuf> 
         | DeveloperCommand::Govern { workspace, .. } => {
             resolve_command_workspace(workspace.as_deref())
         }
+        DeveloperCommand::Index { command } => match command {
+            IndexSubcommand::Status { workspace }
+            | IndexSubcommand::Refresh { workspace }
+            | IndexSubcommand::Rebuild { workspace }
+            | IndexSubcommand::Clean { workspace }
+            | IndexSubcommand::Doctor { workspace } => {
+                resolve_command_workspace(workspace.as_deref())
+            }
+        },
         DeveloperCommand::Session { command } => match command {
             SessionSubcommand::List { workspace, cluster }
             | SessionSubcommand::Resume { workspace, cluster, .. } => {
@@ -1750,6 +1817,7 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
         DeveloperCommand::Orchestrate { .. } => dispatch_orchestrate_command(command),
         DeveloperCommand::Run { .. } => dispatch_run_command(command),
         DeveloperCommand::Workflow { command } => dispatch_workflow_command(command),
+        DeveloperCommand::Index { command } => dispatch_index_command(command),
         DeveloperCommand::Checkpoint { command } => dispatch_checkpoint_command(command),
         DeveloperCommand::Inspect { trace, workspace, cluster, session, audit } => {
             dispatch_inspect_command(
@@ -2271,6 +2339,7 @@ fn dispatch_init_command(command: &DeveloperCommand) -> DispatchOutcome {
         owner,
         ide,
         auto_approve,
+        semantic_index_hook_action,
         export_docs,
         refresh,
         diff,
@@ -2301,6 +2370,7 @@ fn dispatch_init_command(command: &DeveloperCommand) -> DispatchOutcome {
             owner: owner.as_deref(),
             ide,
             auto_approve: *auto_approve,
+            semantic_index_hook_action: *semantic_index_hook_action,
             export_docs: *export_docs,
             docs_refresh: *refresh,
             docs_diff: *diff,
@@ -2590,6 +2660,43 @@ fn dispatch_probe_command(workspace: Option<&Path>) -> DispatchOutcome {
     DispatchOutcome::text(CommandExitStatus::Succeeded, json, None)
 }
 
+fn dispatch_index_command(command: &IndexSubcommand) -> DispatchOutcome {
+    match command {
+        IndexSubcommand::Status { workspace } => {
+            dispatch_serialized_index_report(index::execute_status(workspace.as_deref()))
+        }
+        IndexSubcommand::Refresh { workspace } => {
+            dispatch_serialized_index_report(index::execute_refresh(workspace.as_deref()))
+        }
+        IndexSubcommand::Rebuild { workspace } => {
+            dispatch_serialized_index_report(index::execute_rebuild(workspace.as_deref()))
+        }
+        IndexSubcommand::Clean { workspace } => {
+            dispatch_serialized_index_report(index::execute_clean(workspace.as_deref()))
+        }
+        IndexSubcommand::Doctor { workspace } => {
+            dispatch_serialized_index_report(index::execute_doctor(workspace.as_deref()))
+        }
+    }
+}
+
+fn dispatch_serialized_index_report<T>(result: Result<T, String>) -> DispatchOutcome
+where
+    T: serde::Serialize,
+{
+    match result {
+        Ok(report) => match serde_json::to_string_pretty(&report) {
+            Ok(json) => DispatchOutcome::text(CommandExitStatus::Succeeded, json, None),
+            Err(error) => DispatchOutcome::text(
+                CommandExitStatus::NonSuccess,
+                format!("failed to serialize index report: {error}"),
+                None,
+            ),
+        },
+        Err(error) => DispatchOutcome::text(CommandExitStatus::InvalidInvocation, error, None),
+    }
+}
+
 fn dispatch_models_command(command: &ModelsSubcommand) -> DispatchOutcome {
     let result = match command {
         ModelsSubcommand::Auth { command: auth_command } => match auth_command {
@@ -2609,13 +2716,14 @@ mod tests {
     use std::path::{Path, PathBuf};
 
     use clap::Parser;
+    use serde::Serializer;
     use serde_json::json;
     use uuid::Uuid;
 
     use super::{
         AssistantSubcommand, CheckpointSubcommand, Cli, ClusterSubcommand, CommandExitStatus,
-        CommandName, ConfigSubcommand, DeveloperCommand, DeveloperCommandSession,
-        SessionSubcommand, WorkflowSubcommand, dispatch,
+        CommandName, ConfigSubcommand, DeveloperCommand, DeveloperCommandSession, IndexSubcommand,
+        SessionSubcommand, WorkflowSubcommand, dispatch, dispatch_serialized_index_report,
     };
     use crate::adapters::config_store::FileConfigStore;
     use crate::adapters::session_store::{FileSessionStore, SessionStore};
@@ -2732,6 +2840,111 @@ fn red_to_green_addition() {
             Some(DeveloperCommand::Status { .. }) => {}
             other => panic!("expected status command, got {other:?}"),
         }
+    }
+
+    #[rustfmt::skip]
+    fn assert_index_workspace_flag(workspace: Option<PathBuf>, label: &str) -> Result<(), String> { if workspace == Some(PathBuf::from("/tmp/workspace")) { Ok(()) } else { Err(format!("expected {label} workspace flag, got {workspace:?}")) } }
+
+    #[test]
+    fn index_status_cli_parses_workspace_flag() -> Result<(), String> {
+        let cli =
+            Cli::try_parse_from(["boundline", "index", "status", "--workspace", "/tmp/workspace"])
+                .map_err(|error| error.to_string())?;
+
+        let Some(DeveloperCommand::Index { command: IndexSubcommand::Status { workspace } }) =
+            cli.command
+        else {
+            return Err("expected index status command".to_string());
+        };
+        assert_index_workspace_flag(workspace, "status")?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn index_lifecycle_cli_parses_refresh_rebuild_clean_and_doctor_flags() -> Result<(), String> {
+        let refresh =
+            Cli::try_parse_from(["boundline", "index", "refresh", "--workspace", "/tmp/workspace"])
+                .map_err(|error| error.to_string())?;
+        let Some(DeveloperCommand::Index { command: IndexSubcommand::Refresh { workspace } }) =
+            refresh.command
+        else {
+            return Err("expected index refresh command".to_string());
+        };
+        assert_index_workspace_flag(workspace, "refresh")?;
+
+        let rebuild =
+            Cli::try_parse_from(["boundline", "index", "rebuild", "--workspace", "/tmp/workspace"])
+                .map_err(|error| error.to_string())?;
+        let Some(DeveloperCommand::Index { command: IndexSubcommand::Rebuild { workspace } }) =
+            rebuild.command
+        else {
+            return Err("expected index rebuild command".to_string());
+        };
+        assert_index_workspace_flag(workspace, "rebuild")?;
+
+        let clean =
+            Cli::try_parse_from(["boundline", "index", "clean", "--workspace", "/tmp/workspace"])
+                .map_err(|error| error.to_string())?;
+        let Some(DeveloperCommand::Index { command: IndexSubcommand::Clean { workspace } }) =
+            clean.command
+        else {
+            return Err("expected index clean command".to_string());
+        };
+        assert_index_workspace_flag(workspace, "clean")?;
+
+        let doctor =
+            Cli::try_parse_from(["boundline", "index", "doctor", "--workspace", "/tmp/workspace"])
+                .map_err(|error| error.to_string())?;
+        let Some(DeveloperCommand::Index { command: IndexSubcommand::Doctor { workspace } }) =
+            doctor.command
+        else {
+            return Err("expected index doctor command".to_string());
+        };
+        assert_index_workspace_flag(workspace, "doctor")?;
+
+        Ok(())
+    }
+
+    #[test]
+    fn index_command_name_and_dispatch_helpers_cover_index_paths() {
+        struct FailingSerialize;
+
+        impl serde::Serialize for FailingSerialize {
+            fn serialize<S>(&self, _serializer: S) -> Result<S::Ok, S::Error>
+            where
+                S: Serializer,
+            {
+                Err(serde::ser::Error::custom("intentional serialization failure"))
+            }
+        }
+
+        assert_eq!(CommandName::Index.as_str(), "index");
+
+        let command =
+            DeveloperCommand::Index { command: IndexSubcommand::Status { workspace: None } };
+        assert_eq!(command.name(), CommandName::Index);
+
+        let success = dispatch_serialized_index_report::<serde_json::Value>(Ok(json!({
+            "state": "ready"
+        })));
+        assert_eq!(success.exit_status, CommandExitStatus::Succeeded);
+        assert!(success.output.contains("\"state\": \"ready\""), "{}", success.output);
+
+        let serialization_failure =
+            dispatch_serialized_index_report::<FailingSerialize>(Ok(FailingSerialize));
+        assert_eq!(serialization_failure.exit_status, CommandExitStatus::NonSuccess);
+        assert!(
+            serialization_failure.output.contains("failed to serialize index report"),
+            "{}",
+            serialization_failure.output
+        );
+
+        let invalid = dispatch_serialized_index_report::<serde_json::Value>(Err(
+            "missing workspace".to_string(),
+        ));
+        assert_eq!(invalid.exit_status, CommandExitStatus::InvalidInvocation);
+        assert_eq!(invalid.output, "missing workspace");
     }
 
     #[test]
@@ -3783,6 +3996,7 @@ fn red_to_green_addition() {
                     assistant: Vec::new(),
                     ide: Vec::new(),
                     auto_approve: None,
+                    semantic_index_hook_action: None,
                     route: Vec::new(),
                     domain: Vec::new(),
                     domain_standard: Vec::new(),
@@ -4008,6 +4222,7 @@ fn red_to_green_addition() {
             assistant: Vec::new(),
             ide: Vec::new(),
             auto_approve: None,
+            semantic_index_hook_action: None,
             route: Vec::new(),
             domain: Vec::new(),
             domain_standard: Vec::new(),
@@ -4052,6 +4267,7 @@ fn red_to_green_addition() {
             assistant: vec![crate::domain::configuration::AssistantHostKind::Copilot],
             ide: Vec::new(),
             auto_approve: None,
+            semantic_index_hook_action: None,
             route: Vec::new(),
             domain: Vec::new(),
             domain_standard: Vec::new(),

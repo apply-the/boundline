@@ -2,7 +2,7 @@
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-05-09
-**Feature**: [spec.md](/Users/rt/workspace/apply-the/boundline/specs/045-chat-first-runtime/spec.md)
+**Feature**: [spec.md](specs/045-chat-first-runtime/spec.md)
 
 ## Content Quality
 

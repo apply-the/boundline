@@ -2940,6 +2940,7 @@ fn command_names_render_for_all_remaining_subcommands() {
                 owner: None,
                 ide: Vec::new(),
                 auto_approve: None,
+                semantic_index_hook_action: None,
                 export_docs: false,
                 refresh: false,
                 diff: false,

@@ -2,7 +2,7 @@
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-05-02
-**Feature**: [spec.md](/Users/rt/workspace/boundline/specs/030-native-direct-run/spec.md)
+**Feature**: [spec.md](specs/030-native-direct-run/spec.md)
 
 ## Content Quality
 

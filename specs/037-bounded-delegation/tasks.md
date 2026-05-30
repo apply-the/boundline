@@ -17,8 +17,8 @@
 
 **Purpose**: Finalize the 037 feature pack and confirm test-harness entry points before runtime changes.
 
-- [x] T001 Confirm and keep synchronized `/Users/rt/workspace/boundline/specs/037-bounded-delegation/plan.md`, `/Users/rt/workspace/boundline/specs/037-bounded-delegation/research.md`, `/Users/rt/workspace/boundline/specs/037-bounded-delegation/data-model.md`, `/Users/rt/workspace/boundline/specs/037-bounded-delegation/contracts/`, and `/Users/rt/workspace/boundline/specs/037-bounded-delegation/quickstart.md`
-- [x] T002 [P] Add or update top-level test harness references in `/Users/rt/workspace/boundline/tests/unit.rs`, `/Users/rt/workspace/boundline/tests/contract.rs`, and `/Users/rt/workspace/boundline/tests/integration.rs` if 037 introduces new test modules
+- [x] T001 Confirm and keep synchronized `specs/037-bounded-delegation/plan.md`, `specs/037-bounded-delegation/research.md`, `specs/037-bounded-delegation/data-model.md`, `specs/037-bounded-delegation/contracts/`, and `specs/037-bounded-delegation/quickstart.md`
+- [x] T002 [P] Add or update top-level test harness references in `tests/unit.rs`, `tests/contract.rs`, and `tests/integration.rs` if 037 introduces new test modules
 
 ---
 
@@ -28,10 +28,10 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [x] T003 Extend `/Users/rt/workspace/boundline/src/domain/configuration.rs` and `/Users/rt/workspace/boundline/src/domain/routing_decision.rs` with runtime capability profiles, slot effort policy, effective projection, and validation rules shared by planning and execution
-- [x] T004 [P] Extend `/Users/rt/workspace/boundline/src/domain/task_context.rs`, `/Users/rt/workspace/boundline/src/domain/session.rs`, `/Users/rt/workspace/boundline/src/domain/follow_through.rs`, and `/Users/rt/workspace/boundline/src/domain/trace.rs` with delegation packets, continuity state, stuck evidence markers, and packet lifecycle projection fields
-- [x] T005 [P] Extend `/Users/rt/workspace/boundline/src/domain/goal_plan.rs` and `/Users/rt/workspace/boundline/src/orchestrator/goal_planner.rs` so planning can persist capability-aware routing rationale and delegation-aware bounded stop summaries
-- [x] T006 [P] Extend `/Users/rt/workspace/boundline/tests/unit/runtime_routing.rs`, `/Users/rt/workspace/boundline/tests/unit/session_model.rs`, and `/Users/rt/workspace/boundline/tests/contract/runtime_routing_contract.rs` with foundational coverage for capability validation, effort-policy projection, packet invariants, and continuity state transitions
+- [x] T003 Extend `src/domain/configuration.rs` and `src/domain/routing_decision.rs` with runtime capability profiles, slot effort policy, effective projection, and validation rules shared by planning and execution
+- [x] T004 [P] Extend `src/domain/task_context.rs`, `src/domain/session.rs`, `src/domain/follow_through.rs`, and `src/domain/trace.rs` with delegation packets, continuity state, stuck evidence markers, and packet lifecycle projection fields
+- [x] T005 [P] Extend `src/domain/goal_plan.rs` and `src/orchestrator/goal_planner.rs` so planning can persist capability-aware routing rationale and delegation-aware bounded stop summaries
+- [x] T006 [P] Extend `tests/unit/runtime_routing.rs`, `tests/unit/session_model.rs`, and `tests/contract/runtime_routing_contract.rs` with foundational coverage for capability validation, effort-policy projection, packet invariants, and continuity state transitions
 
 **Checkpoint**: Runtime policy, delegation state, and continuity projection primitives exist and can support all user stories.
 
@@ -45,15 +45,15 @@
 
 ### Tests for User Story 1
 
-- [x] T007 [P] [US1] Add contract coverage for capability and effort projection in `/Users/rt/workspace/boundline/tests/contract/config_cli_contract.rs` and `/Users/rt/workspace/boundline/tests/contract/runtime_routing_contract.rs`
-- [x] T008 [P] [US1] Add integration coverage for capability-aware configuration and planning in `/Users/rt/workspace/boundline/tests/integration/config_workspace_flow.rs` and `/Users/rt/workspace/boundline/tests/integration/session_native_flow.rs`
-- [x] T009 [P] [US1] Add unit coverage for effective routing, effort fallback, and capability-aware plan shaping in `/Users/rt/workspace/boundline/tests/unit/runtime_routing.rs` and `/Users/rt/workspace/boundline/tests/unit/session_model.rs`
+- [x] T007 [P] [US1] Add contract coverage for capability and effort projection in `tests/contract/config_cli_contract.rs` and `tests/contract/runtime_routing_contract.rs`
+- [x] T008 [P] [US1] Add integration coverage for capability-aware configuration and planning in `tests/integration/config_workspace_flow.rs` and `tests/integration/session_native_flow.rs`
+- [x] T009 [P] [US1] Add unit coverage for effective routing, effort fallback, and capability-aware plan shaping in `tests/unit/runtime_routing.rs` and `tests/unit/session_model.rs`
 
 ### Implementation for User Story 1
 
-- [x] T010 [US1] Extend `/Users/rt/workspace/boundline/src/cli.rs` and `/Users/rt/workspace/boundline/src/domain/configuration.rs` so operators can declare and unset runtime capability profiles and slot effort policy through the existing config surface
-- [x] T011 [US1] Extend `/Users/rt/workspace/boundline/src/domain/routing_decision.rs`, `/Users/rt/workspace/boundline/src/orchestrator/goal_planner.rs`, and `/Users/rt/workspace/boundline/src/orchestrator/session_runtime.rs` so route selection and plan rationale record capability and effort evidence explicitly
-- [x] T012 [US1] Extend `/Users/rt/workspace/boundline/src/cli/session.rs`, `/Users/rt/workspace/boundline/src/cli/output.rs`, and `/Users/rt/workspace/boundline/src/cli/run.rs` so `config show`, `plan`, and `run` surface the effective capability and effort policy that shaped the next bounded action
+- [x] T010 [US1] Extend `src/cli.rs` and `src/domain/configuration.rs` so operators can declare and unset runtime capability profiles and slot effort policy through the existing config surface
+- [x] T011 [US1] Extend `src/domain/routing_decision.rs`, `src/orchestrator/goal_planner.rs`, and `src/orchestrator/session_runtime.rs` so route selection and plan rationale record capability and effort evidence explicitly
+- [x] T012 [US1] Extend `src/cli/session.rs`, `src/cli/output.rs`, and `src/cli/run.rs` so `config show`, `plan`, and `run` surface the effective capability and effort policy that shaped the next bounded action
 
 **Checkpoint**: Operators can see and influence route selection through declared capability and effort policy.
 
@@ -67,15 +67,15 @@
 
 ### Tests for User Story 2
 
-- [x] T013 [P] [US2] Add contract coverage for packet creation and continuity authority in `/Users/rt/workspace/boundline/tests/contract/session_command_contract.rs` and `/Users/rt/workspace/boundline/tests/contract/compatibility_continuity_contract.rs`
-- [x] T014 [P] [US2] Add integration coverage for handoff and escalation packet creation in `/Users/rt/workspace/boundline/tests/integration/session_native_flow.rs` and `/Users/rt/workspace/boundline/tests/integration/session_compatibility_continuity.rs`
-- [x] T015 [P] [US2] Add unit coverage for packet lifecycle, supersession, and continuity projection in `/Users/rt/workspace/boundline/tests/unit/session_model.rs` and `/Users/rt/workspace/boundline/tests/unit/decision_model.rs`
+- [x] T013 [P] [US2] Add contract coverage for packet creation and continuity authority in `tests/contract/session_command_contract.rs` and `tests/contract/compatibility_continuity_contract.rs`
+- [x] T014 [P] [US2] Add integration coverage for handoff and escalation packet creation in `tests/integration/session_native_flow.rs` and `tests/integration/session_compatibility_continuity.rs`
+- [x] T015 [P] [US2] Add unit coverage for packet lifecycle, supersession, and continuity projection in `tests/unit/session_model.rs` and `tests/unit/decision_model.rs`
 
 ### Implementation for User Story 2
 
-- [x] T016 [US2] Extend `/Users/rt/workspace/boundline/src/orchestrator/session_runtime.rs`, `/Users/rt/workspace/boundline/src/domain/task_context.rs`, and `/Users/rt/workspace/boundline/src/domain/session.rs` so blocked native runs persist active handoff or escalation packets and expose them as authoritative continuity state
-- [x] T017 [US2] Extend `/Users/rt/workspace/boundline/src/domain/goal_plan.rs`, `/Users/rt/workspace/boundline/src/orchestrator/goal_planner.rs`, and `/Users/rt/workspace/boundline/src/domain/follow_through.rs` so unresolved packets block or redirect planning and follow-through explicitly
-- [x] T018 [US2] Extend `/Users/rt/workspace/boundline/src/cli/session.rs`, `/Users/rt/workspace/boundline/src/cli/output.rs`, `/Users/rt/workspace/boundline/src/cli/inspect.rs`, and `/Users/rt/workspace/boundline/src/domain/trace.rs` so packet history, target owner, and next command project consistently on native and compatibility-aware surfaces
+- [x] T016 [US2] Extend `src/orchestrator/session_runtime.rs`, `src/domain/task_context.rs`, and `src/domain/session.rs` so blocked native runs persist active handoff or escalation packets and expose them as authoritative continuity state
+- [x] T017 [US2] Extend `src/domain/goal_plan.rs`, `src/orchestrator/goal_planner.rs`, and `src/domain/follow_through.rs` so unresolved packets block or redirect planning and follow-through explicitly
+- [x] T018 [US2] Extend `src/cli/session.rs`, `src/cli/output.rs`, `src/cli/inspect.rs`, and `src/domain/trace.rs` so packet history, target owner, and next command project consistently on native and compatibility-aware surfaces
 
 **Checkpoint**: Blocked continuity is represented by authoritative packets, not by ad hoc operator interpretation.
 
@@ -89,15 +89,15 @@
 
 ### Tests for User Story 3
 
-- [x] T019 [P] [US3] Add contract coverage for stuck continuity and delegated follow-through summaries in `/Users/rt/workspace/boundline/tests/contract/trace_summary_contract.rs` and `/Users/rt/workspace/boundline/tests/contract/session_command_contract.rs`
-- [x] T020 [P] [US3] Add integration coverage for repeated-block detection and packet supersession in `/Users/rt/workspace/boundline/tests/integration/runtime_refoundation_flow.rs`, `/Users/rt/workspace/boundline/tests/integration/retry_and_replan.rs`, and `/Users/rt/workspace/boundline/tests/integration/session_native_flow.rs`
-- [x] T021 [P] [US3] Add unit coverage for stuck evidence aggregation and recovery guidance in `/Users/rt/workspace/boundline/tests/unit/decision_loop.rs`, `/Users/rt/workspace/boundline/tests/unit/decision_model.rs`, and `/Users/rt/workspace/boundline/tests/unit/session_model.rs`
+- [x] T019 [P] [US3] Add contract coverage for stuck continuity and delegated follow-through summaries in `tests/contract/trace_summary_contract.rs` and `tests/contract/session_command_contract.rs`
+- [x] T020 [P] [US3] Add integration coverage for repeated-block detection and packet supersession in `tests/integration/runtime_refoundation_flow.rs`, `tests/integration/retry_and_replan.rs`, and `tests/integration/session_native_flow.rs`
+- [x] T021 [P] [US3] Add unit coverage for stuck evidence aggregation and recovery guidance in `tests/unit/decision_loop.rs`, `tests/unit/decision_model.rs`, and `tests/unit/session_model.rs`
 
 ### Implementation for User Story 3
 
-- [x] T022 [US3] Extend `/Users/rt/workspace/boundline/src/orchestrator/decision_loop.rs` and `/Users/rt/workspace/boundline/src/orchestrator/session_runtime.rs` so repeated blocked attempts, unchanged evidence, or stale route declarations produce stuck markers and bounded recovery guidance
-- [x] T023 [US3] Extend `/Users/rt/workspace/boundline/src/domain/follow_through.rs`, `/Users/rt/workspace/boundline/src/domain/trace.rs`, and `/Users/rt/workspace/boundline/src/domain/session.rs` so active, stuck, resolved, superseded, and exhausted continuity states remain authoritative and inspectable
-- [x] T024 [US3] Extend `/Users/rt/workspace/boundline/src/cli/output.rs`, `/Users/rt/workspace/boundline/src/cli/inspect.rs`, and `/Users/rt/workspace/boundline/src/cli/session.rs` so `run`, `status`, `next`, and `inspect` render stuck reasoning, packet supersession, and recommended recovery or continuation commands consistently
+- [x] T022 [US3] Extend `src/orchestrator/decision_loop.rs` and `src/orchestrator/session_runtime.rs` so repeated blocked attempts, unchanged evidence, or stale route declarations produce stuck markers and bounded recovery guidance
+- [x] T023 [US3] Extend `src/domain/follow_through.rs`, `src/domain/trace.rs`, and `src/domain/session.rs` so active, stuck, resolved, superseded, and exhausted continuity states remain authoritative and inspectable
+- [x] T024 [US3] Extend `src/cli/output.rs`, `src/cli/inspect.rs`, and `src/cli/session.rs` so `run`, `status`, `next`, and `inspect` render stuck reasoning, packet supersession, and recommended recovery or continuation commands consistently
 
 **Checkpoint**: Delegated continuity stops or recovers explicitly when it stops making progress.
 
@@ -111,14 +111,14 @@
 
 ### Tests for User Story 4
 
-- [x] T025 [P] [US4] Refresh focused coverage assertions for touched Rust files via `/Users/rt/workspace/boundline/lcov.info` and supporting validation commands
+- [x] T025 [P] [US4] Refresh focused coverage assertions for touched Rust files via `lcov.info` and supporting validation commands
 
 ### Implementation for User Story 4
 
-- [x] T026 [US4] Bump crate version to `0.37.0` in `/Users/rt/workspace/boundline/Cargo.toml` and `/Users/rt/workspace/boundline/Cargo.lock`
-- [x] T027 [US4] Update impacted docs and release narrative in `/Users/rt/workspace/boundline/README.md`, `/Users/rt/workspace/boundline/docs/`, `/Users/rt/workspace/boundline/CONTRIBUTING.md`, `/Users/rt/workspace/boundline/CHANGELOG.md`, and `/Users/rt/workspace/boundline/AGENTS.md`
-- [x] T028 [US4] Update `/Users/rt/workspace/boundline/ROADMAP.md` to activate and then mark Spec 037 as delivered on the next macrofeature line
-- [x] T029 [US4] Update assistant guidance impacted by delegated execution in `/Users/rt/workspace/boundline/assistant/README.md`, `/Users/rt/workspace/boundline/assistant/claude/commands/`, `/Users/rt/workspace/boundline/assistant/codex/commands/`, and `/Users/rt/workspace/boundline/assistant/copilot/prompts/`
+- [x] T026 [US4] Bump crate version to `0.37.0` in `Cargo.toml` and `Cargo.lock`
+- [x] T027 [US4] Update impacted docs and release narrative in `README.md`, `docs/`, `CONTRIBUTING.md`, `CHANGELOG.md`, and `AGENTS.md`
+- [x] T028 [US4] Update `ROADMAP.md` to activate and then mark Spec 037 as delivered on the next macrofeature line
+- [x] T029 [US4] Update assistant guidance impacted by delegated execution in `assistant/README.md`, `assistant/claude/commands/`, `assistant/codex/commands/`, and `assistant/copilot/prompts/`
 
 **Checkpoint**: Release artifacts describe `0.37.0` and delegated execution consistently.
 
@@ -132,7 +132,7 @@
 - [x] T031 [P] Run lint validation with `cargo clippy --workspace --all-targets --all-features -- -D warnings`
 - [x] T032 Run compile-oriented and broader Rust validation for the slice with `cargo test --no-run --all-targets` and `cargo nextest run --workspace --all-features`
 - [x] T033 Refresh line coverage with `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info` and confirm modified or new Rust files stay above 95%
-- [x] T034 Mark completed tasks in `/Users/rt/workspace/boundline/specs/037-bounded-delegation/tasks.md` and capture the final descriptive commit message in the implementation summary
+- [x] T034 Mark completed tasks in `specs/037-bounded-delegation/tasks.md` and capture the final descriptive commit message in the implementation summary
 
 ---
 

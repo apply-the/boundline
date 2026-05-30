@@ -1,6 +1,6 @@
 # Implementation Plan: Native Loop Integration
 
-**Branch**: `014-native-loop-integration` | **Date**: 2026-04-29 | **Spec**: [/Users/rt/workspace/boundline/specs/014-native-loop-integration/spec.md](/Users/rt/workspace/boundline/specs/014-native-loop-integration/spec.md)
+**Branch**: `014-native-loop-integration` | **Date**: 2026-04-29 | **Spec**: [specs/014-native-loop-integration/spec.md](specs/014-native-loop-integration/spec.md)
 **Input**: Feature specification from `/specs/014-native-loop-integration/spec.md`
 
 ## Summary

@@ -96,8 +96,11 @@ pub enum EnvLayerError {
 pub fn load_provider_environment(
     workspace: Option<&Path>,
 ) -> Result<EnvLayerReport, EnvLayerError> {
-    let inherited =
-        env::vars_os().filter_map(|(key, _)| key.into_string().ok()).collect::<BTreeSet<_>>();
+    let inherited = provider_key_catalog()
+        .into_iter()
+        .filter(|key| env::var_os(key).is_some())
+        .map(str::to_string)
+        .collect::<BTreeSet<_>>();
     let mut loaded_files = Vec::new();
 
     for path in provider_env_files(workspace) {
