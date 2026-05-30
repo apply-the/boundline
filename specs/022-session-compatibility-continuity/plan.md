@@ -17,7 +17,7 @@ Tighten Boundline's operator continuity story after explicit compatibility runs 
   the iteration process.
 -->
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, plus Rust standard library filesystem and path APIs; no new runtime dependencies planned for this slice  
 **Storage**: Existing workspace-local `.boundline/session.json` and `.boundline/traces/` remain authoritative; no new persistence surface is planned unless research proves existing state cannot express continuity safely  
 **Testing**: `cargo fmt --all`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test --no-run --all-targets`, targeted contract, integration, and unit coverage for compatibility follow-up continuity, `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`, plus repository-standard `cargo nextest run --workspace --all-features` and `cargo deny check licenses advisories bans sources` during release closeout  

@@ -3,7 +3,7 @@
 ## Prerequisites
 
 1. Work from the repository root on branch `004-session-model-unification`.
-2. Have Rust 1.95.0 with `cargo` available.
+2. Have Rust 1.96.0 with `cargo` available.
 3. Use a writable workspace so Boundline can persist both `.boundline/session.json` and `.boundline/traces/`.
 4. Start from the workspace you want the active session to belong to.
 

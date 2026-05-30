@@ -22,7 +22,7 @@ promotion metadata stay distinct from Boundline runtime decisions.
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: Existing workspace dependencies `clap`, `dialoguer`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, and Rust standard-library collections, filesystem, path, and process APIs; no new runtime dependencies planned for this slice  
 **Storage**: Workspace-local `.boundline/session.json`, persisted traces under `.boundline/traces/`, optional `.boundline/execution.json` and `.boundline/config.toml`, plus Canon-governed packet metadata already consumed through the governance runtime boundary  
 **Testing**: `cargo fmt --all`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, targeted unit and integration tests for governance state resolution and projection, `cargo test --no-run --all-targets`, focused package tests such as `cargo test -p boundline-core ...`, `cargo test -p boundline-adapters ...`, and `cargo test -p boundline-cli ...`, `cargo nextest run --workspace --all-features` when feasible, and modified-file coverage validation at 95% or higher  

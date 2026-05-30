@@ -9,7 +9,7 @@ Design the next Boundline product slice for project-scale delivery UX while pres
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0 workspace, edition 2024, plus JSON, Markdown, TOML, Bash, and assistant command assets  
+**Language/Version**: Rust 1.96.0 workspace, edition 2024, plus JSON, Markdown, TOML, Bash, and assistant command assets  
 **Primary Dependencies**: Existing workspace dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`); external Canon CLI compatibility target `0.45.0`; no new runtime crates planned for the first implementation slice  
 **Storage**: Workspace-local `.boundline/session.json`, `.boundline/traces/`, optional `.boundline/checkpoints/`, optional `.canon/` governed packet artifacts, repo-managed assistant package files, docs, and Spec Kit artifacts  
 **Testing**: Contract/unit/integration tests for assistant bootstrap, governed stage catalog, `/boundline:govern`, voting state projection, status/next/inspect parity, docs validation, `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test`, and touched-Rust-file coverage with `cargo llvm-cov`  

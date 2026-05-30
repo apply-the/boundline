@@ -11,7 +11,7 @@ Deepen Boundline's Canon governance coverage by adding one newer governed analys
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, plus Rust standard library filesystem, path, process, and collections APIs; external Canon CLI compatibility target updated to `0.25.0`; no new runtime dependencies planned for the first slice  
 **Storage**: Workspace-local `.boundline/session.json`, `.boundline/traces/`, optional `.boundline/execution.json`, optional `.canon/` artifacts, and repository docs plus assistant assets  
 **Testing**: `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test --no-run --all-targets`, `cargo nextest run --workspace --all-features`, `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`, `cargo deny check licenses advisories bans sources`  

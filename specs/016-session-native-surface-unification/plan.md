@@ -17,7 +17,7 @@ Unify Boundline's remaining operator-facing runtime surfaces so review, adaptive
   the iteration process.
 -->
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, plus Rust standard library filesystem, path, process, and collections APIs; no new runtime dependencies planned for the first slice  
 **Storage**: Workspace-local `.boundline/session.json`, `.boundline/traces/`, optional `.boundline/execution.json`, optional `.canon/` artifacts, and updated repository docs and assistant assets  
 **Testing**: `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test --no-run --all-targets`, `cargo nextest run --workspace --all-features`, `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`, `cargo deny check licenses advisories bans sources`  

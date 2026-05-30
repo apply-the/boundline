@@ -9,7 +9,7 @@ Build the first Boundline orchestration brain as a single Rust library crate tha
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: Rust standard library plus `serde`, `serde_json`, `thiserror`, `tracing`, and `uuid` for structured state, trace serialization, error handling, instrumentation, and stable identifiers  
 **Storage**: In-memory task state for active runs; local append-only JSON trace files for inspection after completion or failure  
 **Testing**: `cargo test` with unit, integration, and contract-style tests using deterministic fake agent/tool adapters  

@@ -1,4 +1,29 @@
-use super::*;
+use serde_json::json;
+
+use crate::adapters::governance_runtime::GovernanceRuntime;
+use crate::domain::governance::{
+    CanonAuthorityZone, CanonIntendedPersona, CanonRiskClass, GovernanceLifecycleState,
+    PacketReadiness,
+};
+use crate::domain::limits::TerminalCondition;
+use crate::domain::session::SessionStatus;
+use crate::orchestrator::review_trace::record_reasoning_profile_events;
+use crate::orchestrator::terminal::build_terminal_reason;
+
+use super::{
+    ActiveSessionRecord, CanonCliRuntime, ExecutionTrace, FixtureRuntime, FlowStepMetadata,
+    GovernanceBlockContext, GovernanceRequestKind, GovernanceRuntimeKind, GovernanceRuntimeRequest,
+    GovernanceStepDecision, GovernedStageRecord, LocalGovernanceRuntime, ReasoningGateContext,
+    ReasoningTraceContext, SessionRuntime, SessionRuntimeError, Step, Task, TaskRunResponse,
+    TraceEventType, append_governed_document_to_lifecycle, bounded_governance_context,
+    build_autopilot_decision, clarification_prompt_from_response,
+    compacted_canon_memory_from_response, current_timestamp_millis, default_stage_canon_mode,
+    enrich_bounded_context_with_accumulated, governance_input_documents,
+    governance_projection_snapshot, governance_stage_key, governance_state_patch,
+    governed_document_ref_from_response, overlay_stage_policy_with_intent,
+    requested_governance_intent, resolved_canon_mode, runtime_command_available,
+    selected_stage_policy, store_latest_reasoning_profile,
+};
 
 impl SessionRuntime {
     pub(super) fn ensure_stage_governance(

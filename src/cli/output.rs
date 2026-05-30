@@ -1,10 +1,7 @@
 //! Operator-facing text and JSON renderers for CLI commands.
 
-use std::path::Path;
-
 use crate::adapters::cluster_store::FileClusterStore;
 use crate::adapters::config_store::FileConfigStore;
-use serde_json::Value;
 
 use crate::cli::diagnostics::{DiagnosticsReport, DiagnosticsStatus};
 use crate::cli::{CliValidationError, DeveloperCommand};

@@ -18,7 +18,7 @@ on all modified files.
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: Existing workspace dependencies `clap`, `serde`, `serde_json`, `thiserror`, `toml`, `uuid`, and Rust standard-library collections, filesystem, and path types; no new runtime dependencies planned for this slice  
 **Storage**: Workspace-local `.boundline/` config and session state, persisted goal-plan data, local and cluster routing config stores, local repository cues, and optional Canon-governed expertise artifacts discovered through compatible publication and lineage surfaces  
 **Testing**: `cargo fmt --all`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, targeted unit and integration tests for domain selection and session projection, `cargo test --no-run --all-targets`, `cargo nextest run --workspace --all-features` when feasible, and modified-file coverage validation at 95% or higher  

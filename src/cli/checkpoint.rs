@@ -67,12 +67,7 @@ pub fn execute_restore(
         )
         .restore(checkpoint_id, mode)
         .map_err(CheckpointCommandError::CheckpointStore)?;
-        let exit_status = match result.record.outcome {
-            CheckpointRestoreOutcome::Succeeded => CommandExitStatus::Succeeded,
-            CheckpointRestoreOutcome::Refused | CheckpointRestoreOutcome::Failed => {
-                CommandExitStatus::NonSuccess
-            }
-        };
+        let exit_status = checkpoint_restore_exit_status(&result);
         return Ok(CheckpointCommandReport {
             exit_status,
             terminal_output: render_workspace_restore_result(
@@ -89,44 +84,9 @@ pub fn execute_restore(
     }
 
     if mode == CheckpointRestoreMode::Safe {
-        let mut conflicts = Vec::new();
-        for manifest in &manifests {
-            let store = checkpoint_store_for_workspace(
-                Path::new(&manifest.workspace_ref),
-                target.active_session_id.as_deref(),
-            );
-            let manifest_conflicts = store
-                .restore_conflicts(&manifest.checkpoint_id)
-                .map_err(CheckpointCommandError::CheckpointStore)?
-                .unwrap_or_default();
-            if !manifest_conflicts.is_empty() {
-                conflicts.push((manifest.clone(), manifest_conflicts));
-            }
-        }
-
+        let conflicts = collect_cluster_restore_conflicts(&target, &manifests)?;
         if !conflicts.is_empty() {
-            let mut results = Vec::new();
-            for (manifest, conflicting_paths) in conflicts {
-                let store = checkpoint_store_for_workspace(
-                    Path::new(&manifest.workspace_ref),
-                    target.active_session_id.as_deref(),
-                );
-                results.push(
-                    store
-                        .refuse_restore(&manifest.checkpoint_id, mode, conflicting_paths)
-                        .map_err(CheckpointCommandError::CheckpointStore)?,
-                );
-            }
-
-            return Ok(CheckpointCommandReport {
-                exit_status: CommandExitStatus::NonSuccess,
-                terminal_output: render_cluster_restore_results(
-                    &target,
-                    checkpoint_id,
-                    mode,
-                    &results,
-                ),
-            });
+            return refuse_cluster_restore_conflicts(&target, checkpoint_id, mode, conflicts);
         }
     }
 
@@ -146,6 +106,62 @@ pub fn execute_restore(
     Ok(CheckpointCommandReport {
         exit_status: CommandExitStatus::Succeeded,
         terminal_output: render_cluster_restore_results(&target, checkpoint_id, mode, &results),
+    })
+}
+
+fn checkpoint_restore_exit_status(result: &CheckpointRestoreResult) -> CommandExitStatus {
+    match result.record.outcome {
+        CheckpointRestoreOutcome::Succeeded => CommandExitStatus::Succeeded,
+        CheckpointRestoreOutcome::Refused | CheckpointRestoreOutcome::Failed => {
+            CommandExitStatus::NonSuccess
+        }
+    }
+}
+
+fn collect_cluster_restore_conflicts(
+    target: &ResolvedCheckpointTarget,
+    manifests: &[CheckpointManifest],
+) -> Result<Vec<(CheckpointManifest, Vec<String>)>, CheckpointCommandError> {
+    let mut conflicts = Vec::new();
+    for manifest in manifests {
+        let store = checkpoint_store_for_workspace(
+            Path::new(&manifest.workspace_ref),
+            target.active_session_id.as_deref(),
+        );
+        let manifest_conflicts = store
+            .restore_conflicts(&manifest.checkpoint_id)
+            .map_err(CheckpointCommandError::CheckpointStore)?
+            .unwrap_or_default();
+        if !manifest_conflicts.is_empty() {
+            conflicts.push((manifest.clone(), manifest_conflicts));
+        }
+    }
+
+    Ok(conflicts)
+}
+
+fn refuse_cluster_restore_conflicts(
+    target: &ResolvedCheckpointTarget,
+    checkpoint_id: &str,
+    mode: CheckpointRestoreMode,
+    conflicts: Vec<(CheckpointManifest, Vec<String>)>,
+) -> Result<CheckpointCommandReport, CheckpointCommandError> {
+    let mut results = Vec::new();
+    for (manifest, conflicting_paths) in conflicts {
+        let store = checkpoint_store_for_workspace(
+            Path::new(&manifest.workspace_ref),
+            target.active_session_id.as_deref(),
+        );
+        results.push(
+            store
+                .refuse_restore(&manifest.checkpoint_id, mode, conflicting_paths)
+                .map_err(CheckpointCommandError::CheckpointStore)?,
+        );
+    }
+
+    Ok(CheckpointCommandReport {
+        exit_status: CommandExitStatus::NonSuccess,
+        terminal_output: render_cluster_restore_results(target, checkpoint_id, mode, &results),
     })
 }
 

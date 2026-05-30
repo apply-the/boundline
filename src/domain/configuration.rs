@@ -936,32 +936,35 @@ pub fn resolve_effective_runtime_capabilities(
     runtime_ids
         .into_keys()
         .filter_map(|runtime| {
-            let sourced = if let Some(profile) =
-                workspace.and_then(|cfg| cfg.runtime_capabilities.get(&runtime))
-            {
-                Some(SourcedRuntimeCapabilityProfile {
-                    profile: profile.clone(),
-                    source: ValueSource::Workspace,
-                })
-            } else if let Some(profile) =
-                cluster.and_then(|cfg| cfg.runtime_capabilities.get(&runtime))
-            {
-                Some(SourcedRuntimeCapabilityProfile {
-                    profile: profile.clone(),
-                    source: ValueSource::Cluster,
-                })
-            } else {
-                global.and_then(|cfg| cfg.runtime_capabilities.get(&runtime)).map(|profile| {
-                    SourcedRuntimeCapabilityProfile {
-                        profile: profile.clone(),
-                        source: ValueSource::Global,
-                    }
-                })
-            };
-
-            sourced.map(|profile| (runtime, profile))
+            resolve_runtime_capability_profile(runtime, workspace, cluster, global)
+                .map(|profile| (runtime, profile))
         })
         .collect()
+}
+
+fn resolve_runtime_capability_profile(
+    runtime: RuntimeKind,
+    workspace: Option<&RoutingConfig>,
+    cluster: Option<&RoutingConfig>,
+    global: Option<&RoutingConfig>,
+) -> Option<SourcedRuntimeCapabilityProfile> {
+    if let Some(profile) = workspace.and_then(|cfg| cfg.runtime_capabilities.get(&runtime)) {
+        return Some(SourcedRuntimeCapabilityProfile {
+            profile: profile.clone(),
+            source: ValueSource::Workspace,
+        });
+    }
+
+    if let Some(profile) = cluster.and_then(|cfg| cfg.runtime_capabilities.get(&runtime)) {
+        return Some(SourcedRuntimeCapabilityProfile {
+            profile: profile.clone(),
+            source: ValueSource::Cluster,
+        });
+    }
+
+    global.and_then(|cfg| cfg.runtime_capabilities.get(&runtime)).map(|profile| {
+        SourcedRuntimeCapabilityProfile { profile: profile.clone(), source: ValueSource::Global }
+    })
 }
 
 /// Resolves the effective advanced-context retrieval policy across config layers.

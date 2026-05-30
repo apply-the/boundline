@@ -38,7 +38,7 @@ surfaces in four coordinated layers:
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024 for runtime and CLI changes;
+**Language/Version**: Rust 1.96.0, edition 2024 for runtime and CLI changes;
 JSON and Markdown for assistant asset metadata and prompts  
 **Primary Dependencies**: Existing Boundline stack (`clap`, `serde`,
 `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`) only; no new runtime

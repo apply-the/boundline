@@ -16,7 +16,7 @@ contract for Claude, Codex, and Gemini command-pack execution later.
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: Existing CLI/runtime stack (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`) with Rust standard library terminal and filesystem APIs; no new runtime dependencies for the first slice  
 **Storage**: Existing workspace-local `.boundline/session.json` and `.boundline/traces/`, plus assistant asset files under `assistant/`; no new persistence surface  
 **Testing**: `cargo test`, focused contract tests in `tests/contract/*.rs`, focused integration tests in `tests/integration/*.rs`, unit coverage in `src/cli/*.rs`, plus final `cargo test --no-run --all-targets --all-features`  

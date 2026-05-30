@@ -23,7 +23,7 @@ modified Rust files, clippy cleanup, and formatting.
   the iteration process.
 -->
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, plus Rust standard library filesystem, path, and collections APIs; no new runtime dependencies planned for this slice  
 **Storage**: Workspace-local `.boundline/cluster.toml`, `.boundline/session.json`, `.boundline/traces/`, `.boundline/execution.json`, `.boundline/config.toml`, optional `.boundline/workflows.toml`, and release-aligned repository docs plus assistant assets  
 **Testing**: `cargo fmt --all`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test --no-run --all-targets`, targeted unit, integration, and contract coverage for clustered planning, execution, and follow-up, `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`, plus repository-standard `cargo nextest run --workspace --all-features` and `cargo deny check licenses advisories bans sources` during release closeout  

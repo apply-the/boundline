@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-1. Install Rust 1.95.0 with `rustfmt` and `clippy` available.
+1. Install Rust 1.96.0 with `rustfmt` and `clippy` available.
 2. Work from the repository root on branch `001-delivery-orchestrator-core`.
 3. Use a writable workspace path so trace files can be created under `.boundline/traces/`.
 

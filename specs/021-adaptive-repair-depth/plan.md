@@ -17,7 +17,7 @@
   the iteration process.
 -->
 
-**Language/Version**: [e.g., Rust 1.95.0, Python 3.11 or NEEDS CLARIFICATION]  
+**Language/Version**: [e.g., Rust 1.96.0, Python 3.11 or NEEDS CLARIFICATION]  
 **Primary Dependencies**: [core libraries and runtime dependencies or NEEDS CLARIFICATION]  
 **Storage**: [e.g., in-memory state, files, database, or N/A]  
 **Testing**: [e.g., cargo test, pytest, contract tests or NEEDS CLARIFICATION]  

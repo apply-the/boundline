@@ -39,7 +39,7 @@ are no longer implied as more shipped than the runtime actually supports.
   the iteration process.
 -->
 
-**Language/Version**: Rust 1.95.0, edition 2024 in Boundline; Markdown, TOML, and JSON repository artifacts; required Canon companion publication updates for the new supported release pair  
+**Language/Version**: Rust 1.96.0, edition 2024 in Boundline; Markdown, TOML, and JSON repository artifacts; required Canon companion publication updates for the new supported release pair  
 **Primary Dependencies**: Existing workspace dependencies only (`serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, `clap`, `dialoguer`, `rusqlite` already present in workspace); no new runtime crates planned  
 **Storage**: Existing `.boundline/session.json`, trace files, configuration state, spec artifacts under `specs/062-reasoning-profile-closure/`, and release-facing docs or changelog files in Boundline plus the required Canon companion publication artifacts  
 **Testing**: `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, focused `cargo test --test contract <filter>`, `cargo test --test integration <filter>`, and `cargo test --test unit <filter>` runs, `cargo nextest run --workspace --all-features`, `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`, and the existing SonarCloud quality gate in `.github/workflows/quality.yml` for the touched cognitive-complexity findings  

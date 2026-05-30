@@ -18,7 +18,7 @@ artifacts only through the documented semantic producer contract.
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: existing workspace runtime dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`), existing `rusqlite` bundled SQLite support, and one optional `sqlite-vec` integration path for local vector tables; no remote embedding-provider dependency in the first slice  
 **Storage**: existing `.boundline/session.json`, `.boundline/traces/`, `.boundline/config.toml`, and `.boundline/context-intelligence/retrieval-index.sqlite3`, extended with a dedicated `semantic_acceleration` config section resolved alongside the V1 `advanced_context` baseline plus semantic-index metadata and vector-backed chunk tables on the same workspace-local SQLite store  
 **Testing**: `cargo fmt --all`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, focused unit tests for semantic policy and hybrid ranking state, contract tests for Canon semantic compatibility and operator-facing projection shape, targeted integration tests for `plan`, `status`, and `inspect`, plus `cargo test --no-run --all-targets` for compile coverage  

@@ -9,7 +9,7 @@ Ship repository-managed assistant command packs for Copilot, Codex, and Claude s
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024 for the existing CLI backend plus repository-managed Markdown prompt assets for assistant command packs  
+**Language/Version**: Rust 1.96.0, edition 2024 for the existing CLI backend plus repository-managed Markdown prompt assets for assistant command packs  
 **Primary Dependencies**: Existing runtime dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`); no new runtime dependencies for this slice  
 **Storage**: Repository-stored assistant asset files under `assistant/` and existing workspace-local traces under `<workspace>/.boundline/traces/` for status and inspection backends  
 **Testing**: `cargo test` with new contract, unit, and integration tests that load assistant assets, verify required command coverage and backend mappings, and exercise shell-enabled plus chat-only fallback flows against the current CLI  

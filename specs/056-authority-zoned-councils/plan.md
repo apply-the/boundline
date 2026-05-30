@@ -20,7 +20,7 @@ coverage validation at 95% or higher.
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: Existing workspace dependencies `clap`, `dialoguer`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, and Rust standard-library collections, filesystem, path, and process APIs; no new runtime dependencies planned for this slice  
 **Storage**: Workspace-local `.boundline/session.json`, persisted traces under `.boundline/traces/`, optional `.boundline/execution.json` and `.boundline/config.toml`, plus optional Canon-governed packet refs consumed through the existing governance runtime boundary  
 **Testing**: `cargo fmt --all`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, targeted unit and integration tests for governance resolution and projection, `cargo test --no-run --all-targets`, focused package tests such as `cargo test -p boundline-core ...` and `cargo test -p boundline-adapters ...` where root `src/` modules are re-exported, `cargo nextest run --workspace --all-features` when feasible, and modified-file coverage validation at 95% or higher  

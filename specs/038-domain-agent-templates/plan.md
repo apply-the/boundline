@@ -20,7 +20,7 @@ modified Rust files.
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, and `toml`, plus Rust standard library filesystem, path, and collections APIs; no new runtime dependencies planned for this slice  
 **Storage**: Workspace-local `.boundline/config.toml`, cluster-local `.boundline/cluster.toml`, user-global config at `$XDG_CONFIG_HOME/boundline/config.toml` or `$HOME/.config/boundline/config.toml`, persisted session and trace state under `.boundline/session.json` and `.boundline/traces/`, optional `.boundline/execution.json`, and repository docs plus assistant assets  
 **Testing**: `cargo fmt --all`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, targeted unit, integration, and contract tests, `cargo test --no-run --all-targets`, `cargo nextest run --workspace --all-features`, and `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`  

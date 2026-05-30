@@ -1,4 +1,12 @@
-use super::*;
+use uuid::Uuid;
+
+use super::{
+    ActiveSessionRecord, FixtureRuntimeError, FlowStepMetadata, GovernanceLifecycleState,
+    GovernanceRequestKind, GovernanceStepDecision, SessionCommand, SessionRuntime,
+    SessionRuntimeError, SessionStatus, Task, TaskRunResponse, build_fixture_plan_for_goal,
+    build_task_request, current_timestamp_millis, load_workspace_execution_profile,
+    overlay_stage_policy_with_intent, requested_governance_intent, selected_stage_policy,
+};
 
 impl SessionRuntime {
     /// Advances the active session by exactly one bounded step.

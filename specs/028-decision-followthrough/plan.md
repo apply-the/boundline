@@ -26,7 +26,7 @@ coverage refresh for touched Rust files, clippy cleanup, and formatting.
   the iteration process.
 -->
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, plus Rust standard library filesystem, path, process, and collections APIs; no new runtime dependencies planned for the first slice  
 **Storage**: Workspace-local `.boundline/session.json`, persisted execution traces under `<workspace>/.boundline/traces/`, optional `.boundline/execution.json`, optional `.boundline/workflows.toml`, optional cluster state under `.boundline/cluster.toml`, and repository-managed assistant assets under `assistant/`  
 **Testing**: `cargo fmt --all`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test --no-run --all-targets`, targeted unit/contract/integration tests for follow-through guidance and continuity authority, `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`, and focused regression checks for touched CLI and domain slices  

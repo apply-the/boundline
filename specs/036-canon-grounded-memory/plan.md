@@ -20,7 +20,7 @@ files.
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, and `toml`, plus Rust standard library filesystem, path, process, and collections APIs; no new runtime dependencies planned for the first slice  
 **Storage**: Workspace-local `.boundline/session.json`, `.boundline/config.toml`, optional `.boundline/workflows.toml`, persisted traces under `<workspace>/.boundline/traces/`, optional `.boundline/execution.json`, task-context state embedded in session tasks, optional `.canon/` governed artifacts, and repository-managed docs plus assistant assets  
 **Testing**: `cargo fmt --all`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, targeted unit, integration, and contract tests, `cargo test --no-run --all-targets`, `cargo nextest run --workspace --all-features`, and `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`  

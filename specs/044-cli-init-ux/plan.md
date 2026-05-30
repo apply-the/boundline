@@ -16,7 +16,7 @@ that remains plain-text safe for CI and redirected output.
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: Existing CLI/runtime stack (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`) with Rust standard library terminal and filesystem APIs  
 **Storage**: Workspace-local files under `.boundline/`, repository-local assistant asset files under `assistant/`, and stdout/stderr CLI summaries  
 **Testing**: `cargo test`, focused integration tests in `tests/integration.rs`, contract tests in `tests/contract.rs`, plus final `cargo clippy --workspace --all-targets --all-features -- -D warnings`  

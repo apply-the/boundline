@@ -9,7 +9,7 @@ Add a stage-scoped governance layer to Boundline's existing flow-aware runtime b
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: Existing runtime dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`) plus Rust standard library filesystem, path, and process APIs; no new runtime dependencies for the initial governance slice  
 **Storage**: Workspace-local JSON session record at `<workspace>/.boundline/session.json`, persisted execution traces under `<workspace>/.boundline/traces/`, workspace execution manifest at `<workspace>/.boundline/execution.json`, and optional Canon-managed governed artifacts under `<workspace>/.canon/` when the Canon runtime is selected  
 **Testing**: `cargo test --all-targets`, focused contract and integration coverage for execution manifest parsing, governance runtime selection, session projections, trace rendering, required-governance blocking, autopilot decisions, `cargo fmt --check`, and `cargo clippy --workspace --all-targets --all-features -- -D warnings`  

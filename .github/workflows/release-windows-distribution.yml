@@ -57,7 +57,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.95.0
+          toolchain: 1.96.0
           targets: x86_64-pc-windows-msvc
       # Keep the Windows bundle path independent from optional cache restore
       # instability on hosted runners.

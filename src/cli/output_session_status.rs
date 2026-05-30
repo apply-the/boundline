@@ -13,7 +13,7 @@ use super::routing::{
 };
 use super::runtime::append_reasoning_profile_lines;
 use super::support::push_governance_display_lines;
-use super::*;
+use super::{SessionStatusView, session_status_text};
 use crate::domain::follow_through::FollowThroughProjection;
 use crate::domain::governance::planning_stage_brief_ref;
 

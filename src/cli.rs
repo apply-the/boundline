@@ -1526,17 +1526,11 @@ impl DispatchOutcome {
 pub fn execute() -> i32 {
     let cli = Cli::parse();
 
-    let Some(command) = cli.command else {
-        let mut help = Cli::command();
-        if let Err(error) = help.print_help() {
-            eprintln!("{error}");
-            return output::CommandExitCode::for_status(CommandExitStatus::NonSuccess).code();
-        }
-        println!();
-        return output::CommandExitCode::for_status(CommandExitStatus::Succeeded).code();
+    let Some(command) = cli.command.as_ref() else {
+        return render_help_exit_code();
     };
 
-    let mut session = DeveloperCommandSession::from_command(&command);
+    let mut session = DeveloperCommandSession::from_command(command);
 
     if let DeveloperCommand::Inspect { trace: None, workspace: None, cluster: None, .. } = &command
     {
@@ -1545,48 +1539,13 @@ pub fn execute() -> i32 {
     }
 
     match session.validate() {
-        Err(error) => {
-            let rendered = output::validation_error_message(&error);
-            let exit_code = session.complete(CommandExitStatus::InvalidInvocation, None);
-            if cli.json {
-                println!(
-                    "{}",
-                    output::render_host_command_json(
-                        command.name().as_str(),
-                        CommandExitStatus::InvalidInvocation,
-                        &rendered,
-                        None,
-                        None,
-                        None,
-                    )
-                );
-            } else {
-                eprintln!("{rendered}");
-            }
-            exit_code.code()
-        }
+        Err(error) => render_validation_failure(&cli, command, &mut session, &error),
         Ok(()) => {
-            if let Err(error) = load_command_environment(Some(&command)) {
-                let exit_code = session.complete(CommandExitStatus::NonSuccess, None);
-                if cli.json {
-                    println!(
-                        "{}",
-                        output::render_host_command_json(
-                            command.name().as_str(),
-                            CommandExitStatus::NonSuccess,
-                            &error,
-                            None,
-                            None,
-                            None,
-                        )
-                    );
-                } else {
-                    eprintln!("{error}");
-                }
-                return exit_code.code();
+            if let Err(error) = load_command_environment(Some(command)) {
+                return render_environment_failure(&cli, command, &mut session, &error);
             }
 
-            let outcome = dispatch(&command);
+            let outcome = dispatch(command);
             let exit_code = session.complete(outcome.exit_status, outcome.trace_location.clone());
             if let Some(stream_output) = outcome.stream_output.as_ref() {
                 println!("{stream_output}");
@@ -1608,6 +1567,67 @@ pub fn execute() -> i32 {
             exit_code.code()
         }
     }
+}
+
+fn render_help_exit_code() -> i32 {
+    let mut help = Cli::command();
+    if let Err(error) = help.print_help() {
+        eprintln!("{error}");
+        return output::CommandExitCode::for_status(CommandExitStatus::NonSuccess).code();
+    }
+    println!();
+    output::CommandExitCode::for_status(CommandExitStatus::Succeeded).code()
+}
+
+fn render_validation_failure(
+    cli: &Cli,
+    command: &DeveloperCommand,
+    session: &mut DeveloperCommandSession,
+    error: &CliValidationError,
+) -> i32 {
+    let rendered = output::validation_error_message(error);
+    let exit_code = session.complete(CommandExitStatus::InvalidInvocation, None);
+    if cli.json {
+        println!(
+            "{}",
+            output::render_host_command_json(
+                command.name().as_str(),
+                CommandExitStatus::InvalidInvocation,
+                &rendered,
+                None,
+                None,
+                None,
+            )
+        );
+    } else {
+        eprintln!("{rendered}");
+    }
+    exit_code.code()
+}
+
+fn render_environment_failure(
+    cli: &Cli,
+    command: &DeveloperCommand,
+    session: &mut DeveloperCommandSession,
+    error: &str,
+) -> i32 {
+    let exit_code = session.complete(CommandExitStatus::NonSuccess, None);
+    if cli.json {
+        println!(
+            "{}",
+            output::render_host_command_json(
+                command.name().as_str(),
+                CommandExitStatus::NonSuccess,
+                error,
+                None,
+                None,
+                None,
+            )
+        );
+    } else {
+        eprintln!("{error}");
+    }
+    exit_code.code()
 }
 
 fn load_command_environment(command: Option<&DeveloperCommand>) -> Result<(), String> {

@@ -5,11 +5,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
-use crate::adapters::audit_store::{
-    FileSessionAuditStore, SessionAuditStore, SessionAuditStoreError,
-};
+use crate::adapters::audit_store::{FileSessionAuditStore, SessionAuditStoreError};
 use crate::adapters::checkpoint_store::{CheckpointStoreError, FileCheckpointStore};
 use crate::adapters::governance_runtime::{
     CanonCliRuntime, GovernanceRequestKind, GovernanceRuntime, GovernanceRuntimeRequest,
@@ -26,7 +23,7 @@ use uuid::Uuid;
 
 use crate::adapters::cluster_store::FileClusterStore;
 use crate::adapters::config_store::FileConfigStore;
-use crate::adapters::session_store::{FileSessionStore, SessionStore, SessionStoreError};
+use crate::adapters::session_store::{FileSessionStore, SessionStoreError};
 use crate::adapters::trace_store::{FileTraceStore, TraceStore, TraceStoreError};
 use crate::domain::audit::{
     SessionAuditActor, SessionAuditActorKind, SessionAuditAlgorithm, SessionAuditEntry,
@@ -45,7 +42,6 @@ use crate::domain::configuration::{
 };
 use crate::domain::context_intelligence::AdvancedContextProjection;
 use crate::domain::decision::{Decision, DecisionType};
-use crate::domain::distribution::SUPPORTED_CANON_VERSION;
 use crate::domain::flow::{FlowStepMetadata, built_in_flow, supported_flow_names_csv};
 use crate::domain::flow_policy::FlowPolicy;
 use crate::domain::follow_through::FollowThroughProjection;
@@ -61,28 +57,17 @@ use crate::domain::governance::{
     GovernedSessionLifecycle, GovernedStageRecord, MemoryCredibilityState, PacketReadiness,
     SystemContextBinding, backlog_quality_snapshot_for_lifecycle, execution_stage_key_for_mode,
     planned_canon_mode_sequence_for_flow, planning_canon_mode_for_stage_key,
-    planning_canon_mode_sequence, planning_stage_brief_ref, planning_stage_key_for_mode,
-    resolved_canon_mode,
+    planning_canon_mode_sequence, planning_stage_brief_ref, resolved_canon_mode,
 };
 use crate::domain::guidance::{CapabilityPhase, GuidanceGuardianProjection};
 use crate::domain::limits::{RunLimits, TerminalCondition};
 use crate::domain::negotiation::{NegotiatedDeliveryPacket, NegotiationResolutionState};
 use crate::domain::project_memory::{
     GovernedEvidencePromotionRequest, ProjectMemoryCondition, ProjectMemoryContext,
-    ProjectMemoryStatus, evidence_contribution_summaries, evidence_root_for_lineage,
-    promote_governed_evidence_bundle as promote_project_evidence_bundle, read_project_memory,
+    ProjectMemoryStatus, promote_governed_evidence_bundle as promote_project_evidence_bundle,
+    read_project_memory,
 };
-use crate::domain::reasoning::{
-    CanonAdmissionPriority, CanonChallengePostureInput, IndependenceAssessment,
-    IndependenceAssessmentResult, IndependenceFloor, ParticipantAssignment,
-    ParticipantRoleDefinition, ProfileActivationRecord, REASONING_POSTURE_V1_CONTRACT_LINE,
-    ReasoningActivationStatus, ReasoningActivationTrigger, ReasoningAdmissionEffect,
-    ReasoningCompatibilityWindow, ReasoningConfidenceContribution, ReasoningConfidenceLevel,
-    ReasoningIterationCondition, ReasoningIterationKind, ReasoningIterationRecord,
-    ReasoningObservedDistinctness, ReasoningOutcome, ReasoningOutcomeKind,
-    ReasoningParticipantRoleKind, ReasoningParticipantStatus, ReasoningProfileDefinition,
-    ReasoningRoutePreference,
-};
+use crate::domain::reasoning::ProfileActivationRecord;
 use crate::domain::review::{ReviewOutcome, ReviewProfile, ReviewTrigger};
 use crate::domain::review::{
     ReviewerDefinition, ReviewerDisposition, ReviewerFinding, ReviewerParticipation,

@@ -26,7 +26,7 @@ the same primary Canon-default workflow.
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024
+**Language/Version**: Rust 1.96.0, edition 2024
 **Primary Dependencies**: `clap` 4.x, `serde` 1.x, `serde_json` 1.x, `thiserror` 2.x, `tracing` 0.1, `uuid` 1.x, `toml` 0.8; Rust standard library filesystem, path, process, and collections APIs; no new runtime dependencies
 **Storage**: Workspace-local `.boundline/session.json`, `.boundline/config.toml`, `.boundline/traces/`, optional `.boundline/execution.json`, optional `.canon/` governed artifacts
 **Testing**: `cargo test`, `cargo nextest run`, unit tests for domain logic and config serialization, integration tests for CLI dispatch and Canon runtime gating, contract tests for governance request/response schemas

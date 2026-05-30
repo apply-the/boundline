@@ -27,7 +27,7 @@ Rust files.
   the iteration process.
 -->
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: Existing workspace dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `toml`, `uuid`, and Rust standard-library collections, filesystem, path, and process APIs; no new runtime dependencies planned for this slice  
 **Storage**: Repository-managed built-in guidance and guardian assets under `assistant/`, workspace-local overrides under `.boundline/guidance/` and `.boundline/guardians/`, existing workspace-local `.boundline/session.json` and `.boundline/traces/`, and optional Canon-governed repo-visible standards discovered through existing project-memory and governed-artifact surfaces  
 **Testing**: `cargo fmt --all`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, targeted unit, integration, and contract tests for resolution, findings, routing degradation, and trace projection, `cargo test --no-run --all-targets`, `cargo nextest run --workspace --all-features` when feasible, and modified-file coverage validation at 95% or higher  

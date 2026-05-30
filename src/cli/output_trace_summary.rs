@@ -11,7 +11,7 @@ use super::routing::{
 };
 use super::runtime::append_reasoning_profile_lines;
 use super::support::{push_governance_display_lines, render_guidance_projection_lines};
-use super::*;
+use super::{TraceEventType, TraceSummaryView, step_kind_text, step_status_text, task_status_text};
 use crate::domain::follow_through::FollowThroughProjection;
 
 const TRACE_BRIEF_CHAR_LIMIT: usize = 120;

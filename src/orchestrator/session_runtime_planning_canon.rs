@@ -1,4 +1,26 @@
-use super::*;
+use uuid::Uuid;
+
+use crate::adapters::config_store::FileConfigStore;
+use crate::adapters::governance_runtime::{GovernanceRuntime, GovernanceRuntimeResponse};
+use crate::domain::governance::{CanonRuntimeConfig, planning_stage_key_for_mode};
+
+use super::{
+    ActiveSessionRecord, ApprovalState, CanonAuthorityZone, CanonCliRuntime, CanonIntendedPersona,
+    CanonMode, CanonRiskClass, GoalPlan, GovernanceLifecycleState, GovernanceRequestKind,
+    GovernanceRuntimeKind, GovernanceRuntimeRequest, GovernedStageRecord, PacketReadiness,
+    PlanningContextSources, PreparedPlanningGovernanceRequest, ResolvedPlanningGovernanceDefaults,
+    SessionRuntime, SessionRuntimeError, StageCouncilOutcome, StageCouncilStatus,
+    append_governed_document_to_lifecycle, canon_workspace_scope_mismatch_reason,
+    compacted_canon_memory_for_block, compacted_canon_memory_from_response,
+    default_planning_system_context, discovery_stage_council_request,
+    enrich_bounded_context_with_accumulated, governed_document_ref_from_response,
+    load_workspace_execution_profile, missing_planning_governance_field,
+    parse_planning_system_context, planning_brief_has_sufficient_content,
+    planning_brief_insufficiency_reason, planning_canon_mode_for_stage_key,
+    planning_canon_mode_sequence, planning_governance_input_documents,
+    planning_stage_council_block_reason, runtime_command_available,
+    stage_council_voting_session_state,
+};
 
 impl SessionRuntime {
     pub(super) fn prepare_planning_governance_requests(
@@ -67,7 +89,7 @@ impl SessionRuntime {
 
             self.set_planning_stage_progress(session, stage_index, None);
 
-            if let Some(outcome) = prepared.stage_council.clone()
+            if let Some(outcome) = prepared.stage_council.as_ref()
                 && outcome.status == StageCouncilStatus::Blocked
             {
                 self.record_planning_governance_block(
@@ -75,8 +97,8 @@ impl SessionRuntime {
                     goal_plan,
                     &request,
                     stage_index,
-                    planning_stage_council_block_reason(&request.stage_key, &outcome),
-                    Some(outcome),
+                    planning_stage_council_block_reason(&request.stage_key, outcome),
+                    prepared.stage_council.clone(),
                 );
                 break;
             }
@@ -87,8 +109,7 @@ impl SessionRuntime {
                     goal_plan,
                     &request,
                     stage_index,
-                    "planning governance requires Canon initialization, but .boundline/execution.json is missing governance.canon"
-                        .to_string(),
+                    missing_planning_canon_runtime_reason(),
                     prepared.stage_council.clone(),
                 );
                 break;
@@ -99,30 +120,14 @@ impl SessionRuntime {
                 &self.planning_accumulated_context(session),
             );
 
-            if !runtime_command_available(&canon.command) {
-                self.record_planning_governance_block(
-                    session,
-                    goal_plan,
-                    &request,
-                    stage_index,
-                    format!(
-                        "planning governance requires Canon, but command '{}' is unavailable",
-                        canon.command
-                    ),
-                    prepared.stage_council.clone(),
-                );
-                break;
-            }
-
-            if let Some(reason) = canon_workspace_scope_mismatch_reason(&self.workspace_ref) {
-                self.record_planning_governance_block(
-                    session,
-                    goal_plan,
-                    &request,
-                    stage_index,
-                    reason,
-                    prepared.stage_council.clone(),
-                );
+            if self.record_planning_preflight_block(
+                session,
+                goal_plan,
+                &request,
+                stage_index,
+                canon,
+                prepared.stage_council.clone(),
+            ) {
                 break;
             }
 
@@ -145,6 +150,56 @@ impl SessionRuntime {
         }
 
         Ok(())
+    }
+
+    fn record_planning_preflight_block(
+        &self,
+        session: &mut ActiveSessionRecord,
+        goal_plan: &mut GoalPlan,
+        request: &GovernanceRuntimeRequest,
+        stage_index: usize,
+        canon: &CanonRuntimeConfig,
+        stage_council: Option<StageCouncilOutcome>,
+    ) -> bool {
+        if let Some(outcome) = stage_council.as_ref()
+            && outcome.status == StageCouncilStatus::Blocked
+        {
+            self.record_planning_governance_block(
+                session,
+                goal_plan,
+                request,
+                stage_index,
+                planning_stage_council_block_reason(&request.stage_key, outcome),
+                stage_council,
+            );
+            return true;
+        }
+
+        if !runtime_command_available(&canon.command) {
+            self.record_planning_governance_block(
+                session,
+                goal_plan,
+                request,
+                stage_index,
+                unavailable_planning_canon_command_reason(&canon.command),
+                stage_council,
+            );
+            return true;
+        }
+
+        if let Some(reason) = canon_workspace_scope_mismatch_reason(&self.workspace_ref) {
+            self.record_planning_governance_block(
+                session,
+                goal_plan,
+                request,
+                stage_index,
+                reason,
+                stage_council,
+            );
+            return true;
+        }
+
+        false
     }
 
     fn resolve_planning_canon_runtime(
@@ -504,4 +559,13 @@ impl SessionRuntime {
 
         Ok(ResolvedPlanningGovernanceDefaults { system_context, risk, zone, owner })
     }
+}
+
+fn missing_planning_canon_runtime_reason() -> String {
+    "planning governance requires Canon initialization, but .boundline/execution.json is missing governance.canon"
+        .to_string()
+}
+
+fn unavailable_planning_canon_command_reason(command: &str) -> String {
+    format!("planning governance requires Canon, but command '{}' is unavailable", command)
 }

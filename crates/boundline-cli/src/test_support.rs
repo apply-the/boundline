@@ -4,10 +4,7 @@ use std::sync::{LazyLock, Mutex, MutexGuard};
 static CURRENT_DIR_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
 pub(crate) fn acquire_process_state_lock() -> MutexGuard<'static, ()> {
-    match CURRENT_DIR_LOCK.lock() {
-        Ok(guard) => guard,
-        Err(poisoned) => poisoned.into_inner(),
-    }
+    CURRENT_DIR_LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 pub(crate) struct CurrentDirGuard {

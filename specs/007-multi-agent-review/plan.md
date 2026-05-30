@@ -9,7 +9,7 @@ Add a bounded review phase on top of the execution engine so Boundline can run a
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: Existing runtime dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`) plus Rust standard library collections; no new runtime dependencies for the initial review slice  
 **Storage**: Workspace-local JSON session record at `<workspace>/.boundline/session.json`, persisted execution traces under `<workspace>/.boundline/traces/`, and workspace execution manifests under `<workspace>/.boundline/execution.json` extended with bounded review configuration  
 **Testing**: `cargo test --all-targets`, contract and integration coverage for review councils, vote resolution, and inspection output, `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`, `cargo fmt --check`, and `cargo clippy --workspace --all-targets --all-features -- -D warnings`  

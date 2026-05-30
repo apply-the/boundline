@@ -3,7 +3,37 @@ use std::path::Path;
 
 use serde_json::json;
 
-use super::*;
+use crate::adapters::cluster_store::FileClusterStore;
+use crate::adapters::config_store::FileConfigStore;
+use crate::domain::configuration::{EffectiveRouting, RoutingOverrides, resolve_effective_routing};
+use crate::domain::distribution::SUPPORTED_CANON_VERSION;
+use crate::domain::governance::{
+    CanonModeSelectionPreference, GovernanceLifecycleState, GovernanceRuntimeKind,
+    GovernedSessionLifecycle,
+};
+use crate::domain::limits::TerminalCondition;
+use crate::domain::reasoning::{
+    CanonAdmissionPriority, CanonChallengePostureInput, IndependenceAssessment,
+    IndependenceAssessmentResult, IndependenceFloor, ParticipantAssignment,
+    ParticipantRoleDefinition, ProfileActivationRecord, REASONING_POSTURE_V1_CONTRACT_LINE,
+    ReasoningActivationStatus, ReasoningActivationTrigger, ReasoningAdmissionEffect,
+    ReasoningCompatibilityWindow, ReasoningConfidenceContribution, ReasoningConfidenceLevel,
+    ReasoningIterationCondition, ReasoningIterationKind, ReasoningIterationRecord,
+    ReasoningObservedDistinctness, ReasoningOutcome, ReasoningOutcomeKind,
+    ReasoningParticipantRoleKind, ReasoningParticipantStatus, ReasoningProfileDefinition,
+    ReasoningRoutePreference,
+};
+use crate::domain::session::SessionStatus;
+use crate::orchestrator::governance::governance_state_patch;
+use crate::orchestrator::review_trace::record_reasoning_profile_events;
+use crate::orchestrator::terminal::build_terminal_reason;
+
+use super::{
+    ActiveSessionRecord, ApprovalState, CanonMode, ExecutionTrace, GovernanceStepDecision,
+    GovernedStageRecord, SessionRuntime, SessionRuntimeError, Task, TaskRunResponse,
+    TraceEventType, compacted_canon_memory_for_block, current_timestamp_millis,
+    governance_next_action_for_state, governance_projection_snapshot,
+};
 
 pub(super) struct ReasoningTraceContext<'a> {
     pub(super) step_id: &'a str,

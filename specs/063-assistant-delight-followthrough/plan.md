@@ -16,7 +16,7 @@ surface.
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024, plus repository-managed Markdown and JSON assistant assets  
+**Language/Version**: Rust 1.96.0, edition 2024, plus repository-managed Markdown and JSON assistant assets  
 **Primary Dependencies**: existing workspace crates and runtime dependencies (`clap`, `dialoguer`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, `rusqlite`); no new runtime dependencies planned for the first slice  
 **Storage**: workspace-local `.boundline/session.json`, persisted traces under `.boundline/traces/`, and repository-managed assistant asset manifests and host docs under `assistant/`  
 **Testing**: focused `cargo test` unit, integration, and contract suites; especially inspect or output projections, session state, and assistant command pack contracts; use `cargo test --no-run --all-targets` if shared view structs change  

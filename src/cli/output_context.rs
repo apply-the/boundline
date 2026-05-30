@@ -1,4 +1,4 @@
-use super::*;
+use super::{AdvancedContextProjection, RetrievedEvidenceCandidate, SemanticTraceRecord};
 
 pub(crate) fn push_context_projection_lines(
     lines: &mut Vec<String>,

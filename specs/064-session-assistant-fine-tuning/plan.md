@@ -9,7 +9,7 @@ This slice now consolidates four implemented capability areas: a global provider
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024, plus repository-managed Markdown assistant assets
+**Language/Version**: Rust 1.96.0, edition 2024, plus repository-managed Markdown assistant assets
 **Primary Dependencies**: Existing workspace dependencies only (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`)
 **Storage**: User-global `auth-profiles.json` under the Boundline global config directory, workspace-local `.boundline/session.json`, workspace-local `.boundline/config.toml`, optional `.boundline/execution.json`, optional `.boundline/cluster.toml`, optional `.boundline/context-intelligence/retrieval-index.sqlite3`, and repository-managed assets under `assistant/`
 **Testing**: `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, targeted probe tests, targeted assistant contract tests, and representative host-output and planning-gate coverage

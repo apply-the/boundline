@@ -17,7 +17,7 @@ projection remain deferred to S5.v2 and later roadmap slices.
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024
+**Language/Version**: Rust 1.96.0, edition 2024
 **Primary Dependencies**: existing workspace crates plus one embedded SQLite
 binding with bundled FTS5 support; no vector, graph, or remote retrieval
 dependency is required for V1

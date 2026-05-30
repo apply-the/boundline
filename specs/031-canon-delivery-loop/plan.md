@@ -15,7 +15,7 @@ coverage, clippy, and formatting.
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: existing crate dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, plus Rust standard library filesystem and process APIs  
 **Storage**: workspace-local `.boundline/session.json`, `.boundline/traces/`, optional `.boundline/execution.json`, and Canon-managed `.canon/` artifacts when governed runtime is selected  
 **Testing**: `cargo test --all-targets`, focused unit/integration/contract tests, `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo fmt --all`  

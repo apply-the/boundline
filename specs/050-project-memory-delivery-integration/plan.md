@@ -16,7 +16,7 @@ explicitly non-authoritative.
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, Edition 2024
+**Language/Version**: Rust 1.96.0, Edition 2024
 **Primary Dependencies**: `clap`, `serde`, `serde_json`, `thiserror`,
 `tracing`, `uuid`, `toml`
 **Storage**: workspace-local `.boundline/session.json`,

@@ -16,7 +16,7 @@ same inspectable task and review state that Boundline already persists.
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: Existing workspace runtime stack (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`) with Rust standard library filesystem, path, and collections APIs; no new runtime dependencies required for this slice  
 **Storage**: Repository-managed bundled catalog at `assistant/catalog/model-catalog.toml`, workspace-local `.boundline/config.toml` for effective routing inputs, workspace-local `.boundline/execution.json`, task/session state in `.boundline/session.json`, and persisted traces under `.boundline/traces/`  
 **Testing**: Focused unit coverage in `src/domain/brief.rs` and `src/domain/review.rs`, fixture-runtime coverage in `src/fixture.rs`, plus targeted `cargo test -p boundline-core ...`, `cargo test -p boundline-adapters ...`, `cargo test --no-run --all-targets`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, and `cargo fmt --check`  

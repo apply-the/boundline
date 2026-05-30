@@ -807,27 +807,7 @@ fn execute_goal_with_target_mode(
     }
     runtime.persist_session(&record).map_err(map_runtime_error)?;
 
-    let summary = if bundle.clarification.is_some() {
-        if update_existing {
-            "updated the active goal, but clarification is required before planning can continue"
-                .to_string()
-        } else {
-            "recorded the active goal, but clarification is required before planning can continue"
-                .to_string()
-        }
-    } else if bundle.markdown_source_count() == 0 {
-        if update_existing {
-            "updated the active goal for the current workspace session".to_string()
-        } else {
-            "recorded the active goal for the current workspace session".to_string()
-        }
-    } else {
-        format!(
-            "{} the active goal with {} Markdown brief source(s) for the current workspace session",
-            if update_existing { "updated" } else { "recorded" },
-            bundle.markdown_source_count()
-        )
-    };
+    let summary = goal_capture_summary(&bundle, update_existing);
 
     let explanation = if target.cluster_projection.is_some() {
         format!("{summary} for the current clustered delivery session")
@@ -844,6 +824,24 @@ fn execute_goal_with_target_mode(
     let view = build_status_view(&record, suggested_next_command(&record), explanation);
 
     Ok(report_with_session_status(CommandExitStatus::Succeeded, view))
+}
+
+fn goal_capture_summary(bundle: &AuthoredBriefBundle, update_existing: bool) -> String {
+    let action = if update_existing { "updated" } else { "recorded" };
+    if bundle.clarification.is_some() {
+        return format!(
+            "{action} the active goal, but clarification is required before planning can continue"
+        );
+    }
+
+    let markdown_source_count = bundle.markdown_source_count();
+    if markdown_source_count == 0 {
+        return format!("{action} the active goal for the current workspace session");
+    }
+
+    format!(
+        "{action} the active goal with {markdown_source_count} Markdown brief source(s) for the current workspace session"
+    )
 }
 
 /// Selects a delivery flow for the active session.

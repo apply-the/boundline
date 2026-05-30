@@ -23,7 +23,7 @@ cluster, and Canon detail moves into the architecture layer.
   the iteration process.
 -->
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: Existing runtime dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, and `toml`; no new non-standard runtime dependency is required for checkpoint persistence  
 **Storage**: Workspace-local `.boundline/session.json`, `.boundline/traces/`, `.boundline/config.toml`, `.boundline/cluster.toml`, optional `.boundline/execution.json`, optional `.canon/` artifacts, and new workspace-local `.boundline/checkpoints/` manifests plus captured file payloads  
 **Testing**: `cargo fmt --all`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, targeted unit/integration/contract tests, `cargo test --workspace --all-targets`, `cargo nextest run --workspace --all-features`, and `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`  

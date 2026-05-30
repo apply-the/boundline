@@ -35,7 +35,7 @@ window.
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024 for Boundline and Canon runtime changes; Markdown and TOML or JSON contract artifacts for cross-repo contract surfaces  
+**Language/Version**: Rust 1.96.0, edition 2024 for Boundline and Canon runtime changes; Markdown and TOML or JSON contract artifacts for cross-repo contract surfaces  
 **Primary Dependencies**: Existing Boundline workspace dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`) and Canon workspace dependencies of the same family; no new runtime crates planned for the first implementation line  
 **Storage**: Existing Boundline `.boundline/session.json`, `.boundline/traces/`, optional config and execution-profile surfaces, feature-local spec artifacts under `specs/061-reasoning-profile-contracts/`, sibling Canon docs under `docs/integration/`, and normal repository documentation surfaces  
 **Testing**: `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test --no-run --all-targets`, focused unit, integration, and contract tests for reasoning-profile activation and trace projection, bilateral Boundline↔Canon compatibility tests, and `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`  

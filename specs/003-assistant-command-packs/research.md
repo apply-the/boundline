@@ -191,7 +191,7 @@ Represents the user-readable result returned by an assistant command after direc
 ## Prerequisites
 
 1. Work from the repository root on branch `003-assistant-command-packs`.
-2. Have Rust 1.95.0 with `cargo` available so the local Boundline CLI can run.
+2. Have Rust 1.96.0 with `cargo` available so the local Boundline CLI can run.
 3. Use a writable workspace so Boundline can persist traces under `.boundline/traces/`.
 4. Choose one supported assistant environment: Claude, Codex, or Copilot.
 

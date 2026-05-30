@@ -44,6 +44,11 @@ Comments must explain the *why*, business constraints, and invariants, rather th
 
 Triggers: comments that simply restate the code (e.g., `// increment i by 1`), missing explanations for complex workarounds.
 
+### no-wildcard-imports
+Avoid wildcard or glob imports (e.g., `import java.util.*`, `from module import *`). Explicitly importing symbols makes dependencies clear, prevents namespace pollution, and avoids breakage when external libraries add new symbols.
+
+Triggers: wildcard imports, glob imports, importing entire namespaces instead of specific types or functions.
+
 ## Disposition
 
 Default: `concern` (raise for discussion, do not block).

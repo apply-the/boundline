@@ -17,7 +17,7 @@ formatting, focused tests, and coverage on modified files.
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: Existing workspace dependencies `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, and `toml`, plus Rust standard library filesystem, path, collections, and synchronization-free runtime primitives; no new runtime dependencies planned for this slice  
 **Storage**: Workspace-local `.boundline/` session and runtime state, persisted traces under `.boundline/traces/`, existing goal-plan state, repo-visible project context such as `project.boundline.toml`, local repository files, and optional `.canon/` or repo-visible Canon artifacts as enrichment only  
 **Testing**: `cargo fmt --all`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, targeted unit and integration tests for `goal_planner`, `session_runtime`, and CLI projection, `cargo test --no-run --all-targets`, `cargo nextest run --workspace --all-features`, and file-scoped coverage validation for modified files  

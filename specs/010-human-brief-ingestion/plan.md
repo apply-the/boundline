@@ -9,7 +9,7 @@ Allow developers to start Boundline work from plain text and Markdown briefs by 
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: Existing runtime dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`) plus Rust standard library filesystem, path, and collections APIs; no new runtime dependencies for the first human-input slice  
 **Storage**: Workspace-local `.boundline/session.json`, persisted execution traces under `<workspace>/.boundline/traces/`, existing `<workspace>/.boundline/execution.json` with legacy fallback to `<workspace>/.boundline/fixture.json` for advanced automation, and optional Canon-managed artifacts under `<workspace>/.canon/` when governed execution is selected  
 **Testing**: `cargo test --all-targets`, focused contract, integration, and unit coverage for CLI validation, input normalization, session persistence, trace and status projections, governance intent mapping, `cargo fmt --check`, and `cargo clippy --workspace --all-targets --all-features -- -D warnings`  

@@ -1,5 +1,10 @@
 use super::host::{push_output_section, stdout_presentation};
-use super::*;
+use super::{
+    DiagnosticsReport, DiagnosticsStatus, KEY_FAILURE_REASON, KEY_FINDING, KEY_REVIEW_OUTCOME,
+    KEY_REVIEW_TRIGGER, KEY_REVIEWER_ID, KEY_REVIEWER_ROLE, KEY_SUMMARY, KEY_VOTE_RESOLUTION,
+    TraceEventType, UNKNOWN_VALIDATION_EXIT_CODE, governance_packet_provenance_text,
+};
+use serde_json::Value;
 
 fn diagnostic_follow_up_actions(report: &DiagnosticsReport) -> Vec<String> {
     if !report.ready {

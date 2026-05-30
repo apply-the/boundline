@@ -15,7 +15,7 @@ workspace-owned config surfaces.
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: Existing CLI/runtime stack (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`) plus `dialoguer` for guided prompts and `indicatif` for spinner/progress feedback in the CLI crate  
 **Storage**: Existing workspace-local `.boundline/execution.json`, `.boundline/config.toml`, repository-managed assistant asset files under `assistant/`, and a bundled catalog asset at `assistant/catalog/model-catalog.toml` compiled into the CLI; no new user-writable persistence surface  
 **Testing**: Focused unit tests in `src/cli/init.rs` and adjacent CLI modules, contract tests for CLI flags and summary output under `tests/contract/`, integration tests for bootstrap flows under `tests/integration/`, `cargo test --no-run --all-targets --all-features`, `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, and `cargo fmt --check`  

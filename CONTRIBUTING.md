@@ -23,7 +23,7 @@ Boundline is a bounded delivery orchestrator. Contributions should keep that bia
 
 ## Prerequisites
 
-- Rust `1.95.0` from [rust-toolchain.toml](rust-toolchain.toml)
+- Rust `1.96.0` from [rust-toolchain.toml](rust-toolchain.toml)
 - `rustfmt` and `clippy`
 - `cargo-nextest` if you want the same test runner used by the repository pre-push hook and blocking CI workflows
 - optional but recommended: `cargo-deny`

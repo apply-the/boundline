@@ -24,7 +24,7 @@ project the new behavior through CLI output, docs, and release notes.
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024  
+**Language/Version**: Rust 1.96.0, edition 2024  
 **Primary Dependencies**: Existing runtime dependencies `clap` 4.x, `serde` 1.x, `serde_json` 1.x, `thiserror` 2.x, `tracing` 0.1, `uuid` 1.x, `toml` 0.8, plus Rust standard library filesystem, path, collections, and process APIs; no new runtime dependencies planned  
 **Storage**: Workspace-local `.boundline/config.toml`, optional `.boundline/execution.json`, `.boundline/session.json`, `.boundline/traces/`, and repository ignore files such as `.gitignore`, `.dockerignore`, `.eslintignore`, `.prettierignore`, `.terraformignore`, and `.helmignore` when bounded hygiene defaults justify them  
 **Testing**: `cargo test`, targeted integration tests for `init`, `doctor`, and native direct-run entry, unit tests for routing defaults and hygiene merge logic, contract-style assertions for config and CLI output surfaces  

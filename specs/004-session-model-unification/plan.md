@@ -9,7 +9,7 @@ Introduce a workspace-scoped session layer that sits between Boundline's CLI and
 
 ## Technical Context
 
-**Language/Version**: Rust 1.95.0, edition 2024 for the existing CLI and orchestrator backend  
+**Language/Version**: Rust 1.96.0, edition 2024 for the existing CLI and orchestrator backend  
 **Primary Dependencies**: Existing runtime dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`); no new runtime dependencies for this slice  
 **Storage**: Workspace-local JSON session record at `<workspace>/.boundline/session.json` plus the existing file-backed traces under `<workspace>/.boundline/traces/`  
 **Testing**: `cargo test` with new unit, integration, and contract tests for session persistence, CLI continuity, assistant continuity, recovery handling, and status routing  
