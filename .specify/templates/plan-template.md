@@ -1,6 +1,7 @@
 # Implementation Plan: [FEATURE]
 
 **Branch**: `[###-feature-name]` | **Date**: [DATE] | **Spec**: [link]
+
 **Input**: Feature specification from `/specs/[###-feature-name]/spec.md`
 
 **Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.
@@ -17,36 +18,29 @@
   the iteration process.
 -->
 
-**Language/Version**: [e.g., Rust 1.96.0, Python 3.11 or NEEDS CLARIFICATION]  
-**Primary Dependencies**: [core libraries and runtime dependencies or NEEDS CLARIFICATION]  
-**Storage**: [e.g., in-memory state, files, database, or N/A]  
-**Testing**: [e.g., cargo test, pytest, contract tests or NEEDS CLARIFICATION]  
-**Target Platform**: [e.g., macOS/Linux developer workstations, Linux CI or NEEDS CLARIFICATION]
-**Project Type**: [e.g., single library crate, CLI, service, or NEEDS CLARIFICATION]  
-**Execution Model**: [e.g., sequential task loop with bounded retries or NEEDS CLARIFICATION]  
-**Observability Surface**: [e.g., persisted execution trace, structured logs, CLI summary, and when governance changes, visible mode/approval/packet-provenance output or NEEDS CLARIFICATION]  
-**Performance Goals**: [delivery-facing targets or NEEDS CLARIFICATION]  
-**Constraints**: [explicit limits, non-goals, and external boundaries or NEEDS CLARIFICATION]  
-**Scale/Scope**: [expected task volume, step count, or user reach or NEEDS CLARIFICATION]
+**Language/Version**: [e.g., Python 3.11, Swift 5.9, Rust 1.75 or NEEDS CLARIFICATION]
+
+**Primary Dependencies**: [e.g., FastAPI, UIKit, LLVM or NEEDS CLARIFICATION]
+
+**Storage**: [if applicable, e.g., PostgreSQL, CoreData, files or N/A]
+
+**Testing**: [e.g., pytest, XCTest, cargo test or NEEDS CLARIFICATION]
+
+**Target Platform**: [e.g., Linux server, iOS 15+, WASM or NEEDS CLARIFICATION]
+
+**Project Type**: [e.g., library/cli/web-service/mobile-app/compiler/desktop-app or NEEDS CLARIFICATION]
+
+**Performance Goals**: [domain-specific, e.g., 1000 req/s, 10k lines/sec, 60 fps or NEEDS CLARIFICATION]
+
+**Constraints**: [domain-specific, e.g., <200ms p95, <100MB memory, offline-capable or NEEDS CLARIFICATION]
+
+**Scale/Scope**: [domain-specific, e.g., 10k users, 1M LOC, 50 screens or NEEDS CLARIFICATION]
 
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- Delivery identity: Explain how this feature directly improves bounded engineering task delivery.
-- Delivery-first scope: Confirm execution, orchestration, decomposition, or validation work is prioritized ahead of optimization or polish.
-- Primary workflow: State whether the main operator path is session-native (`start -> capture -> plan -> run -> status -> next -> inspect`) and identify any explicit compatibility path that remains available.
-- Bounded execution: Identify explicit start conditions, terminal conditions, and max step or retry limits.
-- Stateful execution: Describe shared task context, read and write points, and justify any stateless segment.
-- Mutable planning: Describe initial planning plus replanning, step insertion, or replacement behavior.
-- Sequential-first design: Confirm one-step-at-a-time execution or justify why the constitution allows an exception.
-- Tool-agent symmetry: Show how reasoning and action remain explicit in the execution model.
-- Observability and explicit intelligence: List trace surfaces, visible decisions, failure signals, and any heuristic behavior that must be exposed.
-- Catalog currency: Confirm current public provider docs were checked, the bundled model catalog was refreshed when needed, and the delta or no-change rationale is linked from the plan.
-- Non-goals and external separation: Confirm the plan does not depend on Canon behavior beyond bounded governance/evidence boundaries or reintroduce deferred scope such as councils or voting outside an explicitly reprioritized, bounded review slice, provider abstraction complexity beyond the approved slice, long-term memory, UI/UX, or deployment pipelines.
-- Minimal slice: Explain the smallest independently valuable capability delivered by this plan.
-
-Mark each line as PASS or FAIL in the completed plan and reference the section that satisfies it.
+[Gates determined based on constitution file]
 
 ## Project Structure
 
@@ -54,39 +48,60 @@ Mark each line as PASS or FAIL in the completed plan and reference the section t
 
 ```text
 specs/[###-feature]/
-├── plan.md
-├── research.md
-├── data-model.md
-├── quickstart.md
-├── contracts/
-└── tasks.md
+├── plan.md              # This file (/speckit.plan command output)
+├── research.md          # Phase 0 output (/speckit.plan command)
+├── data-model.md        # Phase 1 output (/speckit.plan command)
+├── quickstart.md        # Phase 1 output (/speckit.plan command)
+├── contracts/           # Phase 1 output (/speckit.plan command)
+└── tasks.md             # Phase 2 output (/speckit.tasks command - NOT created by /speckit.plan)
 ```
 
 ### Source Code (repository root)
 <!--
   ACTION REQUIRED: Replace the placeholder tree below with the concrete layout
-  for this feature. Keep the structure minimal, delivery-focused, and sequential-
-  first. Do not introduce extra top-level projects or UI/runtime surfaces unless
-  the Constitution Check explicitly justifies them.
+  for this feature. Delete unused options and expand the chosen structure with
+  real paths (e.g., apps/admin, packages/something). The delivered plan must
+  not include Option labels.
 -->
 
 ```text
+# [REMOVE IF UNUSED] Option 1: Single project (DEFAULT)
 src/
-├── domain/
-├── orchestrator/
-├── agents/
-├── tools/
-└── tracing/
+├── models/
+├── services/
+├── cli/
+└── lib/
 
 tests/
-└── unit/
+├── contract/
 ├── integration/
-└── contract/
+└── unit/
+
+# [REMOVE IF UNUSED] Option 2: Web application (when "frontend" + "backend" detected)
+backend/
+├── src/
+│   ├── models/
+│   ├── services/
+│   └── api/
+└── tests/
+
+frontend/
+├── src/
+│   ├── components/
+│   ├── pages/
+│   └── services/
+└── tests/
+
+# [REMOVE IF UNUSED] Option 3: Mobile + API (when "iOS/Android" detected)
+api/
+└── [same as backend above]
+
+ios/ or android/
+└── [platform-specific structure: feature modules, UI flows, platform tests]
 ```
 
 **Structure Decision**: [Document the selected structure and reference the real
-directories captured above. If new top-level directories are introduced, explain why
-the constitution allows that additional complexity.]
+directories captured above]
 
 ## Complexity Tracking
 
@@ -95,4 +110,4 @@ the constitution allows that additional complexity.]
 | Violation | Why Needed | Simpler Alternative Rejected Because |
 |-----------|------------|-------------------------------------|
 | [e.g., 4th project] | [current need] | [why 3 projects insufficient] |
-| [e.g., background worker] | [specific delivery need] | [why sequential execution is insufficient] |
+| [e.g., Repository pattern] | [specific problem] | [why direct DB access insufficient] |

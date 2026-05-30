@@ -1,21 +1,26 @@
 # Feature Specification: [FEATURE NAME]
 
-**Feature Branch**: `[###-feature-name]`  
-**Created**: [DATE]  
-**Status**: Draft  
+**Feature Branch**: `[###-feature-name]`
+
+**Created**: [DATE]
+
+**Status**: Draft
+
 **Input**: User description: "$ARGUMENTS"
 
 ## User Scenarios & Testing *(mandatory)*
 
 <!--
-  IMPORTANT: User stories MUST be prioritized as delivery journeys ordered by importance.
-  Each story must improve bounded engineering-task execution and be independently testable.
-  If implementing just one story would not produce immediate delivery value, the slice is too broad.
-  When both a session-native workflow and a compatibility workflow exist, the spec MUST name which path is primary and keep compatibility behavior explicit rather than implicit.
+  IMPORTANT: User stories should be PRIORITIZED as user journeys ordered by importance.
+  Each user story/journey must be INDEPENDENTLY TESTABLE - meaning if you implement just ONE of them,
+  you should still have a viable MVP (Minimum Viable Product) that delivers value.
 
-  At least one acceptance scenario in the spec MUST cover a non-success path such as
-  retry, replanning, failure, or exhaustion. Avoid stories that describe generic agent
-  collaboration, dashboards, chat UX, or abstract reasoning without real execution.
+  Assign priorities (P1, P2, P3, etc.) to each story, where P1 is the most critical.
+  Think of each story as a standalone slice of functionality that can be:
+  - Developed independently
+  - Tested independently
+  - Deployed independently
+  - Demonstrated to users independently
 -->
 
 ### User Story 1 - [Brief Title] (Priority: P1)
@@ -66,80 +71,51 @@
 ### Edge Cases
 
 <!--
-  ACTION REQUIRED: Capture execution limits, invalid state transitions, missing context,
-  traceability gaps, and failure-handling boundaries. Boundline features are invalid if they
-  ignore how work stops, fails, or becomes non-credible.
+  ACTION REQUIRED: The content in this section represents placeholders.
+  Fill them out with the right edge cases.
 -->
 
-- What happens when [execution reaches a configured limit or no credible next step exists]?
-- How does the system handle [a failed step, invalid result, or missing context update]?
-- How does the system surface [primary session-native routing versus any explicit compatibility route]?
+- What happens when [boundary condition]?
+- How does system handle [error scenario]?
 
 ## Requirements *(mandatory)*
 
 <!--
-  ACTION REQUIRED: Fill this section with testable requirements focused on delivery value,
-  bounded execution, state updates, failure handling, and inspectability. Avoid abstract
-  platform language or implementation details.
+  ACTION REQUIRED: The content in this section represents placeholders.
+  Fill them out with the right functional requirements.
 -->
 
 ### Functional Requirements
 
-- **FR-001**: System MUST [represent the bounded task, request, or workflow state explicitly]
-- **FR-002**: System MUST [apply explicit execution limits or stop conditions]
-- **FR-003**: System MUST [preserve or expose the state needed by later execution steps]
-- **FR-004**: System MUST [handle at least one failure or recovery path without losing required context]
-- **FR-005**: System MUST [emit the outputs or traces needed to inspect what happened]
+- **FR-001**: System MUST [specific capability, e.g., "allow users to create accounts"]
+- **FR-002**: System MUST [specific capability, e.g., "validate email addresses"]
+- **FR-003**: Users MUST be able to [key interaction, e.g., "reset their password"]
+- **FR-004**: System MUST [data requirement, e.g., "persist user preferences"]
+- **FR-005**: System MUST [behavior, e.g., "log all security events"]
 
 *Example of marking unclear requirements:*
 
-- **FR-006**: System MUST stop tasks according to [NEEDS CLARIFICATION: terminal condition precedence not specified]
-- **FR-007**: System MUST preserve execution traces for [NEEDS CLARIFICATION: retention window or inspection surface not specified]
-
-### Scope Boundaries *(mandatory)*
-
-<!--
-  ACTION REQUIRED: Name the deferred or excluded capabilities explicitly.
-  Boundline specs should normally exclude councils and voting unless the roadmap and
-  constitution explicitly prioritize a bounded review slice; they should otherwise
-  exclude provider-routing complexity, distributed execution, long-term memory,
-  UI/UX work, and deployment pipelines.
--->
-
-- **In Scope**: [core delivery capability introduced by this spec]
-- **Out of Scope**: [related but deferred capabilities]
+- **FR-006**: System MUST authenticate users via [NEEDS CLARIFICATION: auth method not specified - email/password, SSO, OAuth?]
+- **FR-007**: System MUST retain user data for [NEEDS CLARIFICATION: retention period not specified]
 
 ### Key Entities *(include if feature involves data)*
 
-- **[Entity 1]**: [What it represents, key attributes, lifecycle, and why it matters to delivery]
-- **[Entity 2]**: [What it represents, relationships, and any state-transition constraints]
+- **[Entity 1]**: [What it represents, key attributes without implementation]
+- **[Entity 2]**: [What it represents, relationships to other entities]
 
 ## Success Criteria *(mandatory)*
 
 <!--
-  ACTION REQUIRED: Define measurable success criteria tied to working outcomes.
-  Include execution quality, bounded termination, or inspectability metrics when relevant.
-  These must stay technology-agnostic and measurable.
+  ACTION REQUIRED: Define measurable success criteria.
+  These must be technology-agnostic and measurable.
 -->
 
 ### Measurable Outcomes
 
-- **SC-001**: [Measurable delivery metric, e.g., "Users can complete a bounded engineering task through multiple explicit steps without manual intervention"]
-- **SC-002**: [Measurable reliability metric, e.g., "100% of validation runs stop in an explicit terminal state within configured limits"]
-- **SC-003**: [Measurable inspectability metric, e.g., "Developers can identify failure and recovery paths from recorded execution output in under 5 minutes"]
-- **SC-004**: [Measurable value metric, e.g., "At least 90% of representative tasks reach the intended delivery outcome on first plan or after bounded recovery"]
-
-## Catalog Research & Currency *(mandatory)*
-
-<!--
-  ACTION REQUIRED: Every Boundline spec MUST verify the bundled assistant model catalog
-  against current public provider documentation using web research.
-  Record what sources were checked and whether the catalog changed.
--->
-
-- **Public Sources Reviewed**: [List the provider documentation or changelog pages checked during spec creation]
-- **Catalog Delta**: [Summarize the model additions, removals, or label changes applied to the bundled catalog]
-- **No-Change Rationale**: [If no catalog change was required, explain why the current bundled catalog remains accurate]
+- **SC-001**: [Measurable metric, e.g., "Users can complete account creation in under 2 minutes"]
+- **SC-002**: [Measurable metric, e.g., "System handles 1000 concurrent users without degradation"]
+- **SC-003**: [User satisfaction metric, e.g., "90% of users successfully complete primary task on first attempt"]
+- **SC-004**: [Business metric, e.g., "Reduce support tickets related to [X] by 50%"]
 
 ## Assumptions
 
@@ -147,7 +123,6 @@
   ACTION REQUIRED: The content in this section represents placeholders.
   Fill them out with the right assumptions based on reasonable defaults
   chosen when the feature description did not specify certain details.
-  Assumptions must reduce ambiguity without expanding scope.
 -->
 
 - [Assumption about target users, e.g., "Users have stable internet connectivity"]

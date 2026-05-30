@@ -6,21 +6,12 @@ description: "Task list template for feature implementation"
 # Tasks: [FEATURE NAME]
 
 **Input**: Design documents from `/specs/[###-feature-name]/`
+
 **Prerequisites**: plan.md (required), spec.md (required for user stories), research.md, data-model.md, contracts/
 
-**Tests**: Validation tasks are expected for Boundline features. Include them whenever the
-feature defines executable behavior, failure handling, replanning, or trace guarantees.
-Omit them only when the feature is truly documentation-only. When the feature changes
-runtime routing, governance surfaces, or operator-facing summaries, include coverage for
-route explanation, `execution_condition`, selected mode, approval state, packet provenance,
-next-command guidance, and other CLI-visible surfaces, then refresh coverage artifacts such
-as `lcov.info`.
-Every feature task list MUST also include a catalog-refresh task that checks current public
-provider docs against `assistant/catalog/model-catalog.toml` and records the applied delta
-or explicit no-change result.
+**Tests**: The examples below include test tasks. Tests are OPTIONAL - only include them if explicitly requested in the feature specification.
 
-**Organization**: Tasks are grouped by user story so each slice can deliver bounded,
-inspectable value independently.
+**Organization**: Tasks are grouped by user story to enable independent implementation and testing of each story.
 
 ## Format: `[ID] [P?] [Story] Description`
 
@@ -30,25 +21,26 @@ inspectable value independently.
 
 ## Path Conventions
 
-- **Default Boundline layout**: `src/`, `tests/` at repository root
-- Adjust paths only when `plan.md` explicitly defines a different structure
-- Do not invent frontend/backend or deployment surfaces unless the Constitution Check justifies them
+- **Single project**: `src/`, `tests/` at repository root
+- **Web app**: `backend/src/`, `frontend/src/`
+- **Mobile**: `api/src/`, `ios/src/` or `android/src/`
+- Paths shown below assume single project - adjust based on plan.md structure
 
-<!-- 
+<!--
   ============================================================================
   IMPORTANT: The tasks below are SAMPLE TASKS for illustration purposes only.
-  
+
   The /speckit.tasks command MUST replace these with actual tasks based on:
   - User stories from spec.md (with their priorities P1, P2, P3...)
   - Feature requirements from plan.md
   - Entities from data-model.md
   - Endpoints from contracts/
-  
+
   Tasks MUST be organized by user story so each story can be:
   - Implemented independently
   - Tested independently
   - Delivered as an MVP increment
-  
+
   DO NOT keep these sample tasks in the generated tasks.md file.
   ============================================================================
 -->
@@ -57,9 +49,9 @@ inspectable value independently.
 
 **Purpose**: Project initialization and basic structure
 
-- [ ] T001 Create the project structure described in plan.md
-- [ ] T002 Initialize the runtime or crate manifest with required dependencies
-- [ ] T003 [P] Configure formatting, linting, and test commands
+- [ ] T001 Create project structure per implementation plan
+- [ ] T002 Initialize [language] project with [framework] dependencies
+- [ ] T003 [P] Configure linting and formatting tools
 
 ---
 
@@ -71,15 +63,14 @@ inspectable value independently.
 
 Examples of foundational tasks (adjust based on your project):
 
-- [ ] T004 Create shared task, context, step, limit, or lifecycle models
-- [ ] T005 [P] Define agent, tool, or execution contracts used across stories
-- [ ] T006 [P] Setup trace or event recording infrastructure
-- [ ] T007 Implement error handling, retry, and terminal-state primitives
-- [ ] T008 Setup deterministic fixtures, fakes, or simulators for validation
-- [ ] T009 Document explicit scope boundaries and deferred capabilities in code comments or docs where needed
+- [ ] T004 Setup database schema and migrations framework
+- [ ] T005 [P] Implement authentication/authorization framework
+- [ ] T006 [P] Setup API routing and middleware structure
+- [ ] T007 Create base models/entities that all stories depend on
+- [ ] T008 Configure error handling and logging infrastructure
+- [ ] T009 Setup environment configuration management
 
-**Checkpoint**: Foundation ready - user story work can begin with bounded execution,
-failure handling, and observability primitives in place
+**Checkpoint**: Foundation ready - user story implementation can now begin in parallel
 
 ---
 
@@ -89,21 +80,21 @@ failure handling, and observability primitives in place
 
 **Independent Test**: [How to verify this story works on its own]
 
-### Tests for User Story 1
+### Tests for User Story 1 (OPTIONAL - only if tests requested) ⚠️
 
-> **NOTE: Write these tests first and ensure they fail before implementation when the spec requires executable behavior.**
+> **NOTE: Write these tests FIRST, ensure they FAIL before implementation**
 
-- [ ] T010 [P] [US1] Contract test for the primary execution interface in tests/contract/[name].rs
-- [ ] T011 [P] [US1] Integration test for the primary bounded execution journey in tests/integration/[name].rs
-- [ ] T012 [P] [US1] Integration test for one failure or termination path in tests/integration/[name]_failure.rs
+- [ ] T010 [P] [US1] Contract test for [endpoint] in tests/contract/test_[name].py
+- [ ] T011 [P] [US1] Integration test for [user journey] in tests/integration/test_[name].py
 
 ### Implementation for User Story 1
 
-- [ ] T013 [P] [US1] Create or extend the core domain model in src/domain/[file].rs
-- [ ] T014 [US1] Implement the primary orchestration or service flow in src/[module]/[file].rs
-- [ ] T015 [US1] Connect state updates and execution-limit enforcement
-- [ ] T016 [US1] Emit trace events and visible error surfaces for this story
-- [ ] T017 [US1] Add validation logic for story-specific success conditions
+- [ ] T012 [P] [US1] Create [Entity1] model in src/models/[entity1].py
+- [ ] T013 [P] [US1] Create [Entity2] model in src/models/[entity2].py
+- [ ] T014 [US1] Implement [Service] in src/services/[service].py (depends on T012, T013)
+- [ ] T015 [US1] Implement [endpoint/feature] in src/[location]/[file].py
+- [ ] T016 [US1] Add validation and error handling
+- [ ] T017 [US1] Add logging for user story 1 operations
 
 **Checkpoint**: At this point, User Story 1 should be fully functional and testable independently
 
@@ -115,18 +106,17 @@ failure handling, and observability primitives in place
 
 **Independent Test**: [How to verify this story works on its own]
 
-### Tests for User Story 2
+### Tests for User Story 2 (OPTIONAL - only if tests requested) ⚠️
 
-- [ ] T018 [P] [US2] Contract test for the recovery or replanning interface in tests/contract/[name].rs
-- [ ] T019 [P] [US2] Integration test for the recovery journey in tests/integration/[name].rs
-- [ ] T020 [P] [US2] Integration test for exhausted or terminal recovery behavior in tests/integration/[name]_exhausted.rs
+- [ ] T018 [P] [US2] Contract test for [endpoint] in tests/contract/test_[name].py
+- [ ] T019 [P] [US2] Integration test for [user journey] in tests/integration/test_[name].py
 
 ### Implementation for User Story 2
 
-- [ ] T021 [P] [US2] Extend domain or policy models for retries, replanning, or failure decisions
-- [ ] T022 [US2] Implement recovery behavior in src/[module]/[file].rs
-- [ ] T023 [US2] Integrate recovery behavior with User Story 1 components
-- [ ] T024 [US2] Record retry, replanning, and terminal events in the trace output
+- [ ] T020 [P] [US2] Create [Entity] model in src/models/[entity].py
+- [ ] T021 [US2] Implement [Service] in src/services/[service].py
+- [ ] T022 [US2] Implement [endpoint/feature] in src/[location]/[file].py
+- [ ] T023 [US2] Integrate with User Story 1 components (if needed)
 
 **Checkpoint**: At this point, User Stories 1 AND 2 should both work independently
 
@@ -138,16 +128,16 @@ failure handling, and observability primitives in place
 
 **Independent Test**: [How to verify this story works on its own]
 
-### Tests for User Story 3
+### Tests for User Story 3 (OPTIONAL - only if tests requested) ⚠️
 
-- [ ] T025 [P] [US3] Contract test for the inspection or trace surface in tests/contract/[name].rs
-- [ ] T026 [P] [US3] Integration test for the inspection journey in tests/integration/[name].rs
+- [ ] T024 [P] [US3] Contract test for [endpoint] in tests/contract/test_[name].py
+- [ ] T025 [P] [US3] Integration test for [user journey] in tests/integration/test_[name].py
 
 ### Implementation for User Story 3
 
-- [ ] T027 [P] [US3] Create or extend trace-view or inspection models in src/[module]/[file].rs
-- [ ] T028 [US3] Implement the inspection surface in src/[module]/[file].rs
-- [ ] T029 [US3] Validate that the recorded output explains step order, failures, and final outcome
+- [ ] T026 [P] [US3] Create [Entity] model in src/models/[entity].py
+- [ ] T027 [US3] Implement [Service] in src/services/[service].py
+- [ ] T028 [US3] Implement [endpoint/feature] in src/[location]/[file].py
 
 **Checkpoint**: All user stories should now be independently functional
 
@@ -162,12 +152,10 @@ failure handling, and observability primitives in place
 **Purpose**: Improvements that affect multiple user stories
 
 - [ ] TXXX [P] Documentation updates in docs/
-- [ ] TXXX [P] Refresh assistant command packs and contributor guidance when runtime story or CLI surfaces change
 - [ ] TXXX Code cleanup and refactoring
-- [ ] TXXX Performance optimization across all stories after delivery behavior is stable
-- [ ] TXXX [P] Additional unit tests in tests/unit/
-- [ ] TXXX [P] Additional integration coverage in tests/integration/ plus refreshed `lcov.info`
-- [ ] TXXX Harden diagnostics, error messages, and trace readability
+- [ ] TXXX Performance optimization across all stories
+- [ ] TXXX [P] Additional unit tests (if requested) in tests/unit/
+- [ ] TXXX Security hardening
 - [ ] TXXX Run quickstart.md validation
 
 ---
@@ -179,8 +167,8 @@ failure handling, and observability primitives in place
 - **Setup (Phase 1)**: No dependencies - can start immediately
 - **Foundational (Phase 2)**: Depends on Setup completion - BLOCKS all user stories
 - **User Stories (Phase 3+)**: All depend on Foundational phase completion
-  - User stories can then proceed in parallel if the plan allows it
-  - Or sequentially in priority order (P1 -> P2 -> P3)
+  - User stories can then proceed in parallel (if staffed)
+  - Or sequentially in priority order (P1 → P2 → P3)
 - **Polish (Final Phase)**: Depends on all desired user stories being complete
 
 ### User Story Dependencies
@@ -191,11 +179,10 @@ failure handling, and observability primitives in place
 
 ### Within Each User Story
 
-- Validation tasks MUST fail before implementation when the spec requires executable behavior
-- Models before orchestration logic
-- Contracts before adapters or integration surfaces
+- Tests (if included) MUST be written and FAIL before implementation
+- Models before services
+- Services before endpoints
 - Core implementation before integration
-- Trace and failure-handling coverage before story sign-off
 - Story complete before moving to next priority
 
 ### Parallel Opportunities
@@ -205,20 +192,20 @@ failure handling, and observability primitives in place
 - Once Foundational phase completes, all user stories can start in parallel (if team capacity allows)
 - All tests for a user story marked [P] can run in parallel
 - Models within a story marked [P] can run in parallel
-- Different user stories can be worked on in parallel when shared state and trace contracts are stable
+- Different user stories can be worked on in parallel by different team members
 
 ---
 
 ## Parallel Example: User Story 1
 
 ```bash
-# Launch all tests for User Story 1 together:
-Task: "Contract test for the primary execution interface in tests/contract/[name].rs"
-Task: "Integration test for the primary bounded execution journey in tests/integration/[name].rs"
+# Launch all tests for User Story 1 together (if tests requested):
+Task: "Contract test for [endpoint] in tests/contract/test_[name].py"
+Task: "Integration test for [user journey] in tests/integration/test_[name].py"
 
-# Launch all independent model work for User Story 1 together:
-Task: "Create or extend the core domain model in src/domain/[file].rs"
-Task: "Create supporting trace or state helpers in src/[module]/[file].rs"
+# Launch all models for User Story 1 together:
+Task: "Create [Entity1] model in src/models/[entity1].py"
+Task: "Create [Entity2] model in src/models/[entity2].py"
 ```
 
 ---
@@ -259,7 +246,7 @@ With multiple developers:
 - [P] tasks = different files, no dependencies
 - [Story] label maps task to specific user story for traceability
 - Each user story should be independently completable and testable
-- Verify validation tasks fail before implementing
+- Verify tests fail before implementing
 - Commit after each task or logical group
 - Stop at any checkpoint to validate story independently
-- Avoid: vague tasks, hidden-intelligence work, same-file conflicts, or cross-story dependencies that break independence
+- Avoid: vague tasks, same file conflicts, cross-story dependencies that break independence
