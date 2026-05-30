@@ -14,6 +14,8 @@ use super::{
     scope_includes_workspace, template_label,
 };
 
+const DERIVED_INDEX_HYGIENE_SOURCE: &str = "boundline:derived_index";
+
 fn collect_update_entries(plan: &UpdatePlan, action: UpdatePlanAction) -> Vec<&UpdatePlanEntry> {
     plan.entries.iter().filter(|entry| entry.action == action).collect()
 }
@@ -636,6 +638,14 @@ pub(super) fn render_successful_init_report(
                     sources
                 )
             }));
+            if hygiene_actions.iter().any(|action| {
+                action.sources.iter().any(|source| source == DERIVED_INDEX_HYGIENE_SOURCE)
+            }) {
+                lines.push(
+                    "derived_index_hygiene: disposable retrieval DB, manifest, and SQLite WAL/SHM sidecars stay ignored"
+                        .to_string(),
+                );
+            }
         }
     } else {
         lines.push("workspace_artifacts: skipped in global scope".to_string());

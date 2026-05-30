@@ -7,13 +7,14 @@ license.workspace = true
 [features]
 default = []
 semantic-acceleration = []
-sqlite-vec = ["semantic-acceleration"]
+sqlite-vec = ["semantic-acceleration", "dep:sqlite-vec"]
 
 [dependencies]
 boundline-core.workspace = true
 clap.workspace = true
 reqwest.workspace = true
 rusqlite.workspace = true
+sqlite-vec = { workspace = true, optional = true }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

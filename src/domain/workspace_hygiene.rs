@@ -4,6 +4,21 @@ use std::path::Path;
 
 use crate::domain::domain_templates::DomainFamily;
 
+const DERIVED_INDEX_HYGIENE_PROVENANCE: &str = "boundline:derived_index";
+const DERIVED_INDEX_MANIFEST_PATTERN: &str = ".boundline/context-intelligence/manifest.json";
+const DERIVED_INDEX_SQLITE_PATTERN: &str =
+    ".boundline/context-intelligence/retrieval-index.sqlite3";
+const DERIVED_INDEX_WAL_PATTERN: &str =
+    ".boundline/context-intelligence/retrieval-index.sqlite3-wal";
+const DERIVED_INDEX_SHM_PATTERN: &str =
+    ".boundline/context-intelligence/retrieval-index.sqlite3-shm";
+const DERIVED_INDEX_JOURNAL_PATTERN: &str =
+    ".boundline/context-intelligence/retrieval-index.sqlite3-journal";
+const DERIVED_INDEX_LOCK_PATTERN: &str =
+    ".boundline/context-intelligence/retrieval-index.sqlite3-lock";
+const DERIVED_INDEX_TMP_PATTERN: &str =
+    ".boundline/context-intelligence/retrieval-index.sqlite3.tmp";
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HygieneFilePlan {
     pub path: &'static str,
@@ -34,6 +49,7 @@ pub fn plan_hygiene_defaults(
             provenance: "universal".to_string(),
             patterns: vec![".boundline/traces/", ".boundline/checkpoints/"],
         }];
+        packs.push(derived_index_gitignore_pack());
         packs.extend(domain_gitignore_packs(domains));
         packs.extend(tool_gitignore_packs(workspace));
         plans.push(HygieneFilePlan { path: ".gitignore", packs });
@@ -135,6 +151,21 @@ pub fn merge_hygiene_content(existing: Option<&str>, plan: &HygieneFilePlan) -> 
     }
 
     HygieneMergeResult { content, added_patterns, preserved_custom_lines }
+}
+
+fn derived_index_gitignore_pack() -> HygienePatternPack {
+    HygienePatternPack {
+        provenance: DERIVED_INDEX_HYGIENE_PROVENANCE.to_string(),
+        patterns: vec![
+            DERIVED_INDEX_MANIFEST_PATTERN,
+            DERIVED_INDEX_SQLITE_PATTERN,
+            DERIVED_INDEX_WAL_PATTERN,
+            DERIVED_INDEX_SHM_PATTERN,
+            DERIVED_INDEX_JOURNAL_PATTERN,
+            DERIVED_INDEX_LOCK_PATTERN,
+            DERIVED_INDEX_TMP_PATTERN,
+        ],
+    }
 }
 
 fn domain_gitignore_packs(domains: &BTreeSet<DomainFamily>) -> Vec<HygienePatternPack> {
@@ -280,6 +311,8 @@ mod tests {
     use uuid::Uuid;
 
     use super::{
+        DERIVED_INDEX_HYGIENE_PROVENANCE, DERIVED_INDEX_MANIFEST_PATTERN,
+        DERIVED_INDEX_SHM_PATTERN, DERIVED_INDEX_SQLITE_PATTERN, DERIVED_INDEX_WAL_PATTERN,
         DomainFamily, HygieneFilePlan, HygienePatternPack, merge_hygiene_content,
         plan_hygiene_defaults,
     };
@@ -294,6 +327,15 @@ mod tests {
         let gitignore = plans.iter().find(|plan| plan.path == ".gitignore").unwrap();
 
         assert!(gitignore.packs.iter().any(|pack| pack.provenance == "universal"));
+        let derived_index = gitignore
+            .packs
+            .iter()
+            .find(|pack| pack.provenance == DERIVED_INDEX_HYGIENE_PROVENANCE)
+            .unwrap();
+        assert!(derived_index.patterns.contains(&DERIVED_INDEX_MANIFEST_PATTERN));
+        assert!(derived_index.patterns.contains(&DERIVED_INDEX_SQLITE_PATTERN));
+        assert!(derived_index.patterns.contains(&DERIVED_INDEX_WAL_PATTERN));
+        assert!(derived_index.patterns.contains(&DERIVED_INDEX_SHM_PATTERN));
         assert!(gitignore.packs.iter().any(|pack| pack.provenance == "domain:node_web"));
     }
 

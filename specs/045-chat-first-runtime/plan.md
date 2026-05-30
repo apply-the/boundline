@@ -1,6 +1,6 @@
 # Implementation Plan: Chat-First Host-Integrated Runtime
 
-**Branch**: `045-chat-first-runtime` | **Date**: 2026-05-09 | **Spec**: [/Users/rt/workspace/apply-the/boundline/specs/045-chat-first-runtime/spec.md](/Users/rt/workspace/apply-the/boundline/specs/045-chat-first-runtime/spec.md)
+**Branch**: `045-chat-first-runtime` | **Date**: 2026-05-09 | **Spec**: [specs/045-chat-first-runtime/spec.md](specs/045-chat-first-runtime/spec.md)
 **Input**: Feature specification from `/specs/045-chat-first-runtime/spec.md`
 
 ## Summary

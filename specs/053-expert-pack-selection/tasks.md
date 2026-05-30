@@ -25,8 +25,8 @@ implemented and validated independently.
 **Purpose**: Establish the first required release move and provider-doc audit
 for the branch
 
-- [x] T001 Bump the Boundline workspace version from `0.52.0` to `0.53.0` in `/Users/rt/workspace/apply-the/boundline/Cargo.toml` and update `/Users/rt/workspace/apply-the/boundline/CHANGELOG.md`
-- [x] T002 [P] Re-check current OpenAI, Anthropic, and Google provider docs against `/Users/rt/workspace/apply-the/boundline/assistant/catalog/model-catalog.toml` and record the explicit no-change result in `/Users/rt/workspace/apply-the/boundline/specs/053-expert-pack-selection/research.md`
+- [x] T001 Bump the Boundline workspace version from `0.52.0` to `0.53.0` in `Cargo.toml` and update `CHANGELOG.md`
+- [x] T002 [P] Re-check current OpenAI, Anthropic, and Google provider docs against `assistant/catalog/model-catalog.toml` and record the explicit no-change result in `specs/053-expert-pack-selection/research.md`
 
 ---
 
@@ -36,10 +36,10 @@ for the branch
 
 **⚠️ CRITICAL**: No user story work should begin until this phase is complete
 
-- [x] T003 Extend shared expert-pack selection state and projection helpers in `/Users/rt/workspace/apply-the/boundline/src/domain/goal_plan.rs`
-- [x] T004 [P] Define deterministic built-in expert-pack selection helpers in `/Users/rt/workspace/apply-the/boundline/src/orchestrator/goal_planner.rs`
-- [x] T005 [P] Add Canon-governed expertise input read-side helpers and compatibility gates in `/Users/rt/workspace/apply-the/boundline/src/domain/project_memory.rs` and `/Users/rt/workspace/apply-the/boundline/src/orchestrator/goal_planner.rs`
-- [x] T006 [P] Reuse existing unit and integration coverage surfaces for this slice in `/Users/rt/workspace/apply-the/boundline/src/domain/goal_plan.rs`, `/Users/rt/workspace/apply-the/boundline/src/orchestrator/goal_planner.rs`, and `/Users/rt/workspace/apply-the/boundline/tests/integration/cli_trace_inspection.rs`
+- [x] T003 Extend shared expert-pack selection state and projection helpers in `src/domain/goal_plan.rs`
+- [x] T004 [P] Define deterministic built-in expert-pack selection helpers in `src/orchestrator/goal_planner.rs`
+- [x] T005 [P] Add Canon-governed expertise input read-side helpers and compatibility gates in `src/domain/project_memory.rs` and `src/orchestrator/goal_planner.rs`
+- [x] T006 [P] Reuse existing unit and integration coverage surfaces for this slice in `src/domain/goal_plan.rs`, `src/orchestrator/goal_planner.rs`, and `tests/integration/cli_trace_inspection.rs`
 
 **Checkpoint**: Shared expert-pack primitives and test entry points are ready
 
@@ -53,15 +53,15 @@ for the branch
 
 ### Validation for User Story 1
 
-- [x] T007 [P] [US1] Add deterministic selection and ordering coverage in `/Users/rt/workspace/apply-the/boundline/src/domain/goal_plan.rs` and `/Users/rt/workspace/apply-the/boundline/src/orchestrator/goal_planner.rs`
-- [x] T008 [P] [US1] Add local-only planning-path coverage in `/Users/rt/workspace/apply-the/boundline/src/orchestrator/goal_planner.rs`
+- [x] T007 [P] [US1] Add deterministic selection and ordering coverage in `src/domain/goal_plan.rs` and `src/orchestrator/goal_planner.rs`
+- [x] T008 [P] [US1] Add local-only planning-path coverage in `src/orchestrator/goal_planner.rs`
 
 ### Implementation for User Story 1
 
-- [x] T009 [P] [US1] Implement built-in expert-pack definitions and family matching in `/Users/rt/workspace/apply-the/boundline/src/orchestrator/goal_planner.rs`
-- [x] T010 [US1] Persist expert-pack selection outcome and summary helpers in `/Users/rt/workspace/apply-the/boundline/src/domain/goal_plan.rs`
-- [x] T011 [US1] Compute deterministic expert selection during planning in `/Users/rt/workspace/apply-the/boundline/src/orchestrator/goal_planner.rs`
-- [x] T012 [US1] Align the MVP contract wording in `/Users/rt/workspace/apply-the/boundline/specs/053-expert-pack-selection/data-model.md` and `/Users/rt/workspace/apply-the/boundline/specs/053-expert-pack-selection/contracts/expert-pack-selection-contract.md`
+- [x] T009 [P] [US1] Implement built-in expert-pack definitions and family matching in `src/orchestrator/goal_planner.rs`
+- [x] T010 [US1] Persist expert-pack selection outcome and summary helpers in `src/domain/goal_plan.rs`
+- [x] T011 [US1] Compute deterministic expert selection during planning in `src/orchestrator/goal_planner.rs`
+- [x] T012 [US1] Align the MVP contract wording in `specs/053-expert-pack-selection/data-model.md` and `specs/053-expert-pack-selection/contracts/expert-pack-selection-contract.md`
 
 **Checkpoint**: User Story 1 is independently valid with local-only expert selection
 
@@ -75,14 +75,14 @@ for the branch
 
 ### Validation for User Story 2
 
-- [x] T013 [P] [US2] Add coverage for effective precedence, unroutable runtime roles, and explicit suppression in `/Users/rt/workspace/apply-the/boundline/src/orchestrator/goal_planner.rs`
-- [x] T014 [P] [US2] Add compatibility coverage for supported Canon `v1` `domain-language` and `domain-model` inputs plus ignored unsupported-line, unknown-kind, non-matching-domain, blocked, pending, proposal, evidence, index, or conflicting-state paths in `/Users/rt/workspace/apply-the/boundline/src/domain/project_memory.rs` and `/Users/rt/workspace/apply-the/boundline/src/orchestrator/goal_planner.rs`
+- [x] T013 [P] [US2] Add coverage for effective precedence, unroutable runtime roles, and explicit suppression in `src/orchestrator/goal_planner.rs`
+- [x] T014 [P] [US2] Add compatibility coverage for supported Canon `v1` `domain-language` and `domain-model` inputs plus ignored unsupported-line, unknown-kind, non-matching-domain, blocked, pending, proposal, evidence, index, or conflicting-state paths in `src/domain/project_memory.rs` and `src/orchestrator/goal_planner.rs`
 
 ### Implementation for User Story 2
 
-- [x] T015 [P] [US2] Apply effective reviewer-role and domain-template precedence to candidate suppression in `/Users/rt/workspace/apply-the/boundline/src/orchestrator/goal_planner.rs`
-- [x] T016 [US2] Integrate optional Canon expertise inputs and explicit rejection reasons for unsupported-line, unknown-kind, non-matching-domain, blocked, pending, proposal, evidence, index, or conflicting inputs in `/Users/rt/workspace/apply-the/boundline/src/orchestrator/goal_planner.rs`
-- [x] T017 [US2] Preserve `none-selected`, rejection projection fields, and Canon metadata handoff requirements including `expertise_input.domain_families` in `/Users/rt/workspace/apply-the/boundline/src/domain/goal_plan.rs` and `/Users/rt/workspace/apply-the/boundline/specs/053-expert-pack-selection/contracts/expert-pack-selection-contract.md`
+- [x] T015 [P] [US2] Apply effective reviewer-role and domain-template precedence to candidate suppression in `src/orchestrator/goal_planner.rs`
+- [x] T016 [US2] Integrate optional Canon expertise inputs and explicit rejection reasons for unsupported-line, unknown-kind, non-matching-domain, blocked, pending, proposal, evidence, index, or conflicting inputs in `src/orchestrator/goal_planner.rs`
+- [x] T017 [US2] Preserve `none-selected`, rejection projection fields, and Canon metadata handoff requirements including `expertise_input.domain_families` in `src/domain/goal_plan.rs` and `specs/053-expert-pack-selection/contracts/expert-pack-selection-contract.md`
 
 **Checkpoint**: User Stories 1 and 2 both work independently and preserve the Canon boundary
 
@@ -96,14 +96,14 @@ for the branch
 
 ### Validation for User Story 3
 
-- [x] T018 [P] [US3] Add session and CLI projection coverage in `/Users/rt/workspace/apply-the/boundline/tests/integration/cli_trace_inspection.rs` and `/Users/rt/workspace/apply-the/boundline/src/domain/goal_plan.rs`
-- [x] T019 [P] [US3] Add persisted expert-selection trace coverage in `/Users/rt/workspace/apply-the/boundline/src/domain/goal_plan.rs` and `/Users/rt/workspace/apply-the/boundline/src/orchestrator/goal_planner.rs`
+- [x] T018 [P] [US3] Add session and CLI projection coverage in `tests/integration/cli_trace_inspection.rs` and `src/domain/goal_plan.rs`
+- [x] T019 [P] [US3] Add persisted expert-selection trace coverage in `src/domain/goal_plan.rs` and `src/orchestrator/goal_planner.rs`
 
 ### Implementation for User Story 3
 
-- [x] T020 [P] [US3] Project expert-selection summaries through existing session-native surfaces via `/Users/rt/workspace/apply-the/boundline/src/domain/goal_plan.rs` and `/Users/rt/workspace/apply-the/boundline/src/orchestrator/goal_planner.rs`
-- [x] T021 [US3] Extend persisted provenance used by inspect trace surfaces in `/Users/rt/workspace/apply-the/boundline/src/domain/goal_plan.rs` and `/Users/rt/workspace/apply-the/boundline/src/orchestrator/goal_planner.rs`
-- [x] T022 [US3] Refresh `/Users/rt/workspace/apply-the/boundline/specs/053-expert-pack-selection/quickstart.md` and `/Users/rt/workspace/apply-the/boundline/specs/053-expert-pack-selection/contracts/expert-selection-trace-contract.md`
+- [x] T020 [P] [US3] Project expert-selection summaries through existing session-native surfaces via `src/domain/goal_plan.rs` and `src/orchestrator/goal_planner.rs`
+- [x] T021 [US3] Extend persisted provenance used by inspect trace surfaces in `src/domain/goal_plan.rs` and `src/orchestrator/goal_planner.rs`
+- [x] T022 [US3] Refresh `specs/053-expert-pack-selection/quickstart.md` and `specs/053-expert-pack-selection/contracts/expert-selection-trace-contract.md`
 
 **Checkpoint**: All user stories are independently functional and inspectable
 
@@ -113,11 +113,11 @@ for the branch
 
 **Purpose**: Finish docs, formatting, lint, tests, and coverage
 
-- [x] T023 [P] Update operator-facing docs in `/Users/rt/workspace/apply-the/boundline/docs/configuration.md`, `/Users/rt/workspace/apply-the/boundline/docs/architecture.md`, `/Users/rt/workspace/apply-the/boundline/docs/getting-started.md`, `/Users/rt/workspace/apply-the/boundline/README.md`, and `/Users/rt/workspace/apply-the/boundline/ROADMAP.md`
-- [x] T024 Run `cargo fmt --all` in `/Users/rt/workspace/apply-the/boundline`
-- [x] T025 Run `cargo clippy --workspace --all-targets --all-features -- -D warnings` in `/Users/rt/workspace/apply-the/boundline`
-- [x] T026 Run `cargo test --no-run --all-targets` and `cargo nextest run --workspace --all-features` in `/Users/rt/workspace/apply-the/boundline`
-- [x] T027 Run focused modified-file coverage in `/Users/rt/workspace/apply-the/boundline` and confirm at least 95% coverage for every modified file
+- [x] T023 [P] Update operator-facing docs in `docs/configuration.md`, `docs/architecture.md`, `docs/getting-started.md`, `README.md`, and `ROADMAP.md`
+- [x] T024 Run `cargo fmt --all` in `repo root`
+- [x] T025 Run `cargo clippy --workspace --all-targets --all-features -- -D warnings` in `repo root`
+- [x] T026 Run `cargo test --no-run --all-targets` and `cargo nextest run --workspace --all-features` in `repo root`
+- [x] T027 Run focused modified-file coverage in `repo root` and confirm at least 95% coverage for every modified file
 
 ---
 

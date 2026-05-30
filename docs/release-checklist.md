@@ -11,6 +11,9 @@ version tag. Two contract tests enforce alignment automatically:
 
 - **`Cargo.toml`** — `[workspace.package] version = "X.Y.Z"`. All crates in the
   workspace inherit this value; no crate-local version override is needed.
+- **`Cargo.lock`** — root and member-package version entries for `boundline`,
+  `boundline-core`, `boundline-adapters`, and `boundline-cli` must match the
+  workspace version after the bump.
 
 ### Distribution surface
 
@@ -50,6 +53,12 @@ version tag. Two contract tests enforce alignment automatically:
 
 - **`docs/getting-started.md`** and **`docs/architecture.md`** — update any
   current Canon compatibility target named in the active product docs.
+
+- **Derived-index lifecycle docs** — when the local semantic retrieval surface
+  changes, update the README, getting started docs, configuration reference,
+  troubleshooting guidance, and any wiki quick-start or architecture pages that
+  describe `boundline index status|refresh|rebuild|clean|doctor`, semantic
+  fallback guidance, or hook-managed stale detection.
 
 - **CLI and assistant surface updates** — when `status`, `inspect`, or the
   generated assistant command packs change, document the active usage and any

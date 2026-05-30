@@ -17,9 +17,9 @@
 
 **Purpose**: Reserve the `0.25.0` release boundary and prepare the clustered-delivery test harnesses
 
-- [ ] T001 Bump crate version to `0.25.0` in `/Users/rt/workspace/boundline/Cargo.toml` and `/Users/rt/workspace/boundline/Cargo.lock`
-- [ ] T002 Extend clustered workspace fixtures and helper data for multi-repository delivery scenarios in `/Users/rt/workspace/boundline/tests/support/workspace_fixture.rs`
-- [ ] T003 Register multi-workspace delivery test modules in `/Users/rt/workspace/boundline/tests/contract.rs`, `/Users/rt/workspace/boundline/tests/integration.rs`, and `/Users/rt/workspace/boundline/tests/unit.rs`
+- [ ] T001 Bump crate version to `0.25.0` in `Cargo.toml` and `Cargo.lock`
+- [ ] T002 Extend clustered workspace fixtures and helper data for multi-repository delivery scenarios in `tests/support/workspace_fixture.rs`
+- [ ] T003 Register multi-workspace delivery test modules in `tests/contract.rs`, `tests/integration.rs`, and `tests/unit.rs`
 
 ---
 
@@ -29,10 +29,10 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T004 Extend clustered delivery, authority, and workspace-participation models in `/Users/rt/workspace/boundline/src/domain/cluster.rs`, `/Users/rt/workspace/boundline/src/domain/session.rs`, `/Users/rt/workspace/boundline/src/domain/task_context.rs`, and `/Users/rt/workspace/boundline/src/domain/trace.rs`
-- [ ] T005 [P] Add cluster-aware command inputs and shared resolution helpers for session-native commands in `/Users/rt/workspace/boundline/src/cli.rs`, `/Users/rt/workspace/boundline/src/cli/session.rs`, and `/Users/rt/workspace/boundline/src/cli/run.rs`
-- [ ] T006 [P] Align orchestration and persistence helpers for one authoritative clustered delivery story in `/Users/rt/workspace/boundline/src/orchestrator/session_runtime.rs`, `/Users/rt/workspace/boundline/src/orchestrator/engine.rs`, and `/Users/rt/workspace/boundline/src/adapters/cluster_store.rs`
-- [ ] T007 [P] Add foundational unit coverage for clustered delivery state, task-context serialization, and command parsing in `/Users/rt/workspace/boundline/tests/unit/cluster_models.rs`, `/Users/rt/workspace/boundline/tests/unit/task_context_state.rs`, and `/Users/rt/workspace/boundline/tests/unit/cli_output.rs`
+- [ ] T004 Extend clustered delivery, authority, and workspace-participation models in `src/domain/cluster.rs`, `src/domain/session.rs`, `src/domain/task_context.rs`, and `src/domain/trace.rs`
+- [ ] T005 [P] Add cluster-aware command inputs and shared resolution helpers for session-native commands in `src/cli.rs`, `src/cli/session.rs`, and `src/cli/run.rs`
+- [ ] T006 [P] Align orchestration and persistence helpers for one authoritative clustered delivery story in `src/orchestrator/session_runtime.rs`, `src/orchestrator/engine.rs`, and `src/adapters/cluster_store.rs`
+- [ ] T007 [P] Add foundational unit coverage for clustered delivery state, task-context serialization, and command parsing in `tests/unit/cluster_models.rs`, `tests/unit/task_context_state.rs`, and `tests/unit/cli_output.rs`
 
 **Checkpoint**: Shared clustered-delivery primitives are available and the session-native path can resolve a cluster entry point without introducing parallel ownership.
 
@@ -46,15 +46,15 @@
 
 ### Tests for User Story 1
 
-- [ ] T008 [P] [US1] Add command and runtime contract coverage for clustered delivery entry and failure boundaries in `/Users/rt/workspace/boundline/tests/contract/cluster_cli_contract.rs` and `/Users/rt/workspace/boundline/tests/contract/cluster_delivery_contract.rs`
-- [ ] T009 [P] [US1] Add integration coverage for a successful bounded clustered delivery journey in `/Users/rt/workspace/boundline/tests/integration/cluster_delivery_flow.rs`
-- [ ] T010 [P] [US1] Add integration coverage for blocked or non-credible member handoff in `/Users/rt/workspace/boundline/tests/integration/cluster_delivery_blocked.rs`
+- [ ] T008 [P] [US1] Add command and runtime contract coverage for clustered delivery entry and failure boundaries in `tests/contract/cluster_cli_contract.rs` and `tests/contract/cluster_delivery_contract.rs`
+- [ ] T009 [P] [US1] Add integration coverage for a successful bounded clustered delivery journey in `tests/integration/cluster_delivery_flow.rs`
+- [ ] T010 [P] [US1] Add integration coverage for blocked or non-credible member handoff in `tests/integration/cluster_delivery_blocked.rs`
 
 ### Implementation for User Story 1
 
-- [ ] T011 [US1] Implement cluster-aware `start`, `goal`, `plan`, and `run` command flow in `/Users/rt/workspace/boundline/src/cli.rs`, `/Users/rt/workspace/boundline/src/cli/session.rs`, and `/Users/rt/workspace/boundline/src/cli/run.rs`
-- [ ] T012 [US1] Implement bounded workspace-selection, handoff, and participation recording in `/Users/rt/workspace/boundline/src/orchestrator/session_runtime.rs`, `/Users/rt/workspace/boundline/src/orchestrator/engine.rs`, and `/Users/rt/workspace/boundline/src/domain/task.rs`
-- [ ] T013 [US1] Persist clustered delivery authority and workspace participation into session and trace state in `/Users/rt/workspace/boundline/src/domain/session.rs`, `/Users/rt/workspace/boundline/src/domain/task_context.rs`, and `/Users/rt/workspace/boundline/src/domain/trace.rs`
+- [ ] T011 [US1] Implement cluster-aware `start`, `goal`, `plan`, and `run` command flow in `src/cli.rs`, `src/cli/session.rs`, and `src/cli/run.rs`
+- [ ] T012 [US1] Implement bounded workspace-selection, handoff, and participation recording in `src/orchestrator/session_runtime.rs`, `src/orchestrator/engine.rs`, and `src/domain/task.rs`
+- [ ] T013 [US1] Persist clustered delivery authority and workspace participation into session and trace state in `src/domain/session.rs`, `src/domain/task_context.rs`, and `src/domain/trace.rs`
 
 **Checkpoint**: One clustered delivery story can execute bounded work across multiple repositories and stop explicitly on success or a member-specific non-success path.
 
@@ -68,14 +68,14 @@
 
 ### Tests for User Story 2
 
-- [ ] T014 [P] [US2] Add contract coverage for clustered follow-up authority and participation summaries in `/Users/rt/workspace/boundline/tests/contract/runtime_routing_contract.rs`, `/Users/rt/workspace/boundline/tests/contract/trace_summary_contract.rs`, and `/Users/rt/workspace/boundline/tests/contract/cluster_delivery_contract.rs`
-- [ ] T015 [P] [US2] Add integration coverage for clustered `status`, `next`, and `inspect` authority handling in `/Users/rt/workspace/boundline/tests/integration/cluster_follow_up_flow.rs` and `/Users/rt/workspace/boundline/tests/integration/cli_trace_inspection.rs`
-- [ ] T016 [P] [US2] Add unit coverage for clustered summary rendering and inspect-only authority in `/Users/rt/workspace/boundline/tests/unit/cli_output.rs`, `/Users/rt/workspace/boundline/tests/unit/cluster_projection.rs`, and `/Users/rt/workspace/boundline/tests/unit/compatibility_continuity.rs`
+- [ ] T014 [P] [US2] Add contract coverage for clustered follow-up authority and participation summaries in `tests/contract/runtime_routing_contract.rs`, `tests/contract/trace_summary_contract.rs`, and `tests/contract/cluster_delivery_contract.rs`
+- [ ] T015 [P] [US2] Add integration coverage for clustered `status`, `next`, and `inspect` authority handling in `tests/integration/cluster_follow_up_flow.rs` and `tests/integration/cli_trace_inspection.rs`
+- [ ] T016 [P] [US2] Add unit coverage for clustered summary rendering and inspect-only authority in `tests/unit/cli_output.rs`, `tests/unit/cluster_projection.rs`, and `tests/unit/compatibility_continuity.rs`
 
 ### Implementation for User Story 2
 
-- [ ] T017 [US2] Implement clustered follow-up rendering across `/Users/rt/workspace/boundline/src/cli/output.rs`, `/Users/rt/workspace/boundline/src/cli/inspect.rs`, `/Users/rt/workspace/boundline/src/cli/cluster.rs`, and `/Users/rt/workspace/boundline/src/cli/session.rs`
-- [ ] T018 [US2] Extend session and trace projection builders with authoritative workspace and workspace-participation cues in `/Users/rt/workspace/boundline/src/domain/session.rs`, `/Users/rt/workspace/boundline/src/domain/trace.rs`, and `/Users/rt/workspace/boundline/src/cli/inspect.rs`
+- [ ] T017 [US2] Implement clustered follow-up rendering across `src/cli/output.rs`, `src/cli/inspect.rs`, `src/cli/cluster.rs`, and `src/cli/session.rs`
+- [ ] T018 [US2] Extend session and trace projection builders with authoritative workspace and workspace-participation cues in `src/domain/session.rs`, `src/domain/trace.rs`, and `src/cli/inspect.rs`
 
 **Checkpoint**: Clustered follow-up surfaces clearly identify the authoritative route, authoritative workspace, participating repositories, and next action.
 
@@ -89,12 +89,12 @@
 
 ### Tests for User Story 3
 
-- [ ] T019 [P] [US3] Add assistant and documentation coverage for clustered delivery guidance in `/Users/rt/workspace/boundline/tests/contract/assistant_session_continuity_contract.rs` and `/Users/rt/workspace/boundline/tests/unit/cli_output.rs`
+- [ ] T019 [P] [US3] Add assistant and documentation coverage for clustered delivery guidance in `tests/contract/assistant_session_continuity_contract.rs` and `tests/unit/cli_output.rs`
 
 ### Implementation for User Story 3
 
-- [ ] T020 [US3] Update the clustered delivery operator story, impacted docs, and release notes in `/Users/rt/workspace/boundline/README.md`, `/Users/rt/workspace/boundline/docs/getting-started.md`, `/Users/rt/workspace/boundline/docs/configuration.md`, `/Users/rt/workspace/boundline/assistant/README.md`, `/Users/rt/workspace/boundline/CONTRIBUTING.md`, `/Users/rt/workspace/boundline/ROADMAP.md`, and `/Users/rt/workspace/boundline/CHANGELOG.md`
-- [ ] T021 [US3] Refresh generated agent context for clustered delivery surfaces in `/Users/rt/workspace/boundline/AGENTS.md`
+- [ ] T020 [US3] Update the clustered delivery operator story, impacted docs, and release notes in `README.md`, `docs/getting-started.md`, `docs/configuration.md`, `assistant/README.md`, `CONTRIBUTING.md`, `ROADMAP.md`, and `CHANGELOG.md`
+- [ ] T021 [US3] Refresh generated agent context for clustered delivery surfaces in `AGENTS.md`
 
 **Checkpoint**: Maintainers and assistants have one coherent `0.25.0` clustered delivery story.
 
@@ -104,7 +104,7 @@
 
 **Purpose**: Finish release-quality validation and closeout
 
-- [ ] T022 Run coverage-aware release validation for modified Rust files, refresh `/Users/rt/workspace/boundline/lcov.info`, resolve remaining `cargo clippy` issues, run `cargo fmt --all`, and finish with clean validation for touched files under `/Users/rt/workspace/boundline/src/` and `/Users/rt/workspace/boundline/tests/`
+- [ ] T022 Run coverage-aware release validation for modified Rust files, refresh `lcov.info`, resolve remaining `cargo clippy` issues, run `cargo fmt --all`, and finish with clean validation for touched files under `src/` and `tests/`
 
 ---
 

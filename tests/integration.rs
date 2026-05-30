@@ -163,6 +163,15 @@ mod context_intelligence_canon_semantic_flow;
 #[path = "integration/context_intelligence_semantic_inspect.rs"]
 mod context_intelligence_semantic_inspect;
 
+#[path = "integration/context_intelligence_index_refresh.rs"]
+mod context_intelligence_index_refresh;
+
+#[path = "integration/context_intelligence_index_rebuild.rs"]
+mod context_intelligence_index_rebuild;
+
+#[path = "integration/context_intelligence_index_doctor.rs"]
+mod context_intelligence_index_doctor;
+
 #[path = "integration/context_intelligence_semantic_recall.rs"]
 mod context_intelligence_semantic_recall;
 

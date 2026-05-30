@@ -36,6 +36,28 @@ Highlights:
 - Realigned the active Canon compatibility boundary and related reasoning
   contracts to Canon `0.62.0`.
 
+## [0.65.0] - 2026-05-30
+
+Delivered specs:
+
+- `065` - Activate SQLite Vec And DB Merge Strategy
+
+Highlights:
+
+- Activated the sqlite-vec-backed local semantic retrieval path over the
+  existing single derived SQLite store while preserving bounded authority order,
+  explicit fallback reasons, and traceable selected or rejected evidence.
+- Added manifest-backed `boundline index status|refresh|rebuild|clean|doctor`
+  lifecycle commands, incremental refresh behavior, and clear stale,
+  incompatible, degraded, and corrupt recovery guidance.
+- Formalized derived-index hygiene around `.boundline/context-intelligence/`
+  with manifest sidecars, explicit WAL/SHM handling, tracked-file diagnosis,
+  and optional lightweight Git stale-mark hooks for checkout, merge, and
+  rewrite events.
+- Extended operator-facing `status`, `inspect`, `probe`, `init`, and
+  diagnostics surfaces so semantic capability, lifecycle state, fallback
+  disclosure, and recovery actions remain explicit.
+
 ## [0.64.0] - 2026-05-20
 
 Highlights:

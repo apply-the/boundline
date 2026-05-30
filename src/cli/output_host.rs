@@ -127,6 +127,7 @@ pub fn command_name(command: &DeveloperCommand) -> &'static str {
         DeveloperCommand::Step { .. } => "step",
         DeveloperCommand::Run { .. } => "run",
         DeveloperCommand::Workflow { .. } => "workflow",
+        DeveloperCommand::Index { .. } => "index",
         DeveloperCommand::Inspect { .. } => "inspect",
         DeveloperCommand::Status { .. } => "status",
         DeveloperCommand::Next { .. } => "next",
@@ -170,6 +171,7 @@ mod tests {
         command_name, push_output_section, render_host_command_json, render_orchestrate_event_json,
         render_orchestrate_stream_json, stdout_presentation,
     };
+    use crate::cli::IndexSubcommand;
     use crate::domain::configuration::InitConfigScope;
 
     fn minimal_event(kind: &str, msg: &str) -> OrchestrateEventEnvelope {
@@ -254,6 +256,7 @@ mod tests {
             assistant: Vec::new(),
             ide: Vec::new(),
             auto_approve: None,
+            semantic_index_hook_action: None,
             domain: Vec::new(),
             domain_standard: Vec::new(),
             context_binding: Vec::new(),
@@ -270,6 +273,12 @@ mod tests {
             force: false,
         };
         assert_eq!(command_name(&cmd), "init");
+    }
+
+    #[test]
+    fn command_name_returns_index_for_index_variant() {
+        let cmd = DeveloperCommand::Index { command: IndexSubcommand::Status { workspace: None } };
+        assert_eq!(command_name(&cmd), "index");
     }
 
     #[test]

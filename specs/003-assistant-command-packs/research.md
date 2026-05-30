@@ -48,7 +48,7 @@
   - Create a separate status data format: rejected because it duplicates the readable trace-summary surface that already exists.
   - Infer next steps without inspection evidence: rejected because it would reintroduce hidden assistant logic and weaken trace-backed guidance.
 
-*** Add File: /Users/rt/workspace/boundline/specs/003-assistant-command-packs/data-model.md
+*** Add File: specs/003-assistant-command-packs/data-model.md
 # Data Model: Assistant Command Packs
 
 ## AssistantCommandPack
@@ -185,7 +185,7 @@ Represents the user-readable result returned by an assistant command after direc
 - Produced by one `AssistantCommandDefinition`.
 - Updates one `ConversationWorkflowContext`.
 
-*** Add File: /Users/rt/workspace/boundline/specs/003-assistant-command-packs/quickstart.md
+*** Add File: specs/003-assistant-command-packs/quickstart.md
 # Quickstart: Assistant Command Packs
 
 ## Prerequisites

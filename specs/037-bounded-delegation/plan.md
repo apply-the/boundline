@@ -1,6 +1,6 @@
 # Implementation Plan: Bounded Delegated Execution
 
-**Branch**: `037-bounded-delegation` | **Date**: 2026-05-03 | **Spec**: [/Users/rt/workspace/boundline/specs/037-bounded-delegation/spec.md](/Users/rt/workspace/boundline/specs/037-bounded-delegation/spec.md)
+**Branch**: `037-bounded-delegation` | **Date**: 2026-05-03 | **Spec**: [specs/037-bounded-delegation/spec.md](specs/037-bounded-delegation/spec.md)
 **Input**: Feature specification from `/specs/037-bounded-delegation/spec.md`
 
 **Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.

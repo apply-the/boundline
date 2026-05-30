@@ -21,8 +21,8 @@ description: "Task list for guidance and guardian capabilities implementation"
 
 **Purpose**: Establish the required release move and planning compliance notes before runtime changes begin
 
-- [x] T001 Bump the Boundline workspace version from `0.53.0` to `0.54.0` in `/Users/rt/workspace/apply-the/boundline/Cargo.toml` and update `/Users/rt/workspace/apply-the/boundline/CHANGELOG.md`
-- [x] T002 [P] Re-check current OpenAI, Anthropic, and Google provider docs against `/Users/rt/workspace/apply-the/boundline/assistant/catalog/model-catalog.toml` and keep the explicit no-change audit current in `/Users/rt/workspace/apply-the/boundline/specs/054-guidance-guardian-capabilities/research.md`
+- [x] T001 Bump the Boundline workspace version from `0.53.0` to `0.54.0` in `Cargo.toml` and update `CHANGELOG.md`
+- [x] T002 [P] Re-check current OpenAI, Anthropic, and Google provider docs against `assistant/catalog/model-catalog.toml` and keep the explicit no-change audit current in `specs/054-guidance-guardian-capabilities/research.md`
 
 ---
 
@@ -32,10 +32,10 @@ description: "Task list for guidance and guardian capabilities implementation"
 
 **⚠️ CRITICAL**: No user story work should begin until this phase is complete
 
-- [x] T003 Create typed capability, execution, and finding primitives in `/Users/rt/workspace/apply-the/boundline/src/domain/guidance.rs` and export them from `/Users/rt/workspace/apply-the/boundline/src/domain.rs` and `/Users/rt/workspace/apply-the/boundline/src/lib.rs`
-- [x] T004 [P] Extend persisted planning and trace projection models for guidance and guardian state in `/Users/rt/workspace/apply-the/boundline/src/domain/goal_plan.rs` and `/Users/rt/workspace/apply-the/boundline/src/domain/trace.rs`
-- [x] T005 [P] Add shared discovery, precedence, runtime-evidence ranking, and execution-limit scaffolding in `/Users/rt/workspace/apply-the/boundline/src/orchestrator/guidance_runtime.rs` and export it from `/Users/rt/workspace/apply-the/boundline/src/orchestrator.rs`
-- [x] T006 [P] Add foundational unit and contract coverage entry points in `/Users/rt/workspace/apply-the/boundline/tests/unit/guidance_runtime.rs` and `/Users/rt/workspace/apply-the/boundline/tests/contract/capability_manifest_contract.rs`
+- [x] T003 Create typed capability, execution, and finding primitives in `src/domain/guidance.rs` and export them from `src/domain.rs` and `src/lib.rs`
+- [x] T004 [P] Extend persisted planning and trace projection models for guidance and guardian state in `src/domain/goal_plan.rs` and `src/domain/trace.rs`
+- [x] T005 [P] Add shared discovery, precedence, runtime-evidence ranking, and execution-limit scaffolding in `src/orchestrator/guidance_runtime.rs` and export it from `src/orchestrator.rs`
+- [x] T006 [P] Add foundational unit and contract coverage entry points in `tests/unit/guidance_runtime.rs` and `tests/contract/capability_manifest_contract.rs`
 
 **Checkpoint**: Shared capability models and scaffolding are ready
 
@@ -49,15 +49,15 @@ description: "Task list for guidance and guardian capabilities implementation"
 
 ### Validation for User Story 1
 
-- [x] T007 [P] [US1] Add contract coverage for guidance manifests, workspace overrides, and precedence disclosure in `/Users/rt/workspace/apply-the/boundline/tests/contract/capability_manifest_contract.rs`
-- [x] T008 [P] [US1] Add integration coverage for plan-time guidance resolution, local-only execution, and missing Canon disclosure in `/Users/rt/workspace/apply-the/boundline/tests/integration/cli_guidance_resolution.rs`
+- [x] T007 [P] [US1] Add contract coverage for guidance manifests, workspace overrides, and precedence disclosure in `tests/contract/capability_manifest_contract.rs`
+- [x] T008 [P] [US1] Add integration coverage for plan-time guidance resolution, local-only execution, and missing Canon disclosure in `tests/integration/cli_guidance_resolution.rs`
 
 ### Implementation for User Story 1
 
-- [x] T009 [P] [US1] Create shared built-in clean-code, language, framework, testing-framework, and architecture guidance assets plus pack manifests in `/Users/rt/workspace/apply-the/boundline/assistant/guidance/` and `/Users/rt/workspace/apply-the/boundline/assistant/packs/`
-- [x] T010 [US1] Implement guidance discovery, runtime-evidence-aware precedence resolution, and skipped-source disclosure in `/Users/rt/workspace/apply-the/boundline/src/orchestrator/guidance_runtime.rs`
-- [x] T011 [US1] Persist guidance-resolution summaries and provenance in `/Users/rt/workspace/apply-the/boundline/src/domain/goal_plan.rs` and `/Users/rt/workspace/apply-the/boundline/src/orchestrator/goal_planner.rs`
-- [x] T012 [US1] Project resolved guidance sources through `/Users/rt/workspace/apply-the/boundline/src/cli/session.rs` and `/Users/rt/workspace/apply-the/boundline/src/cli/output.rs`
+- [x] T009 [P] [US1] Create shared built-in clean-code, language, framework, testing-framework, and architecture guidance assets plus pack manifests in `assistant/guidance/` and `assistant/packs/`
+- [x] T010 [US1] Implement guidance discovery, runtime-evidence-aware precedence resolution, and skipped-source disclosure in `src/orchestrator/guidance_runtime.rs`
+- [x] T011 [US1] Persist guidance-resolution summaries and provenance in `src/domain/goal_plan.rs` and `src/orchestrator/goal_planner.rs`
+- [x] T012 [US1] Project resolved guidance sources through `src/cli/session.rs` and `src/cli/output.rs`
 
 **Checkpoint**: User Story 1 is independently valid with inspectable guidance resolution
 
@@ -71,15 +71,15 @@ description: "Task list for guidance and guardian capabilities implementation"
 
 ### Validation for User Story 2
 
-- [x] T013 [P] [US2] Add unit coverage for finding emission, raw deterministic failure capture, and degraded guardian outcomes in `/Users/rt/workspace/apply-the/boundline/tests/unit/guidance_runtime.rs`
-- [x] T014 [P] [US2] Add integration coverage for guardian findings and failure projection in `/Users/rt/workspace/apply-the/boundline/tests/integration/cli_guardian_findings.rs`
+- [x] T013 [P] [US2] Add unit coverage for finding emission, raw deterministic failure capture, and degraded guardian outcomes in `tests/unit/guidance_runtime.rs`
+- [x] T014 [P] [US2] Add integration coverage for guardian findings and failure projection in `tests/integration/cli_guardian_findings.rs`
 
 ### Implementation for User Story 2
 
-- [x] T015 [P] [US2] Create shared built-in grouped guardian assets for clean-code, language/framework, testing, and architecture checks in `/Users/rt/workspace/apply-the/boundline/assistant/guardians/` and extend manifest parsing in `/Users/rt/workspace/apply-the/boundline/src/orchestrator/guidance_runtime.rs`
-- [x] T016 [US2] Implement structured finding, failure, and degradation recording in `/Users/rt/workspace/apply-the/boundline/src/domain/guidance.rs` and `/Users/rt/workspace/apply-the/boundline/src/domain/trace.rs`
-- [x] T017 [US2] Invoke guardian execution after bounded work with explicit per-phase count and timeout enforcement in `/Users/rt/workspace/apply-the/boundline/src/orchestrator/session_runtime.rs`
-- [x] T018 [US2] Persist guardian finding summaries and failure visibility in `/Users/rt/workspace/apply-the/boundline/src/domain/goal_plan.rs`, `/Users/rt/workspace/apply-the/boundline/src/cli/session.rs`, and `/Users/rt/workspace/apply-the/boundline/src/cli/output.rs`
+- [x] T015 [P] [US2] Create shared built-in grouped guardian assets for clean-code, language/framework, testing, and architecture checks in `assistant/guardians/` and extend manifest parsing in `src/orchestrator/guidance_runtime.rs`
+- [x] T016 [US2] Implement structured finding, failure, and degradation recording in `src/domain/guidance.rs` and `src/domain/trace.rs`
+- [x] T017 [US2] Invoke guardian execution after bounded work with explicit per-phase count and timeout enforcement in `src/orchestrator/session_runtime.rs`
+- [x] T018 [US2] Persist guardian finding summaries and failure visibility in `src/domain/goal_plan.rs`, `src/cli/session.rs`, and `src/cli/output.rs`
 
 **Checkpoint**: User Stories 1 and 2 both work independently with persisted finding output
 
@@ -93,14 +93,14 @@ description: "Task list for guidance and guardian capabilities implementation"
 
 ### Validation for User Story 3
 
-- [x] T019 [P] [US3] Add unit coverage for guardian ordering, redundant-skip behavior, and hybrid execution staging in `/Users/rt/workspace/apply-the/boundline/tests/unit/guidance_runtime.rs`
-- [x] T020 [P] [US3] Add integration coverage for route-unavailable degradation and deterministic-block skip paths in `/Users/rt/workspace/apply-the/boundline/tests/integration/cli_guardian_routing.rs`
+- [x] T019 [P] [US3] Add unit coverage for guardian ordering, redundant-skip behavior, and hybrid execution staging in `tests/unit/guidance_runtime.rs`
+- [x] T020 [P] [US3] Add integration coverage for route-unavailable degradation and deterministic-block skip paths in `tests/integration/cli_guardian_routing.rs`
 
 ### Implementation for User Story 3
 
-- [x] T021 [P] [US3] Reuse existing planning, implementation, verification, and review route slots for semantic guardians in `/Users/rt/workspace/apply-the/boundline/src/domain/configuration.rs` and `/Users/rt/workspace/apply-the/boundline/src/orchestrator/guidance_runtime.rs`
-- [x] T022 [US3] Implement deterministic-before-LLM ordering, hybrid staging, and explicit skip rules in `/Users/rt/workspace/apply-the/boundline/src/orchestrator/guidance_runtime.rs`
-- [x] T023 [US3] Record route-slot provenance and degraded execution outcomes in `/Users/rt/workspace/apply-the/boundline/src/domain/guidance.rs`, `/Users/rt/workspace/apply-the/boundline/src/domain/trace.rs`, and `/Users/rt/workspace/apply-the/boundline/src/orchestrator/session_runtime.rs`
+- [x] T021 [P] [US3] Reuse existing planning, implementation, verification, and review route slots for semantic guardians in `src/domain/configuration.rs` and `src/orchestrator/guidance_runtime.rs`
+- [x] T022 [US3] Implement deterministic-before-LLM ordering, hybrid staging, and explicit skip rules in `src/orchestrator/guidance_runtime.rs`
+- [x] T023 [US3] Record route-slot provenance and degraded execution outcomes in `src/domain/guidance.rs`, `src/domain/trace.rs`, and `src/orchestrator/session_runtime.rs`
 
 **Checkpoint**: User Story 3 is independently valid with explicit ordering and degradation semantics
 
@@ -114,13 +114,13 @@ description: "Task list for guidance and guardian capabilities implementation"
 
 ### Validation for User Story 4
 
-- [x] T024 [P] [US4] Add contract coverage for workspace override discovery, invalid guardian TOML, and skipped-source reporting in `/Users/rt/workspace/apply-the/boundline/tests/contract/capability_manifest_contract.rs`
-- [x] T025 [P] [US4] Add integration coverage for workspace override precedence and invalid-file handling in `/Users/rt/workspace/apply-the/boundline/tests/integration/cli_guidance_resolution.rs`
+- [x] T024 [P] [US4] Add contract coverage for workspace override discovery, invalid guardian TOML, and skipped-source reporting in `tests/contract/capability_manifest_contract.rs`
+- [x] T025 [P] [US4] Add integration coverage for workspace override precedence and invalid-file handling in `tests/integration/cli_guidance_resolution.rs`
 
 ### Implementation for User Story 4
 
-- [x] T026 [P] [US4] Implement workspace-local guidance and guardian discovery under `/Users/rt/workspace/apply-the/boundline/src/orchestrator/guidance_runtime.rs`
-- [x] T027 [US4] Persist loaded and skipped workspace override disclosure in `/Users/rt/workspace/apply-the/boundline/src/domain/goal_plan.rs` and `/Users/rt/workspace/apply-the/boundline/src/orchestrator/goal_planner.rs`
+- [x] T026 [P] [US4] Implement workspace-local guidance and guardian discovery under `src/orchestrator/guidance_runtime.rs`
+- [x] T027 [US4] Persist loaded and skipped workspace override disclosure in `src/domain/goal_plan.rs` and `src/orchestrator/goal_planner.rs`
 
 **Checkpoint**: User Story 4 is independently valid with explicit override and skipped-source behavior
 
@@ -134,13 +134,13 @@ description: "Task list for guidance and guardian capabilities implementation"
 
 ### Validation for User Story 5
 
-- [x] T028 [P] [US5] Add integration coverage for `applies_to` phase gating and persisted projection in `/Users/rt/workspace/apply-the/boundline/tests/integration/cli_guidance_guardian_projection.rs`
-- [x] T029 [P] [US5] Add unit coverage for projection helpers and phase filtering in `/Users/rt/workspace/apply-the/boundline/tests/unit/guidance_runtime.rs` and `/Users/rt/workspace/apply-the/boundline/src/domain/goal_plan.rs`
+- [x] T028 [P] [US5] Add integration coverage for `applies_to` phase gating and persisted projection in `tests/integration/cli_guidance_guardian_projection.rs`
+- [x] T029 [P] [US5] Add unit coverage for projection helpers and phase filtering in `tests/unit/guidance_runtime.rs` and `src/domain/goal_plan.rs`
 
 ### Implementation for User Story 5
 
-- [x] T030 [P] [US5] Implement phase-aware capability selection and persistence in `/Users/rt/workspace/apply-the/boundline/src/orchestrator/goal_planner.rs` and `/Users/rt/workspace/apply-the/boundline/src/orchestrator/session_runtime.rs`
-- [x] T031 [US5] Extend session-native and inspect output for capability resolution and guardian timelines in `/Users/rt/workspace/apply-the/boundline/src/cli/output.rs` and `/Users/rt/workspace/apply-the/boundline/src/cli/session.rs`
+- [x] T030 [P] [US5] Implement phase-aware capability selection and persistence in `src/orchestrator/goal_planner.rs` and `src/orchestrator/session_runtime.rs`
+- [x] T031 [US5] Extend session-native and inspect output for capability resolution and guardian timelines in `src/cli/output.rs` and `src/cli/session.rs`
 
 **Checkpoint**: All user stories are independently functional and inspectable
 
@@ -150,12 +150,12 @@ description: "Task list for guidance and guardian capabilities implementation"
 
 **Purpose**: Finish documentation, code comments, lint, tests, and coverage
 
-- [x] T032 [P] Update operator-facing docs and roadmap in `/Users/rt/workspace/apply-the/boundline/docs/architecture.md`, `/Users/rt/workspace/apply-the/boundline/docs/configuration.md`, `/Users/rt/workspace/apply-the/boundline/docs/getting-started.md`, `/Users/rt/workspace/apply-the/boundline/README.md`, and `/Users/rt/workspace/apply-the/boundline/ROADMAP.md`
-- [x] T033 [P] Add concise code documentation in `/Users/rt/workspace/apply-the/boundline/src/domain/guidance.rs`, `/Users/rt/workspace/apply-the/boundline/src/orchestrator/guidance_runtime.rs`, and any other modified runtime files where source resolution or guardian ordering is non-obvious
-- [x] T034 Run `cargo fmt --all` in `/Users/rt/workspace/apply-the/boundline`
-- [x] T035 Fix all clippy warnings in modified code and run `cargo clippy --workspace --all-targets --all-features -- -D warnings` in `/Users/rt/workspace/apply-the/boundline`
-- [x] T036 Run `cargo test --no-run --all-targets` and `cargo nextest run --workspace --all-features` in `/Users/rt/workspace/apply-the/boundline`
-- [x] T037 Refresh coverage for all modified or new Rust files in `/Users/rt/workspace/apply-the/boundline` and confirm at least 95% coverage for each file
+- [x] T032 [P] Update operator-facing docs and roadmap in `docs/architecture.md`, `docs/configuration.md`, `docs/getting-started.md`, `README.md`, and `ROADMAP.md`
+- [x] T033 [P] Add concise code documentation in `src/domain/guidance.rs`, `src/orchestrator/guidance_runtime.rs`, and any other modified runtime files where source resolution or guardian ordering is non-obvious
+- [x] T034 Run `cargo fmt --all` in `repo root`
+- [x] T035 Fix all clippy warnings in modified code and run `cargo clippy --workspace --all-targets --all-features -- -D warnings` in `repo root`
+- [x] T036 Run `cargo test --no-run --all-targets` and `cargo nextest run --workspace --all-features` in `repo root`
+- [x] T037 Refresh coverage for all modified or new Rust files in `repo root` and confirm at least 95% coverage for each file
 
 ---
 

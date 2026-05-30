@@ -16,13 +16,13 @@
 ## Path Conventions
 
 - Boundline repo root paths are repo-relative (`src/`, `tests/`, `docs/`)
-- Canon sibling repo paths are absolute under `/Users/rt/workspace/apply-the/canon/`
+- Canon sibling repo paths are absolute under `../canon/`
 
 ## Phase 1: Setup (Shared Infrastructure)
 
 **Purpose**: Lock the release pair and baseline compatibility targets before implementation expands the runtime surface.
 
-- [x] T001 Bump Boundline to `0.61.0`, Canon to `0.57.0`, and seed version-alignment expectations in `Cargo.toml`, `/Users/rt/workspace/apply-the/canon/Cargo.toml`, `tests/contract/canon_reasoning_posture_contract.rs`, and `/Users/rt/workspace/apply-the/canon/tests/contract/governed_reasoning_posture_contract.rs`
+- [x] T001 Bump Boundline to `0.61.0`, Canon to `0.57.0`, and seed version-alignment expectations in `Cargo.toml`, `../canon/Cargo.toml`, `tests/contract/canon_reasoning_posture_contract.rs`, and `../canon/tests/contract/governed_reasoning_posture_contract.rs`
 - [x] T002 [P] Create the feature validation closeout stub in `specs/061-reasoning-profile-contracts/validation-report.md`
 
 ---
@@ -33,12 +33,12 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [x] T003 Publish the Canon provider-side posture contract in `/Users/rt/workspace/apply-the/canon/docs/integration/governed-reasoning-posture-contract.md`
+- [x] T003 Publish the Canon provider-side posture contract in `../canon/docs/integration/governed-reasoning-posture-contract.md`
 - [x] T004 Create typed reasoning-profile domain models in `src/domain/reasoning.rs`
 - [x] T005 [P] Extend routing and governance types for profile activation and confidence handoff in `src/domain/configuration.rs` and `src/domain/governance.rs`
 - [x] T006 [P] Extend session and trace projection models for reasoning-profile state in `src/domain/session.rs` and `src/domain/trace.rs`
 - [x] T007 Create deterministic posture and profile fixture support in `src/fixture.rs`
-- [x] T008 [P] Create Canon-side contract coverage for the provider contract in `/Users/rt/workspace/apply-the/canon/tests/contract/governed_reasoning_posture_contract.rs`
+- [x] T008 [P] Create Canon-side contract coverage for the provider contract in `../canon/tests/contract/governed_reasoning_posture_contract.rs`
 
 **Checkpoint**: The feature has a typed substrate, a published Canon posture contract, and deterministic fixtures for isolated testing.
 
@@ -101,7 +101,7 @@
 ### Tests for User Story 3
 
 - [x] T025 [P] [US3] Boundline contract test for provider contract line and version-window alignment in `tests/contract/canon_reasoning_posture_contract.rs`
-- [x] T026 [P] [US3] Canon contract test for the published provider vocabulary and consumer window in `/Users/rt/workspace/apply-the/canon/tests/contract/governed_reasoning_posture_contract.rs`
+- [x] T026 [P] [US3] Canon contract test for the published provider vocabulary and consumer window in `../canon/tests/contract/governed_reasoning_posture_contract.rs`
 - [x] T027 [P] [US3] Integration test for contract-drift blocked outcomes in `tests/integration/reasoning_profile_degradation.rs`
 
 ### Implementation for User Story 3
@@ -118,7 +118,7 @@
 
 **Purpose**: Release-facing closeout across both repositories.
 
-- [x] T031 Update `README.md`, `ROADMAP.md`, `CHANGELOG.md`, `/Users/rt/workspace/apply-the/canon/README.md`, `/Users/rt/workspace/apply-the/canon/ROADMAP.md`, `/Users/rt/workspace/apply-the/canon/CHANGELOG.md`, and `specs/061-reasoning-profile-contracts/validation-report.md`, then run and record final `cargo clippy --workspace --all-targets --all-features -- -D warnings` plus `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info` in Boundline and the matching final `cargo clippy --workspace --all-targets --all-features -- -D warnings` plus focused coverage validation in Canon
+- [x] T031 Update `README.md`, `ROADMAP.md`, `CHANGELOG.md`, `../canon/README.md`, `../canon/ROADMAP.md`, `../canon/CHANGELOG.md`, and `specs/061-reasoning-profile-contracts/validation-report.md`, then run and record final `cargo clippy --workspace --all-targets --all-features -- -D warnings` plus `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info` in Boundline and the matching final `cargo clippy --workspace --all-targets --all-features -- -D warnings` plus focused coverage validation in Canon
 
 ---
 

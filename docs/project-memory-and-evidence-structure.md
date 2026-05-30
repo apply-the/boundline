@@ -8,6 +8,9 @@ Boundline uses two repo-visible document roots to keep reusable inputs and durab
 These roots are different from runtime-owned storage:
 
 - `.boundline/` keeps session state, traces, checkpoints, and transient governance artifacts.
+- `.boundline/context-intelligence/` keeps the derived retrieval DB,
+  `manifest.json`, and any SQLite WAL/SHM sidecars used by local semantic
+  retrieval.
 - `.canon/` keeps raw Canon run packets and Canon-owned runtime payloads.
 
 ## Default Layout
@@ -31,6 +34,7 @@ Use the layout as a convention, not as a hard schema. The important contract is 
 
 - keep curated, reusable inputs under `docs/project/`
 - keep durable, shareable outputs under `docs/evidence/`
+- keep the derived semantic index and its sidecars under `.boundline/`
 - keep transient runtime and packet state out of both folders
 
 ## What Belongs in docs/project

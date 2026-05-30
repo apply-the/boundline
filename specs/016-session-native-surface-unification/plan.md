@@ -1,6 +1,6 @@
 # Implementation Plan: Session-Native Surface Unification
 
-**Branch**: `016-session-native-surface-unification` | **Date**: 2026-04-29 | **Spec**: [/Users/rt/workspace/boundline/specs/016-session-native-surface-unification/spec.md](/Users/rt/workspace/boundline/specs/016-session-native-surface-unification/spec.md)
+**Branch**: `016-session-native-surface-unification` | **Date**: 2026-04-29 | **Spec**: [specs/016-session-native-surface-unification/spec.md](specs/016-session-native-surface-unification/spec.md)
 **Input**: Feature specification from `/specs/016-session-native-surface-unification/spec.md`
 
 **Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.

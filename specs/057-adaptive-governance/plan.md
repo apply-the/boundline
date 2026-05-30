@@ -1,6 +1,6 @@
 # Implementation Plan: Control Graduation And Adaptive Governance
 
-**Branch**: `057-adaptive-governance` | **Date**: 2026-05-16 | **Spec**: [/Users/rt/workspace/apply-the/boundline/specs/057-adaptive-governance/spec.md](/Users/rt/workspace/apply-the/boundline/specs/057-adaptive-governance/spec.md)
+**Branch**: `057-adaptive-governance` | **Date**: 2026-05-16 | **Spec**: [specs/057-adaptive-governance/spec.md](specs/057-adaptive-governance/spec.md)
 **Input**: Feature specification from `/specs/057-adaptive-governance/spec.md`
 
 **Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.

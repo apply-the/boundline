@@ -4,37 +4,57 @@
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::path::Path;
+use std::io::ErrorKind;
+use std::path::{Path, PathBuf};
+use std::process::Command;
+#[cfg(feature = "sqlite-vec")]
+use std::sync::OnceLock;
 
 use rusqlite::{Connection, params};
 use serde::Serialize;
 use thiserror::Error;
 use uuid::Uuid;
 
+use crate::domain::audit::format_audit_timestamp;
 use crate::domain::configuration::{AdvancedContextConfig, SemanticAccelerationPolicyState};
 use crate::domain::context_intelligence::{
-    AdvancedContextProjection, AuthorityRank, CandidateSelectionState, HybridOutcome,
-    ImpactAnalysisFinding, ImpactFindingKind, ImpactFindingSeverity, ImpactFindingStatus,
-    RelationshipCredibilityState, RelationshipKind, RelationshipProjection,
-    RetrievalCompatibilityState, RetrievalIndexState, RetrievalMatchOrigin, RetrievalMode,
-    RetrievalScore, RetrievalSourceKind, RetrievalStalenessState, RetrievalState,
-    RetrievedEvidenceCandidate, SemanticCapabilityState, SemanticChunkState, SemanticPolicyState,
-    SemanticTraceEventKind, SemanticTraceRecord, VectorExtensionState,
+    AdvancedContextProjection, AuthorityRank, CandidateSelectionState, DerivedIndexManifest,
+    HybridOutcome, ImpactAnalysisFinding, ImpactFindingKind, ImpactFindingSeverity,
+    ImpactFindingStatus, IndexDoctorCheck, IndexDoctorConsistencyState, IndexDoctorReport,
+    IndexDoctorStatus, IndexLifecycleReport, IndexMaintenanceCommand, IndexRefreshReason,
+    IndexStaleReason, ManifestFtsState, RelationshipCredibilityState, RelationshipKind,
+    RelationshipProjection, RetrievalCompatibilityState, RetrievalIndexState, RetrievalMatchOrigin,
+    RetrievalMode, RetrievalScore, RetrievalSourceKind, RetrievalStalenessState, RetrievalState,
+    RetrievedEvidenceCandidate, SemanticCapabilityState, SemanticChunkRecord, SemanticChunkState,
+    SemanticEngine, SemanticPolicyState, SemanticTraceEventKind, SemanticTraceRecord,
+    VectorExtensionState,
 };
 use crate::domain::goal_plan::{ContextInput, ContextInputKind, ContextPackCredibility};
 use crate::domain::governance::{CanonSemanticEligibilityState, CanonSemanticProvenanceBoundary};
 use crate::domain::project_memory::{
     CompatibilityOutcome, PromotionStateView, read_canon_semantic_artifact_surface,
 };
+use crate::domain::trace::current_timestamp_millis;
 
 const BOUNDLINE_STATE_DIRECTORY: &str = ".boundline";
 const CONTEXT_INTELLIGENCE_DIRECTORY: &str = "context-intelligence";
 const RETRIEVAL_INDEX_FILE_NAME: &str = "retrieval-index.sqlite3";
+const RETRIEVAL_INDEX_WAL_FILE_NAME: &str = "retrieval-index.sqlite3-wal";
+const RETRIEVAL_INDEX_SHM_FILE_NAME: &str = "retrieval-index.sqlite3-shm";
+const RETRIEVAL_INDEX_MANIFEST_FILE_NAME: &str = "manifest.json";
+const SEMANTIC_CHUNKS_TABLE_NAME: &str = "semantic_chunks";
+const RETRIEVAL_INDEX_SCHEMA_VERSION: &str = "retrieval-index-v3";
 const SEMANTIC_INDEX_MANIFEST_ID: &str = "semantic-index-manifest";
+const SEMANTIC_INDEX_HOOK_TRIGGER_ENV: &str = "BOUNDLINE_INDEX_HOOK_TRIGGER";
+const SEMANTIC_INDEX_HOOK_TRIGGER_POST_CHECKOUT: &str = "post_checkout";
+const SEMANTIC_INDEX_HOOK_TRIGGER_POST_MERGE: &str = "post_merge";
+const SEMANTIC_INDEX_HOOK_TRIGGER_POST_REWRITE: &str = "post_rewrite";
 const SEMANTIC_VECTOR_STATE_OVERRIDE_ENV: &str = "BOUNDLINE_SEMANTIC_VECTOR_STATE_OVERRIDE";
 const SEMANTIC_VECTOR_STATE_READY_VALUE: &str = "ready";
 const SEMANTIC_VECTOR_STATE_MISSING_VALUE: &str = "missing";
 const SEMANTIC_VECTOR_STATE_STALE_VALUE: &str = "stale";
+const SEMANTIC_VECTOR_STATE_DEGRADED_VALUE: &str = "degraded";
+const SEMANTIC_VECTOR_STATE_CORRUPT_VALUE: &str = "corrupt";
 const SEMANTIC_VECTOR_STATE_UNSUPPORTED_VALUE: &str = "unsupported";
 const SEMANTIC_REFRESH_PENDING_REASON: &str =
     "semantic acceleration scaffold initialized; no semantic refresh has completed yet";
@@ -43,6 +63,8 @@ const SQLITE_VEC_EACH_MODULE_NAME: &str = "vec_each";
 const SEMANTIC_ACCELERATION_MISSING_REASON: &str = "semantic acceleration is enabled but sqlite-vec support is unavailable; using baseline structured retrieval";
 const SEMANTIC_ACCELERATION_SKIPPED_REASON: &str = "semantic acceleration is configured locally but bounded retrieval did not reach semantic expansion";
 const SEMANTIC_ACCELERATION_STALE_REASON: &str = "semantic acceleration is enabled but semantic vector state is stale; using baseline structured retrieval";
+const SEMANTIC_ACCELERATION_DEGRADED_REASON: &str = "semantic acceleration is enabled but sqlite-vec capability is degraded; using baseline structured retrieval";
+const SEMANTIC_ACCELERATION_CORRUPT_REASON: &str = "semantic acceleration is enabled but sqlite-vec state is corrupt; using baseline structured retrieval";
 const SEMANTIC_ACCELERATION_UNSUPPORTED_REASON: &str = "semantic acceleration is enabled but SQLite vector capability inspection is unavailable; using baseline structured retrieval";
 const SEMANTIC_BASELINE_ONLY_REASON: &str =
     "semantic acceleration evaluated the bounded query but kept the V1 candidate set unchanged";
@@ -56,6 +78,19 @@ const SEMANTIC_RERANK_SELECTION_REASON: &str =
     "semantic similarity reranked the candidate within bounded authority order";
 const SEMANTIC_REJECTED_LIMIT_REASON: &str = "semantic similarity found the candidate but the bounded evidence limit kept the V1 set unchanged";
 const SEMANTIC_SCHEMA_LINE_V1: &str = "boundline.semantic_chunk.v1";
+const SEMANTIC_VECTORS_TABLE_NAME: &str = "semantic_vectors";
+const SEMANTIC_VECTOR_TABLE_DEFINITION: &str =
+    "chunk_id text primary key, embedding float[48] distance_metric=cosine";
+const DERIVED_INDEX_CONFIG_FINGERPRINT_NAMESPACE: &str = "derived-index-config-v1";
+const DERIVED_INDEX_CHUNKER_FINGERPRINT_NAMESPACE: &str = "derived-index-chunker-v1";
+const DERIVED_INDEX_EMBEDDING_FINGERPRINT_NAMESPACE: &str = "derived-index-embedding-v1";
+const DERIVED_INDEX_IGNORE_PATTERN_DATABASE: &str =
+    ".boundline/context-intelligence/retrieval-index.sqlite3";
+const DERIVED_INDEX_IGNORE_PATTERN_MANIFEST: &str = ".boundline/context-intelligence/manifest.json";
+const DERIVED_INDEX_IGNORE_PATTERN_WAL: &str =
+    ".boundline/context-intelligence/retrieval-index.sqlite3-wal";
+const DERIVED_INDEX_IGNORE_PATTERN_SHM: &str =
+    ".boundline/context-intelligence/retrieval-index.sqlite3-shm";
 const MAX_SEMANTIC_CHUNK_BYTES: usize = 8 * 1024;
 const SEMANTIC_EMBEDDING_DIMENSIONS: usize = 48;
 const SEMANTIC_FEATURE_NGRAM_WIDTH: usize = 3;
@@ -65,6 +100,16 @@ const FNV_OFFSET_BASIS: u64 = 14_695_981_039_346_656_037;
 const FNV_PRIME: u64 = 1_099_511_628_211;
 const MAX_INDEXED_BYTES: usize = 32 * 1024;
 const MAX_QUERY_TERMS: usize = 8;
+
+#[cfg(feature = "sqlite-vec")]
+static SQLITE_VEC_AUTO_EXTENSION_REGISTRATION: OnceLock<Result<(), String>> = OnceLock::new();
+
+#[cfg(feature = "sqlite-vec")]
+type SqliteVecAutoExtensionInit = unsafe extern "C" fn(
+    *mut rusqlite::ffi::sqlite3,
+    *mut *const std::ffi::c_char,
+    *const rusqlite::ffi::sqlite3_api_routines,
+) -> std::ffi::c_int;
 const CANON_PUBLICATION_TARGET_STABLE: &str = "stable";
 const CANON_ARTIFACT_FILE_MISSING_REASON: &str =
     "Canon artifact file is missing from the workspace";
@@ -81,9 +126,15 @@ const CANON_SEMANTIC_SKIP_SELECTION_PREFIX: &str =
     "Canon semantic compatibility skipped the artifact:";
 const SEMANTIC_TRACE_CAPABILITY_REASON_PREFIX: &str =
     "semantic policy evaluated local capability as";
+const SEMANTIC_TRACE_EXTENSION_LOAD_ATTEMPTED_PREFIX: &str =
+    "trusted sqlite-vec extension load attempted";
 const SEMANTIC_TRACE_INDEX_REFRESHED_PREFIX: &str =
     "semantic index refreshed eligible local evidence set";
 const SEMANTIC_TRACE_CHUNK_BLOCKED_PREFIX: &str = "semantic chunk was blocked:";
+const SEMANTIC_TRACE_VECTOR_QUERY_EXECUTED_PREFIX: &str =
+    "vector query executed through semantic engine";
+const SEMANTIC_TRACE_VECTOR_CANDIDATES_RETURNED_PREFIX: &str =
+    "vector query returned chunk candidates before source collapse";
 const SEMANTIC_TRACE_HYBRID_OUTCOME_PREFIX: &str = "semantic retrieval ended with retrieval state";
 
 #[derive(Debug, Clone, Copy)]
@@ -91,6 +142,12 @@ pub struct AdvancedContextBuildState<'a> {
     pub credibility: ContextPackCredibility,
     pub staleness_reason: Option<&'a str>,
     pub semantic_policy: SemanticAccelerationPolicyState,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct GitWorkspaceState {
+    branch: String,
+    head: String,
 }
 
 /// Builds the persisted advanced-context projection that planning, status,
@@ -112,6 +169,382 @@ pub fn build_advanced_context_projection(
         policy,
         vector_extension_state_override_from_env(),
     )
+}
+
+/// Builds the current manifest-backed lifecycle report for `boundline index status`.
+pub fn build_index_status_report(workspace_ref: &Path) -> Result<IndexLifecycleReport, String> {
+    let workspace_root = workspace_ref.to_string_lossy().into_owned();
+    let manifest = read_derived_index_manifest(workspace_ref)
+        .map_err(|error| error.to_string())?
+        .map(|manifest| observe_manifest_git_freshness(workspace_ref, manifest))
+        .transpose()
+        .map_err(|error| error.to_string())?;
+
+    let (pre_state, post_state, recommended_action, stale_reason, warnings, manifest) =
+        match manifest {
+            Some(manifest) => {
+                let mut warnings = Vec::new();
+                let pre_state = manifest.index_status;
+                let stale_reason = manifest.effective_stale_reason();
+                let post_state = if let Some(reason) = stale_reason {
+                    warnings.push(index_stale_warning(reason).to_string());
+                    RetrievalIndexState::Stale
+                } else {
+                    manifest.index_status
+                };
+                (
+                    pre_state,
+                    post_state,
+                    recommended_action_for_index_state(post_state, workspace_ref),
+                    stale_reason,
+                    warnings,
+                    Some(manifest),
+                )
+            }
+            None => (
+                RetrievalIndexState::Missing,
+                RetrievalIndexState::Missing,
+                recommended_action_for_index_state(RetrievalIndexState::Missing, workspace_ref),
+                None,
+                vec!["derived index manifest not found for this workspace".to_string()],
+                None,
+            ),
+        };
+
+    let report = IndexLifecycleReport {
+        command: IndexMaintenanceCommand::Status,
+        workspace_root,
+        operation_id: format!("index-status:{}", Uuid::new_v4()),
+        pre_state,
+        post_state,
+        recommended_action,
+        stale_reason,
+        warnings,
+        manifest,
+    };
+    report.validate().map_err(|error| error.to_string())?;
+    Ok(report)
+}
+
+/// Builds the current derived-index doctor report for `boundline index doctor`.
+pub fn build_index_doctor_report(workspace_ref: &Path) -> Result<IndexDoctorReport, String> {
+    let tracked_index_files = tracked_index_files(workspace_ref);
+    let missing_ignore_rules = missing_ignore_rules(workspace_ref);
+    let wal_sidecars_present = wal_sidecar_paths(workspace_ref).iter().any(|path| path.is_file());
+    let (manifest_consistency, manifest_available) = inspect_manifest_consistency(workspace_ref);
+    let vector_schema_consistency = inspect_vector_schema_consistency(workspace_ref);
+    let checks = build_index_doctor_checks(
+        workspace_ref,
+        &tracked_index_files,
+        &missing_ignore_rules,
+        wal_sidecars_present,
+        manifest_consistency,
+        manifest_available,
+        vector_schema_consistency,
+    );
+    let status = aggregate_index_doctor_status(&checks);
+    let report = IndexDoctorReport {
+        status,
+        checks,
+        tracked_index_files,
+        missing_ignore_rules,
+        wal_sidecars_present,
+        manifest_consistency,
+        vector_schema_consistency,
+    };
+    report.validate().map_err(|error| error.to_string())?;
+    Ok(report)
+}
+
+fn build_index_doctor_checks(
+    workspace_ref: &Path,
+    tracked_index_files: &[String],
+    missing_ignore_rules: &[String],
+    wal_sidecars_present: bool,
+    manifest_consistency: IndexDoctorConsistencyState,
+    manifest_available: bool,
+    vector_schema_consistency: IndexDoctorConsistencyState,
+) -> Vec<IndexDoctorCheck> {
+    vec![
+        tracked_index_files_check(workspace_ref, tracked_index_files),
+        managed_ignore_rules_check(workspace_ref, missing_ignore_rules),
+        wal_sidecars_check(workspace_ref, wal_sidecars_present),
+        manifest_consistency_check(workspace_ref, manifest_consistency, manifest_available),
+        vector_schema_check(workspace_ref, vector_schema_consistency),
+    ]
+}
+
+fn tracked_index_files_check(
+    workspace_ref: &Path,
+    tracked_index_files: &[String],
+) -> IndexDoctorCheck {
+    let workspace = workspace_ref.to_string_lossy();
+    if tracked_index_files.is_empty() {
+        return IndexDoctorCheck {
+            check_name: "tracked_index_files".to_string(),
+            result: IndexDoctorStatus::Passed,
+            detail: "derived index artifacts are not tracked by Git".to_string(),
+            suggested_fix: "none".to_string(),
+        };
+    }
+
+    IndexDoctorCheck {
+        check_name: "tracked_index_files".to_string(),
+        result: IndexDoctorStatus::Failed,
+        detail: format!("tracked derived index artifacts: {}", tracked_index_files.join(", ")),
+        suggested_fix: format!(
+            "git -C {workspace} rm --cached -- {} && boundline init --workspace {workspace} --force",
+            tracked_index_files.join(" ")
+        ),
+    }
+}
+
+fn managed_ignore_rules_check(
+    workspace_ref: &Path,
+    missing_ignore_rules: &[String],
+) -> IndexDoctorCheck {
+    let workspace = workspace_ref.to_string_lossy();
+    if missing_ignore_rules.is_empty() {
+        return IndexDoctorCheck {
+            check_name: "managed_ignore_rules".to_string(),
+            result: IndexDoctorStatus::Passed,
+            detail: "derived index ignore rules cover the database, manifest, and SQLite sidecars"
+                .to_string(),
+            suggested_fix: "none".to_string(),
+        };
+    }
+
+    IndexDoctorCheck {
+        check_name: "managed_ignore_rules".to_string(),
+        result: IndexDoctorStatus::Advisory,
+        detail: format!(
+            "missing managed derived index ignore rules: {}",
+            missing_ignore_rules.join(", ")
+        ),
+        suggested_fix: format!("boundline init --workspace {workspace} --force"),
+    }
+}
+
+fn wal_sidecars_check(workspace_ref: &Path, wal_sidecars_present: bool) -> IndexDoctorCheck {
+    let workspace = workspace_ref.to_string_lossy();
+    if !wal_sidecars_present {
+        return IndexDoctorCheck {
+            check_name: "wal_sidecars".to_string(),
+            result: IndexDoctorStatus::Passed,
+            detail: "SQLite WAL and SHM sidecars are not present".to_string(),
+            suggested_fix: "none".to_string(),
+        };
+    }
+
+    IndexDoctorCheck {
+        check_name: "wal_sidecars".to_string(),
+        result: IndexDoctorStatus::Advisory,
+        detail: "SQLite WAL or SHM sidecars are present next to the derived index".to_string(),
+        suggested_fix: format!(
+            "close any process holding the index open, then rerun boundline index refresh --workspace {workspace}"
+        ),
+    }
+}
+
+fn manifest_consistency_check(
+    workspace_ref: &Path,
+    manifest_consistency: IndexDoctorConsistencyState,
+    manifest_available: bool,
+) -> IndexDoctorCheck {
+    let workspace = workspace_ref.to_string_lossy();
+    let (result, detail, suggested_fix) = match manifest_consistency {
+        IndexDoctorConsistencyState::Consistent => (
+            IndexDoctorStatus::Passed,
+            "derived index manifest is present and internally consistent".to_string(),
+            "none".to_string(),
+        ),
+        IndexDoctorConsistencyState::Missing if !manifest_available => (
+            IndexDoctorStatus::Advisory,
+            "derived index manifest is missing".to_string(),
+            format!("boundline index refresh --workspace {workspace}"),
+        ),
+        IndexDoctorConsistencyState::Missing => (
+            IndexDoctorStatus::Advisory,
+            "derived index manifest could not be observed".to_string(),
+            format!("boundline index refresh --workspace {workspace}"),
+        ),
+        IndexDoctorConsistencyState::Corrupt => (
+            IndexDoctorStatus::Failed,
+            "derived index manifest is unreadable or corrupt".to_string(),
+            format!("boundline index rebuild --workspace {workspace}"),
+        ),
+        IndexDoctorConsistencyState::Invalid => (
+            IndexDoctorStatus::Failed,
+            "derived index manifest does not match the current workspace or on-disk index"
+                .to_string(),
+            format!("boundline index rebuild --workspace {workspace}"),
+        ),
+    };
+
+    IndexDoctorCheck {
+        check_name: "manifest_consistency".to_string(),
+        result,
+        detail,
+        suggested_fix,
+    }
+}
+
+fn vector_schema_check(
+    workspace_ref: &Path,
+    vector_schema_consistency: IndexDoctorConsistencyState,
+) -> IndexDoctorCheck {
+    let workspace = workspace_ref.to_string_lossy();
+    let (result, detail, suggested_fix) = match vector_schema_consistency {
+        IndexDoctorConsistencyState::Consistent => (
+            IndexDoctorStatus::Passed,
+            "derived index schema and semantic vector tables are internally consistent"
+                .to_string(),
+            "none".to_string(),
+        ),
+        IndexDoctorConsistencyState::Missing => (
+            IndexDoctorStatus::Advisory,
+            "derived index database is missing".to_string(),
+            format!("boundline index refresh --workspace {workspace}"),
+        ),
+        IndexDoctorConsistencyState::Corrupt => (
+            IndexDoctorStatus::Failed,
+            "derived index database could not be opened or queried".to_string(),
+            format!("boundline index rebuild --workspace {workspace}"),
+        ),
+        IndexDoctorConsistencyState::Invalid => (
+            IndexDoctorStatus::Failed,
+            "derived index schema is missing required semantic tables for the current capability state"
+                .to_string(),
+            format!("boundline index rebuild --workspace {workspace}"),
+        ),
+    };
+
+    IndexDoctorCheck {
+        check_name: "vector_schema_consistency".to_string(),
+        result,
+        detail,
+        suggested_fix,
+    }
+}
+
+fn aggregate_index_doctor_status(checks: &[IndexDoctorCheck]) -> IndexDoctorStatus {
+    if checks.iter().any(|check| check.result == IndexDoctorStatus::Failed) {
+        IndexDoctorStatus::Failed
+    } else if checks.iter().any(|check| check.result == IndexDoctorStatus::Advisory) {
+        IndexDoctorStatus::Advisory
+    } else {
+        IndexDoctorStatus::Passed
+    }
+}
+
+fn tracked_index_files(workspace_ref: &Path) -> Vec<String> {
+    index_artifact_relative_paths()
+        .into_iter()
+        .filter_map(|relative_path| git_tracked_path(workspace_ref, relative_path))
+        .collect()
+}
+
+fn git_tracked_path(workspace_ref: &Path, relative_path: &'static str) -> Option<String> {
+    git_command_output(workspace_ref, ["ls-files", "--error-unmatch", "--", relative_path])
+}
+
+fn missing_ignore_rules(workspace_ref: &Path) -> Vec<String> {
+    let gitignore_path = workspace_ref.join(".gitignore");
+    let contents = fs::read_to_string(gitignore_path).unwrap_or_default();
+    required_ignore_patterns()
+        .into_iter()
+        .filter(|pattern| !contents.lines().any(|line| line.trim() == *pattern))
+        .map(str::to_string)
+        .collect()
+}
+
+fn wal_sidecar_paths(workspace_ref: &Path) -> [PathBuf; 2] {
+    let base = context_intelligence_state_directory(workspace_ref);
+    [base.join(RETRIEVAL_INDEX_WAL_FILE_NAME), base.join(RETRIEVAL_INDEX_SHM_FILE_NAME)]
+}
+
+fn inspect_manifest_consistency(workspace_ref: &Path) -> (IndexDoctorConsistencyState, bool) {
+    match read_derived_index_manifest(workspace_ref) {
+        Ok(Some(manifest)) => {
+            if manifest.workspace_root != workspace_ref.to_string_lossy()
+                || !retrieval_index_path(workspace_ref).is_file()
+            {
+                (IndexDoctorConsistencyState::Invalid, true)
+            } else {
+                (IndexDoctorConsistencyState::Consistent, true)
+            }
+        }
+        Ok(None) => (IndexDoctorConsistencyState::Missing, false),
+        Err(_) => (IndexDoctorConsistencyState::Corrupt, true),
+    }
+}
+
+fn inspect_vector_schema_consistency(workspace_ref: &Path) -> IndexDoctorConsistencyState {
+    if !retrieval_index_path(workspace_ref).is_file() {
+        return IndexDoctorConsistencyState::Missing;
+    }
+
+    let connection = match open_connection(workspace_ref) {
+        Ok(connection) => connection,
+        Err(_) => return IndexDoctorConsistencyState::Corrupt,
+    };
+    vector_schema_consistency_from_tables(
+        table_exists(&connection, SEMANTIC_CHUNKS_TABLE_NAME),
+        semantic_vector_table_exists(&connection),
+        detect_vector_extension_state(&connection),
+    )
+}
+
+fn vector_schema_consistency_from_tables(
+    semantic_chunks_available: Result<bool, ContextIntelligenceBuildError>,
+    vector_table_available: Result<bool, ContextIntelligenceBuildError>,
+    vector_capability: VectorExtensionState,
+) -> IndexDoctorConsistencyState {
+    let semantic_chunks_available = match semantic_chunks_available {
+        Ok(available) => available,
+        Err(_) => return IndexDoctorConsistencyState::Corrupt,
+    };
+    if !semantic_chunks_available {
+        return IndexDoctorConsistencyState::Invalid;
+    }
+
+    let vector_table_available = match vector_table_available {
+        Ok(available) => available,
+        Err(_) => return IndexDoctorConsistencyState::Corrupt,
+    };
+    if vector_capability == VectorExtensionState::Ready && !vector_table_available {
+        return IndexDoctorConsistencyState::Invalid;
+    }
+
+    IndexDoctorConsistencyState::Consistent
+}
+
+fn table_exists(
+    connection: &Connection,
+    table_name: &str,
+) -> Result<bool, ContextIntelligenceBuildError> {
+    let mut statement = connection
+        .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1 LIMIT 1")
+        .map_err(|error| ContextIntelligenceBuildError::QueryIndex(error.to_string()))?;
+    let mut rows = statement
+        .query(params![table_name])
+        .map_err(|error| ContextIntelligenceBuildError::QueryIndex(error.to_string()))?;
+    rows.next()
+        .map(|row| row.is_some())
+        .map_err(|error| ContextIntelligenceBuildError::QueryIndex(error.to_string()))
+}
+
+fn index_artifact_relative_paths() -> [&'static str; 4] {
+    [
+        DERIVED_INDEX_IGNORE_PATTERN_DATABASE,
+        DERIVED_INDEX_IGNORE_PATTERN_MANIFEST,
+        DERIVED_INDEX_IGNORE_PATTERN_WAL,
+        DERIVED_INDEX_IGNORE_PATTERN_SHM,
+    ]
+}
+
+fn required_ignore_patterns() -> [&'static str; 4] {
+    index_artifact_relative_paths()
 }
 
 fn build_advanced_context_projection_with_vector_state(
@@ -198,6 +631,7 @@ fn build_advanced_context_projection_with_vector_state(
             hybrid_outcome: semantic_projection.hybrid_outcome,
             retrieval_state: RetrievalState::Insufficient,
             retrieval_index_state: default_index_state,
+            execution_details: SemanticTraceExecutionDetails::default(),
             terminal_reason: terminal_reason.as_deref(),
             selected_evidence: &[],
             rejected_candidates: &rejected_candidates,
@@ -233,6 +667,7 @@ fn build_advanced_context_projection_with_vector_state(
         retrieval_index_state,
         semantic_projection,
         base_terminal_reason,
+        trace_execution_details,
     ) = match refresh_and_query_index(
         workspace_ref,
         goal_text,
@@ -270,6 +705,11 @@ fn build_advanced_context_projection_with_vector_state(
                 default_index_state,
                 hybrid_result.semantic_projection,
                 default_degraded_reason.clone(),
+                SemanticTraceExecutionDetails {
+                    extension_load_attempted: result.extension_load_attempted,
+                    vector_query_attempted: result.vector_query_attempted,
+                    vector_chunk_candidates_returned: result.vector_chunk_candidates_returned,
+                },
             )
         }
         Ok(result) => {
@@ -315,6 +755,11 @@ fn build_advanced_context_projection_with_vector_state(
                 default_index_state,
                 hybrid_result.semantic_projection,
                 combine_terminal_reasons(Some(base_reason), default_degraded_reason.clone()),
+                SemanticTraceExecutionDetails {
+                    extension_load_attempted: result.extension_load_attempted,
+                    vector_query_attempted: result.vector_query_attempted,
+                    vector_chunk_candidates_returned: result.vector_chunk_candidates_returned,
+                },
             )
         }
         Err(error) => {
@@ -346,6 +791,13 @@ fn build_advanced_context_projection_with_vector_state(
                     Some(format!("SQLite retrieval degraded to structured fallback: {error}")),
                     default_degraded_reason.clone(),
                 ),
+                SemanticTraceExecutionDetails {
+                    extension_load_attempted: semantic_policy
+                        == SemanticAccelerationPolicyState::Local,
+                    vector_query_attempted: semantic_policy
+                        == SemanticAccelerationPolicyState::Local,
+                    vector_chunk_candidates_returned: 0,
+                },
             )
         }
     };
@@ -390,6 +842,7 @@ fn build_advanced_context_projection_with_vector_state(
         hybrid_outcome: semantic_projection.hybrid_outcome,
         retrieval_state,
         retrieval_index_state,
+        execution_details: trace_execution_details,
         terminal_reason: terminal_reason.as_deref(),
         selected_evidence: &selected_evidence,
         rejected_candidates: &rejected_candidates,
@@ -462,6 +915,9 @@ struct IndexQueryResult {
     lexical_matches: Vec<RankedDocumentRef>,
     semantic_matches: Vec<SemanticMatchResult>,
     vector_extension_state: VectorExtensionState,
+    extension_load_attempted: bool,
+    vector_query_attempted: bool,
+    vector_chunk_candidates_returned: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -476,6 +932,20 @@ struct SemanticMatchResult {
     semantic_score: RetrievalScore,
     canon_semantic_contract_line: Option<String>,
     canon_semantic_provenance_ref: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct SemanticQueryResult {
+    matches: Vec<SemanticMatchResult>,
+    vector_query_attempted: bool,
+    vector_chunk_candidates_returned: usize,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct SemanticTraceExecutionDetails {
+    extension_load_attempted: bool,
+    vector_query_attempted: bool,
+    vector_chunk_candidates_returned: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -560,6 +1030,14 @@ fn semantic_projection_for_local_result(
                 VectorExtensionState::Stale => (
                     SemanticCapabilityState::Degraded,
                     Some(SEMANTIC_ACCELERATION_STALE_REASON.to_string()),
+                ),
+                VectorExtensionState::Degraded => (
+                    SemanticCapabilityState::Degraded,
+                    Some(SEMANTIC_ACCELERATION_DEGRADED_REASON.to_string()),
+                ),
+                VectorExtensionState::Corrupt => (
+                    SemanticCapabilityState::Corrupt,
+                    Some(SEMANTIC_ACCELERATION_CORRUPT_REASON.to_string()),
                 ),
             };
 
@@ -668,6 +1146,10 @@ enum ContextIntelligenceBuildError {
     CreateStateDirectory(String),
     #[error("failed to open advanced retrieval index: {0}")]
     OpenIndex(String),
+    #[error("failed to read advanced retrieval manifest: {0}")]
+    ReadManifest(String),
+    #[error("failed to write advanced retrieval manifest: {0}")]
+    WriteManifest(String),
     #[error("failed to initialize advanced retrieval index: {0}")]
     InitializeIndex(String),
     #[error("failed to initialize semantic retrieval scaffold: {0}")]
@@ -876,6 +1358,7 @@ fn terminal_projection(
         hybrid_outcome: semantic_projection.hybrid_outcome,
         retrieval_state,
         retrieval_index_state,
+        execution_details: SemanticTraceExecutionDetails::default(),
         terminal_reason: terminal_reason.as_deref(),
         selected_evidence: &[],
         rejected_candidates: &[],
@@ -916,18 +1399,33 @@ fn refresh_and_query_index(
     let vector_extension_state = vector_extension_state_override
         .unwrap_or_else(|| detect_vector_extension_state(&connection));
     refresh_semantic_chunks(&connection, documents, vector_extension_state)?;
+    let refresh_reason = IndexRefreshReason::ManualRefresh;
+    persist_derived_index_manifest(
+        &connection,
+        workspace_ref,
+        documents,
+        vector_extension_state,
+        refresh_reason,
+    )?;
 
     let query = build_fts_query(goal_text, selected_targets);
+    let vector_state = vector_extension_state;
+    let semantic_query_result = query_semantic_matches(
+        &connection,
+        goal_text,
+        selected_targets,
+        expansion_limit,
+        vector_state,
+    )?;
     if query.is_empty() {
         return Ok(IndexQueryResult {
             lexical_matches: Vec::new(),
-            semantic_matches: query_semantic_matches(
-                &connection,
-                goal_text,
-                selected_targets,
-                expansion_limit,
-            )?,
+            semantic_matches: semantic_query_result.matches,
             vector_extension_state,
+            extension_load_attempted: true,
+            vector_query_attempted: semantic_query_result.vector_query_attempted,
+            vector_chunk_candidates_returned: semantic_query_result
+                .vector_chunk_candidates_returned,
         });
     }
 
@@ -967,24 +1465,66 @@ fn refresh_and_query_index(
     }
     Ok(IndexQueryResult {
         lexical_matches,
-        semantic_matches: query_semantic_matches(
-            &connection,
-            goal_text,
-            selected_targets,
-            expansion_limit,
-        )?,
+        semantic_matches: semantic_query_result.matches,
         vector_extension_state,
+        extension_load_attempted: true,
+        vector_query_attempted: semantic_query_result.vector_query_attempted,
+        vector_chunk_candidates_returned: semantic_query_result.vector_chunk_candidates_returned,
     })
 }
 
+#[cfg(feature = "sqlite-vec")]
+fn register_sqlite_vec_auto_extension() -> Result<(), ContextIntelligenceBuildError> {
+    let registration = SQLITE_VEC_AUTO_EXTENSION_REGISTRATION.get_or_init(|| {
+        let init: SqliteVecAutoExtensionInit = unsafe {
+            std::mem::transmute::<*const (), SqliteVecAutoExtensionInit>(
+                sqlite_vec::sqlite3_vec_init as *const (),
+            )
+        };
+        let rc = unsafe { rusqlite::ffi::sqlite3_auto_extension(Some(init)) };
+        sqlite_auto_extension_result(rc)
+    });
+
+    registration
+        .as_ref()
+        .map_err(|error| ContextIntelligenceBuildError::InitializeSemanticIndex(error.clone()))
+        .copied()
+}
+
+#[cfg(not(feature = "sqlite-vec"))]
+fn register_sqlite_vec_auto_extension() -> Result<(), ContextIntelligenceBuildError> {
+    Ok(())
+}
+
+#[cfg(feature = "sqlite-vec")]
+fn sqlite_auto_extension_result(rc: std::ffi::c_int) -> Result<(), String> {
+    if rc == rusqlite::ffi::SQLITE_OK {
+        Ok(())
+    } else {
+        Err(format!("sqlite3_auto_extension returned {rc}"))
+    }
+}
+
 fn open_connection(workspace_ref: &Path) -> Result<Connection, ContextIntelligenceBuildError> {
-    let state_directory =
-        workspace_ref.join(BOUNDLINE_STATE_DIRECTORY).join(CONTEXT_INTELLIGENCE_DIRECTORY);
+    register_sqlite_vec_auto_extension()?;
+    let state_directory = context_intelligence_state_directory(workspace_ref);
     fs::create_dir_all(&state_directory)
         .map_err(|error| ContextIntelligenceBuildError::CreateStateDirectory(error.to_string()))?;
-    let index_path = state_directory.join(RETRIEVAL_INDEX_FILE_NAME);
+    let index_path = retrieval_index_path(workspace_ref);
     Connection::open(index_path)
         .map_err(|error| ContextIntelligenceBuildError::OpenIndex(error.to_string()))
+}
+
+fn context_intelligence_state_directory(workspace_ref: &Path) -> PathBuf {
+    workspace_ref.join(BOUNDLINE_STATE_DIRECTORY).join(CONTEXT_INTELLIGENCE_DIRECTORY)
+}
+
+fn retrieval_index_path(workspace_ref: &Path) -> PathBuf {
+    context_intelligence_state_directory(workspace_ref).join(RETRIEVAL_INDEX_FILE_NAME)
+}
+
+fn retrieval_index_manifest_path(workspace_ref: &Path) -> PathBuf {
+    context_intelligence_state_directory(workspace_ref).join(RETRIEVAL_INDEX_MANIFEST_FILE_NAME)
 }
 
 fn initialize_schema(
@@ -1058,29 +1598,57 @@ fn initialize_semantic_schema(
     )?;
     ensure_semantic_column(connection, "chunk_text", "TEXT NOT NULL DEFAULT ''")?;
     ensure_semantic_column(connection, "embedding_payload_json", "TEXT NOT NULL DEFAULT '[]'")?;
+    initialize_semantic_vector_table(connection)?;
 
-    let workspace_root = workspace_ref.to_string_lossy().into_owned();
-    let vector_extension_state = detect_vector_extension_state(connection);
-    connection
-        .execute(
-            "INSERT OR REPLACE INTO semantic_index_manifest (
-                manifest_id,
-                workspace_root,
-                vector_extension_state,
-                last_semantic_refresh_reason
-            ) VALUES (?1, ?2, ?3, ?4)",
-            params![
-                SEMANTIC_INDEX_MANIFEST_ID,
-                workspace_root,
-                vector_extension_state.as_str(),
-                SEMANTIC_REFRESH_PENDING_REASON,
-            ],
-        )
-        .map_err(|error| {
-            ContextIntelligenceBuildError::InitializeSemanticIndex(error.to_string())
-        })?;
+    let vector_state = detect_vector_extension_state(connection);
+    let manifest = build_derived_index_manifest(
+        workspace_ref,
+        &[],
+        vector_state,
+        Some(IndexRefreshReason::ManualRefresh),
+        None,
+    );
+    upsert_semantic_manifest_row(connection, &manifest, SEMANTIC_REFRESH_PENDING_REASON)?;
 
     Ok(())
+}
+
+fn initialize_semantic_vector_table(
+    connection: &Connection,
+) -> Result<(), ContextIntelligenceBuildError> {
+    initialize_semantic_vector_table_for_state(
+        connection,
+        detect_vector_extension_state(connection),
+    )
+}
+
+fn initialize_semantic_vector_table_for_state(
+    connection: &Connection,
+    vector_extension_state: VectorExtensionState,
+) -> Result<(), ContextIntelligenceBuildError> {
+    if vector_extension_state != VectorExtensionState::Ready {
+        return Ok(());
+    }
+
+    connection
+        .execute_batch(&format!(
+            "CREATE VIRTUAL TABLE IF NOT EXISTS {SEMANTIC_VECTORS_TABLE_NAME} USING vec0({SEMANTIC_VECTOR_TABLE_DEFINITION});"
+        ))
+        .map_err(|error| ContextIntelligenceBuildError::InitializeSemanticIndex(error.to_string()))
+}
+
+fn semantic_vector_table_exists(
+    connection: &Connection,
+) -> Result<bool, ContextIntelligenceBuildError> {
+    let mut statement = connection
+        .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1 LIMIT 1")
+        .map_err(|error| ContextIntelligenceBuildError::QueryIndex(error.to_string()))?;
+    let mut rows = statement
+        .query(params![SEMANTIC_VECTORS_TABLE_NAME])
+        .map_err(|error| ContextIntelligenceBuildError::QueryIndex(error.to_string()))?;
+    rows.next()
+        .map(|row| row.is_some())
+        .map_err(|error| ContextIntelligenceBuildError::QueryIndex(error.to_string()))
 }
 
 fn ensure_semantic_column(
@@ -1135,6 +1703,8 @@ fn vector_extension_state_override_from_env() -> Option<VectorExtensionState> {
             SEMANTIC_VECTOR_STATE_READY_VALUE => Some(VectorExtensionState::Ready),
             SEMANTIC_VECTOR_STATE_MISSING_VALUE => Some(VectorExtensionState::Missing),
             SEMANTIC_VECTOR_STATE_STALE_VALUE => Some(VectorExtensionState::Stale),
+            SEMANTIC_VECTOR_STATE_DEGRADED_VALUE => Some(VectorExtensionState::Degraded),
+            SEMANTIC_VECTOR_STATE_CORRUPT_VALUE => Some(VectorExtensionState::Corrupt),
             SEMANTIC_VECTOR_STATE_UNSUPPORTED_VALUE => Some(VectorExtensionState::Unsupported),
             _ => None,
         }
@@ -1147,14 +1717,306 @@ fn vector_extension_state_override_from_env() -> Option<VectorExtensionState> {
 }
 
 fn vector_extension_state_from_modules(modules: &[String]) -> VectorExtensionState {
-    if modules
-        .iter()
-        .any(|module| module == SQLITE_VEC_MODULE_NAME || module == SQLITE_VEC_EACH_MODULE_NAME)
-    {
-        VectorExtensionState::Ready
-    } else {
-        VectorExtensionState::Missing
+    let has_vec0 = modules.iter().any(|module| module == SQLITE_VEC_MODULE_NAME);
+    let has_vec_each = modules.iter().any(|module| module == SQLITE_VEC_EACH_MODULE_NAME);
+    match (has_vec0, has_vec_each) {
+        (true, true) => VectorExtensionState::Ready,
+        (false, false) => VectorExtensionState::Missing,
+        _ => VectorExtensionState::Degraded,
     }
+}
+
+fn persist_derived_index_manifest(
+    connection: &Connection,
+    workspace_ref: &Path,
+    documents: &[RetrievalDocument],
+    vector_extension_state: VectorExtensionState,
+    refresh_reason: IndexRefreshReason,
+) -> Result<DerivedIndexManifest, ContextIntelligenceBuildError> {
+    let previous_manifest = read_derived_index_manifest(workspace_ref).ok().flatten();
+    let manifest = build_derived_index_manifest(
+        workspace_ref,
+        documents,
+        vector_extension_state,
+        Some(refresh_reason),
+        previous_manifest.as_ref(),
+    );
+    write_derived_index_manifest(workspace_ref, &manifest)?;
+    let manifest_reason = manifest
+        .last_refresh_reason
+        .map(IndexRefreshReason::as_str)
+        .unwrap_or(SEMANTIC_REFRESH_PENDING_REASON);
+    upsert_semantic_manifest_row(connection, &manifest, manifest_reason)?;
+    Ok(manifest)
+}
+
+fn write_derived_index_manifest(
+    workspace_ref: &Path,
+    manifest: &DerivedIndexManifest,
+) -> Result<(), ContextIntelligenceBuildError> {
+    manifest
+        .validate()
+        .map_err(|error| ContextIntelligenceBuildError::WriteManifest(error.to_string()))?;
+    let manifest_json = serde_json::to_string_pretty(manifest)
+        .map_err(|error| ContextIntelligenceBuildError::WriteManifest(error.to_string()))?;
+    let manifest_path = retrieval_index_manifest_path(workspace_ref);
+    fs::write(&manifest_path, manifest_json)
+        .map_err(|error| ContextIntelligenceBuildError::WriteManifest(error.to_string()))
+}
+
+fn read_derived_index_manifest(
+    workspace_ref: &Path,
+) -> Result<Option<DerivedIndexManifest>, ContextIntelligenceBuildError> {
+    let manifest_path = retrieval_index_manifest_path(workspace_ref);
+    let manifest_json = match fs::read_to_string(manifest_path) {
+        Ok(value) => value,
+        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(None),
+        Err(error) => {
+            return Err(ContextIntelligenceBuildError::ReadManifest(error.to_string()));
+        }
+    };
+    let manifest = serde_json::from_str::<DerivedIndexManifest>(&manifest_json)
+        .map_err(|error| ContextIntelligenceBuildError::ReadManifest(error.to_string()))?;
+    manifest
+        .validate()
+        .map_err(|error| ContextIntelligenceBuildError::ReadManifest(error.to_string()))?;
+    Ok(Some(manifest))
+}
+
+fn recommended_action_for_index_state(
+    index_state: RetrievalIndexState,
+    workspace_ref: &Path,
+) -> String {
+    let workspace = workspace_ref.to_string_lossy();
+    match index_state {
+        RetrievalIndexState::Ready => "none".to_string(),
+        RetrievalIndexState::Missing | RetrievalIndexState::Stale => {
+            format!("boundline index refresh --workspace {workspace}")
+        }
+        RetrievalIndexState::Incompatible | RetrievalIndexState::Corrupt => {
+            format!("boundline index rebuild --workspace {workspace}")
+        }
+        RetrievalIndexState::Degraded | RetrievalIndexState::SemanticUnavailable => {
+            format!("boundline index doctor --workspace {workspace}")
+        }
+        RetrievalIndexState::Building | RetrievalIndexState::Insufficient => {
+            format!("boundline index status --workspace {workspace}")
+        }
+    }
+}
+
+fn index_stale_warning(reason: IndexStaleReason) -> &'static str {
+    match reason {
+        IndexStaleReason::GitHeadChanged => {
+            "git HEAD changed since the last successful derived-index refresh"
+        }
+        IndexStaleReason::BranchCheckout => "a branch checkout marked the derived index stale",
+        IndexStaleReason::Merge => "a merge marked the derived index stale",
+        IndexStaleReason::PullWithMerge => "a pull-with-merge marked the derived index stale",
+        IndexStaleReason::Rebase => "a rebase marked the derived index stale",
+        IndexStaleReason::PostRewrite => "a post-rewrite event marked the derived index stale",
+        IndexStaleReason::HookMarkedStale => "a Git freshness hook marked the derived index stale",
+    }
+}
+
+fn build_derived_index_manifest(
+    workspace_ref: &Path,
+    documents: &[RetrievalDocument],
+    vector_extension_state: VectorExtensionState,
+    refresh_reason: Option<IndexRefreshReason>,
+    previous_manifest: Option<&DerivedIndexManifest>,
+) -> DerivedIndexManifest {
+    let git_state = current_git_state(workspace_ref);
+    let mut manifest = DerivedIndexManifest {
+        schema_version: RETRIEVAL_INDEX_SCHEMA_VERSION.to_string(),
+        workspace_root: workspace_ref.to_string_lossy().into_owned(),
+        git_branch: git_state
+            .as_ref()
+            .map(|state| state.branch.clone())
+            .or_else(|| previous_manifest.and_then(|manifest| manifest.git_branch.clone())),
+        git_head: git_state
+            .as_ref()
+            .map(|state| state.head.clone())
+            .or_else(|| previous_manifest.and_then(|manifest| manifest.git_head.clone())),
+        last_seen_head: git_state
+            .as_ref()
+            .map(|state| state.head.clone())
+            .or_else(|| previous_manifest.and_then(|manifest| manifest.last_seen_head.clone())),
+        index_status: RetrievalIndexState::Missing,
+        last_refresh_at: Some(format_audit_timestamp(current_timestamp_millis())),
+        last_refresh_reason: refresh_reason,
+        stale_reason: None,
+        file_count: documents.len(),
+        chunk_count: documents
+            .iter()
+            .filter(|document| semantic_eligible_document(document))
+            .count(),
+        fts5_state: ManifestFtsState::Ready,
+        sqlite_vec_state: vector_extension_state,
+        semantic_engine: semantic_engine_for_vector_state(vector_extension_state),
+        workspace_fingerprint: workspace_fingerprint(documents),
+        config_fingerprint: derived_index_config_fingerprint(),
+        chunker_fingerprint: semantic_chunker_fingerprint(),
+        embedding_model_fingerprint: semantic_embedding_fingerprint(),
+    };
+    manifest.index_status =
+        derive_manifest_index_status(previous_manifest, &manifest, workspace_ref);
+    manifest
+}
+
+fn observe_manifest_git_freshness(
+    workspace_ref: &Path,
+    manifest: DerivedIndexManifest,
+) -> Result<DerivedIndexManifest, ContextIntelligenceBuildError> {
+    let Some(git_state) = current_git_state(workspace_ref) else {
+        return Ok(manifest);
+    };
+
+    let mut updated = manifest.clone();
+    updated.git_branch = Some(git_state.branch);
+    updated.last_seen_head = Some(git_state.head);
+    if let Some(reason) = hook_trigger_stale_reason_from_env() {
+        updated.stale_reason = Some(reason);
+    }
+
+    if updated != manifest {
+        write_derived_index_manifest(workspace_ref, &updated)?;
+    }
+
+    Ok(updated)
+}
+
+fn hook_trigger_stale_reason_from_env() -> Option<IndexStaleReason> {
+    let value = std::env::var(SEMANTIC_INDEX_HOOK_TRIGGER_ENV).ok()?;
+    match value.trim().to_ascii_lowercase().as_str() {
+        SEMANTIC_INDEX_HOOK_TRIGGER_POST_CHECKOUT => Some(IndexStaleReason::BranchCheckout),
+        SEMANTIC_INDEX_HOOK_TRIGGER_POST_MERGE => Some(IndexStaleReason::Merge),
+        SEMANTIC_INDEX_HOOK_TRIGGER_POST_REWRITE => Some(IndexStaleReason::PostRewrite),
+        _ => None,
+    }
+}
+
+fn current_git_state(workspace_ref: &Path) -> Option<GitWorkspaceState> {
+    let branch = git_command_output(workspace_ref, ["rev-parse", "--abbrev-ref", "HEAD"])?;
+    let head = git_command_output(workspace_ref, ["rev-parse", "HEAD"])?;
+    Some(GitWorkspaceState { branch, head })
+}
+
+fn git_command_output<const N: usize>(workspace_ref: &Path, args: [&str; N]) -> Option<String> {
+    let output = Command::new("git").arg("-C").arg(workspace_ref).args(args).output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let value = String::from_utf8(output.stdout).ok()?;
+    let trimmed = value.trim();
+    if trimmed.is_empty() { None } else { Some(trimmed.to_string()) }
+}
+
+fn derive_manifest_index_status(
+    previous_manifest: Option<&DerivedIndexManifest>,
+    next_manifest: &DerivedIndexManifest,
+    workspace_ref: &Path,
+) -> RetrievalIndexState {
+    if next_manifest.workspace_root != workspace_ref.to_string_lossy() {
+        return RetrievalIndexState::Incompatible;
+    }
+    if next_manifest.fts5_state == ManifestFtsState::Corrupt {
+        return RetrievalIndexState::Corrupt;
+    }
+    if previous_manifest.is_some_and(|manifest| manifest.requires_rebuild_against(next_manifest)) {
+        return RetrievalIndexState::Incompatible;
+    }
+    match next_manifest.sqlite_vec_state {
+        VectorExtensionState::Ready => RetrievalIndexState::Ready,
+        VectorExtensionState::Missing | VectorExtensionState::Unsupported => {
+            RetrievalIndexState::SemanticUnavailable
+        }
+        VectorExtensionState::Stale | VectorExtensionState::Degraded => {
+            RetrievalIndexState::Degraded
+        }
+        VectorExtensionState::Corrupt => RetrievalIndexState::Corrupt,
+    }
+}
+
+fn semantic_engine_for_vector_state(
+    vector_extension_state: VectorExtensionState,
+) -> SemanticEngine {
+    match vector_extension_state {
+        VectorExtensionState::Ready => SemanticEngine::SqliteVec,
+        VectorExtensionState::Missing
+        | VectorExtensionState::Unsupported
+        | VectorExtensionState::Stale
+        | VectorExtensionState::Degraded
+        | VectorExtensionState::Corrupt => SemanticEngine::BaselineJson,
+    }
+}
+
+fn workspace_fingerprint(documents: &[RetrievalDocument]) -> String {
+    let fingerprint_input = documents
+        .iter()
+        .map(|document| {
+            format!(
+                "{}|{}|{}|{}|{}",
+                document.source_ref,
+                document.source_kind.as_str(),
+                document.compatibility_state.as_str(),
+                document.staleness_state.as_str(),
+                semantic_content_hash(&document.content)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    format!("fnv64:{:016x}", stable_hash(&fingerprint_input))
+}
+
+fn derived_index_config_fingerprint() -> String {
+    let config_line = format!(
+        "{}|max_indexed_bytes={MAX_INDEXED_BYTES}|max_query_terms={MAX_QUERY_TERMS}",
+        DERIVED_INDEX_CONFIG_FINGERPRINT_NAMESPACE,
+    );
+    format!("fnv64:{:016x}", stable_hash(&config_line))
+}
+
+fn semantic_chunker_fingerprint() -> String {
+    let chunker_line = format!(
+        "{}|schema={SEMANTIC_SCHEMA_LINE_V1}|max_chunk_bytes={MAX_SEMANTIC_CHUNK_BYTES}",
+        DERIVED_INDEX_CHUNKER_FINGERPRINT_NAMESPACE,
+    );
+    format!("fnv64:{:016x}", stable_hash(&chunker_line))
+}
+
+fn semantic_embedding_fingerprint() -> String {
+    let embedding_line = format!(
+        "{}|dimensions={SEMANTIC_EMBEDDING_DIMENSIONS}|ngram_width={SEMANTIC_FEATURE_NGRAM_WIDTH}|min_token_length={MIN_SEMANTIC_TOKEN_LENGTH}",
+        DERIVED_INDEX_EMBEDDING_FINGERPRINT_NAMESPACE,
+    );
+    format!("fnv64:{:016x}", stable_hash(&embedding_line))
+}
+
+fn upsert_semantic_manifest_row(
+    connection: &Connection,
+    manifest: &DerivedIndexManifest,
+    refresh_reason: &str,
+) -> Result<(), ContextIntelligenceBuildError> {
+    connection
+        .execute(
+            "INSERT OR REPLACE INTO semantic_index_manifest (
+                manifest_id,
+                workspace_root,
+                vector_extension_state,
+                last_semantic_refresh_reason
+            ) VALUES (?1, ?2, ?3, ?4)",
+            params![
+                SEMANTIC_INDEX_MANIFEST_ID,
+                manifest.workspace_root,
+                manifest.sqlite_vec_state.as_str(),
+                refresh_reason,
+            ],
+        )
+        .map_err(|error| {
+            ContextIntelligenceBuildError::InitializeSemanticIndex(error.to_string())
+        })?;
+    Ok(())
 }
 
 fn refresh_documents(
@@ -1219,11 +2081,57 @@ fn refresh_semantic_chunks(
         .unchecked_transaction()
         .map_err(|error| ContextIntelligenceBuildError::RefreshIndex(error.to_string()))?;
 
-    transaction
-        .execute("DELETE FROM semantic_chunks", [])
-        .map_err(|error| ContextIntelligenceBuildError::RefreshIndex(error.to_string()))?;
-
+    let vector_table_available = semantic_vector_table_exists(&transaction)?;
     let chunk_state = semantic_chunk_state_for_vector_extension(vector_extension_state);
+    let existing_chunks = load_existing_semantic_chunk_rows(&transaction)?;
+    let desired_chunks = build_desired_semantic_chunk_rows(documents, chunk_state)?;
+    let desired_chunk_ids =
+        desired_chunks.iter().map(|row| row.chunk_id.clone()).collect::<BTreeSet<_>>();
+
+    let remove_vectors = vector_table_available;
+    delete_missing_semantic_chunks(
+        &transaction,
+        &existing_chunks,
+        &desired_chunk_ids,
+        remove_vectors,
+    )?;
+
+    for desired in &desired_chunks {
+        let existing = existing_chunks.get(&desired.chunk_id);
+        if existing != Some(desired) {
+            upsert_semantic_chunk_row(&transaction, desired)?;
+        }
+        sync_semantic_vector_row(&transaction, vector_table_available, existing, desired)?;
+    }
+
+    transaction
+        .commit()
+        .map_err(|error| ContextIntelligenceBuildError::RefreshIndex(error.to_string()))
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct SemanticChunkRefreshRow {
+    chunk_id: String,
+    source_kind: String,
+    source_ref: String,
+    provenance_boundary: String,
+    provenance_ref: String,
+    content_hash: String,
+    embedding_state: String,
+    embedding_dimensions: i64,
+    canon_semantic_contract_line: Option<String>,
+    semantic_labels_json: String,
+    semantic_schema_line: String,
+    chunk_text: String,
+    embedding_payload_json: String,
+}
+
+fn build_desired_semantic_chunk_rows(
+    documents: &[RetrievalDocument],
+    chunk_state: SemanticChunkState,
+) -> Result<Vec<SemanticChunkRefreshRow>, ContextIntelligenceBuildError> {
+    let mut rows = Vec::new();
+
     for document in documents.iter().filter(|document| semantic_eligible_document(document)) {
         let chunk_text = truncate_string(document.content.clone(), MAX_SEMANTIC_CHUNK_BYTES);
         let embedding = if chunk_state == SemanticChunkState::Ready {
@@ -1236,51 +2144,223 @@ fn refresh_semantic_chunks(
         let embedding_payload_json = serde_json::to_string(&embedding)
             .map_err(|error| ContextIntelligenceBuildError::SerializeMetadata(error.to_string()))?;
 
-        transaction
-            .execute(
-                "INSERT INTO semantic_chunks (
-                    chunk_id,
-                    source_kind,
-                    source_ref,
-                    provenance_boundary,
-                    provenance_ref,
-                    content_hash,
-                    embedding_state,
-                    embedding_dimensions,
-                    canon_semantic_contract_line,
-                    semantic_labels_json,
-                    semantic_schema_line,
-                    chunk_text,
-                    embedding_payload_json
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
-                params![
-                    semantic_chunk_id(&document.source_ref),
-                    document.source_kind.as_str(),
-                    document.source_ref,
-                    document
-                        .canon_semantic_provenance_boundary
-                        .map(CanonSemanticProvenanceBoundary::as_str)
-                        .unwrap_or_else(|| document.source_kind.as_str()),
-                    document
-                        .canon_semantic_provenance_ref
-                        .clone()
-                        .unwrap_or_else(|| document.source_ref.clone()),
-                    semantic_content_hash(&chunk_text),
-                    chunk_state.as_str(),
-                    SEMANTIC_EMBEDDING_DIMENSIONS as i64,
-                    document.canon_semantic_contract_line.clone(),
-                    semantic_labels_json,
-                    SEMANTIC_SCHEMA_LINE_V1,
-                    chunk_text,
-                    embedding_payload_json,
-                ],
-            )
+        rows.push(SemanticChunkRefreshRow {
+            chunk_id: semantic_chunk_id(&document.source_ref),
+            source_kind: document.source_kind.as_str().to_string(),
+            source_ref: document.source_ref.clone(),
+            provenance_boundary: document
+                .canon_semantic_provenance_boundary
+                .map(CanonSemanticProvenanceBoundary::as_str)
+                .unwrap_or_else(|| document.source_kind.as_str())
+                .to_string(),
+            provenance_ref: document
+                .canon_semantic_provenance_ref
+                .clone()
+                .unwrap_or_else(|| document.source_ref.clone()),
+            content_hash: semantic_content_hash(&chunk_text),
+            embedding_state: chunk_state.as_str().to_string(),
+            embedding_dimensions: SEMANTIC_EMBEDDING_DIMENSIONS as i64,
+            canon_semantic_contract_line: document.canon_semantic_contract_line.clone(),
+            semantic_labels_json,
+            semantic_schema_line: SEMANTIC_SCHEMA_LINE_V1.to_string(),
+            chunk_text,
+            embedding_payload_json,
+        });
+    }
+
+    Ok(rows)
+}
+
+fn load_existing_semantic_chunk_rows(
+    connection: &Connection,
+) -> Result<BTreeMap<String, SemanticChunkRefreshRow>, ContextIntelligenceBuildError> {
+    let mut statement = connection
+        .prepare(
+            "SELECT
+                chunk_id,
+                source_kind,
+                source_ref,
+                provenance_boundary,
+                provenance_ref,
+                content_hash,
+                embedding_state,
+                embedding_dimensions,
+                canon_semantic_contract_line,
+                semantic_labels_json,
+                semantic_schema_line,
+                chunk_text,
+                embedding_payload_json
+             FROM semantic_chunks",
+        )
+        .map_err(|error| ContextIntelligenceBuildError::RefreshIndex(error.to_string()))?;
+    let rows = statement
+        .query_map([], |row| {
+            Ok(SemanticChunkRefreshRow {
+                chunk_id: row.get(0)?,
+                source_kind: row.get(1)?,
+                source_ref: row.get(2)?,
+                provenance_boundary: row.get(3)?,
+                provenance_ref: row.get(4)?,
+                content_hash: row.get(5)?,
+                embedding_state: row.get(6)?,
+                embedding_dimensions: row.get(7)?,
+                canon_semantic_contract_line: row.get(8)?,
+                semantic_labels_json: row.get(9)?,
+                semantic_schema_line: row.get(10)?,
+                chunk_text: row.get(11)?,
+                embedding_payload_json: row.get(12)?,
+            })
+        })
+        .map_err(|error| ContextIntelligenceBuildError::RefreshIndex(error.to_string()))?;
+
+    let mut chunks = BTreeMap::new();
+    for row in rows {
+        let row =
+            row.map_err(|error| ContextIntelligenceBuildError::RefreshIndex(error.to_string()))?;
+        chunks.insert(row.chunk_id.clone(), row);
+    }
+
+    Ok(chunks)
+}
+
+fn delete_missing_semantic_chunks(
+    connection: &Connection,
+    existing_chunks: &BTreeMap<String, SemanticChunkRefreshRow>,
+    desired_chunk_ids: &BTreeSet<String>,
+    remove_vectors: bool,
+) -> Result<(), ContextIntelligenceBuildError> {
+    for chunk_id in existing_chunks.keys().filter(|chunk_id| !desired_chunk_ids.contains(*chunk_id))
+    {
+        if remove_vectors {
+            delete_semantic_vector_row(connection, chunk_id)?;
+        }
+        connection
+            .execute("DELETE FROM semantic_chunks WHERE chunk_id = ?1", params![chunk_id])
             .map_err(|error| ContextIntelligenceBuildError::RefreshIndex(error.to_string()))?;
     }
 
-    transaction
-        .commit()
-        .map_err(|error| ContextIntelligenceBuildError::RefreshIndex(error.to_string()))
+    Ok(())
+}
+
+fn upsert_semantic_chunk_row(
+    connection: &Connection,
+    row: &SemanticChunkRefreshRow,
+) -> Result<(), ContextIntelligenceBuildError> {
+    connection
+        .execute(
+            "INSERT INTO semantic_chunks (
+                chunk_id,
+                source_kind,
+                source_ref,
+                provenance_boundary,
+                provenance_ref,
+                content_hash,
+                embedding_state,
+                embedding_dimensions,
+                canon_semantic_contract_line,
+                semantic_labels_json,
+                semantic_schema_line,
+                chunk_text,
+                embedding_payload_json
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+            ON CONFLICT(chunk_id) DO UPDATE SET
+                source_kind = excluded.source_kind,
+                source_ref = excluded.source_ref,
+                provenance_boundary = excluded.provenance_boundary,
+                provenance_ref = excluded.provenance_ref,
+                content_hash = excluded.content_hash,
+                embedding_state = excluded.embedding_state,
+                embedding_dimensions = excluded.embedding_dimensions,
+                canon_semantic_contract_line = excluded.canon_semantic_contract_line,
+                semantic_labels_json = excluded.semantic_labels_json,
+                semantic_schema_line = excluded.semantic_schema_line,
+                chunk_text = excluded.chunk_text,
+                embedding_payload_json = excluded.embedding_payload_json",
+            params![
+                row.chunk_id,
+                row.source_kind,
+                row.source_ref,
+                row.provenance_boundary,
+                row.provenance_ref,
+                row.content_hash,
+                row.embedding_state,
+                row.embedding_dimensions,
+                row.canon_semantic_contract_line,
+                row.semantic_labels_json,
+                row.semantic_schema_line,
+                row.chunk_text,
+                row.embedding_payload_json,
+            ],
+        )
+        .map_err(|error| ContextIntelligenceBuildError::RefreshIndex(error.to_string()))?;
+
+    Ok(())
+}
+
+fn sync_semantic_vector_row(
+    connection: &Connection,
+    vector_table_available: bool,
+    existing: Option<&SemanticChunkRefreshRow>,
+    desired: &SemanticChunkRefreshRow,
+) -> Result<(), ContextIntelligenceBuildError> {
+    if !vector_table_available {
+        return Ok(());
+    }
+
+    let vector_exists = semantic_vector_row_exists(connection, &desired.chunk_id)?;
+    let vector_required = desired.embedding_state == SemanticChunkState::Ready.as_str();
+    if !vector_required {
+        if vector_exists {
+            delete_semantic_vector_row(connection, &desired.chunk_id)?;
+        }
+        return Ok(());
+    }
+
+    if existing == Some(desired) && vector_exists {
+        return Ok(());
+    }
+
+    if vector_exists {
+        delete_semantic_vector_row(connection, &desired.chunk_id)?;
+    }
+
+    connection
+        .execute(
+            &format!(
+                "INSERT INTO {SEMANTIC_VECTORS_TABLE_NAME} (chunk_id, embedding) VALUES (?1, vec_f32(?2))"
+            ),
+            params![desired.chunk_id, desired.embedding_payload_json],
+        )
+        .map_err(|error| ContextIntelligenceBuildError::RefreshIndex(error.to_string()))?;
+
+    Ok(())
+}
+
+fn semantic_vector_row_exists(
+    connection: &Connection,
+    chunk_id: &str,
+) -> Result<bool, ContextIntelligenceBuildError> {
+    let count = connection
+        .query_row(
+            &format!("SELECT COUNT(*) FROM {SEMANTIC_VECTORS_TABLE_NAME} WHERE chunk_id = ?1"),
+            params![chunk_id],
+            |row| row.get::<_, i64>(0),
+        )
+        .map_err(|error| ContextIntelligenceBuildError::RefreshIndex(error.to_string()))?;
+    Ok(count > 0)
+}
+
+fn delete_semantic_vector_row(
+    connection: &Connection,
+    chunk_id: &str,
+) -> Result<(), ContextIntelligenceBuildError> {
+    connection
+        .execute(
+            &format!("DELETE FROM {SEMANTIC_VECTORS_TABLE_NAME} WHERE chunk_id = ?1"),
+            params![chunk_id],
+        )
+        .map_err(|error| ContextIntelligenceBuildError::RefreshIndex(error.to_string()))?;
+    Ok(())
 }
 
 fn semantic_chunk_state_for_vector_extension(
@@ -1292,6 +2372,8 @@ fn semantic_chunk_state_for_vector_extension(
             SemanticChunkState::Blocked
         }
         VectorExtensionState::Stale => SemanticChunkState::Stale,
+        VectorExtensionState::Degraded => SemanticChunkState::Stale,
+        VectorExtensionState::Corrupt => SemanticChunkState::Blocked,
     }
 }
 
@@ -1315,7 +2397,7 @@ fn semantic_labels(document: &RetrievalDocument) -> Vec<String> {
 }
 
 fn semantic_chunk_id(source_ref: &str) -> String {
-    format!("semantic:{}", source_ref)
+    SemanticChunkRecord::stable_chunk_id(source_ref, 0)
 }
 
 fn semantic_content_hash(value: &str) -> String {
@@ -1327,17 +2409,40 @@ fn query_semantic_matches(
     goal_text: &str,
     selected_targets: &[String],
     expansion_limit: usize,
-) -> Result<Vec<SemanticMatchResult>, ContextIntelligenceBuildError> {
+    vector_extension_state: VectorExtensionState,
+) -> Result<SemanticQueryResult, ContextIntelligenceBuildError> {
     if expansion_limit == 0 {
-        return Ok(Vec::new());
+        return Ok(SemanticQueryResult {
+            matches: Vec::new(),
+            vector_query_attempted: false,
+            vector_chunk_candidates_returned: 0,
+        });
     }
 
     let query_text = semantic_query_text(goal_text, selected_targets);
     let query_embedding = semantic_embedding(&query_text);
     if query_embedding.iter().all(|value| *value == 0.0) {
-        return Ok(Vec::new());
+        return Ok(SemanticQueryResult {
+            matches: Vec::new(),
+            vector_query_attempted: false,
+            vector_chunk_candidates_returned: 0,
+        });
     }
 
+    if vector_extension_state == VectorExtensionState::Ready
+        && semantic_vector_table_exists(connection)?
+    {
+        return query_semantic_matches_from_vec0(connection, &query_embedding, expansion_limit);
+    }
+
+    query_semantic_matches_from_payload(connection, &query_embedding, expansion_limit)
+}
+
+fn query_semantic_matches_from_payload(
+    connection: &Connection,
+    query_embedding: &[f64],
+    expansion_limit: usize,
+) -> Result<SemanticQueryResult, ContextIntelligenceBuildError> {
     let mut statement = connection
         .prepare(
             "SELECT source_ref, provenance_ref, canon_semantic_contract_line, embedding_payload_json
@@ -1362,7 +2467,7 @@ fn query_semantic_matches(
             row.map_err(|error| ContextIntelligenceBuildError::QueryIndex(error.to_string()))?;
         let embedding = serde_json::from_str::<Vec<f64>>(&embedding_payload_json)
             .map_err(|error| ContextIntelligenceBuildError::QueryIndex(error.to_string()))?;
-        let Some(score) = RetrievalScore::from_raw(cosine_similarity(&query_embedding, &embedding))
+        let Some(score) = RetrievalScore::from_raw(cosine_similarity(query_embedding, &embedding))
         else {
             continue;
         };
@@ -1394,7 +2499,102 @@ fn query_semantic_matches(
             .then_with(|| left.source_ref.cmp(&right.source_ref))
     });
     matches.truncate(expansion_limit);
-    Ok(matches)
+    Ok(SemanticQueryResult {
+        matches,
+        vector_query_attempted: false,
+        vector_chunk_candidates_returned: 0,
+    })
+}
+
+fn query_semantic_matches_from_vec0(
+    connection: &Connection,
+    query_embedding: &[f64],
+    expansion_limit: usize,
+) -> Result<SemanticQueryResult, ContextIntelligenceBuildError> {
+    let query_vector_json = serde_json::to_string(query_embedding)
+        .map_err(|error| ContextIntelligenceBuildError::SerializeMetadata(error.to_string()))?;
+    let mut statement = connection
+        .prepare(&format!(
+            "SELECT chunks.source_ref,
+                    chunks.provenance_ref,
+                    chunks.canon_semantic_contract_line,
+                    vectors.distance
+             FROM {SEMANTIC_VECTORS_TABLE_NAME} AS vectors
+             INNER JOIN semantic_chunks AS chunks
+                 ON chunks.chunk_id = vectors.chunk_id
+             WHERE vectors.embedding MATCH vec_f32(?1)
+               AND vectors.k = ?2
+               AND chunks.embedding_state = ?3
+             ORDER BY vectors.distance
+            "
+        ))
+        .map_err(|error| ContextIntelligenceBuildError::QueryIndex(error.to_string()))?;
+    let rows = statement
+        .query_map(
+            params![query_vector_json, expansion_limit as i64, SemanticChunkState::Ready.as_str(),],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                    row.get::<_, f64>(3)?,
+                ))
+            },
+        )
+        .map_err(|error| ContextIntelligenceBuildError::QueryIndex(error.to_string()))?;
+
+    let mut matches_by_ref = BTreeMap::<String, SemanticMatchResult>::new();
+    let mut vector_chunk_candidates_returned = 0;
+    for row in rows {
+        let (source_ref, provenance_ref, contract_line, distance) =
+            row.map_err(|error| ContextIntelligenceBuildError::QueryIndex(error.to_string()))?;
+        let maybe_score = filtered_semantic_score_from_vec_distance(distance);
+        let Some(score) = maybe_score else {
+            continue;
+        };
+        vector_chunk_candidates_returned += 1;
+
+        let next_match = SemanticMatchResult {
+            source_ref: source_ref.clone(),
+            semantic_score: score,
+            canon_semantic_contract_line: contract_line.clone(),
+            canon_semantic_provenance_ref: contract_line.as_ref().map(|_| provenance_ref.clone()),
+        };
+        match matches_by_ref.get(&source_ref) {
+            Some(existing) if existing.semantic_score.as_raw() >= score.as_raw() => {}
+            _ => {
+                matches_by_ref.insert(source_ref, next_match);
+            }
+        }
+    }
+
+    let mut matches = matches_by_ref.into_values().collect::<Vec<_>>();
+    matches.sort_by(|left, right| {
+        right
+            .semantic_score
+            .as_raw()
+            .partial_cmp(&left.semantic_score.as_raw())
+            .unwrap_or(Ordering::Equal)
+            .then_with(|| left.source_ref.cmp(&right.source_ref))
+    });
+    Ok(SemanticQueryResult {
+        matches,
+        vector_query_attempted: true,
+        vector_chunk_candidates_returned,
+    })
+}
+
+fn semantic_score_from_vec_distance(distance: f64) -> Option<RetrievalScore> {
+    if !distance.is_finite() {
+        return None;
+    }
+
+    RetrievalScore::from_raw(1.0 / (1.0 + distance.max(0.0)))
+}
+
+fn filtered_semantic_score_from_vec_distance(distance: f64) -> Option<RetrievalScore> {
+    let score = semantic_score_from_vec_distance(distance)?;
+    (score.as_raw() >= MIN_SEMANTIC_SIMILARITY_SCORE).then_some(score)
 }
 
 fn semantic_query_text(goal_text: &str, selected_targets: &[String]) -> String {
@@ -1928,6 +3128,7 @@ struct SemanticTraceRecordInputs<'a> {
     hybrid_outcome: HybridOutcome,
     retrieval_state: RetrievalState,
     retrieval_index_state: RetrievalIndexState,
+    execution_details: SemanticTraceExecutionDetails,
     terminal_reason: Option<&'a str>,
     selected_evidence: &'a [RetrievedEvidenceCandidate],
     rejected_candidates: &'a [RetrievedEvidenceCandidate],
@@ -1942,6 +3143,7 @@ fn build_semantic_trace_records(inputs: SemanticTraceRecordInputs<'_>) -> Vec<Se
         hybrid_outcome,
         retrieval_state,
         retrieval_index_state,
+        execution_details,
         terminal_reason,
         selected_evidence,
         rejected_candidates,
@@ -1970,6 +3172,28 @@ fn build_semantic_trace_records(inputs: SemanticTraceRecordInputs<'_>) -> Vec<Se
     });
 
     if semantic_policy_state == SemanticPolicyState::Local
+        && execution_details.extension_load_attempted
+    {
+        records.push(SemanticTraceRecord {
+            record_id: format!("{query_id}:semantic:extension-load"),
+            event_kind: SemanticTraceEventKind::ExtensionLoadAttempted,
+            candidate_ref: None,
+            match_origin: None,
+            compatibility_state: None,
+            semantic_score: None,
+            canon_artifact_class: None,
+            canon_semantic_contract_line: None,
+            canon_semantic_provenance_boundary: None,
+            canon_semantic_provenance_ref: None,
+            reason: format!(
+                "{SEMANTIC_TRACE_EXTENSION_LOAD_ATTEMPTED_PREFIX}: capability={} retrieval_index_state={}",
+                semantic_capability_state.as_str(),
+                retrieval_index_state.as_str()
+            ),
+        });
+    }
+
+    if semantic_policy_state == SemanticPolicyState::Local
         && retrieval_index_state != RetrievalIndexState::Insufficient
     {
         let eligible_count =
@@ -1987,6 +3211,44 @@ fn build_semantic_trace_records(inputs: SemanticTraceRecordInputs<'_>) -> Vec<Se
             canon_semantic_provenance_ref: None,
             reason: format!(
                 "{SEMANTIC_TRACE_INDEX_REFRESHED_PREFIX}: {eligible_count} eligible document(s)"
+            ),
+        });
+    }
+
+    if semantic_policy_state == SemanticPolicyState::Local
+        && execution_details.vector_query_attempted
+    {
+        records.push(SemanticTraceRecord {
+            record_id: format!("{query_id}:semantic:vector-query"),
+            event_kind: SemanticTraceEventKind::VectorQueryExecuted,
+            candidate_ref: None,
+            match_origin: None,
+            compatibility_state: None,
+            semantic_score: None,
+            canon_artifact_class: None,
+            canon_semantic_contract_line: None,
+            canon_semantic_provenance_boundary: None,
+            canon_semantic_provenance_ref: None,
+            reason: format!(
+                "{SEMANTIC_TRACE_VECTOR_QUERY_EXECUTED_PREFIX}: engine={}",
+                semantic_engine_for_trace(semantic_policy_state, semantic_capability_state)
+                    .as_str()
+            ),
+        });
+        records.push(SemanticTraceRecord {
+            record_id: format!("{query_id}:semantic:vector-candidates"),
+            event_kind: SemanticTraceEventKind::VectorCandidatesReturned,
+            candidate_ref: None,
+            match_origin: None,
+            compatibility_state: None,
+            semantic_score: None,
+            canon_artifact_class: None,
+            canon_semantic_contract_line: None,
+            canon_semantic_provenance_boundary: None,
+            canon_semantic_provenance_ref: None,
+            reason: format!(
+                "{SEMANTIC_TRACE_VECTOR_CANDIDATES_RETURNED_PREFIX}: {}",
+                execution_details.vector_chunk_candidates_returned
             ),
         });
     }
@@ -2118,6 +3380,22 @@ fn build_semantic_trace_records(inputs: SemanticTraceRecordInputs<'_>) -> Vec<Se
     });
 
     records
+}
+
+fn semantic_engine_for_trace(
+    semantic_policy_state: SemanticPolicyState,
+    semantic_capability_state: SemanticCapabilityState,
+) -> SemanticEngine {
+    match semantic_policy_state {
+        SemanticPolicyState::Disabled => SemanticEngine::Disabled,
+        SemanticPolicyState::Local => match semantic_capability_state {
+            SemanticCapabilityState::Ready => SemanticEngine::SqliteVec,
+            SemanticCapabilityState::Unavailable
+            | SemanticCapabilityState::Unsupported
+            | SemanticCapabilityState::Degraded
+            | SemanticCapabilityState::Corrupt => SemanticEngine::BaselineJson,
+        },
+    }
 }
 
 fn semantic_candidate_event_kind(
@@ -2561,26 +3839,48 @@ fn resolved_relative_path(workspace_ref: &Path, reference: &str) -> Option<Strin
 
 #[cfg(test)]
 mod tests {
+    use std::collections::{BTreeMap, BTreeSet};
     use std::fs;
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
     use std::path::PathBuf;
 
     use uuid::Uuid;
 
     use super::{
-        AdvancedContextBuildState, AdvancedContextConfig, RelationshipKind, RetrievalDocument,
-        SEMANTIC_INDEX_MANIFEST_ID, build_advanced_context_projection,
+        AdvancedContextBuildState, AdvancedContextConfig, ContextIntelligenceBuildError,
+        RelationshipKind, RetrievalDocument, SEMANTIC_CHUNKS_TABLE_NAME,
+        SEMANTIC_INDEX_HOOK_TRIGGER_ENV, SEMANTIC_INDEX_HOOK_TRIGGER_POST_MERGE,
+        SEMANTIC_INDEX_HOOK_TRIGGER_POST_REWRITE, SEMANTIC_INDEX_MANIFEST_ID,
+        SEMANTIC_REFRESH_PENDING_REASON, SEMANTIC_VECTORS_TABLE_NAME, SemanticChunkRefreshRow,
+        aggregate_index_doctor_status, build_advanced_context_projection,
         build_advanced_context_projection_with_vector_state, collect_retrieval_documents,
-        default_compatibility_state, derive_relationships_and_findings,
-        detect_vector_extension_state, initialize_schema, open_connection,
-        promote_selected_target_refs, resolved_relative_path, staleness_state,
-        structured_fallback_refs, vector_extension_state_from_modules,
+        default_compatibility_state, delete_missing_semantic_chunks, derive_manifest_index_status,
+        derive_relationships_and_findings, detect_vector_extension_state,
+        filtered_semantic_score_from_vec_distance, hook_trigger_stale_reason_from_env,
+        index_stale_warning, initialize_schema, initialize_semantic_vector_table_for_state,
+        inspect_manifest_consistency, inspect_vector_schema_consistency,
+        manifest_consistency_check, open_connection, promote_selected_target_refs,
+        query_semantic_matches, query_semantic_matches_from_payload, read_derived_index_manifest,
+        recommended_action_for_index_state, refresh_and_query_index, resolved_relative_path,
+        semantic_engine_for_trace, semantic_score_from_vec_distance, staleness_state,
+        structured_fallback_refs, sync_semantic_vector_row, upsert_semantic_manifest_row,
+        vector_extension_state_from_modules, vector_schema_check,
+        vector_schema_consistency_from_tables,
+    };
+    #[cfg(feature = "sqlite-vec")]
+    use super::{
+        query_semantic_matches_from_vec0, register_sqlite_vec_auto_extension,
+        sqlite_auto_extension_result,
     };
     use crate::domain::configuration::SemanticAccelerationPolicyState;
     use crate::domain::context_intelligence::{
-        AuthorityRank, CandidateSelectionState, HybridOutcome, ImpactFindingKind,
-        RetrievalCompatibilityState, RetrievalIndexState, RetrievalMatchOrigin,
-        RetrievalSourceKind, RetrievalStalenessState, RetrievalState, RetrievedEvidenceCandidate,
-        SemanticCapabilityState, SemanticPolicyState, VectorExtensionState,
+        AuthorityRank, CandidateSelectionState, DerivedIndexManifest, HybridOutcome,
+        ImpactFindingKind, IndexDoctorConsistencyState, IndexDoctorStatus, IndexRefreshReason,
+        IndexStaleReason, ManifestFtsState, RetrievalCompatibilityState, RetrievalIndexState,
+        RetrievalMatchOrigin, RetrievalSourceKind, RetrievalStalenessState, RetrievalState,
+        RetrievedEvidenceCandidate, SemanticCapabilityState, SemanticChunkState, SemanticEngine,
+        SemanticPolicyState, VectorExtensionState,
     };
     use crate::domain::goal_plan::{ContextInput, ContextInputKind, ContextPackCredibility};
 
@@ -2625,6 +3925,29 @@ mod tests {
             semantic_score: None,
             canon_semantic_contract_line: None,
             canon_semantic_provenance_ref: None,
+        }
+    }
+
+    fn valid_manifest_fixture(workspace: &std::path::Path) -> DerivedIndexManifest {
+        DerivedIndexManifest {
+            schema_version: "retrieval-index-v3".to_string(),
+            workspace_root: workspace.display().to_string(),
+            git_branch: Some("main".to_string()),
+            git_head: Some("abc123".to_string()),
+            last_seen_head: Some("abc123".to_string()),
+            index_status: RetrievalIndexState::Ready,
+            last_refresh_at: Some("2026-05-30 12:00:00".to_string()),
+            last_refresh_reason: Some(IndexRefreshReason::ManualRefresh),
+            stale_reason: None,
+            file_count: 1,
+            chunk_count: 1,
+            fts5_state: ManifestFtsState::Ready,
+            sqlite_vec_state: VectorExtensionState::Ready,
+            semantic_engine: SemanticEngine::SqliteVec,
+            workspace_fingerprint: "fnv64:0000000000000001".to_string(),
+            config_fingerprint: "fnv64:0000000000000002".to_string(),
+            chunker_fingerprint: "fnv64:0000000000000003".to_string(),
+            embedding_model_fingerprint: "fnv64:0000000000000004".to_string(),
         }
     }
 
@@ -2696,7 +4019,10 @@ mod tests {
         );
 
         assert_eq!(projection.semantic_policy_state, SemanticPolicyState::Local);
-        assert_eq!(projection.hybrid_outcome, HybridOutcome::Skipped);
+        assert!(matches!(
+            projection.hybrid_outcome,
+            HybridOutcome::Skipped | HybridOutcome::BaselineOnly
+        ));
         assert!(matches!(
             projection.semantic_capability_state,
             SemanticCapabilityState::Ready
@@ -2889,11 +4215,11 @@ mod tests {
         );
         assert_eq!(
             vector_extension_state_from_modules(&["vec0".to_string()]),
-            crate::domain::context_intelligence::VectorExtensionState::Ready
+            crate::domain::context_intelligence::VectorExtensionState::Degraded
         );
         assert_eq!(
             vector_extension_state_from_modules(&["vec_each".to_string()]),
-            crate::domain::context_intelligence::VectorExtensionState::Ready
+            crate::domain::context_intelligence::VectorExtensionState::Degraded
         );
     }
 
@@ -3001,5 +4327,704 @@ mod tests {
             findings[0].recommended_follow_up,
             "refresh bounded evidence: governance memory is stale"
         );
+    }
+
+    #[test]
+    fn doctor_helper_checks_cover_consistency_states_and_aggregation() {
+        let workspace = temp_workspace("boundline-advanced-context-doctor-checks");
+
+        let consistent =
+            manifest_consistency_check(&workspace, IndexDoctorConsistencyState::Consistent, true);
+        assert_eq!(consistent.result, IndexDoctorStatus::Passed);
+
+        let missing =
+            manifest_consistency_check(&workspace, IndexDoctorConsistencyState::Missing, false);
+        assert_eq!(missing.result, IndexDoctorStatus::Advisory);
+        assert!(missing.detail.contains("manifest is missing"));
+
+        let unobserved =
+            manifest_consistency_check(&workspace, IndexDoctorConsistencyState::Missing, true);
+        assert_eq!(unobserved.result, IndexDoctorStatus::Advisory);
+        assert!(unobserved.detail.contains("could not be observed"));
+
+        let corrupt =
+            manifest_consistency_check(&workspace, IndexDoctorConsistencyState::Corrupt, true);
+        assert_eq!(corrupt.result, IndexDoctorStatus::Failed);
+
+        let invalid =
+            manifest_consistency_check(&workspace, IndexDoctorConsistencyState::Invalid, true);
+        assert_eq!(invalid.result, IndexDoctorStatus::Failed);
+
+        let vector_consistent =
+            vector_schema_check(&workspace, IndexDoctorConsistencyState::Consistent);
+        assert_eq!(vector_consistent.result, IndexDoctorStatus::Passed);
+
+        let vector_missing = vector_schema_check(&workspace, IndexDoctorConsistencyState::Missing);
+        assert_eq!(vector_missing.result, IndexDoctorStatus::Advisory);
+
+        let vector_corrupt = vector_schema_check(&workspace, IndexDoctorConsistencyState::Corrupt);
+        assert_eq!(vector_corrupt.result, IndexDoctorStatus::Failed);
+
+        let vector_invalid = vector_schema_check(&workspace, IndexDoctorConsistencyState::Invalid);
+        assert_eq!(vector_invalid.result, IndexDoctorStatus::Failed);
+
+        assert_eq!(
+            aggregate_index_doctor_status(&[consistent, vector_missing]),
+            IndexDoctorStatus::Advisory
+        );
+        assert_eq!(
+            aggregate_index_doctor_status(&[vector_consistent, vector_corrupt]),
+            IndexDoctorStatus::Failed
+        );
+        assert_eq!(
+            aggregate_index_doctor_status(&[unobserved, invalid, vector_invalid]),
+            IndexDoctorStatus::Failed
+        );
+    }
+
+    #[test]
+    fn doctor_helper_checks_cover_fully_consistent_statuses() {
+        let workspace = temp_workspace("boundline-advanced-context-doctor-consistent");
+        let connection = open_connection(&workspace).unwrap();
+        initialize_schema(&connection, &workspace).unwrap();
+        drop(connection);
+
+        let manifest = valid_manifest_fixture(&workspace);
+        fs::write(
+            workspace.join(".boundline/context-intelligence/manifest.json"),
+            serde_json::to_string_pretty(&manifest).unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            inspect_manifest_consistency(&workspace),
+            (IndexDoctorConsistencyState::Consistent, true)
+        );
+        assert_eq!(
+            inspect_vector_schema_consistency(&workspace),
+            IndexDoctorConsistencyState::Consistent
+        );
+        assert_eq!(
+            aggregate_index_doctor_status(&[
+                manifest_consistency_check(
+                    &workspace,
+                    IndexDoctorConsistencyState::Consistent,
+                    true
+                ),
+                vector_schema_check(&workspace, IndexDoctorConsistencyState::Consistent),
+            ]),
+            IndexDoctorStatus::Passed
+        );
+    }
+
+    #[test]
+    fn inspect_manifest_consistency_marks_missing_index_file_as_invalid() {
+        let workspace = temp_workspace("boundline-advanced-context-doctor-missing-index");
+        fs::create_dir_all(workspace.join(".boundline/context-intelligence")).unwrap();
+        let manifest = valid_manifest_fixture(&workspace);
+        fs::write(
+            workspace.join(".boundline/context-intelligence/manifest.json"),
+            serde_json::to_string_pretty(&manifest).unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            inspect_manifest_consistency(&workspace),
+            (IndexDoctorConsistencyState::Invalid, true)
+        );
+    }
+
+    #[test]
+    fn lifecycle_helper_mappings_cover_remaining_recovery_and_env_variants() {
+        let workspace = temp_workspace("boundline-advanced-context-helper-mappings");
+
+        assert!(
+            recommended_action_for_index_state(RetrievalIndexState::Degraded, &workspace)
+                .contains("index doctor")
+        );
+        assert!(
+            recommended_action_for_index_state(RetrievalIndexState::Building, &workspace)
+                .contains("index status")
+        );
+
+        assert_eq!(
+            index_stale_warning(IndexStaleReason::GitHeadChanged),
+            "git HEAD changed since the last successful derived-index refresh"
+        );
+        assert_eq!(
+            index_stale_warning(IndexStaleReason::Merge),
+            "a merge marked the derived index stale"
+        );
+        assert_eq!(
+            index_stale_warning(IndexStaleReason::PullWithMerge),
+            "a pull-with-merge marked the derived index stale"
+        );
+        assert_eq!(
+            index_stale_warning(IndexStaleReason::Rebase),
+            "a rebase marked the derived index stale"
+        );
+        assert_eq!(
+            index_stale_warning(IndexStaleReason::PostRewrite),
+            "a post-rewrite event marked the derived index stale"
+        );
+        assert_eq!(
+            index_stale_warning(IndexStaleReason::HookMarkedStale),
+            "a Git freshness hook marked the derived index stale"
+        );
+
+        let original_trigger = std::env::var_os(SEMANTIC_INDEX_HOOK_TRIGGER_ENV);
+        unsafe {
+            std::env::set_var(
+                SEMANTIC_INDEX_HOOK_TRIGGER_ENV,
+                SEMANTIC_INDEX_HOOK_TRIGGER_POST_MERGE,
+            );
+        }
+        assert_eq!(hook_trigger_stale_reason_from_env(), Some(IndexStaleReason::Merge));
+        unsafe {
+            std::env::set_var(
+                SEMANTIC_INDEX_HOOK_TRIGGER_ENV,
+                SEMANTIC_INDEX_HOOK_TRIGGER_POST_REWRITE,
+            );
+        }
+        assert_eq!(hook_trigger_stale_reason_from_env(), Some(IndexStaleReason::PostRewrite));
+        unsafe {
+            std::env::set_var(SEMANTIC_INDEX_HOOK_TRIGGER_ENV, "unexpected");
+        }
+        assert_eq!(hook_trigger_stale_reason_from_env(), None);
+        restore_semantic_index_hook_trigger(original_trigger.as_ref());
+
+        let mut incompatible_manifest = valid_manifest_fixture(&workspace);
+        incompatible_manifest.workspace_root = format!("{}/other", workspace.display());
+        assert_eq!(
+            derive_manifest_index_status(None, &incompatible_manifest, &workspace),
+            RetrievalIndexState::Incompatible
+        );
+
+        let mut degraded_manifest = valid_manifest_fixture(&workspace);
+        degraded_manifest.sqlite_vec_state = VectorExtensionState::Degraded;
+        assert_eq!(
+            derive_manifest_index_status(None, &degraded_manifest, &workspace),
+            RetrievalIndexState::Degraded
+        );
+
+        let mut corrupt_manifest = valid_manifest_fixture(&workspace);
+        corrupt_manifest.sqlite_vec_state = VectorExtensionState::Corrupt;
+        assert_eq!(
+            derive_manifest_index_status(None, &corrupt_manifest, &workspace),
+            RetrievalIndexState::Corrupt
+        );
+        let mut corrupt_fts_manifest = valid_manifest_fixture(&workspace);
+        corrupt_fts_manifest.fts5_state = ManifestFtsState::Corrupt;
+        assert_eq!(
+            derive_manifest_index_status(None, &corrupt_fts_manifest, &workspace),
+            RetrievalIndexState::Corrupt
+        );
+
+        assert_eq!(
+            semantic_engine_for_trace(
+                SemanticPolicyState::Disabled,
+                SemanticCapabilityState::Ready,
+            ),
+            SemanticEngine::Disabled
+        );
+        assert_eq!(
+            semantic_engine_for_trace(SemanticPolicyState::Local, SemanticCapabilityState::Corrupt,),
+            SemanticEngine::BaselineJson
+        );
+    }
+
+    #[test]
+    fn semantic_helpers_cover_delete_sync_empty_query_and_distance_guard_paths() {
+        let connection = rusqlite::Connection::open_in_memory().unwrap();
+        connection.execute("CREATE TABLE semantic_chunks (chunk_id TEXT PRIMARY KEY)", []).unwrap();
+        connection
+            .execute(
+                &format!(
+                    "CREATE TABLE {SEMANTIC_VECTORS_TABLE_NAME} (chunk_id TEXT PRIMARY KEY, embedding TEXT NOT NULL)"
+                ),
+                [],
+            )
+            .unwrap();
+
+        let make_row = |chunk_id: &str, embedding_state: &str| SemanticChunkRefreshRow {
+            chunk_id: chunk_id.to_string(),
+            source_kind: RetrievalSourceKind::WorkspaceFile.as_str().to_string(),
+            source_ref: format!("src/{chunk_id}.rs"),
+            provenance_boundary: RetrievalSourceKind::WorkspaceFile.as_str().to_string(),
+            provenance_ref: format!("src/{chunk_id}.rs"),
+            content_hash: "sha256:test".to_string(),
+            embedding_state: embedding_state.to_string(),
+            embedding_dimensions: 1536,
+            canon_semantic_contract_line: None,
+            semantic_labels_json: "[]".to_string(),
+            semantic_schema_line: "boundline.semantic_chunk.v1".to_string(),
+            chunk_text: "chunk text".to_string(),
+            embedding_payload_json: "[0.1,0.2]".to_string(),
+        };
+
+        let obsolete = make_row("obsolete", SemanticChunkState::Ready.as_str());
+        connection
+            .execute(
+                "INSERT INTO semantic_chunks (chunk_id) VALUES (?1)",
+                rusqlite::params![obsolete.chunk_id],
+            )
+            .unwrap();
+        connection
+            .execute(
+                &format!("INSERT INTO {SEMANTIC_VECTORS_TABLE_NAME} (chunk_id, embedding) VALUES (?1, ?2)"),
+                rusqlite::params![obsolete.chunk_id, "[0.1,0.2]"],
+            )
+            .unwrap();
+
+        let existing_chunks = BTreeMap::from([(obsolete.chunk_id.clone(), obsolete)]);
+        delete_missing_semantic_chunks(&connection, &existing_chunks, &BTreeSet::new(), true)
+            .unwrap();
+
+        let remaining_chunk_count: i64 = connection
+            .query_row("SELECT COUNT(*) FROM semantic_chunks", [], |row| row.get(0))
+            .unwrap();
+        let remaining_vector_count: i64 = connection
+            .query_row(&format!("SELECT COUNT(*) FROM {SEMANTIC_VECTORS_TABLE_NAME}"), [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(remaining_chunk_count, 0);
+        assert_eq!(remaining_vector_count, 0);
+
+        let blocked = make_row("blocked", SemanticChunkState::Blocked.as_str());
+        sync_semantic_vector_row(&connection, false, None, &blocked).unwrap();
+        connection
+            .execute(
+                &format!("INSERT INTO {SEMANTIC_VECTORS_TABLE_NAME} (chunk_id, embedding) VALUES (?1, ?2)"),
+                rusqlite::params![blocked.chunk_id, "[0.1,0.2]"],
+            )
+            .unwrap();
+        sync_semantic_vector_row(&connection, true, None, &blocked).unwrap();
+
+        let blocked_vector_count: i64 = connection
+            .query_row(
+                &format!("SELECT COUNT(*) FROM {SEMANTIC_VECTORS_TABLE_NAME} WHERE chunk_id = ?1"),
+                rusqlite::params![blocked.chunk_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(blocked_vector_count, 0);
+
+        let empty_query_result = query_semantic_matches(
+            &connection,
+            "refresh semantic state",
+            &[],
+            0,
+            VectorExtensionState::Ready,
+        )
+        .unwrap();
+        assert!(empty_query_result.matches.is_empty());
+        assert!(!empty_query_result.vector_query_attempted);
+        assert_eq!(empty_query_result.vector_chunk_candidates_returned, 0);
+
+        assert!(semantic_score_from_vec_distance(f64::NAN).is_none());
+        assert!(filtered_semantic_score_from_vec_distance(f64::NAN).is_none());
+        assert!(filtered_semantic_score_from_vec_distance(10.0).is_none());
+        assert!(filtered_semantic_score_from_vec_distance(0.0).is_some());
+    }
+
+    #[test]
+    fn query_semantic_matches_from_payload_skips_nonfinite_scores() {
+        let connection = rusqlite::Connection::open_in_memory().unwrap();
+        connection
+            .execute(
+                &format!(
+                    "CREATE TABLE {SEMANTIC_CHUNKS_TABLE_NAME} (source_ref TEXT NOT NULL, provenance_ref TEXT NOT NULL, canon_semantic_contract_line TEXT, embedding_payload_json TEXT NOT NULL, embedding_state TEXT NOT NULL)"
+                ),
+                [],
+            )
+            .unwrap();
+        connection
+            .execute(
+                &format!(
+                    "INSERT INTO {SEMANTIC_CHUNKS_TABLE_NAME} (source_ref, provenance_ref, canon_semantic_contract_line, embedding_payload_json, embedding_state) VALUES (?1, ?2, ?3, ?4, ?5)"
+                ),
+                rusqlite::params![
+                    "src/lib.rs",
+                    "src/lib.rs",
+                    Option::<String>::None,
+                    "[1.0]",
+                    SemanticChunkState::Ready.as_str(),
+                ],
+            )
+            .unwrap();
+
+        let result = query_semantic_matches_from_payload(&connection, &[f64::NAN], 4).unwrap();
+        assert!(result.matches.is_empty());
+    }
+
+    #[test]
+    fn query_semantic_matches_from_payload_filters_low_scores_and_keeps_best_duplicate() {
+        let connection = rusqlite::Connection::open_in_memory().unwrap();
+        connection
+            .execute(
+                &format!(
+                    "CREATE TABLE {SEMANTIC_CHUNKS_TABLE_NAME} (source_ref TEXT NOT NULL, provenance_ref TEXT NOT NULL, canon_semantic_contract_line TEXT, embedding_payload_json TEXT NOT NULL, embedding_state TEXT NOT NULL)"
+                ),
+                [],
+            )
+            .unwrap();
+
+        for (source_ref, embedding_payload_json) in [
+            ("src/best.rs", "[0.9]"),
+            ("src/second.rs", "[0.8]"),
+            ("src/best.rs", "[0.4]"),
+            ("src/low.rs", "[0.1]"),
+        ] {
+            connection
+                .execute(
+                    &format!(
+                        "INSERT INTO {SEMANTIC_CHUNKS_TABLE_NAME} (source_ref, provenance_ref, canon_semantic_contract_line, embedding_payload_json, embedding_state) VALUES (?1, ?2, ?3, ?4, ?5)"
+                    ),
+                    rusqlite::params![
+                        source_ref,
+                        source_ref,
+                        Option::<String>::None,
+                        embedding_payload_json,
+                        SemanticChunkState::Ready.as_str(),
+                    ],
+                )
+                .unwrap();
+        }
+
+        let result = query_semantic_matches_from_payload(&connection, &[1.0], 4).unwrap();
+        assert_eq!(result.matches.len(), 2);
+        assert_eq!(result.matches[0].source_ref, "src/best.rs");
+        assert!((result.matches[0].semantic_score.as_raw() - 0.9).abs() < 0.001);
+        assert_eq!(result.matches[1].source_ref, "src/second.rs");
+    }
+
+    #[test]
+    fn read_derived_index_manifest_reports_directory_read_errors() {
+        let workspace = temp_workspace("boundline-advanced-context-manifest-read-error");
+        let manifest_path = workspace.join(".boundline/context-intelligence/manifest.json");
+        fs::create_dir_all(&manifest_path).unwrap();
+
+        let error = read_derived_index_manifest(&workspace).unwrap_err();
+        assert!(matches!(
+            error,
+            ContextIntelligenceBuildError::ReadManifest(message) if !message.is_empty()
+        ));
+    }
+
+    #[test]
+    fn upsert_semantic_manifest_row_reports_missing_manifest_table() {
+        let connection = rusqlite::Connection::open_in_memory().unwrap();
+        let workspace = temp_workspace("boundline-advanced-context-manifest-upsert-error");
+
+        let error = upsert_semantic_manifest_row(
+            &connection,
+            &valid_manifest_fixture(&workspace),
+            SEMANTIC_REFRESH_PENDING_REASON,
+        )
+        .unwrap_err();
+        assert!(matches!(
+            error,
+            ContextIntelligenceBuildError::InitializeSemanticIndex(message)
+                if message.contains("semantic_index_manifest") || !message.is_empty()
+        ));
+    }
+
+    #[test]
+    fn inspect_manifest_and_vector_consistency_cover_missing_corrupt_and_invalid_paths() {
+        let missing_workspace = temp_workspace("boundline-advanced-context-doctor-missing");
+        assert_eq!(
+            inspect_manifest_consistency(&missing_workspace),
+            (IndexDoctorConsistencyState::Missing, false)
+        );
+        assert_eq!(
+            inspect_vector_schema_consistency(&missing_workspace),
+            IndexDoctorConsistencyState::Missing
+        );
+
+        let corrupt_workspace = temp_workspace("boundline-advanced-context-doctor-corrupt");
+        fs::create_dir_all(corrupt_workspace.join(".boundline/context-intelligence")).unwrap();
+        fs::write(
+            corrupt_workspace.join(".boundline/context-intelligence/manifest.json"),
+            "{not-json}",
+        )
+        .unwrap();
+        assert_eq!(
+            inspect_manifest_consistency(&corrupt_workspace),
+            (IndexDoctorConsistencyState::Corrupt, true)
+        );
+
+        let invalid_workspace = temp_workspace("boundline-advanced-context-doctor-invalid");
+        let connection = open_connection(&invalid_workspace).unwrap();
+        connection.execute("CREATE TABLE placeholder (id INTEGER PRIMARY KEY)", []).unwrap();
+        drop(connection);
+
+        let mut manifest = valid_manifest_fixture(&invalid_workspace);
+        manifest.workspace_root = format!("{}/other-workspace", invalid_workspace.display());
+        fs::write(
+            invalid_workspace.join(".boundline/context-intelligence/manifest.json"),
+            serde_json::to_string_pretty(&manifest).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            inspect_manifest_consistency(&invalid_workspace),
+            (IndexDoctorConsistencyState::Invalid, true)
+        );
+        assert_eq!(
+            inspect_vector_schema_consistency(&invalid_workspace),
+            IndexDoctorConsistencyState::Invalid
+        );
+    }
+
+    #[test]
+    fn vector_schema_consistency_from_tables_maps_corrupt_invalid_and_consistent_states() {
+        assert_eq!(
+            vector_schema_consistency_from_tables(
+                Err(ContextIntelligenceBuildError::QueryIndex(
+                    "semantic chunks failure".to_string()
+                )),
+                Ok(false),
+                VectorExtensionState::Ready,
+            ),
+            IndexDoctorConsistencyState::Corrupt
+        );
+        assert_eq!(
+            vector_schema_consistency_from_tables(
+                Ok(false),
+                Ok(false),
+                VectorExtensionState::Ready,
+            ),
+            IndexDoctorConsistencyState::Invalid
+        );
+        assert_eq!(
+            vector_schema_consistency_from_tables(
+                Ok(true),
+                Err(ContextIntelligenceBuildError::QueryIndex("vector table failure".to_string())),
+                VectorExtensionState::Ready,
+            ),
+            IndexDoctorConsistencyState::Corrupt
+        );
+        assert_eq!(
+            vector_schema_consistency_from_tables(Ok(true), Ok(false), VectorExtensionState::Ready,),
+            IndexDoctorConsistencyState::Invalid
+        );
+        assert_eq!(
+            vector_schema_consistency_from_tables(
+                Ok(true),
+                Ok(false),
+                VectorExtensionState::Missing,
+            ),
+            IndexDoctorConsistencyState::Consistent
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn inspect_vector_schema_consistency_marks_open_errors_corrupt()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let workspace = temp_workspace("boundline-advanced-context-doctor-open-error");
+        let state_dir = workspace.join(".boundline/context-intelligence");
+        fs::create_dir_all(&state_dir)?;
+        let index_path = state_dir.join("retrieval-index.sqlite3");
+        fs::write(&index_path, [])?;
+        fs::set_permissions(&index_path, fs::Permissions::from_mode(0o000))?;
+
+        let state = inspect_vector_schema_consistency(&workspace);
+
+        fs::set_permissions(&index_path, fs::Permissions::from_mode(0o600))?;
+        assert_eq!(state, IndexDoctorConsistencyState::Corrupt);
+        Ok(())
+    }
+
+    #[test]
+    fn initialize_semantic_vector_table_for_state_skips_non_ready_vector_capability()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let connection = rusqlite::Connection::open_in_memory()?;
+
+        initialize_semantic_vector_table_for_state(&connection, VectorExtensionState::Missing)?;
+
+        assert!(!super::table_exists(&connection, SEMANTIC_VECTORS_TABLE_NAME)?);
+        Ok(())
+    }
+
+    #[cfg(feature = "sqlite-vec")]
+    #[test]
+    fn inspect_vector_schema_consistency_marks_ready_without_vector_table_invalid()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let workspace = temp_workspace("boundline-advanced-context-doctor-vector-table-missing");
+        let connection = open_connection(&workspace)?;
+        connection.execute("CREATE TABLE semantic_chunks (chunk_id TEXT PRIMARY KEY)", [])?;
+
+        assert_eq!(detect_vector_extension_state(&connection), VectorExtensionState::Ready);
+        drop(connection);
+
+        assert_eq!(
+            inspect_vector_schema_consistency(&workspace),
+            IndexDoctorConsistencyState::Invalid
+        );
+        Ok(())
+    }
+
+    #[rustfmt::skip]
+    fn restore_semantic_index_hook_trigger(value: Option<&std::ffi::OsString>) { unsafe { match value { Some(value) => std::env::set_var(SEMANTIC_INDEX_HOOK_TRIGGER_ENV, value), None => std::env::remove_var(SEMANTIC_INDEX_HOOK_TRIGGER_ENV), } } }
+
+    #[test]
+    #[rustfmt::skip]
+    fn refresh_and_query_index_persists_manifest_through_payload_fallback() -> Result<(), Box<dyn std::error::Error>> { let workspace = temp_workspace("boundline-advanced-context-refresh-and-query");
+        let documents = vec![RetrievalDocument {
+            source_ref: "src/lib.rs".to_string(),
+            source_kind: RetrievalSourceKind::WorkspaceFile,
+            authority_rank: AuthorityRank::Structured,
+            provenance_summary: "workspace file".to_string(),
+            compatibility_state: RetrievalCompatibilityState::Compatible,
+            compatibility_reason: None,
+            staleness_state: RetrievalStalenessState::Fresh,
+            canon_artifact_class: None,
+            canon_semantic_contract_line: None,
+            canon_semantic_provenance_boundary: None,
+            canon_semantic_provenance_ref: None,
+            canon_semantic_labels: Vec::new(),
+            metadata_json: "{}".to_string(),
+            content: "fn reconcile_context() {}".to_string(),
+        }];
+
+        let result = refresh_and_query_index(&workspace, "reconcile context", &[], &documents, 4, 4, Some(VectorExtensionState::Missing))?;
+
+        assert!(result.lexical_matches.iter().any(|entry| entry.source_ref == "src/lib.rs"));
+        assert!(result.semantic_matches.is_empty());
+        assert_eq!(result.vector_extension_state, VectorExtensionState::Missing);
+        assert!(!result.vector_query_attempted);
+
+        let manifest = read_derived_index_manifest(&workspace)?.ok_or("manifest missing")?;
+        assert_eq!(manifest.index_status, RetrievalIndexState::SemanticUnavailable);
+        assert_eq!(manifest.last_refresh_reason, Some(IndexRefreshReason::ManualRefresh));
+        assert_eq!(manifest.chunk_count, 1);
+        Ok(())
+    }
+
+    #[cfg(feature = "sqlite-vec")]
+    #[test]
+    #[rustfmt::skip]
+    fn query_semantic_matches_from_vec0_keeps_best_duplicate_source() -> Result<(), Box<dyn std::error::Error>> { register_sqlite_vec_auto_extension()?;
+        let connection = rusqlite::Connection::open_in_memory()?;
+
+        initialize_semantic_vector_table_for_state(&connection, VectorExtensionState::Ready)?;
+        connection.execute(
+            "CREATE TABLE semantic_chunks (
+                chunk_id TEXT PRIMARY KEY,
+                source_ref TEXT NOT NULL,
+                provenance_ref TEXT NOT NULL,
+                canon_semantic_contract_line TEXT,
+                embedding_state TEXT NOT NULL
+            )",
+            [],
+        )?;
+
+        let query_embedding = {
+            let mut values = vec![0.0; 48];
+            values[0] = 1.0;
+            values
+        };
+        let best_embedding = serde_json::to_string(&query_embedding)?;
+        let other_embedding = {
+            let mut values = vec![0.0; 48];
+            values[0] = 0.5;
+            values[1] = 0.5;
+            serde_json::to_string(&values)?
+        };
+        let duplicate_embedding = {
+            let mut values = vec![0.0; 48];
+            values[1] = 1.0;
+            serde_json::to_string(&values)?
+        };
+
+        for (chunk_id, source_ref, embedding_payload_json) in [
+            ("dup-best", "src/dup.rs", best_embedding.as_str()),
+            ("other", "src/other.rs", other_embedding.as_str()),
+            ("dup-low", "src/dup.rs", duplicate_embedding.as_str()),
+        ] {
+            connection.execute(
+                "INSERT INTO semantic_chunks (
+                    chunk_id,
+                    source_ref,
+                    provenance_ref,
+                    canon_semantic_contract_line,
+                    embedding_state
+                ) VALUES (?1, ?2, ?3, ?4, ?5)",
+                rusqlite::params![
+                    chunk_id,
+                    source_ref,
+                    source_ref,
+                    Option::<String>::None,
+                    SemanticChunkState::Ready.as_str(),
+                ],
+            )?;
+            connection.execute(
+                &format!(
+                    "INSERT INTO {SEMANTIC_VECTORS_TABLE_NAME} (chunk_id, embedding) VALUES (?1, vec_f32(?2))"
+                ),
+                rusqlite::params![chunk_id, embedding_payload_json],
+            )?;
+        }
+
+        let result = query_semantic_matches_from_vec0(&connection, &query_embedding, 4)?;
+        assert!(result.vector_query_attempted);
+        assert_eq!(result.vector_chunk_candidates_returned, 3);
+        assert_eq!(result.matches.len(), 2);
+        assert_eq!(result.matches[0].source_ref, "src/dup.rs");
+        assert_eq!(result.matches[1].source_ref, "src/other.rs");
+        assert!(
+            result.matches[0].semantic_score.as_raw() > result.matches[1].semantic_score.as_raw()
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn build_advanced_context_projection_returns_insufficient_for_incompatible_canon_only_input() {
+        let workspace = temp_workspace("boundline-advanced-context-canon-only");
+        fs::create_dir_all(workspace.join(".canon")).unwrap();
+        fs::write(workspace.join(".canon/contract.md"), "# Canon\n").unwrap();
+
+        let projection = build_advanced_context_projection(
+            "canon contract",
+            &workspace,
+            &[context_input(
+                ContextInputKind::CanonArtifact,
+                ".canon/contract.md",
+                "canon_artifact",
+                "canon artifact without semantic metadata",
+                true,
+            )],
+            &[],
+            AdvancedContextBuildState {
+                credibility: ContextPackCredibility::Credible,
+                staleness_reason: None,
+                semantic_policy: SemanticAccelerationPolicyState::Local,
+            },
+            &AdvancedContextConfig::default(),
+        );
+
+        assert_eq!(projection.retrieval_state, RetrievalState::Insufficient);
+        assert!(projection.selected_evidence.is_empty());
+        assert!(
+            projection
+                .rejected_candidates
+                .iter()
+                .any(|candidate| { candidate.source_ref == ".canon/contract.md" })
+        );
+    }
+
+    #[cfg(feature = "sqlite-vec")]
+    #[test]
+    fn sqlite_vec_auto_extension_registration_is_idempotent() {
+        register_sqlite_vec_auto_extension().unwrap();
+        register_sqlite_vec_auto_extension().unwrap();
+    }
+
+    #[cfg(feature = "sqlite-vec")]
+    #[test]
+    fn sqlite_auto_extension_result_maps_success_and_failure() {
+        assert!(sqlite_auto_extension_result(rusqlite::ffi::SQLITE_OK).is_ok());
+        assert!(sqlite_auto_extension_result(1).is_err());
     }
 }

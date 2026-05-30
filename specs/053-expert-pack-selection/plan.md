@@ -1,6 +1,6 @@
 # Implementation Plan: Expert Pack Selection
 
-**Branch**: `053-expert-pack-selection` | **Date**: 2026-05-14 | **Spec**: [/Users/rt/workspace/apply-the/boundline/specs/053-expert-pack-selection/spec.md](/Users/rt/workspace/apply-the/boundline/specs/053-expert-pack-selection/spec.md)
+**Branch**: `053-expert-pack-selection` | **Date**: 2026-05-14 | **Spec**: [specs/053-expert-pack-selection/spec.md](specs/053-expert-pack-selection/spec.md)
 **Input**: Feature specification from `/specs/053-expert-pack-selection/spec.md`
 
 **Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.

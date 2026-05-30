@@ -66,8 +66,12 @@ fn build_projection_surfaces_local_semantic_expansion_when_ready_is_forced_for_t
 
     assert_eq!(projection.semantic_policy_state, SemanticPolicyState::Local);
     assert_eq!(projection.semantic_capability_state, SemanticCapabilityState::Ready);
+    assert_eq!(projection.semantic_engine().as_str(), "sqlite_vec");
     assert_eq!(projection.hybrid_outcome, HybridOutcome::Expanded);
     assert_eq!(projection.retrieval_state, RetrievalState::Selected);
+    assert_eq!(projection.vector_query_count(), 1);
+    assert_eq!(projection.vector_candidates_returned(), 1);
+    assert_eq!(projection.semantic_fallback_reason(), None);
     assert_eq!(projection.semantic_selected_count(), 1);
     assert!(projection.selected_evidence.iter().any(|candidate| {
         candidate.source_ref == "src/lib.rs" && candidate.match_origin == RetrievalMatchOrigin::Fts

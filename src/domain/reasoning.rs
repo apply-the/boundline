@@ -1261,10 +1261,10 @@ mod tests {
         let posture = CanonChallengePostureInput {
             contract_line: REASONING_POSTURE_V1_CONTRACT_LINE.to_string(),
             compatibility_window: ReasoningCompatibilityWindow {
-                boundline_min: "0.64.0".to_string(),
-                boundline_max_exclusive: "0.65.0".to_string(),
-                canon_min: "0.62.0".to_string(),
-                canon_max_exclusive: "0.63.0".to_string(),
+                boundline_min: super::CURRENT_BOUNDLINE_VERSION.to_string(),
+                boundline_max_exclusive: "99.0.0".to_string(),
+                canon_min: crate::domain::distribution::SUPPORTED_CANON_VERSION.to_string(),
+                canon_max_exclusive: "99.0.0".to_string(),
                 contract_line: REASONING_POSTURE_V1_CONTRACT_LINE.to_string(),
             },
             required_profile_family: None,

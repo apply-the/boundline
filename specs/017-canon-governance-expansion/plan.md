@@ -1,6 +1,6 @@
 # Implementation Plan: Canon Governance Expansion
 
-**Branch**: `017-canon-governance-expansion` | **Date**: 2026-04-29 | **Spec**: [/Users/rt/workspace/boundline/specs/017-canon-governance-expansion/spec.md](/Users/rt/workspace/boundline/specs/017-canon-governance-expansion/spec.md)
+**Branch**: `017-canon-governance-expansion` | **Date**: 2026-04-29 | **Spec**: [specs/017-canon-governance-expansion/spec.md](specs/017-canon-governance-expansion/spec.md)
 **Input**: Feature specification from `/specs/017-canon-governance-expansion/spec.md`
 
 **Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.

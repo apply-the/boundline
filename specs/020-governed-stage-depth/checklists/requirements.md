@@ -2,7 +2,7 @@
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-05-01
-**Feature**: [spec.md](/Users/rt/workspace/boundline/specs/020-governed-stage-depth/spec.md)
+**Feature**: [spec.md](specs/020-governed-stage-depth/spec.md)
 
 ## Content Quality
 

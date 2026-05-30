@@ -52,9 +52,21 @@ pub(crate) fn push_advanced_context_lines(
     ));
     lines.push(format!(
         "semantic_capability_state: {}",
-        advanced_context.semantic_capability_state.as_str()
+        advanced_context.semantic_capability_contract_label()
     ));
+    if let Some(recovery_guidance) = retrieval_recovery_guidance(advanced_context) {
+        lines.push(format!("retrieval_recovery_guidance: {recovery_guidance}"));
+    }
+    lines.push(format!("semantic_engine: {}", advanced_context.semantic_engine().as_str()));
     lines.push(format!("hybrid_outcome: {}", advanced_context.hybrid_outcome.as_str()));
+    lines.push(format!("vector_query_count: {}", advanced_context.vector_query_count()));
+    lines.push(format!(
+        "vector_candidates_returned: {}",
+        advanced_context.vector_candidates_returned()
+    ));
+    if let Some(fallback_reason) = advanced_context.semantic_fallback_reason() {
+        lines.push(format!("semantic_fallback_reason: {fallback_reason}"));
+    }
     if let Some(terminal_reason) = advanced_context.terminal_reason.as_deref() {
         lines.push(format!("retrieval_terminal_reason: {terminal_reason}"));
     }
@@ -91,6 +103,40 @@ pub(crate) fn push_advanced_context_lines(
             finding.finding_kind.as_str(),
             finding.recommended_follow_up
         ));
+    }
+}
+
+fn retrieval_recovery_guidance(
+    advanced_context: &AdvancedContextProjection,
+) -> Option<&'static str> {
+    if matches!(
+        advanced_context.semantic_capability_state,
+        crate::domain::context_intelligence::SemanticCapabilityState::Degraded
+            | crate::domain::context_intelligence::SemanticCapabilityState::Corrupt
+    ) {
+        return Some(
+            "run boundline index doctor to inspect vector capability, hooks, and tracked-file hygiene",
+        );
+    }
+
+    match advanced_context.retrieval_index_state {
+        crate::domain::context_intelligence::RetrievalIndexState::Ready => None,
+        crate::domain::context_intelligence::RetrievalIndexState::Missing
+        | crate::domain::context_intelligence::RetrievalIndexState::Stale => Some(
+            "run boundline index refresh in the target workspace before relying on semantic retrieval",
+        ),
+        crate::domain::context_intelligence::RetrievalIndexState::Incompatible
+        | crate::domain::context_intelligence::RetrievalIndexState::Corrupt => {
+            Some("run boundline index rebuild or boundline index doctor in the target workspace")
+        }
+        crate::domain::context_intelligence::RetrievalIndexState::Degraded
+        | crate::domain::context_intelligence::RetrievalIndexState::SemanticUnavailable => Some(
+            "run boundline index doctor to inspect vector capability, hooks, and tracked-file hygiene",
+        ),
+        crate::domain::context_intelligence::RetrievalIndexState::Building
+        | crate::domain::context_intelligence::RetrievalIndexState::Insufficient => {
+            Some("rerun boundline index status or refresh after the derived index is available")
+        }
     }
 }
 

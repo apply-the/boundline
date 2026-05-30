@@ -2,7 +2,7 @@
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-05-02
-**Feature**: [/Users/rt/workspace/boundline/specs/035-dynamic-planning-flow/spec.md](/Users/rt/workspace/boundline/specs/035-dynamic-planning-flow/spec.md)
+**Feature**: [specs/035-dynamic-planning-flow/spec.md](specs/035-dynamic-planning-flow/spec.md)
 
 ## Content Quality
 

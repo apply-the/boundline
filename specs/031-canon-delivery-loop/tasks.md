@@ -1,6 +1,6 @@
 # Tasks: Governed Delivery With Canon Inside The Loop
 
-**Input**: Design documents from `/Users/rt/workspace/boundline/specs/031-canon-delivery-loop/`  
+**Input**: Design documents from `specs/031-canon-delivery-loop/`
 **Prerequisites**: plan.md, spec.md, research.md, data-model.md, contracts/, quickstart.md
 
 **Tests**: Validation tasks are required because this feature changes success
@@ -23,8 +23,8 @@ be implemented and validated independently.
 **Purpose**: Reserve the `0.31.0` release boundary and the focused governed
 delivery validation surfaces.
 
-- [x] T001 Bump crate version to `0.31.0` in `/Users/rt/workspace/boundline/Cargo.toml` and `/Users/rt/workspace/boundline/Cargo.lock`
-- [x] T002 Register governed-delivery validation surfaces in `/Users/rt/workspace/boundline/tests/integration/governance_autopilot_flow.rs`, `/Users/rt/workspace/boundline/tests/integration/canon_governance_flow.rs`, `/Users/rt/workspace/boundline/tests/contract/governance_session_contract.rs`, and `/Users/rt/workspace/boundline/tests/unit/coverage_additional.rs`
+- [x] T001 Bump crate version to `0.31.0` in `Cargo.toml` and `Cargo.lock`
+- [x] T002 Register governed-delivery validation surfaces in `tests/integration/governance_autopilot_flow.rs`, `tests/integration/canon_governance_flow.rs`, `tests/contract/governance_session_contract.rs`, and `tests/unit/coverage_additional.rs`
 
 ---
 
@@ -35,9 +35,9 @@ slice depends on.
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [x] T003 Add governed delivery-completion gate helpers in `/Users/rt/workspace/boundline/src/orchestrator/session_runtime.rs`
-- [ ] T004 [P] Project delivery-gate evidence through persisted session state and read-side views in `/Users/rt/workspace/boundline/src/domain/session.rs`, `/Users/rt/workspace/boundline/src/cli/session.rs`, `/Users/rt/workspace/boundline/src/cli/output.rs`, and `/Users/rt/workspace/boundline/src/cli/inspect.rs`
-- [x] T005 [P] Add foundational unit coverage for governed delivery-completion gating in `/Users/rt/workspace/boundline/tests/unit/coverage_additional.rs`
+- [x] T003 Add governed delivery-completion gate helpers in `src/orchestrator/session_runtime.rs`
+- [ ] T004 [P] Project delivery-gate evidence through persisted session state and read-side views in `src/domain/session.rs`, `src/cli/session.rs`, `src/cli/output.rs`, and `src/cli/inspect.rs`
+- [x] T005 [P] Add foundational unit coverage for governed delivery-completion gating in `tests/unit/coverage_additional.rs`
 
 **Checkpoint**: Native runs can only terminate successfully when the runtime can
 prove governance allows completion, a material diff exists, and validation has
@@ -56,14 +56,14 @@ trace story.
 
 ### Tests for User Story 1
 
-- [x] T006 [P] [US1] Add integration and contract coverage for governed native-delivery success in `/Users/rt/workspace/boundline/tests/integration/governance_autopilot_flow.rs` and `/Users/rt/workspace/boundline/tests/contract/governance_session_contract.rs`
-- [x] T007 [P] [US1] Add end-to-end Canon lineage coverage for the same governed delivery proof in `/Users/rt/workspace/boundline/tests/integration/canon_governance_flow.rs`
+- [x] T006 [P] [US1] Add integration and contract coverage for governed native-delivery success in `tests/integration/governance_autopilot_flow.rs` and `tests/contract/governance_session_contract.rs`
+- [x] T007 [P] [US1] Add end-to-end Canon lineage coverage for the same governed delivery proof in `tests/integration/canon_governance_flow.rs`
 
 ### Implementation for User Story 1
 
-- [ ] T008 [US1] Require governed change-framing continuity and verify-stage governed evidence on the native session path in `/Users/rt/workspace/boundline/src/orchestrator/session_runtime.rs` and `/Users/rt/workspace/boundline/src/orchestrator/governance.rs`
-- [x] T009 [US1] Gate terminal success on material changed files plus passed validation evidence in `/Users/rt/workspace/boundline/src/orchestrator/session_runtime.rs` and `/Users/rt/workspace/boundline/src/fixture.rs`
-- [ ] T010 [US1] Keep governed completion evidence visible on `run`, `status`, `next`, and `inspect` in `/Users/rt/workspace/boundline/src/domain/follow_through.rs`, `/Users/rt/workspace/boundline/src/domain/session.rs`, `/Users/rt/workspace/boundline/src/cli/output.rs`, and `/Users/rt/workspace/boundline/src/cli/inspect.rs`
+- [ ] T008 [US1] Require governed change-framing continuity and verify-stage governed evidence on the native session path in `src/orchestrator/session_runtime.rs` and `src/orchestrator/governance.rs`
+- [x] T009 [US1] Gate terminal success on material changed files plus passed validation evidence in `src/orchestrator/session_runtime.rs` and `src/fixture.rs`
+- [ ] T010 [US1] Keep governed completion evidence visible on `run`, `status`, `next`, and `inspect` in `src/domain/follow_through.rs`, `src/domain/session.rs`, `src/cli/output.rs`, and `src/cli/inspect.rs`
 
 **Checkpoint**: One governed native flow now proves real delivery instead of
 claiming success just because the final step finished.
@@ -82,13 +82,13 @@ evidence.
 
 ### Tests for User Story 2
 
-- [ ] T011 [P] [US2] Add integration coverage for explicit governed stop conditions in `/Users/rt/workspace/boundline/tests/integration/governance_autopilot_flow.rs` and `/Users/rt/workspace/boundline/tests/integration/canon_governance_flow.rs`
-- [ ] T012 [P] [US2] Add unit coverage for no-diff and no-validation stop conditions in `/Users/rt/workspace/boundline/tests/unit/coverage_additional.rs`
+- [ ] T011 [P] [US2] Add integration coverage for explicit governed stop conditions in `tests/integration/governance_autopilot_flow.rs` and `tests/integration/canon_governance_flow.rs`
+- [ ] T012 [P] [US2] Add unit coverage for no-diff and no-validation stop conditions in `tests/unit/coverage_additional.rs`
 
 ### Implementation for User Story 2
 
-- [x] T013 [US2] Stop terminal completion when material diff or validation evidence is missing in `/Users/rt/workspace/boundline/src/orchestrator/session_runtime.rs`
-- [ ] T014 [US2] Keep resume and follow-through guidance aligned with approval-gated governed delivery in `/Users/rt/workspace/boundline/src/domain/session.rs`, `/Users/rt/workspace/boundline/src/cli/session.rs`, `/Users/rt/workspace/boundline/src/cli/output.rs`, and `/Users/rt/workspace/boundline/src/cli/workflow.rs`
+- [x] T013 [US2] Stop terminal completion when material diff or validation evidence is missing in `src/orchestrator/session_runtime.rs`
+- [ ] T014 [US2] Keep resume and follow-through guidance aligned with approval-gated governed delivery in `src/domain/session.rs`, `src/cli/session.rs`, `src/cli/output.rs`, and `src/cli/workflow.rs`
 
 **Checkpoint**: Governed delivery stops explicitly when its delivery claim is
 not credible, and operators can see how to continue.
@@ -107,11 +107,11 @@ surfaces.
 
 ### Tests for User Story 3
 
-- [ ] T015 [P] [US3] Extend contract coverage for governed follow-through and compatibility separation in `/Users/rt/workspace/boundline/tests/contract/trace_summary_contract.rs` and `/Users/rt/workspace/boundline/tests/contract/assistant_session_continuity_contract.rs`
+- [ ] T015 [P] [US3] Extend contract coverage for governed follow-through and compatibility separation in `tests/contract/trace_summary_contract.rs` and `tests/contract/assistant_session_continuity_contract.rs`
 
 ### Implementation for User Story 3
 
-- [ ] T016 [US3] Surface governed delivery gate cues without hiding explicit compatibility ownership in `/Users/rt/workspace/boundline/src/domain/follow_through.rs`, `/Users/rt/workspace/boundline/src/domain/session.rs`, `/Users/rt/workspace/boundline/src/cli/output.rs`, and `/Users/rt/workspace/boundline/src/cli/inspect.rs`
+- [ ] T016 [US3] Surface governed delivery gate cues without hiding explicit compatibility ownership in `src/domain/follow_through.rs`, `src/domain/session.rs`, `src/cli/output.rs`, and `src/cli/inspect.rs`
 
 **Checkpoint**: Canon participation improves the same Boundline product story
 instead of creating a parallel one.
@@ -129,8 +129,8 @@ coverage, lint, and formatting align with shipped behavior.
 
 ### Implementation for User Story 4
 
-- [x] T017 [US4] Update the `0.31.0` governed-delivery release story in `/Users/rt/workspace/boundline/README.md`, `/Users/rt/workspace/boundline/docs/getting-started.md`, `/Users/rt/workspace/boundline/docs/configuration.md`, `/Users/rt/workspace/boundline/CONTRIBUTING.md`, `/Users/rt/workspace/boundline/ROADMAP.md`, and `/Users/rt/workspace/boundline/CHANGELOG.md`
-- [x] T018 [US4] Update assistant guidance and regenerate agent context for governed delivery in `/Users/rt/workspace/boundline/assistant/README.md`, `/Users/rt/workspace/boundline/assistant/claude/commands/boundline-status.md`, `/Users/rt/workspace/boundline/assistant/claude/commands/boundline-next.md`, `/Users/rt/workspace/boundline/assistant/claude/commands/boundline-inspect.md`, `/Users/rt/workspace/boundline/assistant/codex/commands/boundline-status.md`, `/Users/rt/workspace/boundline/assistant/codex/commands/boundline-next.md`, `/Users/rt/workspace/boundline/assistant/codex/commands/boundline-inspect.md`, `/Users/rt/workspace/boundline/assistant/copilot/prompts/boundline-status.prompt.md`, `/Users/rt/workspace/boundline/assistant/copilot/prompts/boundline-next.prompt.md`, `/Users/rt/workspace/boundline/assistant/copilot/prompts/boundline-inspect.prompt.md`, and `/Users/rt/workspace/boundline/AGENTS.md`
+- [x] T017 [US4] Update the `0.31.0` governed-delivery release story in `README.md`, `docs/getting-started.md`, `docs/configuration.md`, `CONTRIBUTING.md`, `ROADMAP.md`, and `CHANGELOG.md`
+- [x] T018 [US4] Update assistant guidance and regenerate agent context for governed delivery in `assistant/README.md`, `assistant/claude/commands/boundline-status.md`, `assistant/claude/commands/boundline-next.md`, `assistant/claude/commands/boundline-inspect.md`, `assistant/codex/commands/boundline-status.md`, `assistant/codex/commands/boundline-next.md`, `assistant/codex/commands/boundline-inspect.md`, `assistant/copilot/prompts/boundline-status.prompt.md`, `assistant/copilot/prompts/boundline-next.prompt.md`, `assistant/copilot/prompts/boundline-inspect.prompt.md`, and `AGENTS.md`
 
 **Checkpoint**: Maintainers and assistants now describe one coherent `0.31.0`
 story where Canon improves real delivery inside Boundline.
@@ -141,7 +141,7 @@ story where Canon improves real delivery inside Boundline.
 
 **Purpose**: Finish release-quality validation and closeout.
 
-- [x] T019 Run focused coverage for modified or created Rust files, refresh `/Users/rt/workspace/boundline/lcov.info`, verify modified-Rust coverage remains above 95%, resolve remaining `cargo clippy` issues, run `cargo fmt --all`, and finish with clean validation for touched files under `/Users/rt/workspace/boundline/src/` and `/Users/rt/workspace/boundline/tests/`
+- [x] T019 Run focused coverage for modified or created Rust files, refresh `lcov.info`, verify modified-Rust coverage remains above 95%, resolve remaining `cargo clippy` issues, run `cargo fmt --all`, and finish with clean validation for touched files under `src/` and `tests/`
 
 ---
 

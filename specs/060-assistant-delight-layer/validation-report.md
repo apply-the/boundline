@@ -24,7 +24,7 @@ assistant delight implementation. It is the authoritative location for:
 - No new Canon input class was required to deliver US1, US2, or US3.
 - The independent Canon<->Boundline review completed on 2026-05-17 against the
   sibling Canon contract at
-  `/Users/rt/workspace/apply-the/canon/specs/057-s7-delight-provider/contracts/delight-provider-contract.md`.
+  `../canon/specs/057-s7-delight-provider/contracts/delight-provider-contract.md`.
 - Boundline preserves Canon provider semantics directly: `available`, `stale`,
   `incompatible`, `absent`, and `contradicted` remain the governing states;
   operator wording maps `absent` to missing-input disclosure and

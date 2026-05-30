@@ -128,7 +128,11 @@ fn semantic_projection_contract_serializes_hybrid_candidate_lineage() {
 
     assert_eq!(object.get("semantic_policy_state").unwrap().as_str(), Some("local"));
     assert_eq!(object.get("semantic_capability_state").unwrap().as_str(), Some("ready"));
+    assert_eq!(object.get("semantic_engine").unwrap().as_str(), Some("sqlite_vec"));
     assert_eq!(object.get("hybrid_outcome").unwrap().as_str(), Some("expanded"));
+    assert_eq!(object.get("vector_query_count").unwrap().as_u64(), Some(1));
+    assert_eq!(object.get("vector_candidates_returned").unwrap().as_u64(), Some(2));
+    assert_eq!(object.get("semantic_fallback_reason"), None);
 
     let selected = object
         .get("selected_evidence")
@@ -144,6 +148,8 @@ fn semantic_projection_contract_serializes_hybrid_candidate_lineage() {
             && candidate.get("match_origin").and_then(|value| value.as_str())
                 == Some("semantic_expand")
             && candidate.get("selection_state").and_then(|value| value.as_str()) == Some("selected")
+            && candidate.get("collapsed_from_chunk_count").and_then(|value| value.as_u64())
+                == Some(1)
             && candidate.get("semantic_score").and_then(|value| value.as_f64()).is_some()
     }));
 
@@ -156,6 +162,8 @@ fn semantic_projection_contract_serializes_hybrid_candidate_lineage() {
             && candidate.get("match_origin").and_then(|value| value.as_str())
                 == Some("semantic_expand")
             && candidate.get("selection_state").and_then(|value| value.as_str()) == Some("rejected")
+            && candidate.get("collapsed_from_chunk_count").and_then(|value| value.as_u64())
+                == Some(1)
             && candidate.get("semantic_score").and_then(|value| value.as_f64()).is_some()
     }));
 }
@@ -167,8 +175,15 @@ fn semantic_projection_contract_serializes_v1_fallback_state() {
     let object = serialized.as_object().unwrap();
 
     assert_eq!(object.get("semantic_policy_state").unwrap().as_str(), Some("local"));
-    assert_eq!(object.get("semantic_capability_state").unwrap().as_str(), Some("unavailable"));
+    assert_eq!(object.get("semantic_capability_state").unwrap().as_str(), Some("missing"));
+    assert_eq!(object.get("semantic_engine").unwrap().as_str(), Some("baseline_json"));
     assert_eq!(object.get("hybrid_outcome").unwrap().as_str(), Some("skipped"));
+    assert_eq!(object.get("vector_query_count").unwrap().as_u64(), Some(0));
+    assert_eq!(object.get("vector_candidates_returned").unwrap().as_u64(), Some(0));
+    assert_eq!(
+        object.get("semantic_fallback_reason").unwrap().as_str(),
+        Some(SEMANTIC_FALLBACK_REASON)
+    );
     assert_eq!(object.get("terminal_reason").unwrap().as_str(), Some(SEMANTIC_FALLBACK_REASON));
     assert_eq!(
         object.get("selected_evidence").and_then(|value| value.as_array()).map(Vec::len),

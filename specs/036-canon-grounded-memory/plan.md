@@ -1,6 +1,6 @@
 # Implementation Plan: Canon-Grounded Reasoning And Structured Memory
 
-**Branch**: `036-canon-grounded-memory` | **Date**: 2026-05-03 | **Spec**: [/Users/rt/workspace/boundline/specs/036-canon-grounded-memory/spec.md](/Users/rt/workspace/boundline/specs/036-canon-grounded-memory/spec.md)
+**Branch**: `036-canon-grounded-memory` | **Date**: 2026-05-03 | **Spec**: [specs/036-canon-grounded-memory/spec.md](specs/036-canon-grounded-memory/spec.md)
 **Input**: Feature specification from `/specs/036-canon-grounded-memory/spec.md`
 
 **Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.

@@ -161,7 +161,7 @@ Represents the user-visible summary returned by session-aware `status` and `next
 - `current_step_id` and `current_step_index` must agree with the embedded plan when present.
 - `explanation` must never be empty.
 
-*** Add File: /Users/rt/workspace/boundline/specs/004-session-model-unification/contracts/session-command-contract.md
+*** Add File: specs/004-session-model-unification/contracts/session-command-contract.md
 # Contract: Session Command Surface
 
 ## Purpose
@@ -209,7 +209,7 @@ Defines the required behavior, inputs, and user-visible outputs of the session-b
 - Any command that reaches a terminal outcome MUST surface the terminal reason.
 - Any command that preserves a non-success recovery state MUST make the next recommended action explicit.
 
-*** Add File: /Users/rt/workspace/boundline/specs/004-session-model-unification/contracts/session-record-contract.md
+*** Add File: specs/004-session-model-unification/contracts/session-record-contract.md
 # Contract: Session Record Surface
 
 ## Purpose
@@ -250,7 +250,7 @@ Defines the persisted shape and behavioral guarantees of the workspace-scoped se
 - `step` and `run` MUST persist updated task, status, and trace fields before returning control to the user.
 - Terminal execution MUST preserve the latest task outcome until the user explicitly starts fresh or replaces the active goal.
 
-*** Add File: /Users/rt/workspace/boundline/specs/004-session-model-unification/contracts/assistant-session-continuity-contract.md
+*** Add File: specs/004-session-model-unification/contracts/assistant-session-continuity-contract.md
 # Contract: Assistant Session Continuity
 
 ## Purpose
@@ -288,7 +288,7 @@ Defines how assistant command packs must reuse and respect the active Boundline 
 - When execution reaches a terminal state, assistant commands MUST treat the session as complete and route the user to inspect, restart, or replace the goal explicitly.
 - When the user refers to an explicit prior trace, assistant continuity MUST not overwrite the active session silently.
 
-*** Add File: /Users/rt/workspace/boundline/specs/004-session-model-unification/quickstart.md
+*** Add File: specs/004-session-model-unification/quickstart.md
 # Quickstart: Session & Interaction Model Unification
 
 ## Prerequisites

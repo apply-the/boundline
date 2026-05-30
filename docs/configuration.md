@@ -1,4 +1,4 @@
-# Configuration in Boundline 0.64.0
+# Configuration in Boundline 0.65.0
 
 This page covers the operator-facing configuration surface. Keep one rule in
 mind: configuration declares defaults and policy; the runtime still owns
@@ -91,6 +91,7 @@ boundline init \
 - seed domain defaults
 - write Canon preferences
 - scaffold IDE metadata
+- install lightweight semantic-index stale-mark hooks when explicitly requested
 - export repo-local reference docs
 
 By default, workspace bootstrap also ensures the repo-visible document roots
@@ -185,12 +186,24 @@ retrieval_mode = "local"
 remote_policy = "local_only"
 
 [routing.semantic_acceleration]
-policy = "disabled"
+policy = "local"
+index_hook_action = "mark_stale"
 ```
 
 - `advanced_context` controls the baseline local retrieval path.
 - `semantic_acceleration` is an additive opt-in for local semantic expansion.
+- `index_hook_action = "mark_stale"` is optional and only valid when semantic
+  acceleration stays `local`.
 - Neither surface replaces the normal routing precedence rules.
+
+Common operator commands for this surface are:
+
+```bash
+boundline config set-semantic-acceleration --scope workspace --policy local
+boundline init --semantic-index-hook-action mark-stale
+boundline index status --workspace .
+boundline index doctor --workspace .
+```
 
 Inspect both through:
 

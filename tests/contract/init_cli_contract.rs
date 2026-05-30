@@ -48,6 +48,7 @@ fn init_accepts_template_and_assistant_hosts() {
             diff,
             to,
             force,
+            ..
         }) => {
             assert_eq!(workspace, PathBuf::from("/tmp/ws"));
             assert_eq!(scope, InitConfigScope::Workspace);
@@ -152,6 +153,7 @@ fn init_accepts_domain_templates_standards_and_bindings() {
             diff,
             to,
             force,
+            ..
         }) => {
             assert_eq!(workspace, PathBuf::from("/tmp/ws"));
             assert_eq!(scope, InitConfigScope::Workspace);
@@ -209,6 +211,7 @@ fn init_accepts_workspace_without_template() {
             diff,
             to,
             force,
+            ..
         }) => {
             assert_eq!(workspace, PathBuf::from("/tmp/ws"));
             assert_eq!(scope, InitConfigScope::Workspace);

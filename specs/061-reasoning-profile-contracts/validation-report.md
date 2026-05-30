@@ -28,7 +28,7 @@ This feature is complete. This report records the implemented and validated `061
 - Reasoning-profile confidence, posture, independence, and next-action rendering on `run`, `status`, and `inspect`-backed trace summaries.
 - Contract-drift blocked outcomes are now covered end-to-end in integration by seeding a typed blocked reasoning-profile state; the existing `output.rs` and `inspect.rs` reasoning surfaces already project the mismatch contract line, disagreement summary, remediation next action, and status-level `next_best_action` without additional renderer branching.
 - Boundline-side Canon posture contract validation now falls back to a local provider snapshot when the sibling Canon repository is unavailable, preserving independent contract-test execution.
-- Canon-side contract coverage now verifies the published provider vocabulary and the Boundline consumer window in `/Users/rt/workspace/apply-the/canon/tests/contract/governed_reasoning_posture_contract.rs`.
+- Canon-side contract coverage now verifies the published provider vocabulary and the Boundline consumer window in `../canon/tests/contract/governed_reasoning_posture_contract.rs`.
 - Canon challenge-posture domain validation now fails closed on unsupported contract lines and on compatibility windows that exclude the active Boundline and Canon release pair.
 - The actual activation surface in `src/orchestrator/session_runtime.rs` now enforces posture validation during Canon reasoning-profile activation; the planned `src/orchestrator/reasoning_profile.rs` file was not needed.
 - Release-facing docs and metadata are now aligned across Boundline and Canon, including the Canon `0.57.0` assistant package manifests, shared plugin metadata, and runtime-compatibility references consumed by host-package validation.
@@ -72,7 +72,7 @@ This feature is complete. This report records the implemented and validated `061
 - `cargo test compatibility_window_rejects_unsupported_contract_line --workspace`
 - `cargo test canon_posture_rejects_incompatible_active_release_pair --workspace`
 - `cargo test canon_reasoning_posture_uses_current_release_window --workspace`
-- `cd /Users/rt/workspace/apply-the/canon && cargo test --test governed_reasoning_posture_contract`
+- `cd ../canon && cargo test --test governed_reasoning_posture_contract`
 
 ### Release and contract alignment tests
 
@@ -89,8 +89,8 @@ This feature is complete. This report records the implemented and validated `061
 - `sh scripts/check-rust-no-panic.sh`
 - `cargo clippy --workspace --all-targets --all-features -- -D warnings`
 - `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`
-- `cd /Users/rt/workspace/apply-the/canon && cargo clippy --workspace --all-targets --all-features -- -D warnings`
-- `cd /Users/rt/workspace/apply-the/canon && cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`
+- `cd ../canon && cargo clippy --workspace --all-targets --all-features -- -D warnings`
+- `cd ../canon && cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`
 
 ### Coverage notes
 

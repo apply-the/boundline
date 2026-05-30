@@ -1,6 +1,6 @@
 # Implementation Plan: Guided CLI UX And Clearer Messaging
 
-**Branch**: `044-cli-init-ux` | **Date**: 2026-05-07 | **Spec**: [/Users/rt/workspace/apply-the/boundline/specs/044-cli-init-ux/spec.md](/Users/rt/workspace/apply-the/boundline/specs/044-cli-init-ux/spec.md)
+**Branch**: `044-cli-init-ux` | **Date**: 2026-05-07 | **Spec**: [specs/044-cli-init-ux/spec.md](specs/044-cli-init-ux/spec.md)
 **Input**: Feature specification from `/specs/044-cli-init-ux/spec.md`
 
 ## Summary

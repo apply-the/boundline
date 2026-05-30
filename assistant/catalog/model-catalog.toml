@@ -1,7 +1,7 @@
 [metadata]
 source_label = "bundled"
 catalog_version = "0.64.0"
-updated_at = "2026-05-20"
+updated_at = "2026-05-30"
 
 [[runtimes]]
 runtime = "copilot"
@@ -28,12 +28,20 @@ model_id = "gpt-5-mini"
 display_name = "GPT-5 Mini"
 
 [[runtimes.models]]
+model_id = "opus-4.8"
+display_name = "Claude Opus 4.8"
+
+[[runtimes.models]]
 model_id = "sonnet-4.6"
 display_name = "Claude Sonnet 4.6"
 
 [[runtimes.models]]
 model_id = "sonnet-4.5"
 display_name = "Claude Sonnet 4.5"
+
+[[runtimes.models]]
+model_id = "opus-4.8"
+display_name = "Claude Opus 4.8"
 
 [[runtimes.models]]
 model_id = "opus-4.7"

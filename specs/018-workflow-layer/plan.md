@@ -1,6 +1,6 @@
 # Implementation Plan: Session-Native Workflow Layer
 
-**Branch**: `018-workflow-layer` | **Date**: 2026-04-30 | **Spec**: [/Users/rt/workspace/boundline/specs/018-workflow-layer/spec.md](/Users/rt/workspace/boundline/specs/018-workflow-layer/spec.md)
+**Branch**: `018-workflow-layer` | **Date**: 2026-04-30 | **Spec**: [specs/018-workflow-layer/spec.md](specs/018-workflow-layer/spec.md)
 **Input**: Feature specification from `/specs/018-workflow-layer/spec.md`
 
 ## Summary
@@ -25,16 +25,16 @@ Add one thin named-workflow layer above Boundline's existing session-native runt
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- **PASS** Delivery identity: The slice directly improves bounded engineering task delivery by turning repeatable phase sequences into a session-owned workflow entrypoint rather than adding generic automation. See Summary, Technical Context, and [spec.md](/Users/rt/workspace/boundline/specs/018-workflow-layer/spec.md).
+- **PASS** Delivery identity: The slice directly improves bounded engineering task delivery by turning repeatable phase sequences into a session-owned workflow entrypoint rather than adding generic automation. See Summary, Technical Context, and [spec.md](specs/018-workflow-layer/spec.md).
 - **PASS** Delivery-first scope: The work is about execution ergonomics, orchestration, workflow validation, session state, and inspectability before optimization or polish. See Summary, Technical Context, and research decisions.
 - **PASS** Primary workflow: The main operator path remains session-native, with workflow phases compiling onto `goal -> plan -> run -> status -> next -> inspect`; the explicit compatibility route through `.boundline/execution.json` remains available but opt-in. See Summary, Technical Context, quickstart, and contracts.
 - **PASS** Bounded execution: Workflow start conditions, stop conditions, invalid-definition blocking, and existing runtime step or retry limits remain explicit; workflows pause or terminate at the first unmet bounded condition. See Technical Context, data model, quickstart, and contracts.
 - **PASS** Stateful execution: Workflow identity, phase progress, and blocked or resume state live inside the shared session record and traces rather than in a separate stateless runner. See Summary, data-model, and contracts.
 - **PASS** Mutable planning: Workflows compile onto existing mutable session planning and execution, so planning, replanning, and phase satisfaction remain evidence-driven rather than scripted replay. See Summary, research, and data-model.
-- **PASS** Sequential-first design: The first slice keeps one active phase at a time and rejects hidden concurrency or fan-out. See Technical Context, research, and [spec.md](/Users/rt/workspace/boundline/specs/018-workflow-layer/spec.md).
+- **PASS** Sequential-first design: The first slice keeps one active phase at a time and rejects hidden concurrency or fan-out. See Technical Context, research, and [spec.md](specs/018-workflow-layer/spec.md).
 - **PASS** Tool-agent symmetry: Workflow progression remains explicit because each phase still resolves through the same planner, runtime, tools, and traces already used by direct session-native execution. See Summary, research, and contracts.
 - **PASS** Observability and explicit intelligence: Workflow identity, active phase, routing, execution condition, failures, and next action all remain visible through session and trace surfaces. See Technical Context, quickstart, and contracts.
-- **PASS** Non-goals and external separation: The plan does not depend on Canon beyond bounded governance or evidence boundaries and does not reintroduce deferred provider abstraction, UI, long-term memory, distributed execution, or generalized councils. See Constraints, research, and [spec.md](/Users/rt/workspace/boundline/specs/018-workflow-layer/spec.md).
+- **PASS** Non-goals and external separation: The plan does not depend on Canon beyond bounded governance or evidence boundaries and does not reintroduce deferred provider abstraction, UI, long-term memory, distributed execution, or generalized councils. See Constraints, research, and [spec.md](specs/018-workflow-layer/spec.md).
 - **PASS** Minimal slice: The smallest independently valuable capability is one local named workflow surface that starts, resumes, and inspects existing session-native delivery work without adding a general workflow DSL. See Summary and research.
 
 ## Project Structure

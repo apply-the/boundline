@@ -5,12 +5,14 @@ use std::path::Path;
 use crate::adapters::config_store::FileConfigStore;
 use crate::adapters::env_layer::provider_environment_status;
 use crate::adapters::session_store::{FileSessionStore, SessionStore};
+use crate::domain::configuration::SemanticIndexHookAction;
 use crate::domain::distribution::{CompanionState, evaluate_canon_install};
 use crate::domain::probe::{
     CanonState, CapabilitiesState, ProbeReport, ProviderState, RecommendedHandoff, RecommendedNext,
     SessionState, WorkspaceState,
 };
 use crate::domain::session::SessionStatus;
+use crate::orchestrator::context_intelligence::build_index_doctor_report;
 
 /// Relative path to the advanced context-intelligence retrieval index.
 const ADVANCED_CONTEXT_INDEX_RELATIVE: &str =
@@ -162,6 +164,9 @@ fn probe_canon(workspace: &Path) -> CanonState {
 
 fn probe_capabilities(workspace: &Path, canon: &CanonState) -> CapabilitiesState {
     let semantic_index = workspace.join(ADVANCED_CONTEXT_INDEX_RELATIVE).is_file();
+    let semantic_index_health =
+        build_index_doctor_report(workspace).ok().map(|report| report.status.as_str().to_string());
+    let semantic_index_hooks = resolve_semantic_index_hook_probe_state(workspace);
     let cluster = workspace.join(CLUSTER_CONFIG_RELATIVE).is_file();
 
     CapabilitiesState {
@@ -171,8 +176,31 @@ fn probe_capabilities(workspace: &Path, canon: &CanonState) -> CapabilitiesState
         guardians: true,
         canon_governance: canon.binary_available,
         semantic_index,
+        semantic_index_health,
+        semantic_index_hooks,
         cluster,
     }
+}
+
+fn resolve_semantic_index_hook_probe_state(workspace: &Path) -> Option<String> {
+    let config = FileConfigStore::for_workspace(workspace).load_local().ok().flatten()?;
+    let hook_action = config
+        .routing
+        .semantic_acceleration
+        .as_ref()
+        .map(|policy| policy.index_hook_action)
+        .unwrap_or(SemanticIndexHookAction::Disabled);
+    let hook_paths = [
+        workspace.join(".git/hooks/post-checkout"),
+        workspace.join(".git/hooks/post-merge"),
+        workspace.join(".git/hooks/post-rewrite"),
+    ];
+    let installed = hook_paths.iter().all(|path| path.is_file());
+    Some(match hook_action {
+        SemanticIndexHookAction::Disabled => "disabled".to_string(),
+        SemanticIndexHookAction::MarkStale if installed => "mark_stale_installed".to_string(),
+        SemanticIndexHookAction::MarkStale => "mark_stale_missing".to_string(),
+    })
 }
 
 fn compute_recommended_next(
@@ -359,6 +387,15 @@ mod tests {
     use std::fs;
     use tempfile::TempDir;
 
+    const SEMANTIC_HOOK_CONFIG_DISABLED: &str =
+        "version = 1\n\n[routing.semantic_acceleration]\npolicy = \"local\"\n";
+    const SEMANTIC_HOOK_CONFIG_MARK_STALE: &str = concat!(
+        "version = 1\n\n",
+        "[routing.semantic_acceleration]\n",
+        "policy = \"local\"\n",
+        "index_hook_action = \"mark_stale\"\n",
+    );
+
     #[test]
     fn probe_uninitialized_workspace_recommends_init() {
         let tmp = TempDir::new().map_err(|e| e.to_string()).unwrap();
@@ -417,6 +454,7 @@ mod tests {
         let report = execute_probe(tmp.path());
 
         assert!(report.capabilities.semantic_index);
+        assert_eq!(report.capabilities.semantic_index_health.as_deref(), Some("failed"));
     }
 
     #[test]
@@ -464,5 +502,41 @@ mod tests {
         assert!(report.capabilities.json_stream);
         assert!(report.capabilities.guidance_catalog);
         assert!(report.capabilities.guardians);
+    }
+
+    #[test]
+    fn probe_reports_semantic_index_hook_states() {
+        let tmp = TempDir::new().map_err(|e| e.to_string()).unwrap();
+        let config_root = tmp.path().join(".boundline");
+        fs::create_dir_all(&config_root).map_err(|e| e.to_string()).unwrap();
+
+        fs::write(config_root.join("config.toml"), SEMANTIC_HOOK_CONFIG_DISABLED)
+            .map_err(|e| e.to_string())
+            .unwrap();
+        assert_eq!(
+            resolve_semantic_index_hook_probe_state(tmp.path()).as_deref(),
+            Some("disabled")
+        );
+
+        fs::write(config_root.join("config.toml"), SEMANTIC_HOOK_CONFIG_MARK_STALE)
+            .map_err(|e| e.to_string())
+            .unwrap();
+        assert_eq!(
+            resolve_semantic_index_hook_probe_state(tmp.path()).as_deref(),
+            Some("mark_stale_missing")
+        );
+
+        let hooks_root = tmp.path().join(".git/hooks");
+        fs::create_dir_all(&hooks_root).map_err(|e| e.to_string()).unwrap();
+        for hook_name in ["post-checkout", "post-merge", "post-rewrite"] {
+            fs::write(hooks_root.join(hook_name), "#!/bin/sh\nexit 0\n")
+                .map_err(|e| e.to_string())
+                .unwrap();
+        }
+
+        assert_eq!(
+            resolve_semantic_index_hook_probe_state(tmp.path()).as_deref(),
+            Some("mark_stale_installed")
+        );
     }
 }

@@ -1,6 +1,6 @@
 # Implementation Plan: Distribution & Bundling
 
-**Branch**: `039-distribution-bundling` | **Date**: 2026-05-03 | **Spec**: [/Users/rt/workspace/boundline/specs/039-distribution-bundling/spec.md](/Users/rt/workspace/boundline/specs/039-distribution-bundling/spec.md)
+**Branch**: `039-distribution-bundling` | **Date**: 2026-05-03 | **Spec**: [specs/039-distribution-bundling/spec.md](specs/039-distribution-bundling/spec.md)
 **Input**: Feature specification from `/specs/039-distribution-bundling/spec.md`
 
 **Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.

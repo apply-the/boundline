@@ -474,33 +474,72 @@ impl fmt::Display for SemanticAccelerationPolicyState {
     }
 }
 
+/// Git hook actions supported for the disposable semantic derived index.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "snake_case")]
+pub enum SemanticIndexHookAction {
+    Disabled,
+    MarkStale,
+}
+
+impl SemanticIndexHookAction {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Disabled => "disabled",
+            Self::MarkStale => "mark_stale",
+        }
+    }
+}
+
+impl fmt::Display for SemanticIndexHookAction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 /// Typed semantic-acceleration policy layered through configuration precedence.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SemanticAccelerationPolicy {
     #[serde(default = "default_semantic_acceleration_policy_state")]
     pub policy: SemanticAccelerationPolicyState,
+    #[serde(default = "default_semantic_index_hook_action")]
+    pub index_hook_action: SemanticIndexHookAction,
 }
 
 impl Default for SemanticAccelerationPolicy {
     fn default() -> Self {
-        Self { policy: default_semantic_acceleration_policy_state() }
+        Self {
+            policy: default_semantic_acceleration_policy_state(),
+            index_hook_action: default_semantic_index_hook_action(),
+        }
     }
 }
 
 impl SemanticAccelerationPolicy {
     /// Validates the semantic-acceleration policy.
     pub fn validate(&self) -> Result<(), ConfigurationError> {
+        if self.index_hook_action == SemanticIndexHookAction::MarkStale
+            && self.policy != SemanticAccelerationPolicyState::Local
+        {
+            return Err(ConfigurationError::InvalidAdvancedContextConfig(
+                "semantic index hooks require local semantic acceleration".to_string(),
+            ));
+        }
         Ok(())
     }
 
     /// Returns a compact human-readable summary of the policy.
     pub fn summary_text(&self) -> String {
-        format!("policy={}", self.policy)
+        format!("policy={}, index_hook_action={}", self.policy, self.index_hook_action)
     }
 }
 
 const fn default_semantic_acceleration_policy_state() -> SemanticAccelerationPolicyState {
     SemanticAccelerationPolicyState::Disabled
+}
+
+const fn default_semantic_index_hook_action() -> SemanticIndexHookAction {
+    SemanticIndexHookAction::Disabled
 }
 
 /// Concrete runtime and model selected for a route slot.
@@ -1250,7 +1289,7 @@ mod tests {
         AdvancedContextConfig, CapabilityState, ConfigurationError, EffortFallbackPolicy,
         EffortLevel, ModelRoute, ResolvedDomainTemplate, RouteSlot, RoutingConfig,
         RoutingOverrides, RuntimeCapabilityProfile, RuntimeKind, SemanticAccelerationPolicy,
-        SemanticAccelerationPolicyState, SlotEffortPolicy, ValueSource,
+        SemanticAccelerationPolicyState, SemanticIndexHookAction, SlotEffortPolicy, ValueSource,
         assistant_default_model_route, resolve_effective_advanced_context_config,
         resolve_effective_domain_templates, resolve_effective_routing,
         resolve_effective_runtime_capabilities, resolve_effective_semantic_acceleration_config,
@@ -1361,6 +1400,31 @@ mod tests {
     }
 
     #[test]
+    fn semantic_index_hook_action_labels_and_validation_require_local_policy() {
+        assert_eq!(SemanticIndexHookAction::Disabled.as_str(), "disabled");
+        assert_eq!(SemanticIndexHookAction::MarkStale.as_str(), "mark_stale");
+
+        SemanticAccelerationPolicy {
+            policy: SemanticAccelerationPolicyState::Local,
+            index_hook_action: SemanticIndexHookAction::MarkStale,
+        }
+        .validate()
+        .unwrap();
+
+        let error = SemanticAccelerationPolicy {
+            policy: SemanticAccelerationPolicyState::Disabled,
+            index_hook_action: SemanticIndexHookAction::MarkStale,
+        }
+        .validate()
+        .unwrap_err();
+        let expected = "semantic index hooks require local semantic acceleration";
+        assert!(matches!(
+            error,
+            ConfigurationError::InvalidAdvancedContextConfig(message) if message == expected
+        ));
+    }
+
+    #[test]
     fn advanced_context_policy_prefers_workspace_over_global() {
         let workspace = RoutingConfig {
             advanced_context: Some(AdvancedContextConfig {
@@ -1388,6 +1452,7 @@ mod tests {
         let workspace = RoutingConfig {
             semantic_acceleration: Some(SemanticAccelerationPolicy {
                 policy: SemanticAccelerationPolicyState::Local,
+                ..SemanticAccelerationPolicy::default()
             }),
             ..RoutingConfig::default()
         };
@@ -1405,7 +1470,7 @@ mod tests {
         );
         assert_eq!(resolved.source, ValueSource::Workspace);
         assert_eq!(resolved.policy.policy, SemanticAccelerationPolicyState::Local);
-        assert_eq!(resolved.policy.summary_text(), "policy=local");
+        assert_eq!(resolved.policy.summary_text(), "policy=local, index_hook_action=disabled");
     }
 
     #[test]
@@ -1744,6 +1809,7 @@ mod tests {
         let mut routing = RoutingConfig::default();
         routing.set_semantic_acceleration_policy(SemanticAccelerationPolicy {
             policy: SemanticAccelerationPolicyState::Local,
+            ..SemanticAccelerationPolicy::default()
         });
         assert!(routing.semantic_acceleration.is_some());
         routing.unset_semantic_acceleration_policy();
@@ -1754,6 +1820,7 @@ mod tests {
         let global = RoutingConfig {
             semantic_acceleration: Some(SemanticAccelerationPolicy {
                 policy: SemanticAccelerationPolicyState::Local,
+                ..SemanticAccelerationPolicy::default()
             }),
             ..RoutingConfig::default()
         };

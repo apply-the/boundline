@@ -1,6 +1,6 @@
 # Implementation Plan: Domain Agent Templates
 
-**Branch**: `038-domain-agent-templates` | **Date**: 2026-05-03 | **Spec**: [/Users/rt/workspace/boundline/specs/038-domain-agent-templates/spec.md](/Users/rt/workspace/boundline/specs/038-domain-agent-templates/spec.md)
+**Branch**: `038-domain-agent-templates` | **Date**: 2026-05-03 | **Spec**: [specs/038-domain-agent-templates/spec.md](specs/038-domain-agent-templates/spec.md)
 **Input**: Feature specification from `/specs/038-domain-agent-templates/spec.md`
 
 **Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.

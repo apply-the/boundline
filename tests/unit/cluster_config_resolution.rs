@@ -156,10 +156,14 @@ fn advanced_context_config_rejects_unsupported_remote_combinations() {
 
 #[test]
 fn effective_semantic_acceleration_prefers_nearest_config_scope() {
-    let workspace_policy =
-        SemanticAccelerationPolicy { policy: SemanticAccelerationPolicyState::Local };
-    let cluster_policy =
-        SemanticAccelerationPolicy { policy: SemanticAccelerationPolicyState::Disabled };
+    let workspace_policy = SemanticAccelerationPolicy {
+        policy: SemanticAccelerationPolicyState::Local,
+        ..SemanticAccelerationPolicy::default()
+    };
+    let cluster_policy = SemanticAccelerationPolicy {
+        policy: SemanticAccelerationPolicyState::Disabled,
+        ..SemanticAccelerationPolicy::default()
+    };
 
     let resolved = resolve_effective_semantic_acceleration_config(
         Some(&RoutingConfig {

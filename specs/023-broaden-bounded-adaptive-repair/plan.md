@@ -1,6 +1,6 @@
 # Implementation Plan: Broaden Bounded Adaptive Repair
 
-**Branch**: `023-broaden-bounded-adaptive-repair` | **Date**: 2026-05-01 | **Spec**: [/Users/rt/workspace/boundline/specs/023-broaden-bounded-adaptive-repair/spec.md](/Users/rt/workspace/boundline/specs/023-broaden-bounded-adaptive-repair/spec.md)
+**Branch**: `023-broaden-bounded-adaptive-repair` | **Date**: 2026-05-01 | **Spec**: [specs/023-broaden-bounded-adaptive-repair/spec.md](specs/023-broaden-bounded-adaptive-repair/spec.md)
 **Input**: Feature specification from `/specs/023-broaden-bounded-adaptive-repair/spec.md`
 
 **Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.
@@ -47,16 +47,16 @@ Broaden Boundline's bounded adaptive compatibility path by adding richer determi
 
 Mark each line as PASS or FAIL in the completed plan and reference the section that satisfies it.
 
-- **PASS** Delivery identity: The slice directly improves bounded code-delivery execution by making adaptive compatibility runs capable of trying more credible bounded repairs before they exhaust. See Summary, Technical Context, and [spec.md](/Users/rt/workspace/boundline/specs/023-broaden-bounded-adaptive-repair/spec.md).
+- **PASS** Delivery identity: The slice directly improves bounded code-delivery execution by making adaptive compatibility runs capable of trying more credible bounded repairs before they exhaust. See Summary, Technical Context, and [spec.md](specs/023-broaden-bounded-adaptive-repair/spec.md).
 - **PASS** Delivery-first scope: The work prioritizes execution quality, replanning credibility, and explicit failure handling ahead of polish. See Summary, Technical Context, and research decisions.
 - **PASS** Primary workflow: Session-native remains the main operator path, while deeper adaptive repair stays on the explicit compatibility route and reuses the continuity-aware read-side story from `0.22.0`. See Summary, Technical Context, quickstart, and contracts.
 - **PASS** Bounded execution: Adaptive runs keep explicit start conditions, explicit terminal conditions, and configured attempt, retry, and replan limits; no hidden background control flow is introduced. See Technical Context, data model, and quickstart.
 - **PASS** Stateful execution: Candidate signatures, validation guidance, credibility evidence, workspace slice, and attempt lineage remain persisted in task context, sessions, and traces. See Summary, Technical Context, data model, and contracts.
 - **PASS** Mutable planning: The slice deepens the existing adaptive replan behavior by allowing richer bounded candidate families and clearer candidate rejection semantics while keeping plan mutation inspectable. See Summary, research, and data model.
-- **PASS** Sequential-first design: One adaptive attempt remains active at a time, with explicit validation, replanning, and terminal stop conditions. See Technical Context, research, and [spec.md](/Users/rt/workspace/boundline/specs/023-broaden-bounded-adaptive-repair/spec.md).
+- **PASS** Sequential-first design: One adaptive attempt remains active at a time, with explicit validation, replanning, and terminal stop conditions. See Technical Context, research, and [spec.md](specs/023-broaden-bounded-adaptive-repair/spec.md).
 - **PASS** Tool-agent symmetry: Adaptive analysis, candidate synthesis, validation, and replanning remain visible as explicit steps rather than hidden heuristics. See Summary, research, quickstart, and contracts.
 - **PASS** Observability and explicit intelligence: Selection reasons, rejected candidates, workspace slices, exhaustion rationale, routing ownership, and terminal outcomes remain visible in CLI and trace surfaces. See Technical Context, quickstart, and contracts.
-- **PASS** Non-goals and external separation: The plan does not move adaptive control to workflows or Canon, does not add provider abstraction or long-term memory, and keeps UI and deployment work out of scope. See Constraints, research, and [spec.md](/Users/rt/workspace/boundline/specs/023-broaden-bounded-adaptive-repair/spec.md).
+- **PASS** Non-goals and external separation: The plan does not move adaptive control to workflows or Canon, does not add provider abstraction or long-term memory, and keeps UI and deployment work out of scope. See Constraints, research, and [spec.md](specs/023-broaden-bounded-adaptive-repair/spec.md).
 - **PASS** Minimal slice: The smallest independently valuable capability is richer bounded adaptive candidate generation plus explicit credibility and exhaustion reporting on the existing compatibility path. See Summary and research.
 
 ## Project Structure

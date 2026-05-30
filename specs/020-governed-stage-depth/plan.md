@@ -1,6 +1,6 @@
 # Implementation Plan: Governed Stage Depth
 
-**Branch**: `020-governed-stage-depth` | **Date**: 2026-05-01 | **Spec**: [/Users/rt/workspace/boundline/specs/020-governed-stage-depth/spec.md](/Users/rt/workspace/boundline/specs/020-governed-stage-depth/spec.md)
+**Branch**: `020-governed-stage-depth` | **Date**: 2026-05-01 | **Spec**: [specs/020-governed-stage-depth/spec.md](specs/020-governed-stage-depth/spec.md)
 **Input**: Feature specification from `/specs/020-governed-stage-depth/spec.md`
 
 ## Summary
@@ -25,16 +25,16 @@ Deepen Boundline's bounded governance story by making governed `bug-fix:investig
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- **PASS** Delivery identity: The slice deepens real bounded delivery work by letting a bug-fix session carry governance into `investigate` before later verify work, rather than widening Boundline into a new platform. See Summary, Technical Context, and [spec.md](/Users/rt/workspace/boundline/specs/020-governed-stage-depth/spec.md).
+- **PASS** Delivery identity: The slice deepens real bounded delivery work by letting a bug-fix session carry governance into `investigate` before later verify work, rather than widening Boundline into a new platform. See Summary, Technical Context, and [spec.md](specs/020-governed-stage-depth/spec.md).
 - **PASS** Delivery-first scope: The work prioritizes execution, governance visibility, packet lineage, and next-step guidance before polish. See Summary, Technical Context, and research decisions.
 - **PASS** Primary workflow: The main operator path remains session-native `goal -> plan -> run -> status -> next -> inspect`; the named-workflow layer remains a bounded projection over the same session state, and the compatibility path stays explicit. See Summary, Technical Context, quickstart, and contracts.
 - **PASS** Bounded execution: Governance still starts only at declared stage boundaries, stops at the first unmet approval or packet-readiness condition, and never advances hidden work in the background. See Technical Context, data model, research, and quickstart.
 - **PASS** Stateful execution: Governed stage state, packet references, reuse lineage, and refreshed approval outcomes remain persisted in `.boundline/session.json` and `.boundline/traces/`. See Summary, data model, and contracts.
 - **PASS** Mutable planning: The slice reuses the current goal-plan and stage-boundary governance primitives without introducing a second runtime; later commands may refresh state before the next step resumes. See Summary, research, and data model.
-- **PASS** Sequential-first design: One active session step remains in control at a time, with governance acting as an explicit stop or continue boundary. See Technical Context, research, and [spec.md](/Users/rt/workspace/boundline/specs/020-governed-stage-depth/spec.md).
+- **PASS** Sequential-first design: One active session step remains in control at a time, with governance acting as an explicit stop or continue boundary. See Technical Context, research, and [spec.md](specs/020-governed-stage-depth/spec.md).
 - **PASS** Tool-agent symmetry: Governance mode selection, packet reuse, refresh, and blocked outcomes remain explicit task actions and trace events rather than hidden heuristics. See Summary, research, and contracts.
 - **PASS** Observability and explicit intelligence: Stage key, selected mode, packet provenance, approval state, blocked reason, and refresh outcomes remain visible in session, workflow, and trace surfaces. See Technical Context, quickstart, and contracts.
-- **PASS** Non-goals and external separation: The slice does not give Canon orchestration ownership, does not widen into a general governance engine, and does not introduce deferred scope such as UI, long-term memory, or distributed execution. See Constraints, research, and [spec.md](/Users/rt/workspace/boundline/specs/020-governed-stage-depth/spec.md).
+- **PASS** Non-goals and external separation: The slice does not give Canon orchestration ownership, does not widen into a general governance engine, and does not introduce deferred scope such as UI, long-term memory, or distributed execution. See Constraints, research, and [spec.md](specs/020-governed-stage-depth/spec.md).
 - **PASS** Minimal slice: The smallest independently valuable capability is one deeper governed bug-fix slice that adds `investigate` governance ahead of the existing verify path while improving packet reuse and refresh guidance. See Summary and research.
 
 ## Project Structure

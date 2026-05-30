@@ -1,6 +1,6 @@
 # Implementation Plan: Decision Continuity And Guided Follow-Through
 
-**Branch**: `028-decision-followthrough` | **Date**: 2026-05-01 | **Spec**: [/Users/rt/workspace/boundline/specs/028-decision-followthrough/spec.md](/Users/rt/workspace/boundline/specs/028-decision-followthrough/spec.md)
+**Branch**: `028-decision-followthrough` | **Date**: 2026-05-01 | **Spec**: [specs/028-decision-followthrough/spec.md](specs/028-decision-followthrough/spec.md)
 **Input**: Feature specification from `/specs/028-decision-followthrough/spec.md`
 
 **Note**: This plan keeps the 028 slice inside the current session-native and
@@ -42,7 +42,7 @@ coverage refresh for touched Rust files, clippy cleanup, and formatting.
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- **PASS** Delivery identity: The slice improves bounded engineering-task delivery by making the next bounded action and its supporting evidence visible on the existing follow-up surfaces instead of forcing manual reconstruction from raw state. See Summary, Technical Context, and [/Users/rt/workspace/boundline/specs/028-decision-followthrough/spec.md](/Users/rt/workspace/boundline/specs/028-decision-followthrough/spec.md).
+- **PASS** Delivery identity: The slice improves bounded engineering-task delivery by making the next bounded action and its supporting evidence visible on the existing follow-up surfaces instead of forcing manual reconstruction from raw state. See Summary, Technical Context, and [specs/028-decision-followthrough/spec.md](specs/028-decision-followthrough/spec.md).
 - **PASS** Delivery-first scope: The plan centers on execution follow-through, continuity evidence, and stop-condition clarity first; release polish remains a closeout phase rather than the feature core. See Summary and Technical Context.
 - **PASS** Primary workflow: Session-native remains the default operator path, while explicit compatibility follow-up stays visibly separate and authoritative only when the latest trace owns continuity. See Summary, Technical Context, research, and quickstart.
 - **PASS** Bounded execution: The feature reuses the current sequential runtime, existing run limits, and explicit stop conditions instead of introducing loops or silent recovery. See Technical Context, research, and quickstart.

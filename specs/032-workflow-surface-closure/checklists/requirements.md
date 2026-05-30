@@ -2,7 +2,7 @@
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning  
 **Created**: 2026-05-02  
-**Feature**: [/Users/rt/workspace/boundline/specs/032-workflow-surface-closure/spec.md](/Users/rt/workspace/boundline/specs/032-workflow-surface-closure/spec.md)
+**Feature**: [specs/032-workflow-surface-closure/spec.md](specs/032-workflow-surface-closure/spec.md)
 
 ## Content Quality
 

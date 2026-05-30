@@ -3,8 +3,10 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::adapters::config_store::FileConfigStore;
 use crate::adapters::env_layer::provider_environment_status;
 use crate::adapters::trace_store::FileTraceStore;
+use crate::domain::configuration::SemanticIndexHookAction;
 use crate::domain::distribution::{
     CanonInstallStatus, CompanionState, SUPPORTED_CANON_VERSION, evaluate_canon_install,
     supported_distribution_channels,
@@ -18,6 +20,10 @@ const ADVANCED_CONTEXT_INDEX_RELATIVE: &str =
 const CANON_GUIDANCE_DIR_RELATIVE: &str = ".canon/boundline/guidance";
 const CANON_BINARY_NAME: &str = "canon";
 const CANON_COMMAND_RESOLUTION_CHECK_NAME: &str = "canon_command_resolution";
+const GIT_HOOKS_RELATIVE: &str = ".git/hooks";
+const POST_CHECKOUT_HOOK_NAME: &str = "post-checkout";
+const POST_MERGE_HOOK_NAME: &str = "post-merge";
+const POST_REWRITE_HOOK_NAME: &str = "post-rewrite";
 const SESSION_RECORD_RELATIVE: &str = ".boundline/session.json";
 const WORKSPACE_CONFIG_RELATIVE: &str = ".boundline/config.toml";
 const WORKSPACE_GUIDANCE_DIR_RELATIVE: &str = ".boundline/guidance";
@@ -505,6 +511,51 @@ fn extend_workspace_context_diagnostics(report: &mut DiagnosticsReport, workspac
         }),
     );
 
+    let semantic_hook_action = FileConfigStore::for_workspace(workspace)
+        .load_local()
+        .ok()
+        .flatten()
+        .and_then(|config| config.routing.semantic_acceleration)
+        .map(|policy| policy.index_hook_action)
+        .unwrap_or(SemanticIndexHookAction::Disabled);
+    let hook_paths = [
+        workspace.join(GIT_HOOKS_RELATIVE).join(POST_CHECKOUT_HOOK_NAME),
+        workspace.join(GIT_HOOKS_RELATIVE).join(POST_MERGE_HOOK_NAME),
+        workspace.join(GIT_HOOKS_RELATIVE).join(POST_REWRITE_HOOK_NAME),
+    ];
+    let hooks_installed = hook_paths.iter().all(|path| path.is_file());
+    let (hook_status, hook_message, hook_action) = match semantic_hook_action {
+        SemanticIndexHookAction::Disabled => (
+            DiagnosticsStatus::Passed,
+            "semantic index hooks are disabled by default; fetch remains a no-op and no commit hooks are installed"
+                .to_string(),
+            None,
+        ),
+        SemanticIndexHookAction::MarkStale if hooks_installed => (
+            DiagnosticsStatus::Passed,
+            "semantic index hooks will mark stale on post-checkout, post-merge, and post-rewrite; fetch remains a no-op"
+                .to_string(),
+            None,
+        ),
+        SemanticIndexHookAction::MarkStale => (
+            DiagnosticsStatus::Advisory,
+            "semantic index hook policy is mark_stale but one or more Git hooks are missing"
+                .to_string(),
+            Some(format!(
+                "boundline init --workspace {workspace_ref} --semantic-index-hook-action mark-stale --force"
+            )),
+        ),
+    };
+    push_context_check(
+        report,
+        DiagnosticsCheck {
+            name: "semantic_index_hooks".to_string(),
+            status: hook_status,
+            message: hook_message,
+        },
+        hook_action,
+    );
+
     let trace_root = FileTraceStore::for_workspace(workspace).root().to_path_buf();
     let has_session_evidence =
         workspace.join(SESSION_RECORD_RELATIVE).is_file() || path_has_entries(&trace_root);
@@ -886,6 +937,13 @@ mod tests {
         CanonInstallStatus, CompanionState, SUPPORTED_CANON_VERSION,
     };
 
+    const SEMANTIC_HOOK_CONFIG_MARK_STALE: &str = concat!(
+        "version = 1\n\n",
+        "[routing.semantic_acceleration]\n",
+        "policy = \"local\"\n",
+        "index_hook_action = \"mark_stale\"\n",
+    );
+
     fn temp_workspace() -> PathBuf {
         let workspace =
             std::env::temp_dir().join(format!("boundline-diagnostics-{}", Uuid::new_v4()));
@@ -1044,6 +1102,40 @@ mod tests {
 
         assert!(!report.ready);
         assert!(report.missing_prerequisites.contains(&"trace_store".to_string()));
+    }
+
+    #[test]
+    fn diagnostics_report_surfaces_semantic_index_hook_states() {
+        let workspace = temp_workspace();
+
+        let report = diagnose_workspace_context(&workspace);
+        let check = context_check(&report, "semantic_index_hooks");
+        assert_eq!(check.status, DiagnosticsStatus::Passed);
+        assert!(check.message.contains("disabled by default"), "{}", check.message);
+
+        fs::write(workspace.join(WORKSPACE_CONFIG_RELATIVE), SEMANTIC_HOOK_CONFIG_MARK_STALE)
+            .unwrap();
+        let report = diagnose_workspace_context(&workspace);
+        let check = context_check(&report, "semantic_index_hooks");
+        assert_eq!(check.status, DiagnosticsStatus::Advisory);
+        assert!(check.message.contains("mark_stale"), "{}", check.message);
+        assert!(
+            report
+                .suggested_actions
+                .iter()
+                .any(|action| { action.contains("semantic-index-hook-action mark-stale") })
+        );
+
+        let hooks_root = workspace.join(".git/hooks");
+        fs::create_dir_all(&hooks_root).unwrap();
+        for hook_name in ["post-checkout", "post-merge", "post-rewrite"] {
+            fs::write(hooks_root.join(hook_name), "#!/bin/sh\nexit 0\n").unwrap();
+        }
+
+        let report = diagnose_workspace_context(&workspace);
+        let check = context_check(&report, "semantic_index_hooks");
+        assert_eq!(check.status, DiagnosticsStatus::Passed);
+        assert!(check.message.contains("post-checkout, post-merge, and post-rewrite"));
     }
 
     #[test]

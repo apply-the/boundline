@@ -21,14 +21,14 @@ place.
 ## Path Conventions
 
 - Boundline repo root paths are repo-relative (`src/`, `tests/`, `docs/`)
-- Canon sibling repo paths are absolute under `/Users/rt/workspace/apply-the/canon/`
+- Canon sibling repo paths are absolute under `../canon/`
 
 ## Phase 1: Setup (Shared Infrastructure)
 
 **Purpose**: Lock the release pair, seed validation artifacts, and capture the
 required catalog audit before runtime work expands.
 
-- [ ] T001 Bump Boundline to `0.62.0` and seed the release-alignment expectations in `Cargo.toml`, `CHANGELOG.md`, `tests/contract/canon_reasoning_posture_contract.rs`, and `specs/062-reasoning-profile-closure/contracts/release-alignment-contract.md`; bump `/Users/rt/workspace/apply-the/canon/Cargo.toml` to `0.59.0` and align its version assertions in `/Users/rt/workspace/apply-the/canon/tests/contract/governed_reasoning_posture_contract.rs`
+- [ ] T001 Bump Boundline to `0.62.0` and seed the release-alignment expectations in `Cargo.toml`, `CHANGELOG.md`, `tests/contract/canon_reasoning_posture_contract.rs`, and `specs/062-reasoning-profile-closure/contracts/release-alignment-contract.md`; bump `../canon/Cargo.toml` to `0.59.0` and align its version assertions in `../canon/tests/contract/governed_reasoning_posture_contract.rs`
 - [ ] T002 [P] Create `specs/062-reasoning-profile-closure/validation-report.md` and record the provider-doc catalog audit result referencing `assistant/catalog/model-catalog.toml` plus the public OpenAI, Anthropic, and Google model docs
 
 ---
@@ -42,7 +42,7 @@ artifacts required by every user story.
 
 - [ ] T003 Extend closure classification, operator-claim, and release-alignment helpers in `src/domain/reasoning.rs`, `src/domain/governance.rs`, and `src/domain/session.rs`
 - [ ] T004 [P] Refresh deterministic residual-profile fixtures and helper builders in `src/fixture.rs`, `tests/integration/reasoning_profile_activation.rs`, and `tests/integration/reasoning_profile_degradation.rs`
-- [ ] T005 [P] Refresh Boundline-local Canon compatibility artifacts and published contract baselines in `tests/contract/canon_reasoning_posture_contract.rs`, `specs/061-reasoning-profile-contracts/contracts/canon-governed-reasoning-posture-contract.snapshot.md`, and `specs/061-reasoning-profile-contracts/contracts/canon-challenge-posture-consumer-contract.md`, and update `/Users/rt/workspace/apply-the/canon/docs/integration/governed-reasoning-posture-contract.md` in the same step
+- [ ] T005 [P] Refresh Boundline-local Canon compatibility artifacts and published contract baselines in `tests/contract/canon_reasoning_posture_contract.rs`, `specs/061-reasoning-profile-contracts/contracts/canon-governed-reasoning-posture-contract.snapshot.md`, and `specs/061-reasoning-profile-contracts/contracts/canon-challenge-posture-consumer-contract.md`, and update `../canon/docs/integration/governed-reasoning-posture-contract.md` in the same step
 
 **Checkpoint**: The release-alignment substrate exists, fixtures are ready, and
 compatibility validation can run with or without the sibling Canon repo.
@@ -116,14 +116,14 @@ exceptions.
 
 - [ ] T019 [P] [US3] Extend Boundline compatibility coverage for the release pair, sibling-Canon alignment, and local-snapshot fallback in `tests/contract/canon_reasoning_posture_contract.rs`
 - [ ] T020 [P] [US3] Add behavior-preserving coverage for refactored governance validation in `tests/unit/workflow_session_projection.rs` and `tests/unit/session_model.rs`
-- [ ] T021 [P] [US3] Add behavior-preserving coverage for refactored reasoning-independence assessment in `tests/unit/reasoning_profile_independence.rs`, `tests/integration/reasoning_profile_degradation.rs`, and `/Users/rt/workspace/apply-the/canon/tests/contract/governed_reasoning_posture_contract.rs`
+- [ ] T021 [P] [US3] Add behavior-preserving coverage for refactored reasoning-independence assessment in `tests/unit/reasoning_profile_independence.rs`, `tests/integration/reasoning_profile_degradation.rs`, and `../canon/tests/contract/governed_reasoning_posture_contract.rs`
 
 ### Implementation for User Story 3
 
 - [ ] T022 [P] [US3] Refactor `SessionStatusView::validate_governance` into smaller helper validators in `src/domain/session.rs`
 - [ ] T023 [P] [US3] Refactor `assess_reasoning_independence` into smaller helper evaluators in `src/orchestrator/session_runtime.rs`
-- [ ] T024 [US3] Align release-pair compatibility windows, fallback snapshot usage, and version assertions in `Cargo.toml`, `tests/contract/canon_reasoning_posture_contract.rs`, `specs/061-reasoning-profile-contracts/contracts/canon-governed-reasoning-posture-contract.snapshot.md`, `/Users/rt/workspace/apply-the/canon/Cargo.toml`, `/Users/rt/workspace/apply-the/canon/docs/integration/governed-reasoning-posture-contract.md`, and `/Users/rt/workspace/apply-the/canon/tests/contract/governed_reasoning_posture_contract.rs`
-- [ ] T025 [US3] Update release-facing change records in `CHANGELOG.md`, `specs/062-reasoning-profile-closure/validation-report.md`, `/Users/rt/workspace/apply-the/canon/CHANGELOG.md`, and `/Users/rt/workspace/apply-the/canon/ROADMAP.md`
+- [ ] T024 [US3] Align release-pair compatibility windows, fallback snapshot usage, and version assertions in `Cargo.toml`, `tests/contract/canon_reasoning_posture_contract.rs`, `specs/061-reasoning-profile-contracts/contracts/canon-governed-reasoning-posture-contract.snapshot.md`, `../canon/Cargo.toml`, `../canon/docs/integration/governed-reasoning-posture-contract.md`, and `../canon/tests/contract/governed_reasoning_posture_contract.rs`
+- [ ] T025 [US3] Update release-facing change records in `CHANGELOG.md`, `specs/062-reasoning-profile-closure/validation-report.md`, `../canon/CHANGELOG.md`, and `../canon/ROADMAP.md`
 
 **Checkpoint**: All user stories are independently functional and the closure
 slice is release-ready from a behavior, compatibility, and maintainability
@@ -135,8 +135,8 @@ standpoint.
 
 **Purpose**: Finish the repo-wide documentation and validation closeout.
 
-- [ ] T026 [P] Refresh release-facing docs and roadmap language in `README.md`, `ROADMAP.md`, `docs/adaptive-execution.md`, `docs/runtime-confidence-and-calibration.md`, `docs/architecture.md`, `docs/reasoning-profile-algorithms.md`, retire the completed `roadmap/S6*` drafts, and update `/Users/rt/workspace/apply-the/canon/README.md`, `/Users/rt/workspace/apply-the/canon/ROADMAP.md`, and `/Users/rt/workspace/apply-the/canon/CHANGELOG.md`
-- [ ] T027 Run focused story validations, then run `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo nextest run --workspace --all-features`, `cargo llvm-cov clean --workspace`, and `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info` in Boundline; run `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, and `cargo nextest run --workspace --all-features` in `/Users/rt/workspace/apply-the/canon/`; then record those results plus the `.github/workflows/quality.yml` SonarCloud quality-gate result in `specs/062-reasoning-profile-closure/validation-report.md`
+- [ ] T026 [P] Refresh release-facing docs and roadmap language in `README.md`, `ROADMAP.md`, `docs/adaptive-execution.md`, `docs/runtime-confidence-and-calibration.md`, `docs/architecture.md`, `docs/reasoning-profile-algorithms.md`, retire the completed `roadmap/S6*` drafts, and update `../canon/README.md`, `../canon/ROADMAP.md`, and `../canon/CHANGELOG.md`
+- [ ] T027 Run focused story validations, then run `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo nextest run --workspace --all-features`, `cargo llvm-cov clean --workspace`, and `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info` in Boundline; run `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, and `cargo nextest run --workspace --all-features` in `../canon/`; then record those results plus the `.github/workflows/quality.yml` SonarCloud quality-gate result in `specs/062-reasoning-profile-closure/validation-report.md`
 
 ---
 

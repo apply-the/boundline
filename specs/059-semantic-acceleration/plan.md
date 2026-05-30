@@ -1,6 +1,6 @@
 # Implementation Plan: Advanced Context Intelligence Semantic Acceleration
 
-**Branch**: `059-semantic-acceleration` | **Date**: 2026-05-17 | **Spec**: [/Users/rt/workspace/apply-the/boundline/specs/059-semantic-acceleration/spec.md](/Users/rt/workspace/apply-the/boundline/specs/059-semantic-acceleration/spec.md)
+**Branch**: `059-semantic-acceleration` | **Date**: 2026-05-17 | **Spec**: [specs/059-semantic-acceleration/spec.md](specs/059-semantic-acceleration/spec.md)
 **Input**: Feature specification from `/specs/059-semantic-acceleration/spec.md`
 
 ## Summary

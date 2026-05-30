@@ -95,7 +95,10 @@ fn trace_summary_contract_surfaces_semantic_rejection_details() {
 
     assert!(rendered.contains("semantic_policy_state: local"), "{rendered}");
     assert!(rendered.contains("semantic_capability_state: ready"), "{rendered}");
+    assert!(rendered.contains("semantic_engine: sqlite_vec"), "{rendered}");
     assert!(rendered.contains("hybrid_outcome: expanded"), "{rendered}");
+    assert!(rendered.contains("vector_query_count: 1"), "{rendered}");
+    assert!(rendered.contains("vector_candidates_returned: 2"), "{rendered}");
     assert!(
         rendered.contains(
             "semantic_trace: hybrid_outcome_recorded ref=src/context_router.rs origin=semantic_expand compatibility=compatible semantic_score=0.944 canon_artifact_class=stable canon_contract=v1 canon_boundary=section canon_provenance=.canon/context-router.md#section:overview semantic retrieval ended with retrieval state selected with hybrid outcome expanded"
@@ -111,6 +114,42 @@ fn trace_summary_contract_surfaces_semantic_rejection_details() {
     assert!(
         rendered.contains(
             "rejected_candidate: src/semantic.rs [workspace_file] origin=semantic_expand semantic_score=0.812 semantic similarity found the candidate but the bounded evidence limit kept the V1 set unchanged"
+        ),
+        "{rendered}"
+    );
+}
+
+#[test]
+fn trace_summary_contract_surfaces_recovery_guidance_for_corrupt_index() {
+    let summary = TraceSummaryView {
+        trace_ref: "/tmp/semantic-corrupt-trace.json".to_string(),
+        goal: "Recover guidance for a corrupt derived index".to_string(),
+        advanced_context: Some(AdvancedContextProjection {
+            query_id: "query-semantic-corrupt".to_string(),
+            retrieval_mode: RetrievalMode::Local,
+            retrieval_state: RetrievalState::Degraded,
+            retrieval_index_state: RetrievalIndexState::Corrupt,
+            semantic_policy_state: SemanticPolicyState::Local,
+            semantic_capability_state: SemanticCapabilityState::Corrupt,
+            hybrid_outcome: HybridOutcome::Fallback,
+            budgets: Default::default(),
+            remote_policy_state: RemoteTransmissionPolicyState::LocalOnly,
+            used_remote: false,
+            terminal_reason: Some("derived index is corrupt; using bounded fallback".to_string()),
+            selected_evidence: Vec::new(),
+            rejected_candidates: Vec::new(),
+            semantic_trace_records: Vec::new(),
+            relationships: Vec::new(),
+            impact_findings: Vec::new(),
+        }),
+        ..TraceSummaryView::default()
+    };
+
+    let rendered = render_trace_summary(&summary, "latest-workspace-trace", "/boundline-next");
+
+    assert!(
+        rendered.contains(
+            "retrieval_recovery_guidance: run boundline index doctor to inspect vector capability, hooks, and tracked-file hygiene"
         ),
         "{rendered}"
     );

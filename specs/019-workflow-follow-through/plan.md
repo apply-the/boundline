@@ -1,6 +1,6 @@
 # Implementation Plan: Workflow Follow-Through
 
-**Branch**: `019-workflow-follow-through` | **Date**: 2026-05-01 | **Spec**: [/Users/rt/workspace/boundline/specs/019-workflow-follow-through/spec.md](/Users/rt/workspace/boundline/specs/019-workflow-follow-through/spec.md)
+**Branch**: `019-workflow-follow-through` | **Date**: 2026-05-01 | **Spec**: [specs/019-workflow-follow-through/spec.md](specs/019-workflow-follow-through/spec.md)
 **Input**: Feature specification from `/specs/019-workflow-follow-through/spec.md`
 
 ## Summary
@@ -25,16 +25,16 @@ Complete the first named-workflow slice by making bounded review and govern phas
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- **PASS** Delivery identity: The slice directly improves bounded engineering-task delivery by letting named workflows carry real review and governance work to completion instead of stopping short at declaration-only blockers. See Summary, Technical Context, and [spec.md](/Users/rt/workspace/boundline/specs/019-workflow-follow-through/spec.md).
+- **PASS** Delivery identity: The slice directly improves bounded engineering-task delivery by letting named workflows carry real review and governance work to completion instead of stopping short at declaration-only blockers. See Summary, Technical Context, and [spec.md](specs/019-workflow-follow-through/spec.md).
 - **PASS** Delivery-first scope: The work prioritizes orchestration, execution follow-through, operator guidance, and inspectability before optimization or polish. See Summary, Technical Context, and research decisions.
 - **PASS** Primary workflow: The primary operator path remains session-native and workflow phases still compile onto `goal -> plan -> run -> status -> next -> inspect`; the explicit compatibility route remains available only when the operator chooses it. See Summary, Technical Context, quickstart, and contracts.
 - **PASS** Bounded execution: Start conditions, stop conditions, blocked governance, review outcomes, and existing runtime limits stay explicit; follow-through stops at the first unmet bounded condition. See Technical Context, data model, research, and quickstart.
 - **PASS** Stateful execution: Workflow follow-through remains session-owned, with progress, blocked reasons, and next actions persisted in `.boundline/session.json` and trace evidence preserved in `.boundline/traces/`. See Summary, data-model, and contracts.
 - **PASS** Mutable planning: Workflow follow-through reuses the existing mutable session-native planning and runtime control plane, so review or governance work can pause, fail, or continue based on explicit evidence rather than a rigid script. See Summary, research, and data model.
-- **PASS** Sequential-first design: The design keeps one active workflow phase at a time and rejects hidden concurrency or generic workflow branching. See Technical Context, research, and [spec.md](/Users/rt/workspace/boundline/specs/019-workflow-follow-through/spec.md).
+- **PASS** Sequential-first design: The design keeps one active workflow phase at a time and rejects hidden concurrency or generic workflow branching. See Technical Context, research, and [spec.md](specs/019-workflow-follow-through/spec.md).
 - **PASS** Tool-agent symmetry: Review, governance, and workflow discovery remain visible as explicit runtime or operator actions rather than hidden orchestration magic. See Summary, research, and contracts.
 - **PASS** Observability and explicit intelligence: Workflow identity, phase, routing, execution condition, discovery guidance, blocked reasons, and review or govern outcomes all remain visible through session, trace, and CLI surfaces. See Technical Context, quickstart, and contracts.
-- **PASS** Non-goals and external separation: The plan does not depend on Canon beyond bounded governance or evidence behavior and does not introduce deferred scope such as generic workflow DSL semantics, provider-routing expansion, UI, long-term memory, or distributed execution. See Constraints, research, and [spec.md](/Users/rt/workspace/boundline/specs/019-workflow-follow-through/spec.md).
+- **PASS** Non-goals and external separation: The plan does not depend on Canon beyond bounded governance or evidence behavior and does not introduce deferred scope such as generic workflow DSL semantics, provider-routing expansion, UI, long-term memory, or distributed execution. See Constraints, research, and [spec.md](specs/019-workflow-follow-through/spec.md).
 - **PASS** Minimal slice: The smallest independently valuable capability is one bounded workflow follow-through slice that executes review and govern, adds operator workflow discovery, and documents supported registry authorship. See Summary and research.
 
 ## Project Structure

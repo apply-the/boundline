@@ -2,7 +2,7 @@
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-04-28
-**Feature**: [spec.md](/Users/rt/workspace/boundline/specs/012-multi-workspace/spec.md)
+**Feature**: [spec.md](specs/012-multi-workspace/spec.md)
 
 ## Content Quality
 

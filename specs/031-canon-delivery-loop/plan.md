@@ -1,7 +1,7 @@
 # Implementation Plan: Governed Delivery With Canon Inside The Loop
 
-**Branch**: `031-canon-delivery-loop` | **Date**: 2026-05-02 | **Spec**: `/Users/rt/workspace/boundline/specs/031-canon-delivery-loop/spec.md`
-**Input**: Feature specification from `/Users/rt/workspace/boundline/specs/031-canon-delivery-loop/spec.md`
+**Branch**: `031-canon-delivery-loop` | **Date**: 2026-05-02 | **Spec**: `specs/031-canon-delivery-loop/spec.md`
+**Input**: Feature specification from `specs/031-canon-delivery-loop/spec.md`
 
 ## Summary
 

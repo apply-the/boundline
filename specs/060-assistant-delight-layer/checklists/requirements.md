@@ -2,7 +2,7 @@
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-05-17
-**Feature**: [spec.md](/Users/rt/workspace/apply-the/boundline/specs/060-assistant-delight-layer/spec.md)
+**Feature**: [spec.md](specs/060-assistant-delight-layer/spec.md)
 
 ## Content Quality
 

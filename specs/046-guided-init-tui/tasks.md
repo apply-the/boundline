@@ -11,9 +11,9 @@
 
 **Purpose**: Establish release alignment and the shared dependency surface for the init redesign.
 
-- [ ] T001 Bump Boundline version to `0.47.0` in `/Users/rt/workspace/apply-the/boundline/Cargo.toml`, `/Users/rt/workspace/apply-the/boundline/Cargo.lock`, `/Users/rt/workspace/apply-the/boundline/distribution/channel-metadata.toml`, `/Users/rt/workspace/apply-the/boundline/distribution/homebrew/Formula/boundline.rb`, and `/Users/rt/workspace/apply-the/boundline/CHANGELOG.md`
-- [ ] T002 Add the guided-init CLI dependencies and bundled catalog asset scaffold in `/Users/rt/workspace/apply-the/boundline/Cargo.toml`, `/Users/rt/workspace/apply-the/boundline/crates/boundline-cli/Cargo.toml`, and `/Users/rt/workspace/apply-the/boundline/assistant/catalog/model-catalog.toml`
-- [ ] T003 [P] Extend shared test support for init command fixtures and output capture in `/Users/rt/workspace/apply-the/boundline/tests/support/workspace_fixture.rs`
+- [ ] T001 Bump Boundline version to `0.47.0` in `Cargo.toml`, `Cargo.lock`, `distribution/channel-metadata.toml`, `distribution/homebrew/Formula/boundline.rb`, and `CHANGELOG.md`
+- [ ] T002 Add the guided-init CLI dependencies and bundled catalog asset scaffold in `Cargo.toml`, `crates/boundline-cli/Cargo.toml`, and `assistant/catalog/model-catalog.toml`
+- [ ] T003 [P] Extend shared test support for init command fixtures and output capture in `tests/support/workspace_fixture.rs`
 
 ---
 
@@ -23,9 +23,9 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T004 Define bundled catalog loading, metadata parsing, and default-route seeding primitives in `/Users/rt/workspace/apply-the/boundline/src/cli/init.rs` and `/Users/rt/workspace/apply-the/boundline/assistant/catalog/model-catalog.toml`
-- [ ] T005 Define guided init state, step transitions, TTY detection, and non-interactive validation helpers in `/Users/rt/workspace/apply-the/boundline/src/cli/init.rs`
-- [ ] T006 Define bounded progress-feedback helpers for interactive spinner mode and stable non-interactive text mode in `/Users/rt/workspace/apply-the/boundline/src/cli/init.rs`
+- [ ] T004 Define bundled catalog loading, metadata parsing, and default-route seeding primitives in `src/cli/init.rs` and `assistant/catalog/model-catalog.toml`
+- [ ] T005 Define guided init state, step transitions, TTY detection, and non-interactive validation helpers in `src/cli/init.rs`
+- [ ] T006 Define bounded progress-feedback helpers for interactive spinner mode and stable non-interactive text mode in `src/cli/init.rs`
 
 **Checkpoint**: Foundation ready. Guided input, catalog state, and progress plumbing are explicit and testable.
 
@@ -39,16 +39,16 @@
 
 ### Tests for User Story 1
 
-- [ ] T007 [P] [US1] Add contract coverage for `boundline --version`, `boundline -V`, and guided-init entry behavior in `/Users/rt/workspace/apply-the/boundline/tests/contract/init_cli_contract.rs`
-- [ ] T008 [P] [US1] Extend guided bootstrap integration coverage for defaults, one-slot route editing, and final summary confirmation in `/Users/rt/workspace/apply-the/boundline/tests/integration/init_bootstrap_flow.rs`
-- [ ] T009 [P] [US1] Add unit coverage for guided step validation, visible defaults, and route review transitions in `/Users/rt/workspace/apply-the/boundline/src/cli/init.rs`
-- [ ] T010 [P] [US1] Add cancellation write-safety coverage proving no files are written when the operator cancels before confirmation in `/Users/rt/workspace/apply-the/boundline/tests/contract/init_cli_contract.rs` and `/Users/rt/workspace/apply-the/boundline/tests/integration/init_bootstrap_flow.rs`
+- [ ] T007 [P] [US1] Add contract coverage for `boundline --version`, `boundline -V`, and guided-init entry behavior in `tests/contract/init_cli_contract.rs`
+- [ ] T008 [P] [US1] Extend guided bootstrap integration coverage for defaults, one-slot route editing, and final summary confirmation in `tests/integration/init_bootstrap_flow.rs`
+- [ ] T009 [P] [US1] Add unit coverage for guided step validation, visible defaults, and route review transitions in `src/cli/init.rs`
+- [ ] T010 [P] [US1] Add cancellation write-safety coverage proving no files are written when the operator cancels before confirmation in `tests/contract/init_cli_contract.rs` and `tests/integration/init_bootstrap_flow.rs`
 
 ### Implementation for User Story 1
 
-- [ ] T011 [US1] Add top-level version support and explicit `--non-interactive` init flag handling in `/Users/rt/workspace/apply-the/boundline/src/cli.rs`
-- [ ] T012 [US1] Replace manual `read_line` guided prompts with dialoguer-backed Canon-mode, assistant multi-select, and route-review interactions in `/Users/rt/workspace/apply-the/boundline/src/cli/init.rs`
-- [ ] T013 [US1] Render the new guided summary, cancel path, and preview/write output for init in `/Users/rt/workspace/apply-the/boundline/src/cli/init.rs`
+- [ ] T011 [US1] Add top-level version support and explicit `--non-interactive` init flag handling in `src/cli.rs`
+- [ ] T012 [US1] Replace manual `read_line` guided prompts with dialoguer-backed Canon-mode, assistant multi-select, and route-review interactions in `src/cli/init.rs`
+- [ ] T013 [US1] Render the new guided summary, cancel path, and preview/write output for init in `src/cli/init.rs`
 
 **Checkpoint**: User Story 1 is independently functional and proves the new guided bootstrap path.
 
@@ -62,15 +62,15 @@
 
 ### Tests for User Story 2
 
-- [ ] T014 [P] [US2] Add contract coverage for bundled catalog metadata, custom-model warnings, unset-slot visibility, and assistant-pack scaffolding status in `/Users/rt/workspace/apply-the/boundline/tests/contract/init_cli_contract.rs`
-- [ ] T015 [P] [US2] Extend integration coverage for bundled defaults, custom route fallback, and assistant-pack refresh behavior in `/Users/rt/workspace/apply-the/boundline/tests/integration/init_bootstrap_flow.rs`
-- [ ] T016 [P] [US2] Add unit coverage for catalog parsing, route seeding, custom-route validation, and assistant asset planning in `/Users/rt/workspace/apply-the/boundline/src/cli/init.rs` and `/Users/rt/workspace/apply-the/boundline/src/cli/assistant_assets.rs`
+- [ ] T014 [P] [US2] Add contract coverage for bundled catalog metadata, custom-model warnings, unset-slot visibility, and assistant-pack scaffolding status in `tests/contract/init_cli_contract.rs`
+- [ ] T015 [P] [US2] Extend integration coverage for bundled defaults, custom route fallback, and assistant-pack refresh behavior in `tests/integration/init_bootstrap_flow.rs`
+- [ ] T016 [P] [US2] Add unit coverage for catalog parsing, route seeding, custom-route validation, and assistant asset planning in `src/cli/init.rs` and `src/cli/assistant_assets.rs`
 
 ### Implementation for User Story 2
 
-- [ ] T017 [US2] Implement bundled catalog parsing, route-table derivation, and per-slot model selection in `/Users/rt/workspace/apply-the/boundline/src/cli/init.rs` and `/Users/rt/workspace/apply-the/boundline/assistant/catalog/model-catalog.toml`
-- [ ] T018 [US2] Extend assistant-pack scaffolding reporting and explicit unset/custom slot summaries in `/Users/rt/workspace/apply-the/boundline/src/cli/init.rs` and `/Users/rt/workspace/apply-the/boundline/src/cli/assistant_assets.rs`
-- [ ] T019 [US2] Align repository docs for the bundled catalog and guided route editing surface in `/Users/rt/workspace/apply-the/boundline/README.md`, `/Users/rt/workspace/apply-the/boundline/docs/getting-started.md`, and `/Users/rt/workspace/apply-the/boundline/assistant/README.md`
+- [ ] T017 [US2] Implement bundled catalog parsing, route-table derivation, and per-slot model selection in `src/cli/init.rs` and `assistant/catalog/model-catalog.toml`
+- [ ] T018 [US2] Extend assistant-pack scaffolding reporting and explicit unset/custom slot summaries in `src/cli/init.rs` and `src/cli/assistant_assets.rs`
+- [ ] T019 [US2] Align repository docs for the bundled catalog and guided route editing surface in `README.md`, `docs/getting-started.md`, and `assistant/README.md`
 
 **Checkpoint**: User Stories 1 and 2 work together and route choices are explicit, inspectable, and reviewable.
 
@@ -84,15 +84,15 @@
 
 ### Tests for User Story 3
 
-- [ ] T020 [P] [US3] Add contract coverage for non-interactive validation, no-TTY guidance, progress-output semantics, and the bounded progress threshold in `/Users/rt/workspace/apply-the/boundline/tests/contract/init_cli_contract.rs`
-- [ ] T021 [P] [US3] Extend integration coverage for non-interactive parity, redirected-output safety, and failure/cancel progress cleanup in `/Users/rt/workspace/apply-the/boundline/tests/integration/init_bootstrap_flow.rs`
-- [ ] T022 [P] [US3] Add unit coverage for progress activity state transitions, bounded threshold activation, and TTY fallback logic in `/Users/rt/workspace/apply-the/boundline/src/cli/init.rs`
+- [ ] T020 [P] [US3] Add contract coverage for non-interactive validation, no-TTY guidance, progress-output semantics, and the bounded progress threshold in `tests/contract/init_cli_contract.rs`
+- [ ] T021 [P] [US3] Extend integration coverage for non-interactive parity, redirected-output safety, and failure/cancel progress cleanup in `tests/integration/init_bootstrap_flow.rs`
+- [ ] T022 [P] [US3] Add unit coverage for progress activity state transitions, bounded threshold activation, and TTY fallback logic in `src/cli/init.rs`
 
 ### Implementation for User Story 3
 
-- [ ] T023 [US3] Implement non-interactive init parity and explicit no-TTY guidance in `/Users/rt/workspace/apply-the/boundline/src/cli.rs` and `/Users/rt/workspace/apply-the/boundline/src/cli/init.rs`
-- [ ] T024 [US3] Implement bounded spinner rendering for interactive long-running steps and stable text progress for non-interactive output in `/Users/rt/workspace/apply-the/boundline/src/cli/init.rs`
-- [ ] T025 [US3] Update quickstart validation for version, guided bootstrap, non-interactive automation, and progress behavior in `/Users/rt/workspace/apply-the/boundline/specs/046-guided-init-tui/quickstart.md`
+- [ ] T023 [US3] Implement non-interactive init parity and explicit no-TTY guidance in `src/cli.rs` and `src/cli/init.rs`
+- [ ] T024 [US3] Implement bounded spinner rendering for interactive long-running steps and stable text progress for non-interactive output in `src/cli/init.rs`
+- [ ] T025 [US3] Update quickstart validation for version, guided bootstrap, non-interactive automation, and progress behavior in `specs/046-guided-init-tui/quickstart.md`
 
 **Checkpoint**: All three user stories are independently functional, including automation and progress feedback.
 
@@ -102,10 +102,10 @@
 
 **Purpose**: Close release, coverage, and validation requirements across the full slice.
 
-- [ ] T026 [P] Refresh init command help and release-aligned docs in `/Users/rt/workspace/apply-the/boundline/README.md`, `/Users/rt/workspace/apply-the/boundline/docs/configuration.md`, and `/Users/rt/workspace/apply-the/boundline/assistant/README.md`
-- [ ] T027 [P] Refresh coverage artifacts and verify every modified or created Rust file reaches at least 95% line coverage in `/Users/rt/workspace/apply-the/boundline/lcov.info`
-- [ ] T028 Run the full validation sweep from `/Users/rt/workspace/apply-the/boundline/specs/046-guided-init-tui/quickstart.md`, including `cargo test --no-run --all-targets --all-features`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, and `cargo fmt --check`
-- [ ] T029 Mark completed tasks and capture the released feature summary in `/Users/rt/workspace/apply-the/boundline/specs/046-guided-init-tui/tasks.md`
+- [ ] T026 [P] Refresh init command help and release-aligned docs in `README.md`, `docs/configuration.md`, and `assistant/README.md`
+- [ ] T027 [P] Refresh coverage artifacts and verify every modified or created Rust file reaches at least 95% line coverage in `lcov.info`
+- [ ] T028 Run the full validation sweep from `specs/046-guided-init-tui/quickstart.md`, including `cargo test --no-run --all-targets --all-features`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, and `cargo fmt --check`
+- [ ] T029 Mark completed tasks and capture the released feature summary in `specs/046-guided-init-tui/tasks.md`
 
 ---
 
@@ -155,7 +155,7 @@ Task: "Add unit coverage for guided step validation in src/cli/init.rs"
 
 ## Implementation Notes
 
-- Catalog schema authority: use the TOML example and rules in `/Users/rt/workspace/apply-the/boundline/specs/046-guided-init-tui/data-model.md` when implementing `/Users/rt/workspace/apply-the/boundline/assistant/catalog/model-catalog.toml`.
+- Catalog schema authority: use the TOML example and rules in `specs/046-guided-init-tui/data-model.md` when implementing `assistant/catalog/model-catalog.toml`.
 - No-TTY guidance text: use `Terminal interaction is unavailable. Rerun with --non-interactive and explicit flags.` as the baseline operator-facing message.
 - Assistant-pack reporting format: render per surface as `surface: <created> created, <updated> updated, <unchanged> unchanged`.
 - Progress validation: treat the interactive spinner threshold as a bounded, testable activation point so contract and unit coverage can verify SC-005 without relying on fragile wall-clock timing.

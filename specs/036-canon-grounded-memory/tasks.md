@@ -17,8 +17,8 @@
 
 **Purpose**: Finalize the 036 feature pack and confirm test-harness entry points before runtime changes.
 
-- [x] T001 Confirm and keep synchronized `/Users/rt/workspace/boundline/specs/036-canon-grounded-memory/plan.md`, `/Users/rt/workspace/boundline/specs/036-canon-grounded-memory/research.md`, `/Users/rt/workspace/boundline/specs/036-canon-grounded-memory/data-model.md`, `/Users/rt/workspace/boundline/specs/036-canon-grounded-memory/contracts/`, and `/Users/rt/workspace/boundline/specs/036-canon-grounded-memory/quickstart.md`
-- [x] T002 [P] Add or update top-level test harness references in `/Users/rt/workspace/boundline/tests/unit.rs`, `/Users/rt/workspace/boundline/tests/contract.rs`, and `/Users/rt/workspace/boundline/tests/integration.rs` if 036 introduces new test modules
+- [x] T001 Confirm and keep synchronized `specs/036-canon-grounded-memory/plan.md`, `specs/036-canon-grounded-memory/research.md`, `specs/036-canon-grounded-memory/data-model.md`, `specs/036-canon-grounded-memory/contracts/`, and `specs/036-canon-grounded-memory/quickstart.md`
+- [x] T002 [P] Add or update top-level test harness references in `tests/unit.rs`, `tests/contract.rs`, and `tests/integration.rs` if 036 introduces new test modules
 
 ---
 
@@ -28,10 +28,10 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [x] T003 Extend `/Users/rt/workspace/boundline/src/domain/task_context.rs`, `/Users/rt/workspace/boundline/src/domain/governance.rs`, and `/Users/rt/workspace/boundline/src/domain/decision.rs` with Canon capability snapshots, Canon context snapshots, compact Canon memory, and memory-credibility state primitives
-- [x] T004 [P] Extend `/Users/rt/workspace/boundline/src/domain/goal_plan.rs`, `/Users/rt/workspace/boundline/src/domain/session.rs`, `/Users/rt/workspace/boundline/src/domain/trace.rs`, and `/Users/rt/workspace/boundline/src/domain/follow_through.rs` with Canon-grounded projection fields shared by runtime and CLI surfaces
-- [x] T005 [P] Extend `/Users/rt/workspace/boundline/src/adapters/governance_runtime.rs` and `/Users/rt/workspace/boundline/src/orchestrator/governance.rs` to normalize Canon 0.39.0 capabilities, governance summaries, packet lineage, and bounded artifact-summary inputs into Boundline-owned state
-- [x] T006 [P] Extend `/Users/rt/workspace/boundline/tests/unit/decision_model.rs`, `/Users/rt/workspace/boundline/tests/unit/session_model.rs`, `/Users/rt/workspace/boundline/tests/unit/goal_plan_model.rs`, and `/Users/rt/workspace/boundline/tests/contract/decision_loop_contract.rs` with foundational coverage for Canon snapshot validation, compact-memory invariants, and credibility transitions
+- [x] T003 Extend `src/domain/task_context.rs`, `src/domain/governance.rs`, and `src/domain/decision.rs` with Canon capability snapshots, Canon context snapshots, compact Canon memory, and memory-credibility state primitives
+- [x] T004 [P] Extend `src/domain/goal_plan.rs`, `src/domain/session.rs`, `src/domain/trace.rs`, and `src/domain/follow_through.rs` with Canon-grounded projection fields shared by runtime and CLI surfaces
+- [x] T005 [P] Extend `src/adapters/governance_runtime.rs` and `src/orchestrator/governance.rs` to normalize Canon 0.39.0 capabilities, governance summaries, packet lineage, and bounded artifact-summary inputs into Boundline-owned state
+- [x] T006 [P] Extend `tests/unit/decision_model.rs`, `tests/unit/session_model.rs`, `tests/unit/goal_plan_model.rs`, and `tests/contract/decision_loop_contract.rs` with foundational coverage for Canon snapshot validation, compact-memory invariants, and credibility transitions
 
 **Checkpoint**: Canon snapshot normalization, persisted compact-memory state, and read-side projections exist and can support all user stories.
 
@@ -45,15 +45,15 @@
 
 ### Tests for User Story 1
 
-- [x] T007 [P] [US1] Add contract coverage for Canon-grounded proposal payloads and planning fallbacks in `/Users/rt/workspace/boundline/tests/contract/goal_plan_contract.rs` and `/Users/rt/workspace/boundline/tests/contract/runtime_refoundation_contract.rs`
-- [x] T008 [P] [US1] Add integration coverage for Canon-grounded `goal -> plan` behavior in `/Users/rt/workspace/boundline/tests/integration/session_native_flow.rs`
-- [x] T009 [P] [US1] Add unit coverage for Canon snapshot normalization, planning influence, and bounded-stop shaping in `/Users/rt/workspace/boundline/tests/unit/goal_planner.rs` and `/Users/rt/workspace/boundline/tests/unit/session_model.rs`
+- [x] T007 [P] [US1] Add contract coverage for Canon-grounded proposal payloads and planning fallbacks in `tests/contract/goal_plan_contract.rs` and `tests/contract/runtime_refoundation_contract.rs`
+- [x] T008 [P] [US1] Add integration coverage for Canon-grounded `goal -> plan` behavior in `tests/integration/session_native_flow.rs`
+- [x] T009 [P] [US1] Add unit coverage for Canon snapshot normalization, planning influence, and bounded-stop shaping in `tests/unit/goal_planner.rs` and `tests/unit/session_model.rs`
 
 ### Implementation for User Story 1
 
-- [x] T010 [US1] Extend `/Users/rt/workspace/boundline/src/orchestrator/governance.rs` and `/Users/rt/workspace/boundline/src/adapters/governance_runtime.rs` to derive Canon context snapshots from capabilities, governance summaries, packet reuse, and artifact summaries
-- [x] T011 [US1] Extend `/Users/rt/workspace/boundline/src/orchestrator/goal_planner.rs` and `/Users/rt/workspace/boundline/src/orchestrator/session_runtime.rs` so Canon-grounded snapshots can shape target selection, verification strategy, planning rationale, and bounded planning stops
-- [x] T012 [US1] Extend `/Users/rt/workspace/boundline/src/domain/goal_plan.rs` and `/Users/rt/workspace/boundline/src/domain/session.rs` so active proposals persist Canon-grounded headlines, lineage, and compact-memory credibility alongside the existing plan story
+- [x] T010 [US1] Extend `src/orchestrator/governance.rs` and `src/adapters/governance_runtime.rs` to derive Canon context snapshots from capabilities, governance summaries, packet reuse, and artifact summaries
+- [x] T011 [US1] Extend `src/orchestrator/goal_planner.rs` and `src/orchestrator/session_runtime.rs` so Canon-grounded snapshots can shape target selection, verification strategy, planning rationale, and bounded planning stops
+- [x] T012 [US1] Extend `src/domain/goal_plan.rs` and `src/domain/session.rs` so active proposals persist Canon-grounded headlines, lineage, and compact-memory credibility alongside the existing plan story
 
 **Checkpoint**: Native planning now treats Canon-grounded evidence as live bounded reasoning input and projects that influence explicitly.
 
@@ -67,15 +67,15 @@
 
 ### Tests for User Story 2
 
-- [x] T013 [P] [US2] Add contract coverage for compact-memory reuse and refresh semantics in `/Users/rt/workspace/boundline/tests/contract/decision_loop_contract.rs` and `/Users/rt/workspace/boundline/tests/contract/trace_summary_contract.rs`
-- [x] T014 [P] [US2] Add integration coverage for long-running Canon-memory reuse and stale-memory handling in `/Users/rt/workspace/boundline/tests/integration/runtime_refoundation_flow.rs` and `/Users/rt/workspace/boundline/tests/integration/session_native_flow.rs`
-- [x] T015 [P] [US2] Add unit coverage for compact-memory lifecycle, credibility transitions, and Canon-influenced decision evidence in `/Users/rt/workspace/boundline/tests/unit/decision_loop.rs`, `/Users/rt/workspace/boundline/tests/unit/decision_model.rs`, and `/Users/rt/workspace/boundline/tests/unit/runtime_routing.rs`
+- [x] T013 [P] [US2] Add contract coverage for compact-memory reuse and refresh semantics in `tests/contract/decision_loop_contract.rs` and `tests/contract/trace_summary_contract.rs`
+- [x] T014 [P] [US2] Add integration coverage for long-running Canon-memory reuse and stale-memory handling in `tests/integration/runtime_refoundation_flow.rs` and `tests/integration/session_native_flow.rs`
+- [x] T015 [P] [US2] Add unit coverage for compact-memory lifecycle, credibility transitions, and Canon-influenced decision evidence in `tests/unit/decision_loop.rs`, `tests/unit/decision_model.rs`, and `tests/unit/runtime_routing.rs`
 
 ### Implementation for User Story 2
 
-- [x] T016 [US2] Extend `/Users/rt/workspace/boundline/src/domain/task_context.rs` and `/Users/rt/workspace/boundline/src/domain/decision.rs` to persist compact Canon memory, carry-forward evidence lines, and explicit credibility transitions across later bounded actions
-- [x] T017 [US2] Extend `/Users/rt/workspace/boundline/src/orchestrator/decision_loop.rs` so later decision selection can reuse credible compact Canon memory, attribute Canon evidence explicitly, and trigger refresh or replan when the memory is non-credible
-- [x] T018 [US2] Extend `/Users/rt/workspace/boundline/src/orchestrator/session_runtime.rs` and `/Users/rt/workspace/boundline/src/cli/run.rs` so direct native run and resumed native execution preserve and reuse compact Canon memory across proposal, execution, and replanning boundaries
+- [x] T016 [US2] Extend `src/domain/task_context.rs` and `src/domain/decision.rs` to persist compact Canon memory, carry-forward evidence lines, and explicit credibility transitions across later bounded actions
+- [x] T017 [US2] Extend `src/orchestrator/decision_loop.rs` so later decision selection can reuse credible compact Canon memory, attribute Canon evidence explicitly, and trigger refresh or replan when the memory is non-credible
+- [x] T018 [US2] Extend `src/orchestrator/session_runtime.rs` and `src/cli/run.rs` so direct native run and resumed native execution preserve and reuse compact Canon memory across proposal, execution, and replanning boundaries
 
 **Checkpoint**: Long-running native sessions can reuse credible compact Canon memory and stop explicitly when that memory becomes stale, contradicted, or insufficient.
 
@@ -89,15 +89,15 @@
 
 ### Tests for User Story 3
 
-- [x] T019 [P] [US3] Add contract coverage for CLI-visible Canon inspection and compatibility continuity in `/Users/rt/workspace/boundline/tests/contract/runtime_routing_contract.rs` and `/Users/rt/workspace/boundline/tests/contract/trace_summary_contract.rs`
-- [x] T020 [P] [US3] Add integration coverage for Canon memory projection and explicit stop behavior on `run`, `status`, `next`, and `inspect` in `/Users/rt/workspace/boundline/tests/integration/session_native_flow.rs`, `/Users/rt/workspace/boundline/tests/integration/runtime_refoundation_flow.rs`, and `/Users/rt/workspace/boundline/tests/integration/flow_cli_run.rs`
-- [x] T021 [P] [US3] Add unit coverage for Canon inspection rendering, follow-through guidance, and session execution-path projection in `/Users/rt/workspace/boundline/tests/unit/cli_output.rs`, `/Users/rt/workspace/boundline/tests/unit/session_model.rs`, and `/Users/rt/workspace/boundline/tests/unit/runtime_routing.rs`
+- [x] T019 [P] [US3] Add contract coverage for CLI-visible Canon inspection and compatibility continuity in `tests/contract/runtime_routing_contract.rs` and `tests/contract/trace_summary_contract.rs`
+- [x] T020 [P] [US3] Add integration coverage for Canon memory projection and explicit stop behavior on `run`, `status`, `next`, and `inspect` in `tests/integration/session_native_flow.rs`, `tests/integration/runtime_refoundation_flow.rs`, and `tests/integration/flow_cli_run.rs`
+- [x] T021 [P] [US3] Add unit coverage for Canon inspection rendering, follow-through guidance, and session execution-path projection in `tests/unit/cli_output.rs`, `tests/unit/session_model.rs`, and `tests/unit/runtime_routing.rs`
 
 ### Implementation for User Story 3
 
-- [x] T022 [US3] Extend `/Users/rt/workspace/boundline/src/cli/session.rs`, `/Users/rt/workspace/boundline/src/cli/output.rs`, `/Users/rt/workspace/boundline/src/cli/inspect.rs`, and `/Users/rt/workspace/boundline/src/domain/follow_through.rs` to render Canon context headlines, compact-memory credibility, lineage, and refresh or stop guidance
-- [x] T023 [US3] Extend `/Users/rt/workspace/boundline/src/domain/session.rs`, `/Users/rt/workspace/boundline/src/domain/trace.rs`, and `/Users/rt/workspace/boundline/src/orchestrator/decision_loop.rs` so authoritative session and trace summaries project Canon-grounded reasoning and compact-memory state consistently
-- [x] T024 [US3] Extend `/Users/rt/workspace/boundline/src/orchestrator/session_runtime.rs` and `/Users/rt/workspace/boundline/src/orchestrator/governance.rs` so explicit compatibility-governed follow-up remains trace-authoritative while reusing the same Canon-grounded reasoning vocabulary where trace evidence exists
+- [x] T022 [US3] Extend `src/cli/session.rs`, `src/cli/output.rs`, `src/cli/inspect.rs`, and `src/domain/follow_through.rs` to render Canon context headlines, compact-memory credibility, lineage, and refresh or stop guidance
+- [x] T023 [US3] Extend `src/domain/session.rs`, `src/domain/trace.rs`, and `src/orchestrator/decision_loop.rs` so authoritative session and trace summaries project Canon-grounded reasoning and compact-memory state consistently
+- [x] T024 [US3] Extend `src/orchestrator/session_runtime.rs` and `src/orchestrator/governance.rs` so explicit compatibility-governed follow-up remains trace-authoritative while reusing the same Canon-grounded reasoning vocabulary where trace evidence exists
 
 **Checkpoint**: Operators can inspect Canon-grounded influence and bounded stops from the normal Boundline surfaces without losing route ownership clarity.
 
@@ -111,14 +111,14 @@
 
 ### Tests for User Story 4
 
-- [x] T025 [P] [US4] Refresh focused coverage assertions for touched Rust files via `/Users/rt/workspace/boundline/lcov.info` and supporting validation commands
+- [x] T025 [P] [US4] Refresh focused coverage assertions for touched Rust files via `lcov.info` and supporting validation commands
 
 ### Implementation for User Story 4
 
-- [x] T026 [US4] Bump crate version to `0.36.0` in `/Users/rt/workspace/boundline/Cargo.toml` and `/Users/rt/workspace/boundline/Cargo.lock`
-- [x] T027 [US4] Update impacted docs and release narrative in `/Users/rt/workspace/boundline/README.md`, `/Users/rt/workspace/boundline/docs/`, `/Users/rt/workspace/boundline/CONTRIBUTING.md`, `/Users/rt/workspace/boundline/CHANGELOG.md`, and `/Users/rt/workspace/boundline/AGENTS.md`
-- [x] T028 [US4] Update `/Users/rt/workspace/boundline/ROADMAP.md` to mark Spec 036 as delivered and remove it from the remaining future macrofeature line
-- [x] T029 [US4] Update assistant guidance impacted by Canon-grounded reasoning in `/Users/rt/workspace/boundline/assistant/README.md`, `/Users/rt/workspace/boundline/assistant/claude/commands/`, `/Users/rt/workspace/boundline/assistant/codex/commands/`, `/Users/rt/workspace/boundline/assistant/copilot/prompts/`, and `/Users/rt/workspace/boundline/assistant/gemini/README.md`
+- [x] T026 [US4] Bump crate version to `0.36.0` in `Cargo.toml` and `Cargo.lock`
+- [x] T027 [US4] Update impacted docs and release narrative in `README.md`, `docs/`, `CONTRIBUTING.md`, `CHANGELOG.md`, and `AGENTS.md`
+- [x] T028 [US4] Update `ROADMAP.md` to mark Spec 036 as delivered and remove it from the remaining future macrofeature line
+- [x] T029 [US4] Update assistant guidance impacted by Canon-grounded reasoning in `assistant/README.md`, `assistant/claude/commands/`, `assistant/codex/commands/`, `assistant/copilot/prompts/`, and `assistant/gemini/README.md`
 
 **Checkpoint**: Release artifacts describe `0.36.0` and Canon-grounded reasoning consistently.
 
@@ -132,7 +132,7 @@
 - [x] T031 [P] Run lint validation with `cargo clippy --workspace --all-targets --all-features -- -D warnings`
 - [x] T032 Run compile-oriented and broader Rust validation for the slice with `cargo test --no-run --all-targets` and `cargo nextest run --workspace --all-features`
 - [x] T033 Refresh line coverage with `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info` and confirm modified or new Rust files stay above 95%
-- [x] T034 Mark completed tasks in `/Users/rt/workspace/boundline/specs/036-canon-grounded-memory/tasks.md` and capture the final descriptive commit message in the implementation summary
+- [x] T034 Mark completed tasks in `specs/036-canon-grounded-memory/tasks.md` and capture the final descriptive commit message in the implementation summary
 
 ---
 

@@ -393,21 +393,67 @@ mod tests {
                 canon_semantic_contract_line: None,
                 canon_semantic_provenance_ref: None,
             }],
-            semantic_trace_records: vec![SemanticTraceRecord {
-                record_id: "trace-output-semantic".to_string(),
-                event_kind: SemanticTraceEventKind::CandidateRejected,
-                candidate_ref: Some("src/semantic.rs".to_string()),
-                match_origin: Some(RetrievalMatchOrigin::SemanticExpand),
-                compatibility_state: Some(RetrievalCompatibilityState::Compatible),
-                semantic_score: RetrievalScore::from_raw(0.812),
-                canon_artifact_class: None,
-                canon_semantic_contract_line: None,
-                canon_semantic_provenance_boundary: None,
-                canon_semantic_provenance_ref: None,
-                reason:
-                    "semantic similarity found the candidate but the bounded evidence limit kept the V1 set unchanged"
+            semantic_trace_records: vec![
+                SemanticTraceRecord {
+                    record_id: "trace-output-extension".to_string(),
+                    event_kind: SemanticTraceEventKind::ExtensionLoadAttempted,
+                    candidate_ref: None,
+                    match_origin: None,
+                    compatibility_state: None,
+                    semantic_score: None,
+                    canon_artifact_class: None,
+                    canon_semantic_contract_line: None,
+                    canon_semantic_provenance_boundary: None,
+                    canon_semantic_provenance_ref: None,
+                    reason:
+                        "trusted sqlite-vec extension load attempted: capability=ready retrieval_index_state=ready"
+                            .to_string(),
+                },
+                SemanticTraceRecord {
+                    record_id: "trace-output-vector-query".to_string(),
+                    event_kind: SemanticTraceEventKind::VectorQueryExecuted,
+                    candidate_ref: None,
+                    match_origin: None,
+                    compatibility_state: None,
+                    semantic_score: None,
+                    canon_artifact_class: None,
+                    canon_semantic_contract_line: None,
+                    canon_semantic_provenance_boundary: None,
+                    canon_semantic_provenance_ref: None,
+                    reason: "vector query executed through semantic engine: engine=sqlite_vec"
                         .to_string(),
-            }],
+                },
+                SemanticTraceRecord {
+                    record_id: "trace-output-vector-candidates".to_string(),
+                    event_kind: SemanticTraceEventKind::VectorCandidatesReturned,
+                    candidate_ref: None,
+                    match_origin: None,
+                    compatibility_state: None,
+                    semantic_score: None,
+                    canon_artifact_class: None,
+                    canon_semantic_contract_line: None,
+                    canon_semantic_provenance_boundary: None,
+                    canon_semantic_provenance_ref: None,
+                    reason:
+                        "vector query returned chunk candidates before source collapse: 1"
+                            .to_string(),
+                },
+                SemanticTraceRecord {
+                    record_id: "trace-output-semantic".to_string(),
+                    event_kind: SemanticTraceEventKind::CandidateRejected,
+                    candidate_ref: Some("src/semantic.rs".to_string()),
+                    match_origin: Some(RetrievalMatchOrigin::SemanticExpand),
+                    compatibility_state: Some(RetrievalCompatibilityState::Compatible),
+                    semantic_score: RetrievalScore::from_raw(0.812),
+                    canon_artifact_class: None,
+                    canon_semantic_contract_line: None,
+                    canon_semantic_provenance_boundary: None,
+                    canon_semantic_provenance_ref: None,
+                    reason:
+                        "semantic similarity found the candidate but the bounded evidence limit kept the V1 set unchanged"
+                            .to_string(),
+                },
+            ],
             relationships: Vec::new(),
             impact_findings: Vec::new(),
         };
@@ -427,6 +473,102 @@ mod tests {
         assert!(lines.iter().any(|line| {
             line == "semantic_trace: candidate_rejected ref=src/semantic.rs origin=semantic_expand compatibility=compatible semantic_score=0.812 semantic similarity found the candidate but the bounded evidence limit kept the V1 set unchanged"
         }));
+        assert!(lines.iter().any(|line| {
+            line == "semantic_trace: extension_load_attempted trusted sqlite-vec extension load attempted: capability=ready retrieval_index_state=ready"
+        }));
+        assert!(lines.iter().any(|line| {
+            line == "semantic_trace: vector_query_executed vector query executed through semantic engine: engine=sqlite_vec"
+        }));
+        assert!(lines.iter().any(|line| {
+            line == "semantic_trace: vector_candidates_returned vector query returned chunk candidates before source collapse: 1"
+        }));
+    }
+
+    #[test]
+    fn push_advanced_context_lines_surfaces_recovery_guidance_for_corrupt_index() {
+        let advanced_context = AdvancedContextProjection {
+            query_id: "query-output-recovery".to_string(),
+            retrieval_mode: RetrievalMode::Local,
+            retrieval_state: RetrievalState::Degraded,
+            retrieval_index_state: RetrievalIndexState::Corrupt,
+            semantic_policy_state: SemanticPolicyState::Local,
+            semantic_capability_state: SemanticCapabilityState::Corrupt,
+            hybrid_outcome: HybridOutcome::Fallback,
+            budgets: Default::default(),
+            remote_policy_state: RemoteTransmissionPolicyState::LocalOnly,
+            used_remote: false,
+            terminal_reason: Some("derived index is corrupt; using bounded fallback".to_string()),
+            selected_evidence: Vec::new(),
+            rejected_candidates: Vec::new(),
+            semantic_trace_records: Vec::new(),
+            relationships: Vec::new(),
+            impact_findings: Vec::new(),
+        };
+        let mut lines = Vec::new();
+
+        push_advanced_context_lines(&mut lines, Some(&advanced_context));
+
+        assert!(lines.iter().any(|line| {
+            line == "retrieval_recovery_guidance: run boundline index doctor to inspect vector capability, hooks, and tracked-file hygiene"
+        }));
+    }
+
+    #[test]
+    fn push_advanced_context_lines_surfaces_recovery_guidance_for_other_index_states() {
+        for (retrieval_index_state, expected_guidance) in [
+            (
+                RetrievalIndexState::Missing,
+                "retrieval_recovery_guidance: run boundline index refresh in the target workspace before relying on semantic retrieval",
+            ),
+            (
+                RetrievalIndexState::Stale,
+                "retrieval_recovery_guidance: run boundline index refresh in the target workspace before relying on semantic retrieval",
+            ),
+            (
+                RetrievalIndexState::Incompatible,
+                "retrieval_recovery_guidance: run boundline index rebuild or boundline index doctor in the target workspace",
+            ),
+            (
+                RetrievalIndexState::Degraded,
+                "retrieval_recovery_guidance: run boundline index doctor to inspect vector capability, hooks, and tracked-file hygiene",
+            ),
+            (
+                RetrievalIndexState::SemanticUnavailable,
+                "retrieval_recovery_guidance: run boundline index doctor to inspect vector capability, hooks, and tracked-file hygiene",
+            ),
+            (
+                RetrievalIndexState::Building,
+                "retrieval_recovery_guidance: rerun boundline index status or refresh after the derived index is available",
+            ),
+            (
+                RetrievalIndexState::Insufficient,
+                "retrieval_recovery_guidance: rerun boundline index status or refresh after the derived index is available",
+            ),
+        ] {
+            let advanced_context = AdvancedContextProjection {
+                query_id: format!("query-output-{retrieval_index_state:?}"),
+                retrieval_mode: RetrievalMode::Local,
+                retrieval_state: RetrievalState::Degraded,
+                retrieval_index_state,
+                semantic_policy_state: SemanticPolicyState::Local,
+                semantic_capability_state: SemanticCapabilityState::Unsupported,
+                hybrid_outcome: HybridOutcome::Fallback,
+                budgets: Default::default(),
+                remote_policy_state: RemoteTransmissionPolicyState::LocalOnly,
+                used_remote: false,
+                terminal_reason: Some("bounded fallback in use".to_string()),
+                selected_evidence: Vec::new(),
+                rejected_candidates: Vec::new(),
+                semantic_trace_records: Vec::new(),
+                relationships: Vec::new(),
+                impact_findings: Vec::new(),
+            };
+            let mut lines = Vec::new();
+
+            push_advanced_context_lines(&mut lines, Some(&advanced_context));
+
+            assert!(lines.iter().any(|line| line == expected_guidance), "{lines:?}");
+        }
     }
 
     #[test]
@@ -707,6 +849,7 @@ mod tests {
                     assistant: Vec::new(),
                     ide: Vec::new(),
                     auto_approve: None,
+                    semantic_index_hook_action: None,
                     domain: Vec::new(),
                     domain_standard: Vec::new(),
                     context_binding: Vec::new(),

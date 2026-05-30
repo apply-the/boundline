@@ -1,6 +1,6 @@
 # Implementation Plan: Checkpoint Rewind
 
-**Branch**: `041-checkpoint-rewind` | **Date**: 2026-05-04 | **Spec**: [/Users/rt/workspace/synod/specs/041-checkpoint-rewind/spec.md](/Users/rt/workspace/synod/specs/041-checkpoint-rewind/spec.md)
+**Branch**: `041-checkpoint-rewind` | **Date**: 2026-05-04 | **Spec**: [specs/041-checkpoint-rewind/spec.md](specs/041-checkpoint-rewind/spec.md)
 **Input**: Feature specification from `/specs/041-checkpoint-rewind/spec.md`
 
 **Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.

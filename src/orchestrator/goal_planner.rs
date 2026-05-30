@@ -250,7 +250,8 @@ struct ContextCandidate {
     priority: usize,
 }
 
-fn collect_workspace_file_refs(workspace_ref: &Path) -> Vec<String> {
+/// Collects bounded workspace-relative file references for local indexing flows.
+pub fn collect_workspace_file_refs(workspace_ref: &Path) -> Vec<String> {
     let mut files = Vec::new();
     collect_workspace_files(workspace_ref, workspace_ref, 0, &mut files);
     files
@@ -2351,6 +2352,7 @@ mod tests {
         let routing = RoutingConfig {
             semantic_acceleration: Some(SemanticAccelerationPolicy {
                 policy: SemanticAccelerationPolicyState::Local,
+                ..SemanticAccelerationPolicy::default()
             }),
             ..RoutingConfig::default()
         };

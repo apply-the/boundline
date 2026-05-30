@@ -14,9 +14,9 @@ bounded, inspectable value independently.
 
 **Purpose**: Prepare the test harness and fixtures for clustered workflows.
 
-- [X] T001 Wire cluster test harness registrations in /Users/rt/workspace/boundline/tests/unit.rs, /Users/rt/workspace/boundline/tests/contract.rs, and /Users/rt/workspace/boundline/tests/integration.rs
-- [X] T002 [P] Add reusable clustered workspace fixture helpers in /Users/rt/workspace/boundline/tests/support/workspace_fixture.rs
-- [X] T003 [P] Scaffold feature test files in /Users/rt/workspace/boundline/tests/contract/cluster_cli_contract.rs, /Users/rt/workspace/boundline/tests/contract/cluster_config_contract.rs, /Users/rt/workspace/boundline/tests/integration/cluster_bootstrap_flow.rs, /Users/rt/workspace/boundline/tests/integration/cluster_status_flow.rs, /Users/rt/workspace/boundline/tests/integration/cluster_config_flow.rs, /Users/rt/workspace/boundline/tests/unit/cluster_models.rs, /Users/rt/workspace/boundline/tests/unit/cluster_projection.rs, and /Users/rt/workspace/boundline/tests/unit/cluster_config_resolution.rs
+- [X] T001 Wire cluster test harness registrations in tests/unit.rs, tests/contract.rs, and tests/integration.rs
+- [X] T002 [P] Add reusable clustered workspace fixture helpers in tests/support/workspace_fixture.rs
+- [X] T003 [P] Scaffold feature test files in tests/contract/cluster_cli_contract.rs, tests/contract/cluster_config_contract.rs, tests/integration/cluster_bootstrap_flow.rs, tests/integration/cluster_status_flow.rs, tests/integration/cluster_config_flow.rs, tests/unit/cluster_models.rs, tests/unit/cluster_projection.rs, and tests/unit/cluster_config_resolution.rs
 
 ---
 
@@ -26,11 +26,11 @@ bounded, inspectable value independently.
 
 **CRITICAL**: No user story work can begin until this phase is complete.
 
-- [X] T004 Create shared cluster domain models and exports in /Users/rt/workspace/boundline/src/domain/cluster.rs, /Users/rt/workspace/boundline/src/domain.rs, and /Users/rt/workspace/boundline/src/lib.rs
-- [X] T005 [P] Add cluster persistence primitives in /Users/rt/workspace/boundline/src/adapters/cluster_store.rs and /Users/rt/workspace/boundline/src/adapters.rs
-- [X] T006 [P] Extend configuration types and precedence primitives for cluster scope in /Users/rt/workspace/boundline/src/domain/configuration.rs and /Users/rt/workspace/boundline/src/cli/config.rs
-- [X] T007 [P] Extend CLI parsing, dispatch, and rendering hooks for cluster-aware commands in /Users/rt/workspace/boundline/src/cli.rs and /Users/rt/workspace/boundline/src/cli/output.rs
-- [X] T008 Add explicit cluster report and member-projection primitives in /Users/rt/workspace/boundline/src/domain/cluster.rs and /Users/rt/workspace/boundline/src/cli/cluster.rs
+- [X] T004 Create shared cluster domain models and exports in src/domain/cluster.rs, src/domain.rs, and src/lib.rs
+- [X] T005 [P] Add cluster persistence primitives in src/adapters/cluster_store.rs and src/adapters.rs
+- [X] T006 [P] Extend configuration types and precedence primitives for cluster scope in src/domain/configuration.rs and src/cli/config.rs
+- [X] T007 [P] Extend CLI parsing, dispatch, and rendering hooks for cluster-aware commands in src/cli.rs and src/cli/output.rs
+- [X] T008 Add explicit cluster report and member-projection primitives in src/domain/cluster.rs and src/cli/cluster.rs
 
 **Checkpoint**: Foundation ready - Boundline can represent clusters, persist cluster state, parse cluster-aware commands, and resolve cluster scope in shared primitives.
 
@@ -44,15 +44,15 @@ bounded, inspectable value independently.
 
 ### Tests for User Story 1
 
-- [X] T009 [P] [US1] Add contract coverage for `boundline cluster init` membership validation and failure behavior in /Users/rt/workspace/boundline/tests/contract/cluster_cli_contract.rs
-- [X] T010 [P] [US1] Add integration coverage for successful cluster bootstrap and invalid-member rejection in /Users/rt/workspace/boundline/tests/integration/cluster_bootstrap_flow.rs
-- [X] T011 [P] [US1] Add unit coverage for cluster validation and file persistence in /Users/rt/workspace/boundline/tests/unit/cluster_models.rs and /Users/rt/workspace/boundline/src/adapters/cluster_store.rs
+- [X] T009 [P] [US1] Add contract coverage for `boundline cluster init` membership validation and failure behavior in tests/contract/cluster_cli_contract.rs
+- [X] T010 [P] [US1] Add integration coverage for successful cluster bootstrap and invalid-member rejection in tests/integration/cluster_bootstrap_flow.rs
+- [X] T011 [P] [US1] Add unit coverage for cluster validation and file persistence in tests/unit/cluster_models.rs and src/adapters/cluster_store.rs
 
 ### Implementation for User Story 1
 
-- [X] T012 [US1] Implement cluster validation and persisted cluster file models in /Users/rt/workspace/boundline/src/domain/cluster.rs and /Users/rt/workspace/boundline/src/adapters/cluster_store.rs
-- [X] T013 [US1] Implement `boundline cluster init` command flow in /Users/rt/workspace/boundline/src/cli/cluster.rs and /Users/rt/workspace/boundline/src/cli.rs
-- [X] T014 [US1] Render cluster init summaries and actionable validation errors in /Users/rt/workspace/boundline/src/cli/output.rs
+- [X] T012 [US1] Implement cluster validation and persisted cluster file models in src/domain/cluster.rs and src/adapters/cluster_store.rs
+- [X] T013 [US1] Implement `boundline cluster init` command flow in src/cli/cluster.rs and src/cli.rs
+- [X] T014 [US1] Render cluster init summaries and actionable validation errors in src/cli/output.rs
 
 **Checkpoint**: User Story 1 is complete when Boundline can bootstrap a named cluster from a primary workspace and fail cleanly on invalid members.
 
@@ -66,15 +66,15 @@ bounded, inspectable value independently.
 
 ### Tests for User Story 2
 
-- [X] T015 [P] [US2] Add contract coverage for `boundline cluster status` and `boundline cluster inspect` in /Users/rt/workspace/boundline/tests/contract/cluster_cli_contract.rs
-- [X] T016 [P] [US2] Add integration coverage for mixed member state aggregation in /Users/rt/workspace/boundline/tests/integration/cluster_status_flow.rs
-- [X] T017 [P] [US2] Add unit coverage for cluster session projection and member classification in /Users/rt/workspace/boundline/tests/unit/cluster_projection.rs
+- [X] T015 [P] [US2] Add contract coverage for `boundline cluster status` and `boundline cluster inspect` in tests/contract/cluster_cli_contract.rs
+- [X] T016 [P] [US2] Add integration coverage for mixed member state aggregation in tests/integration/cluster_status_flow.rs
+- [X] T017 [P] [US2] Add unit coverage for cluster session projection and member classification in tests/unit/cluster_projection.rs
 
 ### Implementation for User Story 2
 
-- [X] T018 [US2] Implement explicit member-session projection for cluster reports in /Users/rt/workspace/boundline/src/cli/cluster.rs and /Users/rt/workspace/boundline/src/domain/cluster.rs
-- [X] T019 [US2] Implement cluster status and cluster inspect aggregation in /Users/rt/workspace/boundline/src/cli/cluster.rs and /Users/rt/workspace/boundline/src/adapters/session_store.rs
-- [X] T020 [US2] Surface cluster-aware member classifications and trace references in /Users/rt/workspace/boundline/src/cli/output.rs and /Users/rt/workspace/boundline/src/adapters/trace_store.rs
+- [X] T018 [US2] Implement explicit member-session projection for cluster reports in src/cli/cluster.rs and src/domain/cluster.rs
+- [X] T019 [US2] Implement cluster status and cluster inspect aggregation in src/cli/cluster.rs and src/adapters/session_store.rs
+- [X] T020 [US2] Surface cluster-aware member classifications and trace references in src/cli/output.rs and src/adapters/trace_store.rs
 
 **Checkpoint**: User Stories 1 and 2 are complete when operators can bootstrap a cluster and inspect explicit per-member state and traces from one command surface.
 
@@ -88,15 +88,15 @@ bounded, inspectable value independently.
 
 ### Tests for User Story 3
 
-- [X] T021 [P] [US3] Add contract coverage for cluster-scoped `boundline config show|set|unset` in /Users/rt/workspace/boundline/tests/contract/cluster_config_contract.rs
-- [X] T022 [P] [US3] Add integration coverage for cluster precedence and malformed cluster config handling in /Users/rt/workspace/boundline/tests/integration/cluster_config_flow.rs
-- [X] T023 [P] [US3] Add unit coverage for cluster-aware effective routing resolution in /Users/rt/workspace/boundline/tests/unit/cluster_config_resolution.rs and /Users/rt/workspace/boundline/tests/unit/config_resolution.rs
+- [X] T021 [P] [US3] Add contract coverage for cluster-scoped `boundline config show|set|unset` in tests/contract/cluster_config_contract.rs
+- [X] T022 [P] [US3] Add integration coverage for cluster precedence and malformed cluster config handling in tests/integration/cluster_config_flow.rs
+- [X] T023 [P] [US3] Add unit coverage for cluster-aware effective routing resolution in tests/unit/cluster_config_resolution.rs and tests/unit/config_resolution.rs
 
 ### Implementation for User Story 3
 
-- [X] T024 [US3] Implement cluster-scoped config load/save/unset behavior in /Users/rt/workspace/boundline/src/adapters/cluster_store.rs and /Users/rt/workspace/boundline/src/cli/config.rs
-- [X] T025 [US3] Extend effective routing resolution and config scopes for cluster precedence in /Users/rt/workspace/boundline/src/domain/configuration.rs and /Users/rt/workspace/boundline/src/cli.rs
-- [X] T026 [US3] Render cluster-aware effective config and source attribution in /Users/rt/workspace/boundline/src/cli/output.rs and /Users/rt/workspace/boundline/src/cli/config.rs
+- [X] T024 [US3] Implement cluster-scoped config load/save/unset behavior in src/adapters/cluster_store.rs and src/cli/config.rs
+- [X] T025 [US3] Extend effective routing resolution and config scopes for cluster precedence in src/domain/configuration.rs and src/cli.rs
+- [X] T026 [US3] Render cluster-aware effective config and source attribution in src/cli/output.rs and src/cli/config.rs
 
 **Checkpoint**: All user stories are complete when Boundline can register a cluster, inspect member state, and resolve cluster-scoped defaults without breaking local overrides.
 
@@ -106,8 +106,8 @@ bounded, inspectable value independently.
 
 **Purpose**: Finalize docs, keep the spec artifacts aligned, and run repository validation.
 
-- [X] T027 [P] Update clustered workflow documentation in /Users/rt/workspace/boundline/README.md, /Users/rt/workspace/boundline/docs/getting-started.md, /Users/rt/workspace/boundline/docs/configuration.md, and /Users/rt/workspace/boundline/specs/012-multi-workspace/quickstart.md
-- [X] T028 [P] Sync planning metadata and roadmap guidance in /Users/rt/workspace/boundline/AGENTS.md and /Users/rt/workspace/boundline/ROADMAP.md
+- [X] T027 [P] Update clustered workflow documentation in README.md, docs/getting-started.md, docs/configuration.md, and specs/012-multi-workspace/quickstart.md
+- [X] T028 [P] Sync planning metadata and roadmap guidance in AGENTS.md and ROADMAP.md
 - [X] T029 Run formatting, lint, and targeted/full test validation with `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, and `cargo test --all-targets`
 
 ---

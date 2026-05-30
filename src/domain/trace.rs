@@ -476,6 +476,11 @@ mod tests {
     use super::{
         ExecutionTrace, InspectClosureKind, InspectClosureView, TraceEventType, TraceSummaryView,
     };
+    use crate::domain::context_intelligence::{
+        AdvancedContextProjection, HybridOutcome, RemoteTransmissionPolicyState,
+        RetrievalIndexState, RetrievalMode, RetrievalState, SemanticCapabilityState,
+        SemanticPolicyState, SemanticTraceEventKind, SemanticTraceRecord,
+    };
     use crate::domain::limits::TerminalCondition;
     use crate::domain::task::{TaskStatus, TerminalReason};
 
@@ -536,6 +541,73 @@ mod tests {
         assert!(summary.terminal_reason.message.is_empty());
         assert!(summary.context_primary_inputs.is_empty());
         assert!(summary.context_provenance.is_empty());
+    }
+
+    #[test]
+    fn trace_summary_view_serializes_semantic_trace_lifecycle_records() {
+        let summary = TraceSummaryView {
+            trace_ref: "/tmp/boundline-semantic-trace.json".to_string(),
+            goal: "inspect semantic trace lifecycle".to_string(),
+            advanced_context: Some(AdvancedContextProjection {
+                query_id: "trace-summary-semantic".to_string(),
+                retrieval_mode: RetrievalMode::Local,
+                retrieval_state: RetrievalState::Selected,
+                retrieval_index_state: RetrievalIndexState::Ready,
+                semantic_policy_state: SemanticPolicyState::Local,
+                semantic_capability_state: SemanticCapabilityState::Ready,
+                hybrid_outcome: HybridOutcome::Expanded,
+                budgets: Default::default(),
+                remote_policy_state: RemoteTransmissionPolicyState::LocalOnly,
+                used_remote: false,
+                terminal_reason: Some("semantic retrieval succeeded".to_string()),
+                selected_evidence: Vec::new(),
+                rejected_candidates: Vec::new(),
+                semantic_trace_records: vec![
+                    SemanticTraceRecord {
+                        record_id: "trace-extension-load".to_string(),
+                        event_kind: SemanticTraceEventKind::ExtensionLoadAttempted,
+                        candidate_ref: None,
+                        match_origin: None,
+                        compatibility_state: None,
+                        semantic_score: None,
+                        canon_artifact_class: None,
+                        canon_semantic_contract_line: None,
+                        canon_semantic_provenance_boundary: None,
+                        canon_semantic_provenance_ref: None,
+                        reason:
+                            "trusted sqlite-vec extension load attempted: capability=ready retrieval_index_state=ready"
+                                .to_string(),
+                    },
+                    SemanticTraceRecord {
+                        record_id: "trace-vector-query".to_string(),
+                        event_kind: SemanticTraceEventKind::VectorQueryExecuted,
+                        candidate_ref: None,
+                        match_origin: None,
+                        compatibility_state: None,
+                        semantic_score: None,
+                        canon_artifact_class: None,
+                        canon_semantic_contract_line: None,
+                        canon_semantic_provenance_boundary: None,
+                        canon_semantic_provenance_ref: None,
+                        reason:
+                            "vector query executed through semantic engine: engine=sqlite_vec"
+                                .to_string(),
+                    },
+                ],
+                relationships: Vec::new(),
+                impact_findings: Vec::new(),
+            }),
+            ..TraceSummaryView::default()
+        };
+
+        let serialized = serde_json::to_value(&summary).expect("trace summary serializes");
+        let trace_records = serialized["advanced_context"]["semantic_trace_records"]
+            .as_array()
+            .expect("semantic trace records array");
+
+        assert_eq!(trace_records.len(), 2);
+        assert_eq!(trace_records[0]["event_kind"].as_str(), Some("extension_load_attempted"));
+        assert_eq!(trace_records[1]["event_kind"].as_str(), Some("vector_query_executed"));
     }
 
     #[test]
