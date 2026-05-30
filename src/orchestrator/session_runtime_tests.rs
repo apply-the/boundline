@@ -6,7 +6,7 @@ use std::net::TcpListener;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
-use std::sync::{Mutex, MutexGuard, OnceLock};
+use std::sync::{Mutex, MutexGuard};
 use std::thread;
 use std::time::Duration;
 
@@ -87,8 +87,6 @@ use crate::orchestrator::planner::StaticPlanner;
 use crate::registry::agent_registry::AgentRegistry;
 use crate::registry::tool_registry::ToolRegistry;
 
-static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-
 struct EnvRestore<'a> {
     saved: BTreeMap<&'static str, Option<std::ffi::OsString>>,
     _lock: MutexGuard<'a, ()>,
@@ -138,7 +136,10 @@ fn request_complete(buffer: &[u8]) -> bool {
 }
 
 fn with_env_test<T>(tracked_keys: &[&'static str], action: impl FnOnce() -> T) -> T {
-    let lock = ENV_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap();
+    let lock = crate::adapters::SHARED_ENV_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let saved =
         tracked_keys.iter().map(|key| (*key, std::env::var_os(key))).collect::<BTreeMap<_, _>>();
     let restore = EnvRestore { saved, _lock: lock };

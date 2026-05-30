@@ -78,7 +78,7 @@ fn resolve_base_url() -> String {
 #[cfg(test)]
 mod tests {
     use std::env;
-    use std::sync::{Mutex, OnceLock};
+    use std::sync::Mutex;
 
     use reqwest::blocking::Client;
 
@@ -88,15 +88,12 @@ mod tests {
         ResolvedProviderRoute, execute_chat, resolve_credentials,
     };
 
-    static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-
-    fn env_lock() -> &'static Mutex<()> {
-        ENV_LOCK.get_or_init(|| Mutex::new(()))
-    }
-
     #[test]
     fn resolve_credentials_returns_error_when_all_token_env_vars_are_unset() {
-        let _guard = env_lock().lock().ok();
+        let _guard = super::super::super::SHARED_ENV_LOCK
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let saved: Vec<(_, Option<_>)> =
             [GITHUB_MODELS_TOKEN_ENV, GITHUB_TOKEN_ENV, COPILOT_GITHUB_TOKEN_ENV, GH_TOKEN_ENV]
                 .iter()
@@ -121,7 +118,10 @@ mod tests {
 
     #[test]
     fn resolve_credentials_succeeds_and_returns_token_when_env_var_is_set() {
-        let _guard = env_lock().lock().ok();
+        let _guard = super::super::super::SHARED_ENV_LOCK
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let saved = env::var(GITHUB_MODELS_TOKEN_ENV).ok();
         let base_url_saved = env::var(GITHUB_MODELS_BASE_URL_ENV).ok();
         let org_saved = env::var(GITHUB_MODELS_ORG_ENV).ok();
@@ -154,7 +154,10 @@ mod tests {
 
     #[test]
     fn resolve_base_url_embeds_org_name_when_org_env_is_set() {
-        let _guard = env_lock().lock().ok();
+        let _guard = super::super::super::SHARED_ENV_LOCK
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let token_saved = env::var(GITHUB_MODELS_TOKEN_ENV).ok();
         let base_url_saved = env::var(GITHUB_MODELS_BASE_URL_ENV).ok();
         let org_saved = env::var(GITHUB_MODELS_ORG_ENV).ok();
