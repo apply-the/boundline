@@ -4683,7 +4683,8 @@ mod tests {
     }
 
     fn initialize_workspace_for_update(workspace: &Path) {
-        let _ = execute_successful_init(copilot_canon_init_request(workspace, InitTemplate::BugFix));
+        let _ =
+            execute_successful_init(copilot_canon_init_request(workspace, InitTemplate::BugFix));
     }
 
     fn execute_successful_init(request: InitRequest<'_>) -> super::InitCommandReport {
