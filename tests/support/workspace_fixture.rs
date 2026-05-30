@@ -10,10 +10,42 @@ use std::process::{Command, Output};
 use std::sync::{Mutex, MutexGuard};
 
 use boundline::SUPPORTED_CANON_VERSION;
+use boundline::adapters::env_layer::{
+    ANTHROPIC_API_KEY_ENV, ANTHROPIC_BASE_URL_ENV, COPILOT_API_KEY_ENV, COPILOT_API_URL_ENV,
+    COPILOT_GITHUB_TOKEN_ENV, DEEPSEEK_API_KEY_ENV, DEEPSEEK_BASE_URL_ENV, GEMINI_API_KEY_ENV,
+    GH_TOKEN_ENV, GITHUB_COPILOT_API_TOKEN_ENV, GITHUB_MODELS_BASE_URL_ENV,
+    GITHUB_MODELS_ORG_ENV, GITHUB_MODELS_TOKEN_ENV, GITHUB_TOKEN_ENV, GROK_API_KEY_ENV,
+    GROK_BASE_URL_ENV, GROQ_API_KEY_ENV, GROQ_BASE_URL_ENV, OLLAMA_BASE_URL_ENV,
+    OPENAI_API_KEY_ENV, OPENAI_BASE_URL_ENV,
+};
 use boundline::adapters::config_store::FileConfigStore;
 use boundline::domain::configuration::{ConfigFile, ModelRoute, RoutingConfig, RuntimeKind};
 use serde::de::DeserializeOwned;
 use uuid::Uuid;
+
+const PROVIDER_ENV_KEYS: &[&str] = &[
+    OPENAI_API_KEY_ENV,
+    OPENAI_BASE_URL_ENV,
+    DEEPSEEK_API_KEY_ENV,
+    DEEPSEEK_BASE_URL_ENV,
+    GROK_API_KEY_ENV,
+    GROK_BASE_URL_ENV,
+    GROQ_API_KEY_ENV,
+    GROQ_BASE_URL_ENV,
+    OLLAMA_BASE_URL_ENV,
+    ANTHROPIC_API_KEY_ENV,
+    ANTHROPIC_BASE_URL_ENV,
+    GEMINI_API_KEY_ENV,
+    GITHUB_MODELS_TOKEN_ENV,
+    GITHUB_MODELS_BASE_URL_ENV,
+    GITHUB_MODELS_ORG_ENV,
+    GITHUB_COPILOT_API_TOKEN_ENV,
+    COPILOT_API_URL_ENV,
+    COPILOT_GITHUB_TOKEN_ENV,
+    GH_TOKEN_ENV,
+    GITHUB_TOKEN_ENV,
+    COPILOT_API_KEY_ENV,
+];
 
 const FULL_CANON_CAPABILITIES: &str = include_str!("../fixtures/canon_capabilities_full.json");
 
@@ -436,28 +468,28 @@ pub fn temp_replanning_execution_workspace(prefix: &str) -> PathBuf {
 }
 
 pub fn run_boundline(args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_boundline"))
-        .args(args)
-        .current_dir(target_test_cwd("boundline-cli-cwd"))
-        .output()
-        .unwrap()
+    boundline_command_in(&target_test_cwd("boundline-cli-cwd"), args).output().unwrap()
 }
 
 pub fn run_boundline_in(workspace: &Path, args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_boundline"))
-        .args(args)
-        .current_dir(workspace)
-        .output()
-        .unwrap()
+    boundline_command_in(workspace, args).output().unwrap()
 }
 
 pub fn run_boundline_in_with_env(workspace: &Path, args: &[&str], envs: &[(&str, &str)]) -> Output {
-    let mut command = Command::new(env!("CARGO_BIN_EXE_boundline"));
-    command.args(args).current_dir(workspace);
+    let mut command = boundline_command_in(workspace, args);
     for (key, value) in envs {
         command.env(key, value);
     }
     command.output().unwrap()
+}
+
+pub fn boundline_command_in(workspace: &Path, args: &[&str]) -> Command {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_boundline"));
+    command.args(args).current_dir(workspace);
+    for env_key in PROVIDER_ENV_KEYS {
+        command.env_remove(env_key);
+    }
+    command
 }
 
 pub fn supported_canon_path() -> String {

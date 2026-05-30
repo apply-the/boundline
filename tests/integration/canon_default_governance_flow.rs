@@ -1,12 +1,9 @@
-use std::collections::BTreeMap;
-use std::ffi::OsString;
 use std::fs;
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Output};
+use std::process::Output;
 use std::sync::mpsc;
-use std::sync::{Mutex, MutexGuard, OnceLock};
 use std::thread;
 
 use boundline::{
@@ -15,31 +12,12 @@ use boundline::{
 };
 
 use crate::workspace_fixture::{
-    initialize_nested_git_repository, run_boundline_in, temp_fixture_workspace, terminal_text,
+    boundline_command_in, initialize_nested_git_repository, run_boundline_in,
+    temp_fixture_workspace, terminal_text,
 };
 
 const OPENAI_API_KEY_ENV: &str = "OPENAI_API_KEY";
 const OPENAI_BASE_URL_ENV: &str = "OPENAI_BASE_URL";
-
-static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-
-struct EnvRestore<'a> {
-    saved: BTreeMap<&'static str, Option<OsString>>,
-    _lock: MutexGuard<'a, ()>,
-}
-
-impl Drop for EnvRestore<'_> {
-    fn drop(&mut self) {
-        unsafe {
-            for (key, value) in &self.saved {
-                match value {
-                    Some(value) => std::env::set_var(key, value),
-                    None => std::env::remove_var(key),
-                }
-            }
-        }
-    }
-}
 
 /// Create a workspace with `[canon]` config preferences and a mock Canon CLI.
 fn temp_canon_default_workspace(prefix: &str) -> std::path::PathBuf {
@@ -146,19 +124,6 @@ fn request_complete(buffer: &[u8]) -> bool {
     }
 }
 
-fn with_env_test<T>(tracked_keys: &[&'static str], action: impl FnOnce() -> T) -> T {
-    let lock = ENV_LOCK
-        .get_or_init(|| Mutex::new(()))
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    let saved =
-        tracked_keys.iter().map(|key| (*key, std::env::var_os(key))).collect::<BTreeMap<_, _>>();
-    let restore = EnvRestore { saved, _lock: lock };
-    let result = action();
-    drop(restore);
-    result
-}
-
 fn spawn_scripted_response_server(
     response_bodies: Vec<String>,
 ) -> Result<(String, mpsc::Receiver<String>, thread::JoinHandle<()>), String> {
@@ -214,24 +179,18 @@ fn openai_completion_response(payload: serde_json::Value) -> String {
     .to_string()
 }
 
-fn with_scripted_openai_reviews<T>(review_responses: usize, action: impl FnOnce() -> T) -> T {
-    with_env_test(&[OPENAI_BASE_URL_ENV, OPENAI_API_KEY_ENV], || {
-        let review_response = openai_completion_response(serde_json::json!({
-            "disposition": "approve",
-            "summary": "Bounded planning artifact is acceptable.",
-            "details": "The governed planning artifact is credible and can proceed.",
-            "required_action": null,
-            "evidence_refs": [".boundline/governance/planning/discovery/brief.md"]
-        }));
-        let (base_url, _receiver, _handle) =
-            spawn_scripted_response_server(vec![review_response; review_responses]).unwrap();
-        unsafe {
-            std::env::set_var(OPENAI_BASE_URL_ENV, &base_url);
-            std::env::set_var(OPENAI_API_KEY_ENV, "token");
-        }
+fn with_scripted_openai_reviews<T>(review_responses: usize, action: impl FnOnce(&str) -> T) -> T {
+    let review_response = openai_completion_response(serde_json::json!({
+        "disposition": "approve",
+        "summary": "Bounded planning artifact is acceptable.",
+        "details": "The governed planning artifact is credible and can proceed.",
+        "required_action": null,
+        "evidence_refs": [".boundline/governance/planning/discovery/brief.md"]
+    }));
+    let (base_url, _receiver, _handle) =
+        spawn_scripted_response_server(vec![review_response; review_responses]).unwrap();
 
-        action()
-    })
+    action(&base_url)
 }
 
 fn seed_planning_reviewer_routes(workspace: &Path) {
@@ -516,19 +475,32 @@ fn run_boundline_in_with_path(workspace: &Path, args: &[&str], path_prefix: &Pat
     let existing_path = std::env::var_os("PATH").unwrap_or_default();
     let mut paths = vec![path_prefix.to_path_buf()];
     paths.extend(std::env::split_paths(&existing_path));
-    Command::new(env!("CARGO_BIN_EXE_boundline"))
-        .args(args)
-        .current_dir(workspace)
+    boundline_command_in(workspace, args)
         .env("PATH", std::env::join_paths(paths).unwrap())
         .output()
         .unwrap()
 }
 
 fn run_boundline_in_with_exact_path(workspace: &Path, args: &[&str], path: &Path) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_boundline"))
-        .args(args)
-        .current_dir(workspace)
+    boundline_command_in(workspace, args)
         .env("PATH", path)
+        .output()
+        .unwrap()
+}
+
+fn run_boundline_in_with_path_and_openai_env(
+    workspace: &Path,
+    args: &[&str],
+    path_prefix: &Path,
+    openai_base_url: &str,
+) -> Output {
+    let existing_path = std::env::var_os("PATH").unwrap_or_default();
+    let mut paths = vec![path_prefix.to_path_buf()];
+    paths.extend(std::env::split_paths(&existing_path));
+    boundline_command_in(workspace, args)
+        .env("PATH", std::env::join_paths(paths).unwrap())
+        .env(OPENAI_BASE_URL_ENV, openai_base_url)
+        .env(OPENAI_API_KEY_ENV, "token")
         .output()
         .unwrap()
 }
@@ -702,7 +674,7 @@ fn run_with_incomplete_canon_surface_stops_with_repair_guidance() {
 #[test]
 #[cfg(unix)]
 fn run_with_briefs_assembles_canon_governance_start_request() {
-    with_scripted_openai_reviews(6, || {
+    with_scripted_openai_reviews(6, |openai_base_url| {
         let workspace = temp_canon_default_workspace("brief-assembly");
         seed_planning_reviewer_routes(&workspace);
 
@@ -744,7 +716,7 @@ fn run_with_briefs_assembles_canon_governance_start_request() {
         let canon_path = write_capturing_canon_on_path("brief-assembly", &workspace, &response);
         write_canon_execution_profile(&workspace, &canon_path.join("canon"));
 
-        let output = run_boundline_in_with_path(
+        let output = run_boundline_in_with_path_and_openai_env(
             &workspace,
             &[
                 "run",
@@ -756,6 +728,7 @@ fn run_with_briefs_assembles_canon_governance_start_request() {
                 "docs/arch.md",
             ],
             &canon_path,
+            openai_base_url,
         );
         let text = terminal_text(&output);
 
@@ -790,7 +763,7 @@ fn run_with_briefs_assembles_canon_governance_start_request() {
 #[test]
 #[cfg(unix)]
 fn multi_stage_canon_run_reuses_prior_governed_packet() {
-    with_scripted_openai_reviews(6, || {
+    with_scripted_openai_reviews(6, |openai_base_url| {
         let workspace = temp_canon_default_workspace("multi-stage-reuse");
         seed_planning_reviewer_routes(&workspace);
         let docs_dir = workspace.join("docs");
@@ -840,7 +813,7 @@ fn multi_stage_canon_run_reuses_prior_governed_packet() {
         );
         write_two_stage_canon_execution_profile(&workspace, &canon_path.join("canon"));
 
-        let output = run_boundline_in_with_path(
+        let output = run_boundline_in_with_path_and_openai_env(
             &workspace,
             &[
                 "run",
@@ -850,6 +823,7 @@ fn multi_stage_canon_run_reuses_prior_governed_packet() {
                 "docs/context.md",
             ],
             &canon_path,
+            openai_base_url,
         );
         let text = terminal_text(&output);
 
@@ -879,7 +853,7 @@ fn multi_stage_canon_run_reuses_prior_governed_packet() {
 #[test]
 #[cfg(unix)]
 fn governed_ready_packet_is_promoted_to_docs_evidence() {
-    with_scripted_openai_reviews(6, || {
+    with_scripted_openai_reviews(6, |openai_base_url| {
         let workspace = temp_canon_default_workspace("evidence-promotion");
         seed_planning_reviewer_routes(&workspace);
         let docs_dir = workspace.join("docs");
@@ -917,10 +891,11 @@ fn governed_ready_packet_is_promoted_to_docs_evidence() {
         let canon_path = write_capturing_canon_on_path("evidence-promotion", &workspace, &response);
         write_canon_execution_profile(&workspace, &canon_path.join("canon"));
 
-        let output = run_boundline_in_with_path(
+        let output = run_boundline_in_with_path_and_openai_env(
             &workspace,
             &["run", "--goal", "Capture governed discovery evidence", "--brief", "docs/prd.md"],
             &canon_path,
+            openai_base_url,
         );
         let text = terminal_text(&output);
         assert!(
@@ -973,7 +948,7 @@ fn governed_ready_packet_is_promoted_to_docs_evidence() {
 #[test]
 #[cfg(unix)]
 fn run_with_incomplete_canon_response_surfaces_clarification() {
-    with_scripted_openai_reviews(6, || {
+    with_scripted_openai_reviews(6, |openai_base_url| {
         let workspace = temp_canon_default_workspace("incomplete-response");
         seed_planning_reviewer_routes(&workspace);
         let docs_dir = workspace.join("docs");
@@ -997,10 +972,11 @@ fn run_with_incomplete_canon_response_surfaces_clarification() {
             write_capturing_canon_on_path("incomplete-response", &workspace, incomplete_response);
         write_canon_execution_profile(&workspace, &bin_dir.join("canon"));
 
-        let output = run_boundline_in_with_path(
+        let output = run_boundline_in_with_path_and_openai_env(
             &workspace,
             &["run", "--goal", "Shape requirements for onboarding", "--brief", "docs/prd.md"],
             &bin_dir,
+            openai_base_url,
         );
         let text = terminal_text(&output);
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -1028,7 +1004,7 @@ fn run_with_incomplete_canon_response_surfaces_clarification() {
 #[test]
 #[cfg(unix)]
 fn blocked_planning_stage_retries_with_refresh_and_progresses() {
-    with_scripted_openai_reviews(6, || {
+    with_scripted_openai_reviews(6, |openai_base_url| {
         let workspace = temp_canon_default_workspace("blocked-retry-refresh");
         seed_planning_reviewer_routes(&workspace);
         let docs_dir = workspace.join("docs");
@@ -1055,10 +1031,11 @@ fn blocked_planning_stage_retries_with_refresh_and_progresses() {
         write_canon_execution_profile(&workspace, &bin_dir.join("canon"));
 
         // First run: Canon blocks at the first planning stage with incomplete.
-        let output = run_boundline_in_with_path(
+        let output = run_boundline_in_with_path_and_openai_env(
             &workspace,
             &["run", "--goal", "Deliver governed planning that retries", "--brief", "docs/prd.md"],
             &bin_dir,
+            openai_base_url,
         );
         let text = terminal_text(&output);
         assert!(!output.status.success(), "first run should block: {text}");
@@ -1093,7 +1070,8 @@ fn blocked_planning_stage_retries_with_refresh_and_progresses() {
             write_capturing_canon_on_path("blocked-retry-refresh", &workspace, &ready_response);
 
         // Second run: plan again — retry should use refresh (existing run_ref) and succeed.
-        let output2 = run_boundline_in_with_path(&workspace, &["plan"], &bin_dir);
+        let output2 =
+            run_boundline_in_with_path_and_openai_env(&workspace, &["plan"], &bin_dir, openai_base_url);
         let text2 = terminal_text(&output2);
 
         // The retry should have completed the previously-blocked stage.
