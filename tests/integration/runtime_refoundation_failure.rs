@@ -85,11 +85,8 @@ fn build_loop(workspace: &Path, max_steps: usize) -> DecisionLoop<FileTraceStore
 fn inspect_preserves_failure_and_recovery_evidence_for_native_no_actionable_runs() {
     let workspace = temp_runtime_refoundation_failure_workspace("runtime-refoundation-failure");
 
-    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
     assert_eq!(
-        run_boundline_in(&workspace, &["capture", "--goal", "fix the failing add test"])
-            .status
-            .code(),
+        run_boundline_in(&workspace, &["goal", "--goal", "fix the failing add test"]).status.code(),
         Some(0)
     );
     assert_eq!(run_boundline_in(&workspace, &["plan", "--no-flow"]).status.code(), Some(0));
@@ -102,13 +99,14 @@ fn inspect_preserves_failure_and_recovery_evidence_for_native_no_actionable_runs
     let inspect = run_boundline_in(&workspace, &["inspect", "--workspace", "."]);
     let inspect_text = terminal_text(&inspect);
     assert_eq!(inspect.status.code(), Some(1), "{inspect_text}");
-    assert!(inspect_text.contains("decision_timeline:"), "{inspect_text}");
-    assert!(inspect_text.contains("failure_evidence:"), "{inspect_text}");
-    assert!(inspect_text.contains("recovery decision"), "{inspect_text}");
+    assert!(inspect_text.contains("summary: goal_plan_summary="), "{inspect_text}");
+    assert!(inspect_text.contains("risk_summary:"), "{inspect_text}");
+    assert!(inspect_text.contains("failed to apply the workspace change set"), "{inspect_text}");
     assert!(
         inspect_text.contains("terminal_reason: recovery decision for src/lib.rs failed"),
         "{inspect_text}"
     );
+    assert!(inspect_text.contains("next_command: /boundline-next"), "{inspect_text}");
 }
 
 #[test]

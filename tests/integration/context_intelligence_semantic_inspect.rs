@@ -2,9 +2,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use boundline::cli::inspect::execute_inspect;
-use boundline::cli::session::{
-    execute_capture, execute_plan, execute_run, execute_start, execute_status,
-};
+use boundline::cli::session::{execute_goal, execute_plan, execute_run, execute_status};
 
 use crate::workspace_fixture::{
     SEMANTIC_VECTOR_STATE_READY_VALUE, force_semantic_vector_state_override, temp_empty_workspace,
@@ -79,8 +77,7 @@ fn status_and_inspect_surface_semantic_explanation_lines() {
     let workspace =
         write_semantic_inspect_workspace("boundline-context-intelligence-semantic-inspect");
 
-    execute_start(Some(&workspace)).unwrap();
-    execute_capture(
+    execute_goal(
         Some(&workspace),
         Some("planner reconcile configuration state"),
         &[],
@@ -90,10 +87,10 @@ fn status_and_inspect_surface_semantic_explanation_lines() {
         None,
     )
     .unwrap();
-    execute_plan(Some(&workspace), Some("bug-fix"), false, false).unwrap();
+    execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
     let status = execute_status(Some(&workspace)).unwrap();
     execute_run(Some(&workspace)).unwrap();
-    let inspect = execute_inspect(None, Some(&workspace)).unwrap();
+    let inspect = execute_inspect(None, Some(&workspace), None, false).unwrap();
 
     for output in [status.terminal_output.as_str(), inspect.terminal_output.as_str()] {
         assert!(output.contains("semantic_policy_state: local"), "{output}");

@@ -20,7 +20,7 @@
 
 ### User Story 1 - Select Bounded Context From Explicit Evidence (Priority: P1)
 
-An operator can capture a bounded goal and have Boundline build the planning
+An operator can record a bounded goal and have Boundline build the planning
 context from explicit evidence such as failing tests, validation output,
 authored brief references, recent workspace mutations, workflow-owned targets,
 and reusable Canon artifacts instead of relying mainly on keyword scoring over
@@ -30,7 +30,7 @@ repository paths.
 Boundline still looks inspectable on the surface while choosing context from
 weak heuristics that are hard to trust.
 
-**Independent Test**: Run the session-native `start -> capture -> plan` path on
+**Independent Test**: Run the session-native `goal -> plan` path on
 representative workspaces that contain failing-test evidence, authored brief
 input, or recent mutation evidence, and verify that the resulting context pack
 selects files and artifacts from those evidence anchors with explicit reasons.
@@ -41,7 +41,7 @@ selects files and artifacts from those evidence anchors with explicit reasons.
   target and one related source file, **When** the operator runs `plan`,
   **Then** Boundline selects the test target and related source input because
   of that evidence and records why each one was chosen.
-2. **Given** a captured goal whose wording is generic but whose authored brief
+2. **Given** a recorded goal whose wording is generic but whose authored brief
   names specific files or modules, **When** planning runs, **Then** Boundline
   uses the authored brief references as primary context evidence instead of
   falling back to broad path matching.

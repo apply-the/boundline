@@ -1,20 +1,20 @@
 use std::fs;
-use std::path::PathBuf;
 
-use uuid::Uuid;
+use crate::workspace_fixture::{
+    TempGitWorkspace, run_boundline_in, run_boundline_in_with_env, supported_canon_path,
+    terminal_text,
+};
 
-use crate::workspace_fixture::{run_boundline_in, terminal_text};
-
-fn empty_workspace(prefix: &str) -> PathBuf {
-    let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
-    fs::create_dir_all(workspace.join("src")).unwrap();
-    fs::create_dir_all(workspace.join("tests")).unwrap();
-    fs::write(
-        workspace.join("Cargo.toml"),
-        "[package]\nname = \"boundline-fixture\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
-    )
-    .unwrap();
-    workspace
+fn empty_workspace(prefix: &str) -> TempGitWorkspace {
+    TempGitWorkspace::with_initializer(prefix, |workspace| {
+        fs::create_dir_all(workspace.join("src")).unwrap();
+        fs::create_dir_all(workspace.join("tests")).unwrap();
+        fs::write(
+            workspace.join("Cargo.toml"),
+            "[package]\nname = \"boundline-fixture\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+        )
+        .unwrap();
+    })
 }
 
 #[test]
@@ -50,7 +50,7 @@ fn config_set_show_and_unset_workspace_slot() {
             "--runtime",
             "codex",
             "--model",
-            "gpt-5-codex",
+            "o4-mini",
         ],
     );
     let set_text = terminal_text(&set);
@@ -70,7 +70,7 @@ fn config_set_show_and_unset_workspace_slot() {
     );
     let show_text = terminal_text(&show);
     assert_eq!(show.status.code(), Some(0), "{show_text}");
-    assert!(show_text.contains("planning: codex:gpt-5-codex"), "{show_text}");
+    assert!(show_text.contains("planning: codex:o4-mini"), "{show_text}");
 
     let unset = run_boundline_in(
         &workspace,
@@ -107,8 +107,9 @@ fn config_set_show_and_unset_workspace_slot() {
 #[test]
 fn config_set_canon_updates_workspace_mode_selection() {
     let workspace = empty_workspace("boundline-config-canon");
+    let canon_path = supported_canon_path();
 
-    let init = run_boundline_in(
+    let init = run_boundline_in_with_env(
         &workspace,
         &[
             "init",
@@ -118,6 +119,7 @@ fn config_set_canon_updates_workspace_mode_selection() {
             "--canon-mode-selection",
             "auto-confirm",
         ],
+        &[("PATH", canon_path.as_str())],
     );
     assert_eq!(init.status.code(), Some(0), "{}", terminal_text(&init));
 
@@ -186,7 +188,7 @@ fn config_show_effective_surfaces_assistant_bindings() {
             "--runtime",
             "codex",
             "--model",
-            "gpt-5-codex",
+            "o4-mini",
         ],
     );
     assert_eq!(set.status.code(), Some(0), "{}", terminal_text(&set));
@@ -206,7 +208,7 @@ fn config_show_effective_surfaces_assistant_bindings() {
     assert_eq!(show.status.code(), Some(0), "{show_text}");
     assert!(
         show_text.contains(
-            "effective_routing: planning=codex/gpt-5-codex [workspace], implementation=copilot/gpt-5.5 [workspace]"
+            "effective_routing: planning=codex/o4-mini [workspace], implementation=copilot/gpt-4.1 [workspace]"
         ),
         "{show_text}"
     );
@@ -319,7 +321,7 @@ fn config_show_effective_surfaces_capability_and_effort_projection() {
     assert_eq!(show.status.code(), Some(0), "{show_text}");
     assert!(
         show_text.contains(
-            "effective_routing: planning=copilot/gpt-5.5 [workspace], implementation=claude/sonnet-4 [workspace]"
+            "effective_routing: planning=copilot/gpt-4.1 [workspace], implementation=claude/sonnet-4 [workspace]"
         ),
         "{show_text}"
     );

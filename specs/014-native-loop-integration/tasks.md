@@ -29,11 +29,11 @@
 
 **Goal**: `plan` persists `GoalPlan` and flow-confirmation outcome in session-owned state.
 
-**Independent Test**: Drive `start -> capture -> plan` on the real CLI path and verify the session stores a goal plan plus confirmed/proposed/no-flow outcome without requiring an execution profile.
+**Independent Test**: Drive `goal -> plan` on the real CLI path and verify the session stores a goal plan plus confirmed/proposed/no-flow outcome without requiring an execution profile.
 
 ### Tests for User Story 1
 
-- [x] T004 [P] [US1] Add CLI integration coverage for `start -> capture -> plan` goal-plan persistence in `tests/integration/session_native_flow.rs`
+- [x] T004 [P] [US1] Add CLI integration coverage for `goal -> plan` goal-plan persistence in `tests/integration/session_native_flow.rs`
 - [x] T005 [P] [US1] Add CLI integration coverage for inferred-flow confirmation and explicit no-flow behavior in `tests/integration/session_native_flow.rs`
 
 ### Implementation for User Story 1
@@ -51,7 +51,7 @@
 
 **Goal**: `run` prefers the native loop whenever a goal plan exists and uses fixture execution only as an explicit compatibility path.
 
-**Independent Test**: Verify CLI `start -> capture -> plan -> run` selects native routing, while a workspace with only an explicit execution profile uses compatibility routing.
+**Independent Test**: Verify CLI `goal -> plan -> run` selects native routing, while a workspace with only an explicit execution profile uses compatibility routing.
 
 ### Tests for User Story 2
 

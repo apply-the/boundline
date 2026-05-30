@@ -14,20 +14,18 @@ fn assistant_readme_documents_session_native_continuity_rules() {
     let content = read_asset("assistant/README.md");
 
     for snippet in [
-        "cargo run --bin boundline -- start --workspace <workspace>",
-        "cargo run --bin boundline -- capture --workspace <workspace> --goal \"<goal>\"",
-        "cargo run --bin boundline -- capture --workspace <workspace> --brief <path> [--brief <path> ...]",
-        "cargo run --bin boundline -- plan --workspace <workspace>",
-        "cargo run --bin boundline -- step --workspace <workspace>",
-        "cargo run --bin boundline -- run --workspace <workspace>",
+        "boundline orchestrate --workspace <workspace> --goal \"<goal>\" --until phase-request --json-stream",
+        "boundline orchestrate --workspace <workspace> --brief <path> [--brief <path> ...] --until phase-request --json-stream",
+        "boundline plan --workspace <workspace>",
+        "boundline step --workspace <workspace>",
+        "boundline run --workspace <workspace>",
         "run --compatibility --goal ...",
-        "cargo run --bin boundline -- status --workspace <workspace>",
-        "cargo run --bin boundline -- next --workspace <workspace>",
+        "boundline status --workspace <workspace>",
+        "boundline next --workspace <workspace>",
         "assistants should prefer the native\nroute by default",
-        "Preserve confirmed `workspace_ref`, captured goal, confirmed brief paths, authored input summary, and latest trace reference across assistant turns.",
+        "Preserve confirmed `workspace_ref`, recorded goal, confirmed brief paths, authored input summary, and latest trace reference across assistant turns.",
         "continuity_authority",
         "compatibility_follow_up",
-        "compatibility_follow_up_command",
         "effective_routing",
         "assistant_bindings",
         "assistant_runtimes",
@@ -37,7 +35,10 @@ fn assistant_readme_documents_session_native_continuity_rules() {
         "follow_through_stop_reason",
         "Workspace-based inspect may reuse the active session's `latest_trace_ref` before falling back to the latest workspace trace.",
         "When CLI output includes `next_command`, prefer that route instead of inventing a follow-up.",
-        "When `status` or `next` reports `continuity_authority: compatibility_trace` or `compatibility_follow_up: inspect_only`, route to `/boundline-inspect` instead of `/boundline-start`.",
+        "When CLI output includes a structured `phase_request`:",
+        "phase_request.request_id",
+        "Legacy clarification fields (`clarification_prompt`,",
+        "When `status` or `next` reports `continuity_authority: compatibility_trace` or `compatibility_follow_up: inspect_only`, route to `/boundline-inspect` instead of `/boundline-goal`.",
         "governance_next_action",
         "latest_changed_files",
         "latest_validation_status",
@@ -51,13 +52,12 @@ fn assistant_readme_documents_clustered_session_guidance() {
     let content = read_asset("assistant/README.md");
 
     for snippet in [
-        "cargo run --bin boundline -- start --cluster <primary-workspace>",
-        "cargo run --bin boundline -- capture --cluster <primary-workspace> --goal \"<goal>\"",
-        "cargo run --bin boundline -- plan --cluster <primary-workspace>",
-        "cargo run --bin boundline -- run --cluster <primary-workspace>",
-        "cargo run --bin boundline -- status --cluster <primary-workspace>",
-        "cargo run --bin boundline -- next --cluster <primary-workspace>",
-        "cargo run --bin boundline -- inspect --cluster <primary-workspace>",
+        "boundline goal --cluster <primary-workspace> --goal \"<goal>\"",
+        "boundline plan --cluster <primary-workspace>",
+        "boundline run --cluster <primary-workspace>",
+        "boundline status --cluster <primary-workspace>",
+        "boundline next --cluster <primary-workspace>",
+        "boundline inspect --cluster <primary-workspace>",
         "cluster_route_owner",
         "cluster_authoritative_workspace",
         "cluster_execution_condition",
@@ -69,20 +69,16 @@ fn assistant_readme_documents_clustered_session_guidance() {
 }
 
 #[test]
-fn assistant_readme_documents_workflow_first_guidance() {
+fn assistant_readme_documents_workflow_cli_guidance() {
     let content = read_asset("assistant/README.md");
 
     for snippet in [
-        "/boundline-workflow-list",
-        "/boundline-workflow-run",
-        "/boundline-workflow-status",
-        "/boundline-workflow-resume",
-        "/boundline-workflow-inspect",
-        "cargo run --bin boundline -- workflow list --workspace <workspace>",
-        "cargo run --bin boundline -- workflow run <name> --workspace <workspace>",
-        "cargo run --bin boundline -- workflow status --workspace <workspace>",
-        "cargo run --bin boundline -- workflow resume --workspace <workspace>",
-        "cargo run --bin boundline -- workflow inspect --workspace <workspace>",
+        "boundline workflow list --workspace <workspace>",
+        "boundline workflow run <name> --workspace <workspace>",
+        "boundline workflow status --workspace <workspace>",
+        "boundline workflow resume --workspace <workspace>",
+        "boundline workflow inspect --workspace <workspace>",
+        "Do not expose dedicated `/boundline-workflow-*` prompt surfaces",
         "workflows and direct runs are primary surfaces",
         "compatibility remains explicit and subordinate",
     ] {
@@ -91,19 +87,20 @@ fn assistant_readme_documents_workflow_first_guidance() {
 }
 
 #[test]
-fn gemini_guidance_uses_workflow_first_vocabulary() {
-    let content = read_asset("assistant/gemini/README.md");
+fn antigravity_guidance_keeps_workflow_cli_guidance_explicit() {
+    let content = read_asset("assistant/antigravity/README.md");
 
     for snippet in [
-        "cargo run --bin boundline -- workflow list --workspace <workspace>",
-        "cargo run --bin boundline -- workflow run <name> --workspace <workspace>",
-        "cargo run --bin boundline -- workflow status --workspace <workspace>",
-        "cargo run --bin boundline -- workflow resume --workspace <workspace>",
-        "cargo run --bin boundline -- workflow inspect --workspace <workspace>",
-        "primary Boundline workflow surface",
-        "compatibility remains an explicit subordinate route",
+        "boundline workflow list --workspace <workspace>",
+        "boundline workflow run <name> --workspace <workspace>",
+        "boundline workflow status --workspace <workspace>",
+        "boundline workflow resume --workspace <workspace>",
+        "boundline workflow inspect --workspace <workspace>",
+        "does\nnot ship dedicated `/boundline-workflow-*` commands",
+        "CLI-only named-workflow helpers",
+        "Compatibility remains an explicit subordinate route",
     ] {
-        assert!(content.contains(snippet), "assistant/gemini/README.md missing {snippet}");
+        assert!(content.contains(snippet), "assistant/antigravity/README.md missing {snippet}");
     }
 }
 
@@ -122,7 +119,7 @@ fn inspect_assets_document_session_trace_reuse_and_start_recovery() {
             "route_config_projection",
             "changed_files",
             "validation",
-            "/boundline-start",
+            "/boundline-goal",
             "prior direct run opted into `--compatibility`",
             "authored_input_summary",
             "authored_input_sources",
@@ -141,69 +138,110 @@ fn inspect_assets_document_session_trace_reuse_and_start_recovery() {
 fn assistant_command_packs_expose_session_native_backend_mappings() {
     let assets = [
         (
-            "assistant/claude/commands/boundline-start.md",
-            &["cargo run --bin boundline -- start --workspace <workspace>"][..],
+            "assistant/claude/commands/boundline-goal.md",
+            &[
+                "boundline orchestrate --workspace <workspace> --goal \"<goal>\" --until phase-request --json-stream",
+                "boundline orchestrate --workspace <workspace> --brief <path> [--brief <path> ...] --until phase-request --json-stream",
+                "phase_request",
+                "request_id",
+                "## Host Capabilities",
+                "Boundline needs one answer before it can continue",
+            ][..],
         ),
         (
-            "assistant/codex/commands/boundline-start.md",
-            &["cargo run --bin boundline -- start --workspace <workspace>"][..],
+            "assistant/codex/commands/boundline-goal.md",
+            &[
+                "boundline orchestrate --workspace <workspace> --goal \"<goal>\" --until phase-request --json-stream",
+                "boundline orchestrate --workspace <workspace> --brief <path> [--brief <path> ...] --until phase-request --json-stream",
+                "phase_request",
+                "request_id",
+                "## Host Capabilities",
+                "Boundline needs one answer before it can continue",
+            ][..],
         ),
         (
-            "assistant/copilot/prompts/boundline-start.prompt.md",
-            &["cargo run --bin boundline -- start --workspace <workspace>"][..],
+            "assistant/antigravity/commands/boundline-goal.md",
+            &[
+                "boundline orchestrate --workspace <workspace> --goal \"<goal>\" --until phase-request --json-stream",
+                "boundline orchestrate --workspace <workspace> --brief <path> [--brief <path> ...] --until phase-request --json-stream",
+                "phase_request",
+                "request_id",
+                "## Host Capabilities",
+                "Boundline needs one answer before it can continue",
+            ][..],
+        ),
+        (
+            "assistant/copilot/prompts/boundline-goal.prompt.md",
+            &[
+                "boundline orchestrate --workspace <workspace> --goal \"<goal>\" --slug <derived-slug> --assistant-host copilot --until phase-request --json-stream",
+                "boundline orchestrate --workspace <workspace> --brief <path> [--brief <path> ...] --slug <derived-slug> --assistant-host copilot --until phase-request --json-stream",
+                "phase_request",
+                "request_id",
+            ][..],
         ),
         (
             "assistant/claude/commands/boundline-plan.md",
             &[
-                "cargo run --bin boundline -- capture --workspace <workspace> --goal \"<goal>\"",
-                "cargo run --bin boundline -- capture --workspace <workspace> --brief <path> [--brief <path> ...]",
-                "cargo run --bin boundline -- plan --workspace <workspace>",
+                "boundline orchestrate --workspace <workspace> --goal \"<goal>\" --until phase-request --json-stream",
+                "boundline orchestrate --workspace <workspace> --goal \"<goal>\" --brief <path> [--brief <path> ...] --until phase-request --json-stream",
+                "boundline plan --workspace <workspace> --input <path> --json",
+                "phase_request",
+                "request_id",
             ][..],
         ),
         (
             "assistant/codex/commands/boundline-plan.md",
             &[
-                "cargo run --bin boundline -- capture --workspace <workspace> --goal \"<goal>\"",
-                "cargo run --bin boundline -- capture --workspace <workspace> --brief <path> [--brief <path> ...]",
-                "cargo run --bin boundline -- plan --workspace <workspace>",
+                "boundline orchestrate --workspace <workspace> --goal \"<goal>\" --until phase-request --json-stream",
+                "boundline orchestrate --workspace <workspace> --goal \"<goal>\" --brief <path> [--brief <path> ...] --until phase-request --json-stream",
+                "boundline plan --workspace <workspace> --input <path> --json",
+                "phase_request",
+                "request_id",
             ][..],
         ),
         (
             "assistant/copilot/prompts/boundline-plan.prompt.md",
             &[
-                "cargo run --bin boundline -- capture --workspace <workspace> --goal \"<goal>\"",
-                "cargo run --bin boundline -- capture --workspace <workspace> --brief <path> [--brief <path> ...]",
-                "cargo run --bin boundline -- plan --workspace <workspace>",
+                "boundline orchestrate --workspace <workspace> --goal \"<goal>\" --until phase-request --json-stream",
+                "boundline plan --workspace <workspace> --input <path> --json",
             ][..],
         ),
         (
             "assistant/claude/commands/boundline-step.md",
-            &["cargo run --bin boundline -- step --workspace <workspace>"][..],
+            &["boundline step --workspace <workspace>"][..],
         ),
         (
             "assistant/codex/commands/boundline-step.md",
-            &["cargo run --bin boundline -- step --workspace <workspace>"][..],
+            &["boundline step --workspace <workspace>"][..],
         ),
         (
             "assistant/copilot/prompts/boundline-step.prompt.md",
-            &["cargo run --bin boundline -- step --workspace <workspace>"][..],
+            &["boundline step --workspace <workspace>"][..],
         ),
         (
             "assistant/claude/commands/boundline-run.md",
-            &["cargo run --bin boundline -- run --workspace <workspace>"][..],
+            &[
+                "boundline orchestrate --workspace <workspace> --until terminal --json-stream",
+                "phase_request",
+                "resume_command",
+            ][..],
         ),
         (
             "assistant/codex/commands/boundline-run.md",
-            &["cargo run --bin boundline -- run --workspace <workspace>"][..],
+            &[
+                "boundline orchestrate --workspace <workspace> --until terminal --json-stream",
+                "phase_request",
+                "resume_command",
+            ][..],
         ),
         (
             "assistant/copilot/prompts/boundline-run.prompt.md",
-            &["cargo run --bin boundline -- run --workspace <workspace>"][..],
+            &["boundline orchestrate --workspace <workspace> --until terminal --json-stream"][..],
         ),
         (
             "assistant/claude/commands/boundline-status.md",
             &[
-                "cargo run --bin boundline -- status --workspace <workspace>",
+                "boundline status --workspace <workspace>",
                 "authored_input_summary",
                 "continuity_authority",
                 "compatibility_follow_up",
@@ -215,7 +253,7 @@ fn assistant_command_packs_expose_session_native_backend_mappings() {
         (
             "assistant/codex/commands/boundline-status.md",
             &[
-                "cargo run --bin boundline -- status --workspace <workspace>",
+                "boundline status --workspace <workspace>",
                 "authored_input_summary",
                 "continuity_authority",
                 "compatibility_follow_up",
@@ -227,7 +265,7 @@ fn assistant_command_packs_expose_session_native_backend_mappings() {
         (
             "assistant/copilot/prompts/boundline-status.prompt.md",
             &[
-                "cargo run --bin boundline -- status --workspace <workspace>",
+                "boundline status --workspace <workspace>",
                 "authored_input_summary",
                 "continuity_authority",
                 "compatibility_follow_up",
@@ -239,7 +277,7 @@ fn assistant_command_packs_expose_session_native_backend_mappings() {
         (
             "assistant/claude/commands/boundline-next.md",
             &[
-                "cargo run --bin boundline -- next --workspace <workspace>",
+                "boundline next --workspace <workspace>",
                 "continuity_authority",
                 "compatibility_follow_up",
             ][..],
@@ -247,7 +285,7 @@ fn assistant_command_packs_expose_session_native_backend_mappings() {
         (
             "assistant/codex/commands/boundline-next.md",
             &[
-                "cargo run --bin boundline -- next --workspace <workspace>",
+                "boundline next --workspace <workspace>",
                 "continuity_authority",
                 "compatibility_follow_up",
             ][..],
@@ -255,7 +293,7 @@ fn assistant_command_packs_expose_session_native_backend_mappings() {
         (
             "assistant/copilot/prompts/boundline-next.prompt.md",
             &[
-                "cargo run --bin boundline -- next --workspace <workspace>",
+                "boundline next --workspace <workspace>",
                 "continuity_authority",
                 "compatibility_follow_up",
             ][..],
@@ -271,7 +309,7 @@ fn assistant_command_packs_expose_session_native_backend_mappings() {
 }
 
 #[test]
-fn assistant_command_packs_expose_canon_default_mode_aliases() {
+fn assistant_command_packs_preserve_canon_default_mode_shorthand_without_mode_alias_prompts() {
     let modes = [
         "requirements",
         "discovery",
@@ -294,7 +332,7 @@ fn assistant_command_packs_expose_canon_default_mode_aliases() {
         "assistant/copilot/prompts/boundline-run.prompt.md",
         "assistant/codex/commands/boundline-run.md",
         "assistant/claude/commands/boundline-run.md",
-        "assistant/gemini/README.md",
+        "assistant/antigravity/commands/boundline-run.md",
     ];
     for path in run_assets {
         let content = read_asset(path);
@@ -308,17 +346,10 @@ fn assistant_command_packs_expose_canon_default_mode_aliases() {
 
     for mode in modes {
         let path = format!("assistant/copilot/prompts/boundline-{mode}.prompt.md");
-        let content = read_asset(&path);
-        assert!(content.contains(&format!("/boundline-{mode}")), "{path} missing alias command");
         assert!(
-            content.contains(&format!("boundline run --mode {mode}")),
-            "{path} missing canonical CLI mapping"
+            !asset_path(&path).exists(),
+            "{path} should not exist because per-mode alias prompts were removed"
         );
-        assert!(content.contains("governance_runtime"), "{path} missing lifecycle fields");
-        assert!(content.contains("mode_selection_preference"), "{path} missing lifecycle fields");
-        assert!(content.contains("selected_mode"), "{path} missing lifecycle fields");
-        assert!(content.contains("approval_state"), "{path} missing lifecycle fields");
-        assert!(content.contains("next_action"), "{path} missing lifecycle fields");
     }
 }
 
@@ -349,11 +380,11 @@ fn copilot_prompts_preserve_canon_default_cli_boundaries() {
     }
 
     for command in [
-        "boundline-init",
+        "boundline-update",
         "boundline-doctor",
         "boundline-config-show",
         "boundline-config-set-canon",
-        "boundline-capture",
+        "boundline-goal",
         "boundline-run",
     ] {
         let path = format!("assistant/copilot/prompts/{command}.prompt.md");

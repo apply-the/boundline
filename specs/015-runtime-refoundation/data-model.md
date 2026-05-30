@@ -28,7 +28,7 @@ GoalPlan
 ```
 
 **Behavioral rules**:
-- `GoalPlan` is the default planning artifact for `start -> capture -> plan -> run`.
+- `GoalPlan` is the default planning artifact for `goal -> plan -> run`.
 - A confirmed `GoalPlan` is sufficient to route execution to the session-native path.
 - `GoalPlan` may be superseded only by bounded replanning behavior that remains inspectable.
 

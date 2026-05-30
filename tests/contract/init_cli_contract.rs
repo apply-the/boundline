@@ -2,12 +2,14 @@ use std::path::PathBuf;
 use std::process::Command;
 
 use boundline::cli::{Cli, DeveloperCommand};
-use boundline::domain::configuration::{InitTemplate, RuntimeKind};
+use boundline::domain::configuration::{
+    AssistantHostKind, IdeKind, InitConfigScope, InitTemplate, TerminalAutoApproveProfile,
+};
 use boundline::domain::domain_templates::DomainFamily;
 use clap::{CommandFactory, Parser};
 
 #[test]
-fn init_accepts_template_and_assistant_runtimes() {
+fn init_accepts_template_and_assistant_hosts() {
     let cli = Cli::try_parse_from([
         "boundline",
         "init",
@@ -18,14 +20,15 @@ fn init_accepts_template_and_assistant_runtimes() {
         "--assistant",
         "codex",
         "--assistant",
-        "gemini",
+        "antigravity",
         "--force",
     ])
     .unwrap();
 
     match cli.command {
-        DeveloperCommand::Init {
+        Some(DeveloperCommand::Init {
             workspace,
+            scope,
             non_interactive,
             template,
             assistant,
@@ -38,16 +41,19 @@ fn init_accepts_template_and_assistant_runtimes() {
             risk,
             zone,
             owner,
+            ide,
+            auto_approve,
             export_docs,
             refresh,
             diff,
             to,
             force,
-        } => {
+        }) => {
             assert_eq!(workspace, PathBuf::from("/tmp/ws"));
+            assert_eq!(scope, InitConfigScope::Workspace);
             assert!(!non_interactive);
             assert_eq!(template, Some(InitTemplate::Delivery));
-            assert_eq!(assistant, vec![RuntimeKind::Codex, RuntimeKind::Gemini]);
+            assert_eq!(assistant, vec![AssistantHostKind::Codex, AssistantHostKind::Antigravity]);
             assert!(route.is_empty());
             assert!(domain.is_empty());
             assert!(domain_standard.is_empty());
@@ -57,6 +63,8 @@ fn init_accepts_template_and_assistant_runtimes() {
             assert_eq!(risk, None);
             assert_eq!(zone, None);
             assert_eq!(owner, None);
+            assert!(ide.is_empty());
+            assert_eq!(auto_approve, None);
             assert!(!export_docs);
             assert!(!refresh);
             assert!(!diff);
@@ -85,11 +93,15 @@ fn init_accepts_canon_preferences_and_model_routes() {
     .unwrap();
 
     match cli.command {
-        DeveloperCommand::Init {
-            non_interactive, assistant, route, canon_mode_selection, ..
-        } => {
+        Some(DeveloperCommand::Init {
+            non_interactive,
+            assistant,
+            route,
+            canon_mode_selection,
+            ..
+        }) => {
             assert!(non_interactive);
-            assert_eq!(assistant, vec![RuntimeKind::Copilot]);
+            assert_eq!(assistant, vec![AssistantHostKind::Copilot]);
             assert_eq!(route, vec!["planning=copilot:gpt-4o".to_string()]);
             assert_eq!(canon_mode_selection.unwrap().to_string(), "auto-confirm");
         }
@@ -118,8 +130,9 @@ fn init_accepts_domain_templates_standards_and_bindings() {
     .unwrap();
 
     match cli.command {
-        DeveloperCommand::Init {
+        Some(DeveloperCommand::Init {
             workspace,
+            scope,
             non_interactive,
             template,
             assistant,
@@ -132,13 +145,16 @@ fn init_accepts_domain_templates_standards_and_bindings() {
             risk,
             zone,
             owner,
+            ide,
+            auto_approve,
             export_docs,
             refresh,
             diff,
             to,
             force,
-        } => {
+        }) => {
             assert_eq!(workspace, PathBuf::from("/tmp/ws"));
+            assert_eq!(scope, InitConfigScope::Workspace);
             assert!(!non_interactive);
             assert_eq!(template, None);
             assert!(assistant.is_empty());
@@ -154,6 +170,8 @@ fn init_accepts_domain_templates_standards_and_bindings() {
             assert_eq!(risk, None);
             assert_eq!(zone, None);
             assert_eq!(owner, None);
+            assert!(ide.is_empty());
+            assert_eq!(auto_approve, None);
             assert!(!export_docs);
             assert!(!refresh);
             assert!(!diff);
@@ -169,8 +187,9 @@ fn init_accepts_workspace_without_template() {
     let cli = Cli::try_parse_from(["boundline", "init", "--workspace", "/tmp/ws"]).unwrap();
 
     match cli.command {
-        DeveloperCommand::Init {
+        Some(DeveloperCommand::Init {
             workspace,
+            scope,
             non_interactive,
             template,
             assistant,
@@ -183,13 +202,16 @@ fn init_accepts_workspace_without_template() {
             risk,
             zone,
             owner,
+            ide,
+            auto_approve,
             export_docs,
             refresh,
             diff,
             to,
             force,
-        } => {
+        }) => {
             assert_eq!(workspace, PathBuf::from("/tmp/ws"));
+            assert_eq!(scope, InitConfigScope::Workspace);
             assert!(!non_interactive);
             assert_eq!(template, None);
             assert!(assistant.is_empty());
@@ -202,6 +224,8 @@ fn init_accepts_workspace_without_template() {
             assert_eq!(risk, None);
             assert_eq!(zone, None);
             assert_eq!(owner, None);
+            assert!(ide.is_empty());
+            assert_eq!(auto_approve, None);
             assert!(!export_docs);
             assert!(!refresh);
             assert!(!diff);
@@ -227,7 +251,7 @@ fn init_accepts_docs_export_refresh_diff_and_custom_root() {
     .unwrap();
 
     match cli.command {
-        DeveloperCommand::Init { export_docs, refresh, diff, to, .. } => {
+        Some(DeveloperCommand::Init { export_docs, refresh, diff, to, .. }) => {
             assert!(export_docs);
             assert!(refresh);
             assert!(!diff);
@@ -247,11 +271,94 @@ fn init_accepts_docs_export_refresh_diff_and_custom_root() {
     .unwrap();
 
     match diff_cli.command {
-        DeveloperCommand::Init { export_docs, refresh, diff, to, .. } => {
+        Some(DeveloperCommand::Init { export_docs, refresh, diff, to, .. }) => {
             assert!(export_docs);
             assert!(!refresh);
             assert!(diff);
             assert_eq!(to, None);
+        }
+        other => panic!("expected Init, got {other:?}"),
+    }
+}
+
+#[test]
+fn init_accepts_multi_ide_auto_approve_flags() {
+    let cli = Cli::try_parse_from([
+        "boundline",
+        "init",
+        "--workspace",
+        "/tmp/ws",
+        "--assistant",
+        "copilot",
+        "--ide",
+        "vscode",
+        "--ide",
+        "cursor",
+        "--ide",
+        "antigravity",
+        "--ide",
+        "jetbrains",
+        "--auto-approve",
+        "read-only",
+    ])
+    .unwrap();
+
+    match cli.command {
+        Some(DeveloperCommand::Init { ide, auto_approve, .. }) => {
+            assert_eq!(
+                ide,
+                vec![IdeKind::VsCode, IdeKind::Cursor, IdeKind::Antigravity, IdeKind::JetBrains]
+            );
+            assert_eq!(auto_approve, Some(TerminalAutoApproveProfile::ReadOnly));
+        }
+        other => panic!("expected Init, got {other:?}"),
+    }
+}
+
+#[test]
+fn update_accepts_ide_target_and_auto_approve_flags() {
+    let cli = Cli::try_parse_from([
+        "boundline",
+        "update",
+        "--workspace",
+        "/tmp/ws",
+        "--target",
+        "ide",
+        "--ide",
+        "vscode",
+        "--auto-approve",
+        "trusted",
+    ])
+    .unwrap();
+
+    match cli.command {
+        Some(DeveloperCommand::Update { target, ide, auto_approve, .. }) => {
+            assert_eq!(target, vec![boundline::cli::init::UpdateTarget::Ide]);
+            assert_eq!(ide, vec![IdeKind::VsCode]);
+            assert_eq!(auto_approve, Some(TerminalAutoApproveProfile::Trusted));
+        }
+        other => panic!("expected Update, got {other:?}"),
+    }
+}
+
+#[test]
+fn init_accepts_session_safe_auto_approve_profile() {
+    let cli = Cli::try_parse_from([
+        "boundline",
+        "init",
+        "--workspace",
+        "/tmp/ws",
+        "--ide",
+        "vscode",
+        "--auto-approve",
+        "session-safe",
+    ])
+    .unwrap();
+
+    match cli.command {
+        Some(DeveloperCommand::Init { ide, auto_approve, .. }) => {
+            assert_eq!(ide, vec![IdeKind::VsCode]);
+            assert_eq!(auto_approve, Some(TerminalAutoApproveProfile::SessionSafe));
         }
         other => panic!("expected Init, got {other:?}"),
     }
@@ -265,11 +372,14 @@ fn init_help_explains_supported_assistants_route_shape_and_defaults() {
     init.write_long_help(&mut help).unwrap();
     let help = String::from_utf8(help).unwrap();
 
-    assert!(help.contains("assistant packs, and default routing"), "{help}");
-    assert!(help.contains("claude, codex, copilot, gemini"), "{help}");
+    assert!(
+        help.contains("install-global defaults, workspace files, and default routing"),
+        "{help}"
+    );
+    assert!(help.contains("claude, codex, copilot, antigravity"), "{help}");
     assert!(help.contains("SLOT=RUNTIME:MODEL"), "{help}");
     assert!(help.contains("planning, implementation, verification, review"), "{help}");
-    assert!(help.contains("planning=copilot:gpt-5.4"), "{help}");
+    assert!(help.contains("planning=copilot:gpt-4o"), "{help}");
     assert!(help.contains("--export-docs"), "{help}");
     assert!(help.contains("--refresh"), "{help}");
     assert!(help.contains("--diff"), "{help}");

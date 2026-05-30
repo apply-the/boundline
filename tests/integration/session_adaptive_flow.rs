@@ -7,11 +7,10 @@ use crate::workspace_fixture::{
 fn status_next_and_inspect_surface_adaptive_terminal_failure_cues() {
     let workspace = temp_adaptive_replanning_workspace("boundline-session-adaptive");
 
-    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
     assert_eq!(
         run_boundline_in(
             &workspace,
-            &["capture", "--goal", "Recover after the first adaptive validation fails"],
+            &["goal", "--goal", "Recover after the first adaptive validation fails"],
         )
         .status
         .code(),
@@ -61,7 +60,11 @@ fn inspect_surfaces_validation_guided_adaptive_recovery_on_compatibility_route()
     ]);
     let run_text = terminal_text(&run);
     assert_eq!(run.status.code(), Some(0), "{run_text}");
-    assert!(run_text.contains("workspace_slice: src/helper.rs"), "{run_text}");
+    assert!(run_text.contains("latest_step=verify-adaptive-attempt-2 (succeeded)"), "{run_text}");
+    assert!(
+        run_text.contains("adaptive slice selected src/helper.rs via arithmetic_swap"),
+        "{run_text}"
+    );
 
     let inspect = run_boundline_in(
         &workspace,
@@ -77,9 +80,11 @@ fn inspect_surfaces_validation_guided_adaptive_recovery_on_compatibility_route()
         "{inspect_text}"
     );
     assert!(
-        inspect_text.contains(
-            "adaptive slice selected src/helper.rs via arithmetic_swap for adaptive delivery after validation guidance"
-        ),
+        inspect_text.contains("latest_step=verify-adaptive-attempt-2 (succeeded)"),
+        "{inspect_text}"
+    );
+    assert!(
+        inspect_text.contains("adaptive slice selected src/helper.rs via arithmetic_swap"),
         "{inspect_text}"
     );
     assert!(inspect_text.contains("terminal_status: succeeded"), "{inspect_text}");

@@ -42,7 +42,7 @@
 
 **Goal**: Let capture derive one explicit negotiated delivery packet and stop planning early when the request is not yet credible.
 
-**Independent Test**: Start a session, capture a goal with or without authored inputs, and confirm that Boundline persists one negotiated packet or an explicit clarification/conflict state before planning begins.
+**Independent Test**: Start a session, record a goal with or without authored inputs, and confirm that Boundline persists one negotiated packet or an explicit clarification/conflict state before planning begins.
 
 ### Tests for User Story 1
 

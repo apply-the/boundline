@@ -7,7 +7,12 @@ use serde_json::json;
 fn built_in_flow_registry_returns_supported_flows() {
     assert_eq!(supported_flow_names(), &["bug-fix", "change", "delivery"]);
     assert_eq!(built_in_flow("bug-fix").unwrap().stages.len(), 3);
-    assert_eq!(built_in_flow("delivery").unwrap().stages.len(), 4);
+    let delivery = built_in_flow("delivery").unwrap();
+    assert_eq!(delivery.stages.len(), 5);
+    assert_eq!(
+        delivery.stages.iter().map(|stage| stage.id).collect::<Vec<_>>(),
+        vec!["requirements", "system-shaping", "architecture", "backlog", "implementation"]
+    );
     assert!(built_in_flow("missing").is_none());
 }
 

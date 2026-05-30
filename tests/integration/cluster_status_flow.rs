@@ -28,9 +28,17 @@ fn cluster_status_classifies_missing_session_members_explicitly() {
     );
     assert_eq!(init.status.code(), Some(0), "{}", terminal_text(&init));
 
-    let start =
-        run_boundline_in(&primary, &["start", "--workspace", primary.to_string_lossy().as_ref()]);
-    assert_eq!(start.status.code(), Some(0), "{}", terminal_text(&start));
+    let goal = run_boundline_in(
+        &primary,
+        &[
+            "goal",
+            "--workspace",
+            primary.to_string_lossy().as_ref(),
+            "--goal",
+            "Track cluster status",
+        ],
+    );
+    assert_eq!(goal.status.code(), Some(0), "{}", terminal_text(&goal));
 
     let status = run_boundline_in(
         &primary,
@@ -65,15 +73,29 @@ fn cluster_inspect_surfaces_latest_trace_and_missing_trace_gaps() {
     );
     assert_eq!(init.status.code(), Some(0), "{}", terminal_text(&init));
 
-    let start =
-        run_boundline_in(&primary, &["start", "--workspace", primary.to_string_lossy().as_ref()]);
-    assert_eq!(start.status.code(), Some(0), "{}", terminal_text(&start));
-
-    let start_secondary = run_boundline_in(
-        &secondary,
-        &["start", "--workspace", secondary.to_string_lossy().as_ref()],
+    let goal = run_boundline_in(
+        &primary,
+        &[
+            "goal",
+            "--workspace",
+            primary.to_string_lossy().as_ref(),
+            "--goal",
+            "Track cluster inspect status",
+        ],
     );
-    assert_eq!(start_secondary.status.code(), Some(0), "{}", terminal_text(&start_secondary));
+    assert_eq!(goal.status.code(), Some(0), "{}", terminal_text(&goal));
+
+    let goal_secondary = run_boundline_in(
+        &secondary,
+        &[
+            "goal",
+            "--workspace",
+            secondary.to_string_lossy().as_ref(),
+            "--goal",
+            "Track cluster inspect status",
+        ],
+    );
+    assert_eq!(goal_secondary.status.code(), Some(0), "{}", terminal_text(&goal_secondary));
 
     let mut trace = ExecutionTrace::new("task-primary", "session-primary", "cluster goal");
     trace.record_event(TraceEventType::TaskStarted, None, 0, json!({"goal": "cluster goal"}));

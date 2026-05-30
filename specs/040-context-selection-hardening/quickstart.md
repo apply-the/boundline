@@ -3,7 +3,7 @@
 ## Scenario 1: A failing test drives the bounded context
 
 1. Start or resume a session for a Rust workspace with a failing test.
-2. Capture a goal such as `Fix the failing add test`.
+2. Record a goal such as `Fix the failing add test`.
 3. Run `boundline plan --workspace <repo>`.
 4. Confirm that the output shows:
    - a bounded context summary,
@@ -42,7 +42,7 @@ recovery action.
 
 1. Initialize or use an existing registered cluster with a primary workspace and
    one member workspace.
-2. Capture a goal from the primary workspace.
+2. Record a goal from the primary workspace.
 3. Run `boundline plan --cluster <primary-workspace>`.
 
 Expected result: only cross-workspace files with direct evidence anchors enter

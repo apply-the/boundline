@@ -132,6 +132,41 @@ pub fn governance_input_documents(
     documents
 }
 
+pub fn planning_governance_input_documents(
+    authored_brief: Option<&AuthoredBriefBundle>,
+    stage_brief_ref: &str,
+    compacted_canon_memory: Option<&CompactedCanonMemory>,
+) -> Vec<GovernanceInputDocument> {
+    let mut documents = vec![GovernanceInputDocument {
+        kind: GOVERNANCE_DOCUMENT_KIND_STAGE_BRIEF.to_string(),
+        path: stage_brief_ref.to_string(),
+    }];
+
+    if let Some(bundle) = authored_brief {
+        for source in &bundle.sources {
+            let Some(path) = source.workspace_path.clone() else {
+                continue;
+            };
+            documents.push(GovernanceInputDocument {
+                kind: GOVERNANCE_DOCUMENT_KIND_AUTHORED_BRIEF.to_string(),
+                path,
+            });
+        }
+
+        if let Some(clarification) = bundle.clarification.as_ref().filter(|clarification| {
+            clarification.status == crate::domain::task::ClarificationStatus::Answered
+        }) {
+            documents.push(GovernanceInputDocument {
+                kind: GOVERNANCE_DOCUMENT_KIND_CLARIFICATION_ANSWER.to_string(),
+                path: format!("clarification-{}", clarification.clarification_id),
+            });
+        }
+    }
+
+    append_project_memory_input_documents(&mut documents, compacted_canon_memory);
+    documents
+}
+
 fn append_project_memory_input_documents(
     documents: &mut Vec<GovernanceInputDocument>,
     compacted_canon_memory: Option<&CompactedCanonMemory>,
@@ -563,6 +598,13 @@ pub fn build_autopilot_decision(
         rationale,
         blocked_reason,
     })
+}
+
+pub fn default_stage_canon_mode(
+    policy: &StageGovernancePolicy,
+    default_runtime: GovernanceRuntimeKind,
+) -> Option<CanonMode> {
+    candidate_canon_modes(policy, default_runtime).into_iter().next()
 }
 
 pub fn governance_state_patch(
@@ -1765,6 +1807,7 @@ mod tests {
             stage_records: Vec::new(),
             accumulated_context: Vec::new(),
             terminal_reason: None,
+            planning_input_fingerprint: None,
         });
         set_lifecycle_awaiting_approval(
             &mut session,
@@ -1797,6 +1840,7 @@ mod tests {
             previous_governance_attempt_id: None,
             packet_ref: Some(".canon/runs/canon-run-6".to_string()),
             decision_ref: None,
+            stage_council: None,
             blocked_reason: None,
         });
         stage_result.map_err(|error| format!("unexpected stage persistence error: {error:?}"))?;

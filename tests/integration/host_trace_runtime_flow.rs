@@ -8,15 +8,11 @@ use crate::workspace_fixture::{
 fn structured_run_and_inspect_output_preserve_trace_and_terminal_reasoning() {
     let workspace = temp_fixture_workspace("boundline-host-trace-runtime");
 
-    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
     assert_eq!(
-        run_boundline_in(&workspace, &["capture", "--goal", "Fix the failing add test"])
-            .status
-            .code(),
+        run_boundline_in(&workspace, &["goal", "--goal", "Fix the failing add test"]).status.code(),
         Some(0)
     );
     assert_eq!(run_boundline_in(&workspace, &["plan", "--flow", "bug-fix"]).status.code(), Some(0));
-    assert_eq!(run_boundline_in(&workspace, &["plan", "--confirm"]).status.code(), Some(0));
 
     let run = run_boundline_in(&workspace, &["run", "--json"]);
     let run_text = terminal_text(&run);
@@ -67,23 +63,27 @@ fn structured_inspect_failure_keeps_non_success_exit_and_text_fallback() {
 }
 
 #[test]
-fn host_status_advises_partial_setup_with_explicit_fallback() {
+fn host_status_surfaces_goal_captured_clarification_guidance() {
     let workspace = temp_fixture_workspace("boundline-host-trace-runtime-partial");
 
-    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
+    assert_eq!(
+        run_boundline_in(&workspace, &["goal", "--goal", "Explain why this delivery is safe"])
+            .status
+            .code(),
+        Some(0)
+    );
 
     let status = run_boundline_in(&workspace, &["status", "--json"]);
     let status_text = terminal_text(&status);
     assert_eq!(status.status.code(), Some(0), "{status_text}");
 
     let status_json: Value = stdout_json(&status);
+    assert_eq!(status_json["session_status"]["latest_status"], "goal_captured", "{status_text}");
     let rendered = status_json["rendered_output"].as_str().unwrap_or_default();
-    assert!(rendered.contains("source_attribution: runtime="), "{status_text}");
+    assert!(rendered.contains("clarification_headline:"), "{status_text}");
+    assert!(rendered.contains("clarification_questions:"), "{status_text}");
     assert!(
-        rendered.contains(
-            "fallback_disclosure: Canon input not yet available; using Boundline runtime evidence only"
-        ),
+        rendered.contains("next_command: boundline goal --goal <narrower goal>"),
         "{status_text}"
     );
-    assert!(rendered.contains("next_best_action:"), "{status_text}");
 }

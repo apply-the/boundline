@@ -7,11 +7,10 @@ use crate::workspace_fixture::{
 fn capture_and_status_project_requested_governance_intent() {
     let workspace = temp_optional_governance_workspace("boundline-human-governance-status");
 
-    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
     let capture = run_boundline_in(
         &workspace,
         &[
-            "capture",
+            "goal",
             "--goal",
             "Fix the failing checkout flow",
             "--governance",
@@ -44,12 +43,11 @@ fn capture_and_status_project_requested_governance_intent() {
 fn explicit_canon_request_blocks_without_local_fallback() {
     let workspace = temp_optional_governance_workspace("boundline-human-governance-canon-block");
 
-    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
     assert_eq!(
         run_boundline_in(
             &workspace,
             &[
-                "capture",
+                "goal",
                 "--goal",
                 "Fix the failing checkout flow",
                 "--governance",
@@ -73,7 +71,7 @@ fn explicit_canon_request_blocks_without_local_fallback() {
     let run_text = terminal_text(&run);
     assert_eq!(run.status.code(), Some(1), "{run_text}");
     assert!(
-        run_text.contains("governance_blocked: governance required Canon for bug-fix:investigate"),
+        run_text.contains("active session planning governance for `plan:discovery` is `blocked`"),
         "{run_text}"
     );
 
@@ -81,8 +79,7 @@ fn explicit_canon_request_blocks_without_local_fallback() {
     let text = terminal_text(&status);
     assert_eq!(status.status.code(), Some(0), "{text}");
     assert!(text.contains("requested_governance_runtime: canon"), "{text}");
-    assert!(text.contains("latest_status: failed"), "{text}");
-    assert!(text.contains("latest_governance_stage: bug-fix:investigate"), "{text}");
+    assert!(text.contains("latest_governance_stage: plan:discovery"), "{text}");
     assert!(text.contains("latest_governance_state: blocked"), "{text}");
 
     let inspect = run_boundline_in(
@@ -90,25 +87,18 @@ fn explicit_canon_request_blocks_without_local_fallback() {
         &["inspect", "--workspace", workspace.to_string_lossy().as_ref()],
     );
     let inspect_text = terminal_text(&inspect);
-    assert_eq!(inspect.status.code(), Some(1), "{inspect_text}");
-    assert!(inspect_text.contains("terminal_status: failed"), "{inspect_text}");
-    assert!(
-        inspect_text
-            .contains("governance_blocked: governance required Canon for bug-fix:investigate"),
-        "{inspect_text}"
-    );
+    assert_eq!(inspect.status.code(), Some(3), "{inspect_text}");
+    assert!(inspect_text.contains("inspect: trace read failure"), "{inspect_text}");
 }
 
 #[test]
-fn capture_rejects_explicit_canon_request_missing_owner() {
+fn goal_rejects_explicit_canon_request_missing_owner() {
     let workspace = temp_optional_governance_workspace("boundline-human-governance-missing-owner");
 
-    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
-
-    let capture = run_boundline_in(
+    let goal = run_boundline_in(
         &workspace,
         &[
-            "capture",
+            "goal",
             "--goal",
             "Fix the failing checkout flow",
             "--governance",
@@ -119,8 +109,8 @@ fn capture_rejects_explicit_canon_request_missing_owner() {
             "payments",
         ],
     );
-    let text = terminal_text(&capture);
-    assert_eq!(capture.status.code(), Some(1), "{text}");
+    let text = terminal_text(&goal);
+    assert_eq!(goal.status.code(), Some(1), "{text}");
     assert!(text.contains("failed to ingest authored brief"), "{text}");
     assert!(text.contains("owner"), "{text}");
     assert!(text.contains("canon"), "{text}");
@@ -130,11 +120,10 @@ fn capture_rejects_explicit_canon_request_missing_owner() {
 fn explicit_local_request_overrides_existing_canon_policy() {
     let workspace = temp_canon_governance_workspace("boundline-human-governance-local-override");
 
-    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
     assert_eq!(
         run_boundline_in(
             &workspace,
-            &["capture", "--goal", "Fix the failing checkout flow", "--governance", "local",],
+            &["goal", "--goal", "Fix the failing checkout flow", "--governance", "local",],
         )
         .status
         .code(),
@@ -158,11 +147,10 @@ fn explicit_local_request_overrides_existing_canon_policy() {
 fn inspect_projects_requested_governance_intent_for_session_runs() {
     let workspace = temp_canon_governance_workspace("boundline-human-governance-inspect");
 
-    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
     assert_eq!(
         run_boundline_in(
             &workspace,
-            &["capture", "--goal", "Fix the failing checkout flow", "--governance", "local",],
+            &["goal", "--goal", "Fix the failing checkout flow", "--governance", "local",],
         )
         .status
         .code(),

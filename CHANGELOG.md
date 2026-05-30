@@ -19,7 +19,49 @@ recorded workspace version.
 
 Highlights:
 
-- No unreleased entries yet.
+- Retired the unshipped terminal UI planning artifacts and removed the related
+  product-line references from the active roadmap.
+- Added `boundline models auth login|status|remove` so provider-backed routes
+  can reuse user-scoped authentication outside any one repository; the current
+  public login surface supports `github-copilot`.
+- Aligned runtime planning handoffs around explicit gate and follow-up outputs,
+  including planning-quality projections and assistant-safe resume or next
+  commands instead of implicit host continuation.
+- Added the read-only `boundline probe` preflight surface, plus bootstrap-safe
+  assistant guidance and contract coverage so goal and plan hosts can detect
+  init versus doctor versus session-ready states before orchestration.
+- Closed the remaining cross-host assistant contract gaps so Copilot prompt
+  packs and repo-local Claude, Codex, and Antigravity command surfaces describe
+  the same probe and follow-through behavior.
+- Realigned the active Canon compatibility boundary and related reasoning
+  contracts to Canon `0.62.0`.
+
+## [0.64.0] - 2026-05-20
+
+Highlights:
+
+- Added a separate `boundline-terminal` workspace component for dashboard
+  snapshot projection and terminal rendering groundwork while keeping normal
+  CLI commands and session-native state authoritative.
+- Introduced typed dashboard snapshots, action contracts, diagnostics, and
+  degraded fallbacks over existing session, trace, checkpoint, finding, and
+  governed-reference projections.
+- Added initial release documentation for dashboard launch, snapshot JSON
+  validation, degraded mode, and terminal-safe `boundline` wordmark branding.
+- Bumped release metadata to Boundline `0.64.0`, Canon `0.61.0`, and refreshed
+  the bundled assistant model catalog from current provider documentation.
+
+Validation notes:
+
+- Dashboard-targeted contract, integration, unit, and crate-local UI suites all
+  passed; `cargo nextest run` also exited `0` for the full workspace.
+- `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`
+  produced file-level LCOV evidence above the repository target for the new
+  dashboard files, including `36/37` lines in `crates/boundline-terminal/src/app.rs`
+  and `382/385` lines in `src/adapters/dashboard_state.rs`.
+- In this environment the bare `cargo test` harness still stalls after
+  compilation, so release evidence relies on `cargo test --no-run --all-targets`
+  plus the targeted dashboard suites for deterministic validation.
 
 ## [0.63.0] - 2026-05-19
 
@@ -62,7 +104,7 @@ Highlights:
   runtime-facing tests to match the shipped completed-state behavior.
 - Aligned the active release metadata, distribution surfaces, assistant package
   manifests, and Canon compatibility fixtures to Boundline `0.62.0` and Canon
-  `0.59.0`.
+  `0.60.0`.
 
 ## [0.61.0] - 2026-05-18
 
@@ -101,7 +143,7 @@ Highlights:
   implementation and validation work.
 - Bumped workspace version to `0.60.0`.
 
-## [0.59.0] - 2026-05-17
+## [0.60.0] - 2026-05-17
 
 Delivered specs:
 
@@ -122,7 +164,7 @@ Highlights:
 - Refreshed focused coverage and validation evidence for the semantic runtime,
   including owner-local LCOV attribution for the retrieval, domain, and CLI
   output files.
-- Bumped workspace version to `0.59.0`.
+- Bumped workspace version to `0.60.0`.
 
 ## [0.58.0] - 2026-05-16
 
@@ -353,7 +395,7 @@ Highlights:
 - Add host-specific assistant package folders for Claude Code, Codex, Cursor,
   and a Copilot prompt-pack boundary so chat surfaces can discover Boundline as
   a session-native delivery runtime.
-- Expose namespaced `/boundline:*` commands for start, capture, plan, run,
+- Expose namespaced `/boundline:*` commands for start, goal, plan, run,
   status, inspect, recover, and conditional governance while keeping
   `.boundline/session.json` and CLI output authoritative.
 - Validate plugin manifests, shared metadata, command coverage, referenced
@@ -649,7 +691,7 @@ Delivered specs:
 Highlights:
 
 - Make direct `boundline run --goal ...` bootstrap the
-  native session route by default, including negotiated capture, executable
+  native session route by default, including negotiated goal intake, executable
   planning, decision-loop execution, and persisted follow-up through `status`,
   `next`, and `inspect`.
 - Preserve declarative execution profiles as an explicit subordinate route via
@@ -720,7 +762,7 @@ Delivered specs:
 
 Highlights:
 
-- Derive one negotiated delivery packet during `capture` from direct goals,
+- Derive one negotiated delivery packet during `goal` from direct goals,
   authored briefs, and governance context before planning begins.
 - Gate `plan` on a credible negotiation result and keep
   `negotiation_goal_summary`, `negotiation_resolution`, and
@@ -919,7 +961,7 @@ Delivered specs:
 
 Highlights:
 
-- Refound Boundline around `start -> capture -> plan -> run -> status -> inspect`
+- Refound Boundline around `goal -> plan -> run -> status -> inspect`
   as the primary operator journey for bounded delivery work.
 - Treat flow as confirmed policy constraints over bounded decisions rather than
   as a rigid script, while preserving failure evidence and recovery state for
@@ -972,9 +1014,9 @@ Delivered specs:
 
 Highlights:
 
-- `boundline capture` and `boundline run` accept one or more `--brief <path>.md`
+- `boundline goal` and `boundline run` accept one or more `--brief <path>.md`
   arguments alongside (or instead of) `--goal`. Brief contents are normalized
-  into a single goal text projected through the existing capture pipeline so
+  into a single goal text projected through the existing goal-intake pipeline so
   developers no longer need to author free-text prose only on the command line.
 - New `boundline::domain::brief` module (`AuthoredBriefBundle`,
   `InputSourceReference`, `BriefIngestionError`, `normalize_inputs`) enforces
@@ -982,7 +1024,7 @@ Highlights:
   files per invocation, and a 256 KiB per-source size cap.
 - Multi-source resolution deduplicates explicit and referenced Markdown input
   into one persisted authored brief bundle with stable provenance across
-  `capture`, `run`, `status`, and `inspect`.
+  `goal`, `run`, `status`, and `inspect`.
 - Clarification-aware task drafting blocks planning explicitly for unbounded
   requests and records an inspectable trace instead of guessing missing scope.
 - Human governance intent (`--governance`, `--risk`, `--zone`, `--owner`)
@@ -1060,7 +1102,7 @@ Delivered specs:
 Highlights:
 
 - Persist active workspace session state under `<workspace>/.boundline/session.json`.
-- Unify `start`, `capture`, `plan`, `step`, `run`, `status`, `next`, and
+- Unify `start`, `goal`, `plan`, `step`, `run`, `status`, `next`, and
   `inspect` around one session-native CLI workflow.
 - Tighten session validation and status projection so operators can resume work
   without reconstructing task state from raw traces.

@@ -8,7 +8,7 @@
 ```bash
 cd /tmp/session-native-surface
 cargo run --bin boundline -- start
-cargo run --bin boundline -- capture --goal "fix the failing add test"
+cargo run --bin boundline -- goal --goal "fix the failing add test"
 cargo run --bin boundline -- plan --flow bug-fix
 cargo run --bin boundline -- run
 cargo run --bin boundline -- status
@@ -38,7 +38,7 @@ cargo run --bin boundline -- inspect
 ```bash
 cd /tmp/session-native-surface-governed
 cargo run --bin boundline -- start
-cargo run --bin boundline -- capture --goal "ship the governed change"
+cargo run --bin boundline -- goal --goal "ship the governed change"
 cargo run --bin boundline -- plan --no-flow
 cargo run --bin boundline -- run
 cargo run --bin boundline -- status

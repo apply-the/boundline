@@ -25,5 +25,5 @@ fn govern_with_mode_stops_when_session_state_is_missing() {
     assert_eq!(output.status.code(), Some(1), "{text}");
     assert!(text.contains("govern error:"), "{text}");
     assert!(text.contains(".boundline/session.json"), "{text}");
-    assert!(text.contains("boundline start"), "{text}");
+    assert!(text.contains("boundline goal --workspace"), "{text}");
 }

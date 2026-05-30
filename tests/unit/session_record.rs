@@ -460,6 +460,7 @@ fn goal_captured_status_view_can_project_clarification_fields_from_authored_brie
         clarification_headline: bundle.clarification_headline(),
         clarification_prompt: bundle.clarification_prompt(),
         clarification_missing_fields: bundle.clarification_missing_fields(),
+        clarification_questions: bundle.clarification_questions(),
         requested_governance_runtime: None,
         requested_governance_risk: None,
         requested_governance_zone: None,
@@ -514,7 +515,7 @@ fn goal_captured_status_view_can_project_clarification_fields_from_authored_brie
         latest_governance_decision: None,
         latest_governance_candidates: None,
         governance_next_action: None,
-        next_command: Some("boundline capture --goal <narrower goal>".to_string()),
+        next_command: Some("boundline goal --goal <narrower goal>".to_string()),
         explanation: "clarification is required before planning can continue".to_string(),
         ..Default::default()
     };

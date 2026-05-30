@@ -27,6 +27,18 @@ pub const MAX_BRIEF_SOURCES: usize = 10;
 /// Maximum size in bytes for a single Markdown brief source.
 pub const MAX_BRIEF_BYTES: usize = 256 * 1024;
 
+const FIELD_INTENDED_OUTCOME: &str = "intended_outcome";
+const FIELD_DOMAIN_MODEL: &str = "domain_model_entities";
+const FIELD_API_OPERATIONS: &str = "api_operations";
+const FIELD_PERSISTENCE_CHOICE: &str = "persistence_choice";
+const FIELD_AUTH_BOUNDARY: &str = "auth_boundary";
+const FIELD_ROLE_MODEL_SEMANTICS: &str = "role_model_semantics";
+const FIELD_VALIDATION_TARGET: &str = "validation_target";
+const FIELD_SCOPE_BOUNDARY: &str = "scope_boundary";
+const FIELD_SUCCESS_CRITERIA: &str = "success_criteria";
+const DIRECT_TEXT_DISPLAY_NAME: &str = "developer goal";
+const CLARIFICATION_ANSWER_PREFIX: &str = "Clarification answer:";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AuthoredBriefResolutionState {
@@ -37,6 +49,37 @@ pub enum AuthoredBriefResolutionState {
 
 fn default_resolution_state() -> AuthoredBriefResolutionState {
     AuthoredBriefResolutionState::Ready
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GoalQualityState {
+    Ready,
+    ClarificationRequired,
+}
+
+impl GoalQualityState {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Ready => "ready",
+            Self::ClarificationRequired => "clarification_required",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GoalQualityAssessment {
+    pub state: GoalQualityState,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub findings: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub assumptions: Vec<String>,
+}
+
+impl Default for GoalQualityAssessment {
+    fn default() -> Self {
+        Self { state: GoalQualityState::Ready, findings: Vec::new(), assumptions: Vec::new() }
+    }
 }
 
 /// Normalized representation of human-authored input gathered from the CLI.
@@ -51,6 +94,8 @@ pub struct AuthoredBriefBundle {
     pub governance_intent: Option<GovernanceIntent>,
     #[serde(default = "default_resolution_state")]
     pub resolution_state: AuthoredBriefResolutionState,
+    #[serde(default)]
+    pub goal_quality: GoalQualityAssessment,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub clarification: Option<ClarificationRecord>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -121,6 +166,18 @@ impl AuthoredBriefBundle {
         self.derived_task_draft.as_ref().is_some_and(|draft| draft.planning_ready)
     }
 
+    pub fn goal_quality_state(&self) -> Option<String> {
+        Some(self.goal_quality.state.as_str().to_string())
+    }
+
+    pub fn goal_quality_findings(&self) -> Option<Vec<String>> {
+        (!self.goal_quality.findings.is_empty()).then_some(self.goal_quality.findings.clone())
+    }
+
+    pub fn goal_quality_assumptions(&self) -> Option<Vec<String>> {
+        (!self.goal_quality.assumptions.is_empty()).then_some(self.goal_quality.assumptions.clone())
+    }
+
     pub fn clarification_headline(&self) -> Option<String> {
         self.clarification.as_ref().map(ClarificationRecord::headline)
     }
@@ -135,6 +192,69 @@ impl AuthoredBriefBundle {
                 .then_some(clarification.missing_fields.clone())
         })
     }
+
+    pub fn clarification_questions(&self) -> Option<Vec<String>> {
+        self.clarification.as_ref().and_then(|clarification| {
+            (!clarification.questions.is_empty()).then_some(clarification.questions.clone())
+        })
+    }
+
+    pub fn with_clarification_answer(&self, answer: &str) -> Self {
+        let trimmed_answer = answer.trim();
+        let updated_goal_text = self
+            .primary_goal_text
+            .as_deref()
+            .map(str::trim)
+            .filter(|goal| !goal.is_empty())
+            .map(|goal| format!("{goal}\n\n{CLARIFICATION_ANSWER_PREFIX} {trimmed_answer}"))
+            .unwrap_or_else(|| format!("{CLARIFICATION_ANSWER_PREFIX} {trimmed_answer}"));
+
+        let mut updated_bundle = self.clone();
+        updated_bundle.bundle_id = Uuid::new_v4().to_string();
+        updated_bundle.primary_goal_text = Some(updated_goal_text.clone());
+        updated_bundle.captured_at = current_timestamp_millis();
+        updated_bundle.sources = rebuilt_sources_with_updated_direct_text(self, updated_goal_text);
+
+        let (derived_task_draft, clarification, goal_quality) = derive_task_draft(&updated_bundle);
+        updated_bundle.resolution_state = if clarification.is_some() {
+            AuthoredBriefResolutionState::ClarificationRequired
+        } else {
+            AuthoredBriefResolutionState::Ready
+        };
+        updated_bundle.goal_quality = goal_quality;
+        updated_bundle.clarification = clarification;
+        updated_bundle.derived_task_draft = Some(derived_task_draft);
+
+        updated_bundle
+    }
+}
+
+fn rebuilt_sources_with_updated_direct_text(
+    bundle: &AuthoredBriefBundle,
+    updated_goal_text: String,
+) -> Vec<InputSourceReference> {
+    let mut sources = Vec::with_capacity(bundle.sources.len().max(1));
+    sources.push(InputSourceReference {
+        source_id: "direct-0".to_string(),
+        kind: InputSourceKind::DirectText,
+        display_name: DIRECT_TEXT_DISPLAY_NAME.to_string(),
+        workspace_path: None,
+        precedence: 0,
+        content: updated_goal_text,
+    });
+
+    for (index, source) in bundle
+        .sources
+        .iter()
+        .filter(|source| !matches!(source.kind, InputSourceKind::DirectText))
+        .enumerate()
+    {
+        let mut updated_source = source.clone();
+        updated_source.precedence = index + 1;
+        sources.push(updated_source);
+    }
+
+    sources
 }
 
 /// Human-facing governance intent supplied alongside authored input.
@@ -273,7 +393,7 @@ pub fn normalize_inputs_with_governance(
         sources.push(InputSourceReference {
             source_id: format!("direct-{precedence}"),
             kind: InputSourceKind::DirectText,
-            display_name: "developer goal".to_string(),
+            display_name: DIRECT_TEXT_DISPLAY_NAME.to_string(),
             workspace_path: None,
             precedence,
             content: text.clone(),
@@ -320,17 +440,19 @@ pub fn normalize_inputs_with_governance(
         deduplicated_sources,
         governance_intent,
         resolution_state: AuthoredBriefResolutionState::Ready,
+        goal_quality: GoalQualityAssessment::default(),
         clarification: None,
         derived_task_draft: None,
         captured_at,
     };
 
-    let (derived_task_draft, clarification) = derive_task_draft(&bundle);
+    let (derived_task_draft, clarification, goal_quality) = derive_task_draft(&bundle);
     bundle.resolution_state = if clarification.is_some() {
         AuthoredBriefResolutionState::ClarificationRequired
     } else {
         AuthoredBriefResolutionState::Ready
     };
+    bundle.goal_quality = goal_quality;
     bundle.clarification = clarification;
     bundle.derived_task_draft = Some(derived_task_draft);
 
@@ -480,9 +602,10 @@ fn resolve_markdown_source(
 
 fn derive_task_draft(
     bundle: &AuthoredBriefBundle,
-) -> (DerivedTaskDraft, Option<ClarificationRecord>) {
+) -> (DerivedTaskDraft, Option<ClarificationRecord>, GoalQualityAssessment) {
     let bounded_goal = extract_bounded_goal(bundle);
-    let clarification = clarification_for_bundle(bundle, &bounded_goal);
+    let goal_quality = assess_goal_quality(bundle, &bounded_goal);
+    let clarification = clarification_for_bundle(bundle, &bounded_goal, &goal_quality);
     let blocking_clarification_ref =
         clarification.as_ref().map(|record| record.clarification_id.clone());
 
@@ -501,6 +624,7 @@ fn derive_task_draft(
             blocking_clarification_ref,
         },
         clarification,
+        goal_quality,
     )
 }
 
@@ -530,20 +654,109 @@ fn extract_bounded_goal(bundle: &AuthoredBriefBundle) -> String {
 fn clarification_for_bundle(
     bundle: &AuthoredBriefBundle,
     bounded_goal: &str,
+    goal_quality: &GoalQualityAssessment,
 ) -> Option<ClarificationRecord> {
-    if !requires_unbounded_request_clarification(bounded_goal) {
+    if requires_unbounded_request_clarification(bounded_goal) {
+        return Some(ClarificationRecord {
+            clarification_id: Uuid::new_v4().to_string(),
+            reason_kind: ClarificationReasonKind::UnboundedRequest,
+            prompt: "Narrow the request to one bounded bug-fix, change, or delivery outcome. Name the single document, component, or failing behavior Boundline should address before planning continues.".to_string(),
+            missing_fields: vec!["bounded_scope".to_string()],
+            questions: vec![
+                "What single bounded outcome should Boundline address first?".to_string(),
+            ],
+            blocking_sources: bundle.sources.iter().map(|source| source.source_id.clone()).collect(),
+            turn_index: 1,
+            status: ClarificationStatus::Open,
+        });
+    }
+
+    let missing_fields = goal_quality.findings.clone();
+    if missing_fields.is_empty() {
         return None;
     }
 
     Some(ClarificationRecord {
         clarification_id: Uuid::new_v4().to_string(),
-        reason_kind: ClarificationReasonKind::UnboundedRequest,
-        prompt: "Narrow the request to one bounded bug-fix, change, or delivery outcome. Name the single document, component, or failing behavior Boundline should address before planning continues.".to_string(),
-        missing_fields: vec!["bounded_scope".to_string()],
+        reason_kind: ClarificationReasonKind::MissingContext,
+        prompt: planning_clarification_prompt(&missing_fields),
+        questions: planning_clarification_questions(&missing_fields),
+        missing_fields,
         blocking_sources: bundle.sources.iter().map(|source| source.source_id.clone()).collect(),
         turn_index: 1,
         status: ClarificationStatus::Open,
     })
+}
+
+fn assess_goal_quality(bundle: &AuthoredBriefBundle, bounded_goal: &str) -> GoalQualityAssessment {
+    let rendered_goal = bundle.render_goal_text();
+    let lower = rendered_goal.to_ascii_lowercase();
+
+    if requires_unbounded_request_clarification(bounded_goal) {
+        return GoalQualityAssessment {
+            state: GoalQualityState::ClarificationRequired,
+            findings: vec!["bounded_scope".to_string()],
+            assumptions: Vec::new(),
+        };
+    }
+
+    let mut assumptions = goal_quality_assumptions(&lower);
+    if !looks_like_delivery_brief(&lower) {
+        assumptions
+            .push("Scope is limited to the stated goal and supplied brief files.".to_string());
+        return GoalQualityAssessment {
+            state: GoalQualityState::Ready,
+            findings: Vec::new(),
+            assumptions: dedup_preserve_order(assumptions),
+        };
+    }
+
+    let mut findings = Vec::new();
+    if !has_scope_boundary(&lower) {
+        findings.push(FIELD_SCOPE_BOUNDARY.to_string());
+    }
+    if !has_intended_outcome(&lower) {
+        findings.push(FIELD_INTENDED_OUTCOME.to_string());
+    }
+    if !has_domain_model(&lower) {
+        findings.push(FIELD_DOMAIN_MODEL.to_string());
+    }
+    if !has_api_operations(&lower) {
+        findings.push(FIELD_API_OPERATIONS.to_string());
+    }
+    if !has_persistence_choice(&lower) {
+        findings.push(FIELD_PERSISTENCE_CHOICE.to_string());
+    }
+    if mentions_security_or_privacy(&lower) && !has_auth_boundary(&lower) {
+        findings.push(FIELD_AUTH_BOUNDARY.to_string());
+    }
+    if lower.contains("role") && !has_role_model_semantics(&lower) {
+        findings.push(FIELD_ROLE_MODEL_SEMANTICS.to_string());
+    }
+    if !has_success_criteria(&lower) {
+        findings.push(FIELD_SUCCESS_CRITERIA.to_string());
+    }
+    if !has_validation_target(&lower) {
+        findings.push(FIELD_VALIDATION_TARGET.to_string());
+    }
+
+    findings.sort_by_key(|field| quality_field_priority(field));
+
+    if findings.is_empty() {
+        assumptions
+            .push("Scope is limited to the stated goal and supplied brief files.".to_string());
+        GoalQualityAssessment {
+            state: GoalQualityState::Ready,
+            findings,
+            assumptions: dedup_preserve_order(assumptions),
+        }
+    } else {
+        GoalQualityAssessment {
+            state: GoalQualityState::ClarificationRequired,
+            findings: dedup_preserve_order(findings),
+            assumptions: dedup_preserve_order(assumptions),
+        }
+    }
 }
 
 fn requires_unbounded_request_clarification(goal: &str) -> bool {
@@ -554,16 +767,269 @@ fn requires_unbounded_request_clarification(goal: &str) -> bool {
         || (lower.starts_with("improve ") && lower.contains(" and "))
 }
 
+fn looks_like_delivery_brief(lower: &str) -> bool {
+    lower.contains("microservice")
+        || lower.contains("microservizio")
+        || lower.contains("delivery")
+        || lower.contains("service")
+        || lower.contains("api")
+        || lower.contains("grpc")
+        || lower.contains("endpoint")
+        || lower.contains("oauth")
+        || lower.contains("user management")
+}
+
+fn has_intended_outcome(lower: &str) -> bool {
+    lower.contains("outcome:")
+        || lower.contains("goal:")
+        || lower.contains("deliver ")
+        || lower.contains("ship ")
+        || lower.contains("build ")
+        || lower.contains("create ")
+        || lower.contains("repair ")
+        || lower.contains("fix ")
+        || lower.contains("implement ")
+}
+
+fn has_domain_model(lower: &str) -> bool {
+    lower.contains("entity")
+        || lower.contains("entities")
+        || lower.contains("domain model")
+        || lower.contains("affected artifact")
+        || lower.contains("artifact")
+        || lower.contains("session")
+        || lower.contains("user")
+        || lower.contains("role")
+}
+
+fn has_api_operations(lower: &str) -> bool {
+    lower.contains("endpoint:")
+        || lower.contains("endpoints:")
+        || lower.contains(" endpoint ")
+        || lower.contains(" endpoints ")
+        || lower.ends_with(" endpoint")
+        || lower.ends_with(" endpoints")
+        || lower.contains("route:")
+        || lower.contains("routes:")
+        || lower.contains("operation:")
+        || lower.contains("operations:")
+        || lower.contains("create ")
+        || lower.contains("update ")
+        || lower.contains("delete ")
+        || lower.contains("list ")
+        || lower.contains("get ")
+        || lower.contains("rest crud")
+        || lower.contains("rpc:")
+        || lower.contains("grpc service:")
+        || (lower.contains("grpc") && lower.contains("method"))
+        || (lower.contains("rpc") && lower.contains("method"))
+        || lower.contains("graphql")
+        || (lower.contains("query") && lower.contains("mutation"))
+}
+
+fn has_scope_boundary(lower: &str) -> bool {
+    lower.contains("first slice")
+        || lower.contains("in scope")
+        || lower.contains("in-scope")
+        || lower.contains("out of scope")
+        || lower.contains("bounded")
+        || lower.contains("only ")
+        || lower.contains("limit")
+        || lower.contains("scope:")
+}
+
+fn has_persistence_choice(lower: &str) -> bool {
+    lower.contains("postgres")
+        || lower.contains("sqlite")
+        || lower.contains("mysql")
+        || lower.contains("database")
+        || lower.contains("persist")
+        || lower.contains("storage")
+}
+
+fn has_auth_boundary(lower: &str) -> bool {
+    let mentions_auth = lower.contains("oauth")
+        || lower.contains("auth")
+        || lower.contains("jwt")
+        || lower.contains("scope")
+        || lower.contains("permission");
+    let has_boundary = lower.contains("boundary")
+        || lower.contains("authorization")
+        || lower.contains("authorized by")
+        || lower.contains("service authorizes")
+        || lower.contains("authenticates")
+        || lower.contains("enforces roles")
+        || lower.contains("enforces permissions");
+
+    mentions_auth && has_boundary
+}
+
+fn mentions_security_or_privacy(lower: &str) -> bool {
+    lower.contains("oauth")
+        || lower.contains("auth")
+        || lower.contains("jwt")
+        || lower.contains("permission")
+        || lower.contains("role")
+        || lower.contains("privacy")
+        || lower.contains("personal data")
+        || lower.contains("pii")
+}
+
+fn has_role_model_semantics(lower: &str) -> bool {
+    lower.contains("role semantics")
+        || lower.contains("role model")
+        || lower.contains("roles:")
+        || lower.contains("permissions:")
+        || lower.contains("rbac")
+        || lower.contains("admin")
+        || lower.contains("member")
+        || lower.contains("viewer")
+        || lower.contains("editor")
+}
+
+fn has_validation_target(lower: &str) -> bool {
+    lower.contains("cargo test")
+        || lower.contains("test:")
+        || lower.contains("tests:")
+        || lower.contains("validation")
+        || lower.contains("verify")
+        || lower.contains("acceptance")
+        || lower.contains("evidence")
+}
+
+fn has_success_criteria(lower: &str) -> bool {
+    lower.contains("success criteria")
+        || lower.contains("success criterion")
+        || lower.contains("done when")
+        || lower.contains("acceptance scenario")
+        || lower.contains("acceptance criteria")
+        || lower.contains("users can")
+        || lower.contains("customers can")
+        || lower.contains("under ")
+        || lower.contains('%')
+        || lower.contains("measurable")
+}
+
+fn goal_quality_assumptions(lower: &str) -> Vec<String> {
+    let mut assumptions = Vec::new();
+    if !mentions_security_or_privacy(lower) {
+        assumptions.push(
+            "No new authentication, authorization, privacy, or compliance boundary is assumed."
+                .to_string(),
+        );
+    }
+    if !has_persistence_choice(lower) {
+        assumptions.push("No new persistence boundary is assumed.".to_string());
+    }
+    assumptions
+}
+
+fn quality_field_priority(field: &str) -> u8 {
+    match field {
+        "bounded_scope" | FIELD_SCOPE_BOUNDARY | FIELD_INTENDED_OUTCOME | FIELD_DOMAIN_MODEL => 0,
+        FIELD_AUTH_BOUNDARY | FIELD_ROLE_MODEL_SEMANTICS => 1,
+        FIELD_SUCCESS_CRITERIA => 2,
+        FIELD_API_OPERATIONS | FIELD_PERSISTENCE_CHOICE | FIELD_VALIDATION_TARGET => 3,
+        _ => 4,
+    }
+}
+
+fn dedup_preserve_order(items: Vec<String>) -> Vec<String> {
+    let mut seen = HashSet::new();
+    items.into_iter().filter(|item| seen.insert(item.clone())).collect()
+}
+
+fn planning_clarification_prompt(missing_fields: &[String]) -> String {
+    let questions = planning_clarification_questions(missing_fields);
+
+    format!(
+        "Answer these planning questions before Boundline can continue planning: {}",
+        questions.join(" ")
+    )
+}
+
+fn planning_clarification_questions(missing_fields: &[String]) -> Vec<String> {
+    let mut questions = Vec::new();
+
+    if missing_fields.iter().any(|field| field == FIELD_SCOPE_BOUNDARY) {
+        questions.push(
+            "Which bounded outcome and scope boundary should this first slice cover?".to_string(),
+        );
+    }
+    if missing_fields.iter().any(|field| field == FIELD_INTENDED_OUTCOME) {
+        questions.push("What exact outcome should Boundline deliver?".to_string());
+    }
+    if missing_fields.iter().any(|field| field == FIELD_DOMAIN_MODEL) {
+        questions.push(
+            "Which actors, affected artifacts, data, and relationships are in scope?".to_string(),
+        );
+    }
+    if missing_fields.iter().any(|field| field == FIELD_AUTH_BOUNDARY) {
+        questions.push(
+            "Where does OAuth2 or authentication stop and service-level authorization begin?"
+                .to_string(),
+        );
+    }
+    if missing_fields.iter().any(|field| field == FIELD_ROLE_MODEL_SEMANTICS) {
+        questions.push(
+            "How should role semantics, permissions, and role transitions behave?".to_string(),
+        );
+    }
+    if missing_fields.iter().any(|field| field == FIELD_API_OPERATIONS) {
+        questions.push(
+            "Which API operations, endpoints, or RPC methods are in scope first?".to_string(),
+        );
+    }
+    if missing_fields.iter().any(|field| field == FIELD_SUCCESS_CRITERIA) {
+        questions.push(
+            "What measurable success criteria should prove the goal is complete?".to_string(),
+        );
+    }
+    if missing_fields.iter().any(|field| field == FIELD_PERSISTENCE_CHOICE) {
+        questions.push("Which persistence store is authoritative for the first slice?".to_string());
+    }
+    if missing_fields.iter().any(|field| field == FIELD_VALIDATION_TARGET) {
+        questions.push(
+            "Which validation command or acceptance evidence should prove the slice?".to_string(),
+        );
+    }
+
+    if questions.len() > 3 {
+        questions.truncate(3);
+    }
+
+    questions
+}
+
 fn derive_flow_hint(goal: &str) -> Option<String> {
     let lower = goal.to_ascii_lowercase();
     if lower.contains("bug") || lower.contains("fix") || lower.contains("failing test") {
         return Some("bug-fix".to_string());
     }
-    if lower.contains("change") || lower.contains("update") || lower.contains("prepare") {
+    if (lower.contains("existing")
+        || lower.contains("change")
+        || lower.contains("update")
+        || lower.contains("modify")
+        || lower.contains("extend")
+        || lower.contains("refactor")
+        || lower.contains("prepare"))
+        && !looks_like_delivery_brief(&lower)
+    {
         return Some("change".to_string());
     }
-    if lower.contains("release") || lower.contains("ship") || lower.contains("deliver") {
+    if looks_like_delivery_brief(&lower)
+        && (lower.contains("release")
+            || lower.contains("ship")
+            || lower.contains("deliver")
+            || lower.contains("build")
+            || lower.contains("implement")
+            || lower.contains("create")
+            || lower.contains("first slice"))
+    {
         return Some("delivery".to_string());
+    }
+    if lower.contains("change") || lower.contains("update") || lower.contains("prepare") {
+        return Some("change".to_string());
     }
     None
 }
@@ -633,7 +1099,13 @@ mod tests {
     use serde_json::json;
     use uuid::Uuid;
 
-    use super::*;
+    use super::{
+        AuthoredBriefBundle, AuthoredBriefResolutionState, BriefIngestionError,
+        ClarificationReasonKind, ClarificationRecord, ClarificationStatus, DerivedTaskDraft,
+        InputSourceKind, MAX_BRIEF_SOURCES, derive_flow_hint, normalize_governance_intent,
+        normalize_inputs,
+    };
+    use crate::domain::governance::GovernanceRuntimeKind;
 
     fn temp_workspace(prefix: &str) -> PathBuf {
         let path = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
@@ -672,6 +1144,71 @@ mod tests {
     }
 
     #[test]
+    fn thin_delivery_markdown_requires_planning_clarification() {
+        let workspace = temp_workspace("boundline-brief-thin-delivery");
+        let brief = workspace.join("plan.md");
+        fs::write(
+            &brief,
+            "\
+Microservizio rust edition 2024
+Axum
+Grpc
+Handle user management.
+User with first name, last name, email, role
+endpoints oauth 2 protected
+",
+        )
+        .unwrap();
+
+        let bundle = normalize_inputs(&workspace, None, &[brief]).unwrap();
+
+        assert_eq!(bundle.resolution_state, AuthoredBriefResolutionState::ClarificationRequired);
+        assert!(!bundle.planning_ready());
+        let clarification = bundle.clarification.as_ref().expect("clarification should be open");
+        assert_eq!(clarification.reason_kind, ClarificationReasonKind::MissingContext);
+        assert!(clarification.missing_fields.contains(&"intended_outcome".to_string()));
+        assert!(clarification.missing_fields.contains(&"api_operations".to_string()));
+        assert!(clarification.missing_fields.contains(&"persistence_choice".to_string()));
+        assert!(clarification.missing_fields.contains(&"auth_boundary".to_string()));
+        assert!(clarification.missing_fields.contains(&"role_model_semantics".to_string()));
+        assert!(clarification.missing_fields.contains(&"validation_target".to_string()));
+        assert!(clarification.questions.len() <= 3);
+        assert!(
+            clarification.questions.iter().any(|question| question.contains("bounded outcome"))
+        );
+        assert!(clarification.questions.iter().any(|question| question.contains("OAuth2")));
+        assert!(clarification.prompt.contains("continue planning"));
+    }
+
+    #[test]
+    fn thin_delivery_direct_text_requires_planning_clarification_questions() {
+        let workspace = temp_workspace("boundline-brief-thin-direct-text");
+
+        let bundle = normalize_inputs(
+            &workspace,
+            Some("Rust microservice, Axum, gRPC, user management, OAuth2"),
+            &[],
+        )
+        .unwrap();
+
+        assert_eq!(bundle.resolution_state, AuthoredBriefResolutionState::ClarificationRequired);
+        assert!(!bundle.planning_ready());
+        let clarification = bundle.clarification.as_ref().expect("clarification should be open");
+        assert!(clarification.missing_fields.contains(&"persistence_choice".to_string()));
+        assert!(clarification.missing_fields.contains(&"auth_boundary".to_string()));
+        assert!(clarification.missing_fields.contains(&"api_operations".to_string()));
+        assert!(clarification.missing_fields.contains(&"validation_target".to_string()));
+        assert!(clarification.questions.len() <= 3);
+        assert!(clarification.questions.iter().any(|question| question.contains("OAuth2")));
+        assert!(
+            clarification.questions.iter().any(|question| question.contains("bounded outcome")
+                || question.contains("exact outcome"))
+        );
+        assert!(clarification.prompt.contains("continue planning"));
+        assert!(!clarification.prompt.contains("run discovery"));
+    }
+
+    #[test]
     fn normalizes_path_only_goal_as_referenced_markdown() {
         let workspace = temp_workspace("boundline-brief-path-goal");
         let brief = workspace.join("docs").join("prd.md");
@@ -688,6 +1225,16 @@ mod tests {
         );
         assert!(!bundle.render_goal_text().contains("./docs/prd.md"));
         assert!(bundle.render_goal_text().contains("Ship the change"));
+    }
+
+    #[test]
+    fn derive_flow_hint_prefers_delivery_for_concrete_service_features() {
+        assert_eq!(
+            derive_flow_hint(
+                "Implement the first slice of a Rust user-management microservice with REST endpoints and gRPC methods"
+            ),
+            Some("delivery".to_string())
+        );
     }
 
     #[test]
@@ -812,6 +1359,7 @@ mod tests {
             reason_kind: ClarificationReasonKind::MissingContext,
             prompt: "Need more business context".to_string(),
             missing_fields: vec!["risk".to_string()],
+            questions: Vec::new(),
             blocking_sources: Vec::new(),
             turn_index: 1,
             status: ClarificationStatus::Open,

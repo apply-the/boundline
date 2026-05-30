@@ -29,7 +29,7 @@ Deepen Boundline's Canon governance coverage by adding one newer governed analys
 
 - **PASS** Delivery identity: The feature directly improves bounded engineering task delivery by extending a real governed verification path for session-native work instead of adding a generic integration surface. See Summary and Technical Context.
 - **PASS** Delivery-first scope: The slice prioritizes execution control, governed verification, packet readiness, approval refresh, and operator visibility before any secondary polish. See Summary and Constraints.
-- **PASS** Primary workflow: `start -> capture -> plan -> run -> status -> next -> inspect` remains the main operator path; compatibility via `.boundline/execution.json` remains available but unchanged. See Summary and Constraints.
+- **PASS** Primary workflow: `goal -> plan -> run -> status -> next -> inspect` remains the main operator path; compatibility via `.boundline/execution.json` remains available but unchanged. See Summary and Constraints.
 - **PASS** Bounded execution: Governed follow-on analysis starts only at targeted stage boundaries, refreshes only on later explicit commands, and stops explicitly on blocked, failed, or approval-gated outcomes. See Technical Context and spec requirements.
 - **PASS** Stateful execution: The design continues to read and write active task context, governance packet state, decision state, and trace evidence inside the existing session and trace stores. See Technical Context and Project Structure.
 - **PASS** Mutable planning: The slice reuses existing stage selection, candidate-mode selection, bounded packet reuse, and explicit decision traces rather than freezing governance decisions into a static path. See Summary and Technical Context.

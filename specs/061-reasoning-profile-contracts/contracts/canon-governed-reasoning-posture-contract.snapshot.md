@@ -8,17 +8,17 @@ This snapshot preserves the Canon provider-side release contract needed for Boun
 - `current_contract_line`: `governed_reasoning_posture_v1`
 - `schema_version`: `v1`
 - `primary_consumer`: `boundline`
-- `supported_boundline_window`: `0.63.x`
-- `supported_canon_window`: `0.59.x`
+- `supported_boundline_window`: `0.64.x`
+- `supported_canon_window`: `0.62.x`
 
 ## Producer Shape
 
 ```toml
 contract_line = "governed_reasoning_posture_v1"
-boundline_min = "0.63.0"
-boundline_max_exclusive = "0.64.0"
-canon_min = "0.59.0"
-canon_max_exclusive = "0.60.0"
+boundline_min = "0.64.0"
+boundline_max_exclusive = "0.65.0"
+canon_min = "0.62.0"
+canon_max_exclusive = "0.63.0"
 required_profile_family = "blind_review"
 admission_priority = "required_before_acceptance"
 confidence_handoff_required = true

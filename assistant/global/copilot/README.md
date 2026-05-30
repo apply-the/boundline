@@ -3,8 +3,11 @@
 Copilot support is represented as prompt-pack guidance. Boundline does not claim
 that every Copilot environment supports user-scoped slash command installation.
 
+Bootstrap itself remains a raw CLI step: run `boundline init --assistant
+copilot` once, then use `boundline update --workspace <workspace> --target
+assistant --apply` to refresh the repo-local prompt pack.
+
 Prompts:
-- `/boundline:init`
 - `/boundline:doctor`
 - `/boundline:help`
 - `/boundline:status`
@@ -21,6 +24,7 @@ truth after initialization.
 
 Fallback CLI:
 - `boundline init --assistant copilot`
+- `boundline update --workspace <workspace> --target assistant --apply`
 - `boundline doctor`
 - `boundline doctor --workspace <workspace>`
 - `boundline status`

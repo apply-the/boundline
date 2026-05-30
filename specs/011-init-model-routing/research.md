@@ -1,8 +1,8 @@
 # Research: Human-Friendly Init and Model Routing
 
-## Decision 1: Add a dedicated `boundline init` command instead of overloading `doctor`, `start`, or `capture`
+## Decision 1: Add a dedicated `boundline init` command instead of overloading `doctor`, `start`, or `goal`
 
-- Decision: Introduce a first-class `boundline init` command that prepares workspace files, detects supported runtimes, previews proposed changes, and optionally scaffolds repository-local assistant assets. Keep `doctor`, `start`, `capture`, `plan`, and `run` focused on readiness and delivery flow after setup exists.
+- Decision: Introduce a first-class `boundline init` command that prepares workspace files, detects supported runtimes, previews proposed changes, and optionally scaffolds repository-local assistant assets. Keep `doctor`, `start`, `goal`, `plan`, and `run` focused on readiness and delivery flow after setup exists.
 - Rationale: Setup is a distinct operator journey from delivery execution. Reusing existing commands would keep leaking internal setup concerns into commands that should remain delivery-focused, while a dedicated init surface can be both guided and explicit.
 - Alternatives considered:
   - Overload `doctor` to create missing files: rejected because diagnostics should remain read-mostly and explain readiness rather than mutating the repository implicitly.

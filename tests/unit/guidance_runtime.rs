@@ -13,9 +13,9 @@ use boundline::domain::goal_plan::{
 use boundline::domain::trace::TraceSummaryView;
 use boundline::{
     CapabilityPhase, FindingConfidence, GoalPlan, GuardianCapability, GuardianDisposition,
-    GuardianExecutionRequest, GuardianFinding, GuardianKind, GuidanceAuthoritySource,
-    execute_guardians_for_phase, guardian_kind_requires_route, order_guardians_for_execution,
-    planning_runtime_evidence, resolve_capabilities_for_phase,
+    GuardianExecutionRequest, GuardianExecutionState, GuardianFinding, GuardianKind,
+    GuidanceAuthoritySource, execute_guardians_for_phase, guardian_kind_requires_route,
+    order_guardians_for_execution, planning_runtime_evidence, resolve_capabilities_for_phase,
     should_short_circuit_semantic_guards,
 };
 use uuid::Uuid;
@@ -330,9 +330,11 @@ fn guardian_execution_stages_hybrid_guardians_on_verification_routes() {
         .find(|execution| execution.guardian_id == "custom-hybrid")
         .expect("custom hybrid guardian should execute");
     assert_eq!(execution.route_slot, Some(RouteSlot::Verification));
-    assert!(!execution.finding_ids.is_empty());
+    assert_eq!(execution.execution_state, GuardianExecutionState::Degraded);
+    assert!(execution.finding_ids.is_empty());
     assert!(outcome.projection.guardian_timeline.iter().any(|line| {
-        line.contains("custom-hybrid: completed (semantic review staged on verification")
+        line.contains("custom-hybrid: degraded (")
+            && line.contains("requires real provider execution on route verification")
     }));
 }
 

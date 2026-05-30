@@ -15,8 +15,8 @@ Exercise the complete `0.33.0` story: explicit context assembly before plan conf
 
 1. Start a fresh session:
    `cargo run --bin boundline -- start`
-2. Capture a bounded goal with authored context:
-   `cargo run --bin boundline -- capture --goal "fix the failing context summary output"`
+2. Record a bounded goal with authored context:
+   `cargo run --bin boundline -- goal --goal "fix the failing context summary output"`
 3. Plan the task:
    `cargo run --bin boundline -- plan`
 4. Verify the output and persisted session expose:
@@ -37,7 +37,7 @@ Exercise the complete `0.33.0` story: explicit context assembly before plan conf
 
 ## Scenario 3: Non-credible context stops planning explicitly
 
-1. Capture a goal in a workspace with no credible relevant code or artifact inputs.
+1. Record a goal in a workspace with no credible relevant code or artifact inputs.
 2. Run:
    `cargo run --bin boundline -- plan`
 3. Verify planning stops explicitly and the output explains that the context pack is insufficient or stale rather than silently proceeding.

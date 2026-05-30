@@ -35,7 +35,7 @@ As a Boundline developer, I can establish and reuse one active session for a wor
 
 ### User Story 2 - Plan and Execute Through Shared Session State (Priority: P2)
 
-As a Boundline developer, I can capture a goal, plan it, and execute work step-by-step or end-to-end through the same session so that progress, traces, and latest outcome remain coherent across invocations.
+As a Boundline developer, I can record a goal, plan it, and execute work step-by-step or end-to-end through the same session so that progress, traces, and latest outcome remain coherent across invocations.
 
 **Why this priority**: Once an active session exists, the next delivery value is being able to move through the bounded execution flow without manually reconstructing state between commands.
 
@@ -43,7 +43,7 @@ As a Boundline developer, I can capture a goal, plan it, and execute work step-b
 
 **Acceptance Scenarios**:
 
-1. **Given** an active session with a captured goal, **When** the developer plans the work, **Then** Boundline attaches the new plan to the session and resets execution position so subsequent commands operate on the latest plan.
+1. **Given** an active session with a recorded goal, **When** the developer plans the work, **Then** Boundline attaches the new plan to the session and resets execution position so subsequent commands operate on the latest plan.
 2. **Given** an active session with a current plan, **When** the developer executes one step at a time or runs the task to a terminal state, **Then** Boundline updates the shared session after each meaningful transition, including latest progress and latest trace reference.
 3. **Given** execution fails, retries, replans, exhausts its limits, or aborts, **When** Boundline updates the session, **Then** the session preserves the latest actionable state so the developer can inspect what happened and continue or recover deliberately.
 
@@ -72,7 +72,7 @@ As a Boundline developer working from CLI or assistant commands, I can inspect t
 -->
 
 - An active session exists but its latest trace reference is missing or unreadable.
-- An active session exists but contains no captured goal, and the developer requests planning or execution.
+- An active session exists but contains no recorded goal, and the developer requests planning or execution.
 - A new plan replaces a previous plan after partial progress, and execution position must not silently continue against stale plan state.
 - A session reaches a terminal outcome and the developer issues another execution command without first resetting or replacing the active task context.
 - The session record is malformed, partially written, or otherwise unreadable.

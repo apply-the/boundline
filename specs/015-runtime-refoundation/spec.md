@@ -3,21 +3,21 @@
 **Feature Branch**: `015-runtime-refoundation`  
 **Created**: 2026-04-29  
 **Status**: Draft  
-**Input**: User description: "Refound Boundline around a session-native runtime that derives bounded plans from captured goals, selects explicit next decisions from live state, treats flow as policy constraints, demotes fixture execution to explicit compatibility, and keeps Canon as a stage-boundary governance input rather than the orchestration brain"
+**Input**: User description: "Refound Boundline around a session-native runtime that derives bounded plans from recorded goals, selects explicit next decisions from live state, treats flow as policy constraints, demotes fixture execution to explicit compatibility, and keeps Canon as a stage-boundary governance input rather than the orchestration brain"
 
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Session-Native Runtime Path (Priority: P1)
 
-A developer starts a session, captures a goal, runs planning, and then runs execution without treating `init` or a declarative execution profile as the normal starting point. Boundline derives a bounded task draft from the captured goal, current workspace state, collected authored input, and any available Canon artifacts. During execution, Boundline chooses the next bounded action from live evidence rather than replaying a static declaration, and it persists each decision plus the terminal outcome so the developer can inspect what happened.
+A developer starts a session, captures a goal, runs planning, and then runs execution without treating `init` or a declarative execution profile as the normal starting point. Boundline derives a bounded task draft from the recorded goal, current workspace state, collected authored input, and any available Canon artifacts. During execution, Boundline chooses the next bounded action from live evidence rather than replaying a static declaration, and it persists each decision plus the terminal outcome so the developer can inspect what happened.
 
 **Why this priority**: This is the product refoundation itself. If the primary path is still init-first or static-profile-first, Boundline remains misaligned with the intended session-native product story.
 
-**Independent Test**: Can be fully tested by running `start -> capture -> plan -> run -> inspect` in a local workspace that has no pre-authored execution profile and verifying that Boundline derives a bounded task draft, executes at least one bounded decision, and reaches an explicit terminal state with inspectable evidence.
+**Independent Test**: Can be fully tested by running `goal -> plan -> run -> inspect` in a local workspace that has no pre-authored execution profile and verifying that Boundline derives a bounded task draft, executes at least one bounded decision, and reaches an explicit terminal state with inspectable evidence.
 
 **Acceptance Scenarios**:
 
-1. **Given** an active session with a captured goal and a usable workspace, **When** the developer runs planning and then execution, **Then** Boundline derives a bounded task draft from current evidence, executes one bounded decision at a time from live state, and records the resulting decisions plus the terminal outcome for inspection.
+1. **Given** an active session with a recorded goal and a usable workspace, **When** the developer runs planning and then execution, **Then** Boundline derives a bounded task draft from current evidence, executes one bounded decision at a time from live state, and records the resulting decisions plus the terminal outcome for inspection.
 2. **Given** a running session-native execution where verification fails for a bounded action, **When** Boundline chooses what to do next, **Then** it preserves the failure evidence, selects a bounded recovery or replan action, and keeps the full failure path inspectable instead of silently discarding it.
 3. **Given** a running session-native execution that reaches its configured limits or has no credible next action, **When** Boundline evaluates whether to continue, **Then** it stops in an explicit non-success terminal state with remediation cues visible through session output and inspection.
 
@@ -25,7 +25,7 @@ A developer starts a session, captures a goal, runs planning, and then runs exec
 
 ### User Story 2 - Flow As Confirmed Policy (Priority: P2)
 
-A developer planning work on the session-native path gets a proposed flow inferred from the captured goal and current workspace signals. The developer can confirm it, override it, or skip flow constraints entirely. Once confirmed, flow no longer behaves like a rigid script; it acts as a bounded policy surface that constrains which families of decisions are allowed at each stage and requires verifiable outcomes before stage transitions.
+A developer planning work on the session-native path gets a proposed flow inferred from the recorded goal and current workspace signals. The developer can confirm it, override it, or skip flow constraints entirely. Once confirmed, flow no longer behaves like a rigid script; it acts as a bounded policy surface that constrains which families of decisions are allowed at each stage and requires verifiable outcomes before stage transitions.
 
 **Why this priority**: The runtime cannot become adaptive and inspectable if flow remains either manual busywork or an ornamental label. Flow needs to stay visible, lightweight, and safely bounded.
 
@@ -33,7 +33,7 @@ A developer planning work on the session-native path gets a proposed flow inferr
 
 **Acceptance Scenarios**:
 
-1. **Given** a captured goal whose wording indicates a bug fix, **When** the developer runs planning, **Then** Boundline proposes the `bug-fix` flow with a visible rationale and allows the developer to confirm, override, or skip it.
+1. **Given** a recorded goal whose wording indicates a bug fix, **When** the developer runs planning, **Then** Boundline proposes the `bug-fix` flow with a visible rationale and allows the developer to confirm, override, or skip it.
 2. **Given** a confirmed flow and an active stage, **When** Boundline selects the next bounded action, **Then** only decision families allowed by the current stage may run, and stage transitions occur only after verifiable outcomes are recorded.
 3. **Given** a proposed flow that has not been confirmed or skipped, **When** the developer runs execution, **Then** Boundline blocks silent auto-run and explains how to confirm or skip the proposal before execution can continue under that policy.
 
@@ -55,7 +55,7 @@ Developers who still rely on declarative execution profiles can continue using t
 
 ### Edge Cases
 
-- What happens when execution is requested after `capture` but before planning has produced a bounded task draft? Boundline stops immediately with an explicit remediation message instead of silently falling back to compatibility execution.
+- What happens when execution is requested after `goal` but before planning has produced a bounded task draft? Boundline stops immediately with an explicit remediation message instead of silently falling back to compatibility execution.
 - What happens when a proposed flow remains unconfirmed at run time? Boundline does not auto-confirm it; it blocks policy-bound execution until the operator confirms or skips the proposal.
 - What happens when the observe phase finds evidence but no credible next bounded action? Boundline terminates with an explicit no-actionable-state outcome and preserves the evidence that led to the stop.
 - What happens when a tool or adapter cannot execute the selected decision? Boundline records the failure as evidence, preserves the interrupted decision, and either chooses a bounded recovery action or terminates explicitly.
@@ -65,8 +65,8 @@ Developers who still rely on declarative execution profiles can continue using t
 
 ### Functional Requirements
 
-- **FR-001**: System MUST treat `start -> capture -> plan -> run -> status -> inspect` as the primary operator journey for bounded delivery work.
-- **FR-002**: System MUST derive a bounded task draft from captured goal text, workspace state, collected authored inputs, and available Canon artifacts without requiring a pre-authored execution profile.
+- **FR-001**: System MUST treat `goal -> plan -> run -> status -> inspect` as the primary operator journey for bounded delivery work.
+- **FR-002**: System MUST derive a bounded task draft from recorded goal text, workspace state, collected authored inputs, and available Canon artifacts without requiring a pre-authored execution profile.
 - **FR-003**: System MUST select the next bounded action during execution from live runtime state, prior evidence, and current bounded plan rather than replaying static declarations as the default control model.
 - **FR-004**: System MUST represent each chosen bounded action as an explicit decision object containing decision family, target, rationale, expected outcome, evidence inputs, execution result, and lifecycle status.
 - **FR-005**: System MUST dispatch bounded actions through concrete runtime operations that can read files, write or patch files, run validation commands, and capture execution output as evidence for later decisions.
@@ -94,7 +94,7 @@ Developers who still rely on declarative execution profiles can continue using t
 
 ### Measurable Outcomes
 
-- **SC-001**: Developers can complete `start -> capture -> plan -> run -> inspect` on representative local workspaces without needing `init` or a pre-authored execution profile for the normal path.
+- **SC-001**: Developers can complete `goal -> plan -> run -> inspect` on representative local workspaces without needing `init` or a pre-authored execution profile for the normal path.
 - **SC-002**: 100% of session-native runs terminate in an explicit terminal state within configured execution limits.
 - **SC-003**: Developers can identify the chosen route, the last failed or recovered decision, and the terminal reason from recorded session output and inspection surfaces in under 5 minutes.
 - **SC-004**: Planning produces a bounded task draft and any flow proposal or skip outcome in under 5 seconds for workspaces with up to 1000 files.

@@ -94,7 +94,7 @@ Create `.boundline/execution.json` in a small Rust workspace:
 
    ```bash
    cargo run --bin boundline -- start
-   cargo run --bin boundline -- capture --goal "Fix the failing add test"
+   cargo run --bin boundline -- goal --goal "Fix the failing add test"
    cargo run --bin boundline -- flow bug-fix
    cargo run --bin boundline -- plan
    cargo run --bin boundline -- step

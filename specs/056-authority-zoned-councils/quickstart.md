@@ -14,7 +14,7 @@ Expected result:
 Run:
 
 ```bash
-boundline capture --goal "finish the governed verification pass"
+boundline goal --goal "finish the governed verification pass"
 ```
 
 Expected result:

@@ -24,7 +24,7 @@ on conflicts.
 
 1. Use a repository containing both Rust and React code.
 2. Enable the relevant domain families for the workspace.
-3. Run `boundline capture --workspace <repo> --goal "fix the React dashboard regression"`.
+3. Run `boundline goal --workspace <repo> --goal "fix the React dashboard regression"`.
 4. Run `boundline plan --workspace <repo>`.
 
 Expected result: the proposed plan keeps the normal bounded planning flow, and
@@ -47,7 +47,7 @@ visible on normal CLI surfaces.
 
 1. Use a workspace with no active matching domain family for the current goal,
    or bind a required supporting input that is unavailable.
-2. Run `boundline capture --workspace <repo> --goal "update the unsupported target"`.
+2. Run `boundline goal --workspace <repo> --goal "update the unsupported target"`.
 3. Run `boundline plan --workspace <repo>`.
 
 Expected result: planning stops explicitly because the bounded context is not

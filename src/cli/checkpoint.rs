@@ -7,6 +7,7 @@ use crate::adapters::checkpoint_store::{
     CheckpointRestoreResult, CheckpointStoreError, FileCheckpointStore,
 };
 use crate::adapters::cluster_store::{ClusterStoreError, FileClusterStore};
+use crate::adapters::session_store::{FileSessionStore, SessionStore, SessionStoreError};
 use crate::cli::CommandExitStatus;
 use crate::cli::workspace as cli_workspace;
 use crate::domain::checkpoint::{
@@ -23,18 +24,23 @@ pub struct CheckpointCommandReport {
 struct ResolvedCheckpointTarget {
     owner_workspace: PathBuf,
     member_workspaces: Vec<String>,
+    active_session_id: Option<String>,
 }
 
 pub fn execute_list(
     workspace: Option<&Path>,
     cluster: Option<&Path>,
+    session_id: Option<&str>,
 ) -> Result<CheckpointCommandReport, CheckpointCommandError> {
-    let target = resolve_checkpoint_target(workspace, cluster, "checkpoint list")?;
+    let target = resolve_checkpoint_target(workspace, cluster, "checkpoint list", session_id)?;
 
     let terminal_output = if target.member_workspaces.is_empty() {
-        let manifests = FileCheckpointStore::for_workspace(&target.owner_workspace)
-            .list()
-            .map_err(CheckpointCommandError::CheckpointStore)?;
+        let manifests = checkpoint_store_for_workspace(
+            &target.owner_workspace,
+            target.active_session_id.as_deref(),
+        )
+        .list()
+        .map_err(CheckpointCommandError::CheckpointStore)?;
         render_workspace_checkpoint_list(&target.owner_workspace, manifests)
     } else {
         let manifests = load_cluster_group_manifests(&target)?;
@@ -49,14 +55,18 @@ pub fn execute_restore(
     workspace: Option<&Path>,
     cluster: Option<&Path>,
     force: bool,
+    session_id: Option<&str>,
 ) -> Result<CheckpointCommandReport, CheckpointCommandError> {
-    let target = resolve_checkpoint_target(workspace, cluster, "checkpoint restore")?;
+    let target = resolve_checkpoint_target(workspace, cluster, "checkpoint restore", session_id)?;
     let mode = if force { CheckpointRestoreMode::Forced } else { CheckpointRestoreMode::Safe };
 
     if target.member_workspaces.is_empty() {
-        let result = FileCheckpointStore::for_workspace(&target.owner_workspace)
-            .restore(checkpoint_id, mode)
-            .map_err(CheckpointCommandError::CheckpointStore)?;
+        let result = checkpoint_store_for_workspace(
+            &target.owner_workspace,
+            target.active_session_id.as_deref(),
+        )
+        .restore(checkpoint_id, mode)
+        .map_err(CheckpointCommandError::CheckpointStore)?;
         let exit_status = match result.record.outcome {
             CheckpointRestoreOutcome::Succeeded => CommandExitStatus::Succeeded,
             CheckpointRestoreOutcome::Refused | CheckpointRestoreOutcome::Failed => {
@@ -81,7 +91,10 @@ pub fn execute_restore(
     if mode == CheckpointRestoreMode::Safe {
         let mut conflicts = Vec::new();
         for manifest in &manifests {
-            let store = FileCheckpointStore::for_workspace(Path::new(&manifest.workspace_ref));
+            let store = checkpoint_store_for_workspace(
+                Path::new(&manifest.workspace_ref),
+                target.active_session_id.as_deref(),
+            );
             let manifest_conflicts = store
                 .restore_conflicts(&manifest.checkpoint_id)
                 .map_err(CheckpointCommandError::CheckpointStore)?
@@ -94,7 +107,10 @@ pub fn execute_restore(
         if !conflicts.is_empty() {
             let mut results = Vec::new();
             for (manifest, conflicting_paths) in conflicts {
-                let store = FileCheckpointStore::for_workspace(Path::new(&manifest.workspace_ref));
+                let store = checkpoint_store_for_workspace(
+                    Path::new(&manifest.workspace_ref),
+                    target.active_session_id.as_deref(),
+                );
                 results.push(
                     store
                         .refuse_restore(&manifest.checkpoint_id, mode, conflicting_paths)
@@ -116,7 +132,10 @@ pub fn execute_restore(
 
     let mut results = Vec::new();
     for manifest in manifests {
-        let store = FileCheckpointStore::for_workspace(Path::new(&manifest.workspace_ref));
+        let store = checkpoint_store_for_workspace(
+            Path::new(&manifest.workspace_ref),
+            target.active_session_id.as_deref(),
+        );
         results.push(
             store
                 .restore(&manifest.checkpoint_id, mode)
@@ -134,6 +153,7 @@ fn resolve_checkpoint_target(
     workspace: Option<&Path>,
     cluster: Option<&Path>,
     command_name: &'static str,
+    session_id: Option<&str>,
 ) -> Result<ResolvedCheckpointTarget, CheckpointCommandError> {
     if let Some(cluster_workspace) = cluster {
         let requested_workspace = resolve_workspace(Some(cluster_workspace))?;
@@ -148,6 +168,7 @@ fn resolve_checkpoint_target(
 
         let owner_workspace =
             resolve_workspace(Some(Path::new(&config.cluster.primary_workspace_ref)))?;
+        let active_session_id = resolve_session_id(&owner_workspace, session_id)?;
         let mut member_workspaces = BTreeSet::new();
         member_workspaces.insert(owner_workspace.to_string_lossy().into_owned());
         for member in config.cluster.members {
@@ -157,11 +178,14 @@ fn resolve_checkpoint_target(
         return Ok(ResolvedCheckpointTarget {
             owner_workspace,
             member_workspaces: member_workspaces.into_iter().collect(),
+            active_session_id,
         });
     }
 
+    let owner_workspace = resolve_workspace(workspace)?;
     Ok(ResolvedCheckpointTarget {
-        owner_workspace: resolve_workspace(workspace)?,
+        active_session_id: resolve_session_id(&owner_workspace, session_id)?,
+        owner_workspace,
         member_workspaces: Vec::new(),
     })
 }
@@ -172,17 +196,52 @@ fn resolve_workspace(workspace: Option<&Path>) -> Result<PathBuf, CheckpointComm
     })
 }
 
+fn resolve_session_id(
+    workspace: &Path,
+    session_id: Option<&str>,
+) -> Result<Option<String>, CheckpointCommandError> {
+    let store = FileSessionStore::for_workspace(workspace);
+    match session_id {
+        Some(session_id) => match store.load_session(session_id) {
+            Ok(Some(record)) => Ok(Some(record.session_id)),
+            Ok(None) => Err(CheckpointCommandError::UnknownSession {
+                session_id: session_id.to_string(),
+                workspace: workspace.to_path_buf(),
+            }),
+            Err(error) => Err(CheckpointCommandError::SessionStore(error)),
+        },
+        None => match store.load() {
+            Ok(Some(record)) => Ok(Some(record.session_id)),
+            Ok(None) => Ok(None),
+            Err(error) => Err(CheckpointCommandError::SessionStore(error)),
+        },
+    }
+}
+
+fn checkpoint_store_for_workspace(
+    workspace: &Path,
+    active_session_id: Option<&str>,
+) -> FileCheckpointStore {
+    active_session_id.map_or_else(
+        || FileCheckpointStore::for_workspace(workspace),
+        |session_id| FileCheckpointStore::for_session(workspace, session_id),
+    )
+}
+
 fn load_cluster_group_manifests(
     target: &ResolvedCheckpointTarget,
 ) -> Result<Vec<CheckpointManifest>, CheckpointCommandError> {
     let mut manifests = Vec::new();
     for workspace_ref in &target.member_workspaces {
         manifests.extend(
-            FileCheckpointStore::for_workspace(Path::new(workspace_ref))
-                .list()
-                .map_err(CheckpointCommandError::CheckpointStore)?
-                .into_iter()
-                .filter(|manifest| manifest.group_id.is_some()),
+            checkpoint_store_for_workspace(
+                Path::new(workspace_ref),
+                target.active_session_id.as_deref(),
+            )
+            .list()
+            .map_err(CheckpointCommandError::CheckpointStore)?
+            .into_iter()
+            .filter(|manifest| manifest.group_id.is_some()),
         );
     }
     manifests.sort_by(|left, right| {
@@ -201,9 +260,12 @@ fn load_cluster_group_manifests_for_restore(
     let mut manifests = Vec::new();
     for workspace_ref in &target.member_workspaces {
         manifests.extend(
-            FileCheckpointStore::for_workspace(Path::new(workspace_ref))
-                .load_group(checkpoint_id)
-                .map_err(CheckpointCommandError::CheckpointStore)?,
+            checkpoint_store_for_workspace(
+                Path::new(workspace_ref),
+                target.active_session_id.as_deref(),
+            )
+            .load_group(checkpoint_id)
+            .map_err(CheckpointCommandError::CheckpointStore)?,
         );
     }
     manifests.sort_by(|left, right| left.workspace_ref.cmp(&right.workspace_ref));
@@ -370,12 +432,16 @@ fn max_created_at(manifests: &[CheckpointManifest]) -> u64 {
 pub enum CheckpointCommandError {
     #[error("failed to resolve the current workspace: {0}")]
     WorkspaceResolution(#[from] std::io::Error),
+    #[error("session store operation failed: {0}")]
+    SessionStore(#[from] SessionStoreError),
     #[error("cluster store operation failed: {0}")]
     ClusterStore(#[from] ClusterStoreError),
     #[error("checkpoint store operation failed: {0}")]
     CheckpointStore(#[from] CheckpointStoreError),
     #[error("`{command_name}` requires a valid cluster config in {}", workspace.display())]
     MissingClusterConfig { workspace: PathBuf, command_name: &'static str },
+    #[error("session `{session_id}` does not exist in {}", workspace.display())]
+    UnknownSession { session_id: String, workspace: PathBuf },
     #[error("checkpoint '{0}' was not found")]
     MissingCheckpoint(String),
 }
@@ -390,11 +456,14 @@ mod tests {
     use super::{execute_list, execute_restore};
     use crate::adapters::checkpoint_store::{CheckpointCaptureRequest, FileCheckpointStore};
     use crate::adapters::cluster_store::FileClusterStore;
+    use crate::adapters::session_store::{FileSessionStore, SessionStore};
     use crate::domain::checkpoint::{CheckpointAuthorityScope, CheckpointRestoreMode};
     use crate::domain::cluster::{
         ClusterConfigFile, ClusterMemberRegistration, ClusterMemberRole, WorkspaceCluster,
     };
-    use crate::domain::session::SessionCommand;
+    use crate::domain::session::{
+        ActiveSessionRecord, SessionCommand, SessionStatus, session_checkpoints_root_ref,
+    };
 
     fn temp_workspace(prefix: &str) -> std::path::PathBuf {
         let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
@@ -451,13 +520,104 @@ mod tests {
             .unwrap();
     }
 
+    fn persist_active_session(workspace: &Path, session_id: &str) {
+        FileSessionStore::for_workspace(workspace)
+            .persist(&ActiveSessionRecord {
+                session_id: session_id.to_string(),
+                workspace_ref: workspace.to_string_lossy().into_owned(),
+                goal: Some("checkpoint goal".to_string()),
+                authored_brief: None,
+                negotiation_packet: None,
+                active_flow: None,
+                active_task: None,
+                goal_plan: None,
+                workflow_progress: None,
+                decisions: Vec::new(),
+                active_flow_policy: None,
+                latest_status: SessionStatus::Initialized,
+                latest_terminal_reason: None,
+                latest_trace_ref: None,
+                created_at: 1,
+                updated_at: 1,
+                governance_lifecycle: None,
+                project_scale: None,
+                latest_voting: None,
+                delight_feedback: None,
+            })
+            .unwrap();
+    }
+
+    fn build_session_record(workspace: &Path, session_id: &str) -> ActiveSessionRecord {
+        ActiveSessionRecord {
+            session_id: session_id.to_string(),
+            workspace_ref: workspace.to_string_lossy().into_owned(),
+            goal: Some("checkpoint goal".to_string()),
+            authored_brief: None,
+            negotiation_packet: None,
+            active_flow: None,
+            active_task: None,
+            goal_plan: None,
+            workflow_progress: None,
+            decisions: Vec::new(),
+            active_flow_policy: None,
+            latest_status: SessionStatus::Initialized,
+            latest_terminal_reason: None,
+            latest_trace_ref: None,
+            created_at: 1,
+            updated_at: 1,
+            governance_lifecycle: None,
+            project_scale: None,
+            latest_voting: None,
+            delight_feedback: None,
+        }
+    }
+
+    fn persist_session(
+        workspace: &Path,
+        session_id: &str,
+        select_active: bool,
+    ) -> Result<(), String> {
+        let store = FileSessionStore::for_workspace(workspace);
+        let record = build_session_record(workspace, session_id);
+        if select_active {
+            store.persist(&record).map_err(|error| error.to_string())?;
+        } else {
+            store.persist_without_select(&record).map_err(|error| error.to_string())?;
+        }
+        Ok(())
+    }
+
+    fn capture_session_checkpoint(
+        workspace: &Path,
+        session_id: &str,
+        checkpoint_id: &str,
+        group_id: Option<&str>,
+        file_path: &str,
+    ) -> Result<(), String> {
+        FileCheckpointStore::for_session(workspace, session_id)
+            .capture(CheckpointCaptureRequest {
+                checkpoint_id: checkpoint_id.to_string(),
+                group_id: group_id.map(str::to_string),
+                workspace_ref: workspace.to_string_lossy().into_owned(),
+                authority_scope: CheckpointAuthorityScope::Workspace,
+                trigger_command: SessionCommand::Run,
+                session_id: Some(session_id.to_string()),
+                task_id: Some("task-checkpoint".to_string()),
+                step_id: None,
+                candidate_paths: vec![file_path.to_string()],
+                already_modified_paths: Vec::new(),
+            })
+            .map(|_| ())
+            .map_err(|error| error.to_string())
+    }
+
     #[test]
     fn execute_list_renders_workspace_checkpoints() {
         let workspace = temp_workspace("boundline-cli-checkpoint-list");
         fs::write(workspace.join("src/lib.rs"), "before").unwrap();
         capture_workspace_checkpoint(&workspace, "checkpoint-1", None, "src/lib.rs");
 
-        let report = execute_list(Some(&workspace), None).unwrap();
+        let report = execute_list(Some(&workspace), None, None).unwrap();
 
         assert_eq!(report.exit_status, crate::cli::CommandExitStatus::Succeeded);
         assert!(report.terminal_output.contains("checkpoint_scope: workspace"));
@@ -480,17 +640,147 @@ mod tests {
             .unwrap();
         fs::write(workspace.join("src/lib.rs"), "edited-after-run").unwrap();
 
-        let refused = execute_restore("checkpoint-restore", Some(&workspace), None, false).unwrap();
+        let refused =
+            execute_restore("checkpoint-restore", Some(&workspace), None, false, None).unwrap();
         assert_eq!(refused.exit_status, crate::cli::CommandExitStatus::NonSuccess);
         assert!(refused.terminal_output.contains("checkpoint_scope: workspace"));
         assert!(refused.terminal_output.contains("restore_outcome: refused"));
         assert!(refused.terminal_output.contains("conflicting_paths: src/lib.rs"));
 
-        let forced = execute_restore("checkpoint-restore", Some(&workspace), None, true).unwrap();
+        let forced =
+            execute_restore("checkpoint-restore", Some(&workspace), None, true, None).unwrap();
         assert_eq!(forced.exit_status, crate::cli::CommandExitStatus::Succeeded);
         assert!(forced.terminal_output.contains("restore_mode: forced"));
         assert!(forced.terminal_output.contains("restored_paths: src/lib.rs"));
         assert_eq!(fs::read_to_string(workspace.join("src/lib.rs")).unwrap(), "before");
+    }
+
+    #[test]
+    fn execute_list_prefers_active_session_checkpoint_root() {
+        let workspace = temp_workspace("boundline-cli-checkpoint-active-session");
+        fs::write(workspace.join("src/lib.rs"), "before").unwrap();
+        persist_active_session(&workspace, "session-checkpoint");
+        capture_workspace_checkpoint(&workspace, "checkpoint-session", None, "src/lib.rs");
+
+        let session_manifest = workspace
+            .join(session_checkpoints_root_ref("session-checkpoint"))
+            .join("checkpoint-session.json");
+        assert!(session_manifest.is_file(), "{}", session_manifest.display());
+
+        let report = execute_list(Some(&workspace), None, None).unwrap();
+        assert!(report.terminal_output.contains("checkpoint_id: checkpoint-session"));
+    }
+
+    #[test]
+    fn execute_list_uses_selected_session_checkpoint_root_without_switching_active_pointer()
+    -> Result<(), String> {
+        let workspace = temp_workspace("boundline-cli-checkpoint-selected-session-list");
+        fs::write(workspace.join("src/lib.rs"), "before").map_err(|error| error.to_string())?;
+        persist_session(&workspace, "active-session", true)?;
+        persist_session(&workspace, "selected-session", false)?;
+        capture_session_checkpoint(
+            &workspace,
+            "active-session",
+            "checkpoint-active",
+            None,
+            "src/lib.rs",
+        )?;
+        capture_session_checkpoint(
+            &workspace,
+            "selected-session",
+            "checkpoint-selected",
+            None,
+            "src/lib.rs",
+        )?;
+
+        let report = execute_list(Some(&workspace), None, Some("selected-session"))
+            .map_err(|error| error.to_string())?;
+        if !report.terminal_output.contains("checkpoint_id: checkpoint-selected") {
+            return Err(format!(
+                "expected selected checkpoint in output, got {}",
+                report.terminal_output
+            ));
+        }
+        if report.terminal_output.contains("checkpoint_id: checkpoint-active") {
+            return Err(format!(
+                "did not expect active checkpoint in output, got {}",
+                report.terminal_output
+            ));
+        }
+
+        let active_record = FileSessionStore::for_workspace(&workspace)
+            .load()
+            .map_err(|error| error.to_string())?
+            .ok_or_else(|| "expected active session record".to_string())?;
+        if active_record.session_id != "active-session" {
+            return Err(format!(
+                "expected active-session pointer, got {}",
+                active_record.session_id
+            ));
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn execute_restore_uses_selected_session_checkpoint_root_without_switching_active_pointer()
+    -> Result<(), String> {
+        let workspace = temp_workspace("boundline-cli-checkpoint-selected-session-restore");
+        fs::write(workspace.join("src/lib.rs"), "before").map_err(|error| error.to_string())?;
+        persist_session(&workspace, "active-session", true)?;
+        persist_session(&workspace, "selected-session", false)?;
+        capture_session_checkpoint(
+            &workspace,
+            "selected-session",
+            "checkpoint-selected",
+            None,
+            "src/lib.rs",
+        )?;
+
+        let session_store = FileCheckpointStore::for_session(&workspace, "selected-session");
+        session_store
+            .refresh_observed_state("checkpoint-selected")
+            .map_err(|error| error.to_string())?;
+        fs::write(workspace.join("src/lib.rs"), "after-run").map_err(|error| error.to_string())?;
+        session_store
+            .refresh_observed_state("checkpoint-selected")
+            .map_err(|error| error.to_string())?;
+        fs::write(workspace.join("src/lib.rs"), "edited-after-run")
+            .map_err(|error| error.to_string())?;
+
+        let report = execute_restore(
+            "checkpoint-selected",
+            Some(&workspace),
+            None,
+            true,
+            Some("selected-session"),
+        )
+        .map_err(|error| error.to_string())?;
+        if report.exit_status != crate::cli::CommandExitStatus::Succeeded {
+            return Err(format!(
+                "expected selected restore to succeed, got {:?}: {}",
+                report.exit_status, report.terminal_output
+            ));
+        }
+
+        let restored =
+            fs::read_to_string(workspace.join("src/lib.rs")).map_err(|error| error.to_string())?;
+        if restored != "before" {
+            return Err(format!("expected restored file contents, got {restored}"));
+        }
+
+        let active_record = FileSessionStore::for_workspace(&workspace)
+            .load()
+            .map_err(|error| error.to_string())?
+            .ok_or_else(|| "expected active session record".to_string())?;
+        if active_record.session_id != "active-session" {
+            return Err(format!(
+                "expected active-session pointer, got {}",
+                active_record.session_id
+            ));
+        }
+
+        Ok(())
     }
 
     #[test]
@@ -500,12 +790,13 @@ mod tests {
         save_cluster(&primary, &member);
 
         let target =
-            super::resolve_checkpoint_target(None, Some(&primary), "checkpoint list").unwrap();
+            super::resolve_checkpoint_target(None, Some(&primary), "checkpoint list", None)
+                .unwrap();
         let empty = super::render_cluster_checkpoint_list(&target, Vec::new());
         assert!(empty.contains("checkpoint_group_count: 0"));
         assert!(empty.contains("status: no clustered checkpoints recorded"));
         assert!(matches!(
-            execute_restore("missing-group", None, Some(&primary), false),
+            execute_restore("missing-group", None, Some(&primary), false, None),
             Err(super::CheckpointCommandError::MissingCheckpoint(id)) if id == "missing-group"
         ));
 
@@ -542,7 +833,7 @@ mod tests {
                 .any(|manifest| manifest.workspace_ref == member.to_string_lossy())
         );
 
-        let report = execute_list(None, Some(&primary)).unwrap();
+        let report = execute_list(None, Some(&primary), None).unwrap();
         assert_eq!(report.exit_status, crate::cli::CommandExitStatus::Succeeded);
         assert!(report.terminal_output.contains("checkpoint_scope: cluster"));
         assert!(report.terminal_output.contains("checkpoint_group_count: 1"));
@@ -558,8 +849,9 @@ mod tests {
     #[test]
     fn helper_rendering_and_missing_cluster_config_are_explicit() {
         let workspace = temp_workspace("boundline-cli-checkpoint-missing-cluster");
-        let error = super::resolve_checkpoint_target(None, Some(&workspace), "checkpoint list")
-            .unwrap_err();
+        let error =
+            super::resolve_checkpoint_target(None, Some(&workspace), "checkpoint list", None)
+                .unwrap_err();
         assert!(matches!(
             error,
             super::CheckpointCommandError::MissingClusterConfig {
@@ -579,6 +871,7 @@ mod tests {
             .unwrap();
         let rendered = super::render_cluster_restore_results(
             &super::ResolvedCheckpointTarget {
+                active_session_id: None,
                 owner_workspace: workspace.clone(),
                 member_workspaces: vec![workspace.to_string_lossy().into_owned()],
             },
@@ -619,13 +912,13 @@ mod tests {
             .unwrap();
         fs::write(member.join("src/member.rs"), "edited-after-run").unwrap();
 
-        let refused = execute_restore("group-1", None, Some(&primary), false).unwrap();
+        let refused = execute_restore("group-1", None, Some(&primary), false, None).unwrap();
         assert_eq!(refused.exit_status, crate::cli::CommandExitStatus::NonSuccess);
         assert!(refused.terminal_output.contains("restore_outcome: refused"));
         assert!(refused.terminal_output.contains("conflicting_paths: src/member.rs"));
         assert_eq!(fs::read_to_string(primary.join("src/lib.rs")).unwrap(), "after-run-primary");
 
-        let forced = execute_restore("group-1", None, Some(&primary), true).unwrap();
+        let forced = execute_restore("group-1", None, Some(&primary), true, None).unwrap();
         assert_eq!(forced.exit_status, crate::cli::CommandExitStatus::Succeeded);
         assert!(forced.terminal_output.contains("restore_outcome: succeeded"));
         assert_eq!(fs::read_to_string(primary.join("src/lib.rs")).unwrap(), "before");

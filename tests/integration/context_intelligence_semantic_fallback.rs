@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use boundline::cli::session::{execute_capture, execute_plan, execute_start, execute_status};
+use boundline::cli::session::{execute_goal, execute_plan, execute_status};
 
 use crate::workspace_fixture::{
     SEMANTIC_VECTOR_STATE_MISSING_VALUE, force_semantic_vector_state_override,
@@ -33,18 +33,9 @@ fn plan_status_and_inspect_surface_explicit_semantic_fallback_when_local_capabil
     let workspace =
         write_semantic_fallback_workspace("boundline-context-intelligence-semantic-fallback");
 
-    execute_start(Some(&workspace)).unwrap();
-    execute_capture(
-        Some(&workspace),
-        Some("fix the failing add path"),
-        &[],
-        None,
-        None,
-        None,
-        None,
-    )
-    .unwrap();
-    let plan = execute_plan(Some(&workspace), Some("bug-fix"), false, false).unwrap();
+    execute_goal(Some(&workspace), Some("fix the failing add path"), &[], None, None, None, None)
+        .unwrap();
+    let plan = execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
     let status = execute_status(Some(&workspace)).unwrap();
 
     for output in [plan.terminal_output.as_str(), status.terminal_output.as_str()] {
@@ -66,18 +57,9 @@ fn plan_and_status_surface_hidden_impact_fallback_when_semantic_capability_is_un
     let workspace =
         write_semantic_fallback_workspace("boundline-context-intelligence-semantic-fallback");
 
-    execute_start(Some(&workspace)).unwrap();
-    execute_capture(
-        Some(&workspace),
-        Some("fix the failing add path"),
-        &[],
-        None,
-        None,
-        None,
-        None,
-    )
-    .unwrap();
-    let plan = execute_plan(Some(&workspace), Some("bug-fix"), false, false).unwrap();
+    execute_goal(Some(&workspace), Some("fix the failing add path"), &[], None, None, None, None)
+        .unwrap();
+    let plan = execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
     let status = execute_status(Some(&workspace)).unwrap();
 
     for output in [plan.terminal_output.as_str(), status.terminal_output.as_str()] {

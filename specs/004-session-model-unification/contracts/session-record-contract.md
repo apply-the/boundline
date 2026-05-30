@@ -33,7 +33,7 @@ Defines the persisted shape and behavioral guarantees of the workspace-scoped se
 ## Update Guarantees
 
 - `start` MUST initialize a fresh session record.
-- `capture` MUST update goal-related fields without dropping unrelated valid session state.
+- `goal` MUST update goal-related fields without dropping unrelated valid session state.
 - `plan` MUST write a new active task snapshot and reset execution position.
 - `step` and `run` MUST persist updated task, status, and trace fields before returning control to the user.
 - Terminal execution MUST preserve the latest task outcome until the user explicitly starts fresh or replaces the active goal.

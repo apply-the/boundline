@@ -15,7 +15,7 @@ Defines how assistant command packs must reuse and respect the active Boundline 
 | Assistant Command | Preferred Session-Backed CLI Surface |
 |-------------------|--------------------------------------|
 | `/boundline-start` | `boundline start` |
-| `/boundline-plan` | `boundline capture` followed by `boundline plan` when a goal must be established first |
+| `/boundline-plan` | `boundline goal` followed by `boundline plan` when a goal must be established first |
 | `/boundline-step` | `boundline step` |
 | `/boundline-run` | `boundline run` |
 | `/boundline-status` | `boundline status` |

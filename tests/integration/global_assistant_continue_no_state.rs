@@ -14,7 +14,12 @@ fn continue_ignores_chat_history_when_session_json_is_absent() {
 
     assert_eq!(output.status.code(), Some(0), "{text}");
     assert!(text.contains("no active session"), "{text}");
-    assert!(text.contains(".boundline/session.json"), "{text}");
+    assert!(
+        text.contains(
+            ".boundline/active-session -> .boundline/sessions/<session_ref>/session.json"
+        ),
+        "{text}"
+    );
     assert!(text.contains("chat history is not authoritative"), "{text}");
     assert!(!text.contains("onboarding project"), "{text}");
 }

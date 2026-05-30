@@ -2,9 +2,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use boundline::cli::inspect::execute_inspect;
-use boundline::cli::session::{
-    execute_capture, execute_plan, execute_run, execute_start, execute_status,
-};
+use boundline::cli::session::{execute_goal, execute_plan, execute_run, execute_status};
 
 use crate::workspace_fixture::temp_fixture_workspace;
 
@@ -36,21 +34,12 @@ fn write_disabled_policy_workspace(prefix: &str) -> PathBuf {
 fn advanced_context_projection_contract_surfaces_local_projection_lines() {
     let workspace = write_projection_workspace("boundline-context-projection-contract");
 
-    execute_start(Some(&workspace)).unwrap();
-    execute_capture(
-        Some(&workspace),
-        Some("fix the failing add path"),
-        &[],
-        None,
-        None,
-        None,
-        None,
-    )
-    .unwrap();
-    let plan = execute_plan(Some(&workspace), Some("bug-fix"), false, false).unwrap();
+    execute_goal(Some(&workspace), Some("fix the failing add path"), &[], None, None, None, None)
+        .unwrap();
+    let plan = execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
     let status = execute_status(Some(&workspace)).unwrap();
     execute_run(Some(&workspace)).unwrap();
-    let inspect = execute_inspect(None, Some(&workspace)).unwrap();
+    let inspect = execute_inspect(None, Some(&workspace), None, false).unwrap();
 
     for output in [plan.terminal_output.as_str(), status.terminal_output.as_str()] {
         assert!(output.contains("retrieval_mode: local"), "{output}");
@@ -75,21 +64,12 @@ fn advanced_context_projection_contract_surfaces_local_projection_lines() {
 fn advanced_context_projection_contract_surfaces_disabled_policy_reason() {
     let workspace = write_disabled_policy_workspace("boundline-context-projection-disabled");
 
-    execute_start(Some(&workspace)).unwrap();
-    execute_capture(
-        Some(&workspace),
-        Some("fix the failing add path"),
-        &[],
-        None,
-        None,
-        None,
-        None,
-    )
-    .unwrap();
-    let plan = execute_plan(Some(&workspace), Some("bug-fix"), false, false).unwrap();
+    execute_goal(Some(&workspace), Some("fix the failing add path"), &[], None, None, None, None)
+        .unwrap();
+    let plan = execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
     let status = execute_status(Some(&workspace)).unwrap();
     execute_run(Some(&workspace)).unwrap();
-    let inspect = execute_inspect(None, Some(&workspace)).unwrap();
+    let inspect = execute_inspect(None, Some(&workspace), None, false).unwrap();
 
     for output in [plan.terminal_output.as_str(), status.terminal_output.as_str()] {
         assert!(output.contains("retrieval_mode: disabled"), "{output}");

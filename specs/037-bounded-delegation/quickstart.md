@@ -7,7 +7,7 @@
 3. Configure effort policy for the slots that should prefer lighter or heavier
    reasoning.
 4. Run `boundline config show --workspace <repo> --scope effective`.
-5. Run `boundline capture --workspace <repo> --goal "<goal>"`.
+5. Run `boundline goal --workspace <repo> --goal "<goal>"`.
 6. Run `boundline plan --workspace <repo>`.
 
 Expected result: the effective configuration reports route capability and effort

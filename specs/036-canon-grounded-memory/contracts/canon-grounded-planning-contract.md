@@ -7,7 +7,7 @@ evidence as live bounded reasoning input.
 
 ## Preconditions
 
-- A session exists with a captured goal.
+- A session exists with a recorded goal.
 - Negotiation and authored-brief clarifications are resolved enough for bounded
   planning.
 - Canon-governed evidence may or may not exist; absence must remain explicit.

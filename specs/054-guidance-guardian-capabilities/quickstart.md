@@ -28,7 +28,7 @@ Expected result:
 Run:
 
 ```bash
-boundline capture --goal "tighten the Rust retry policy and keep the flow inspectable"
+boundline goal --goal "tighten the Rust retry policy and keep the flow inspectable"
 ```
 
 Expected result:

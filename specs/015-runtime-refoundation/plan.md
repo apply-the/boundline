@@ -5,7 +5,7 @@
 
 ## Summary
 
-Refound Boundline's primary delivery path around session-native runtime control instead of fixture-shaped replay. Planning will derive a bounded task draft from captured goals, workspace evidence, authored inputs, and available Canon artifacts; execution will choose explicit next decisions from live state through a bounded observe-decide-act-verify-update loop; flow will become an operator-confirmed policy surface; compatibility execution remains explicit rather than implicit; and status or inspection output will explain route choice, decision history, recovery, and terminal outcome.
+Refound Boundline's primary delivery path around session-native runtime control instead of fixture-shaped replay. Planning will derive a bounded task draft from recorded goals, workspace evidence, authored inputs, and available Canon artifacts; execution will choose explicit next decisions from live state through a bounded observe-decide-act-verify-update loop; flow will become an operator-confirmed policy surface; compatibility execution remains explicit rather than implicit; and status or inspection output will explain route choice, decision history, recovery, and terminal outcome.
 
 ## Technical Context
 

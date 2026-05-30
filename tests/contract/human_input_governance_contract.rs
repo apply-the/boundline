@@ -8,7 +8,7 @@ use clap::Parser;
 fn capture_accepts_human_governance_intent_flags() {
     let cli = Cli::try_parse_from([
         "boundline",
-        "capture",
+        "goal",
         "--workspace",
         "/tmp/ws",
         "--goal",
@@ -25,9 +25,16 @@ fn capture_accepts_human_governance_intent_flags() {
     .unwrap();
 
     match cli.command {
-        DeveloperCommand::Capture {
-            workspace, goal, brief, governance, risk, zone, owner, ..
-        } => {
+        Some(DeveloperCommand::Goal {
+            workspace,
+            goal,
+            brief,
+            governance,
+            risk,
+            zone,
+            owner,
+            ..
+        }) => {
             assert_eq!(workspace, Some(PathBuf::from("/tmp/ws")));
             assert_eq!(goal.as_deref(), Some("Fix the failing checkout flow"));
             assert!(brief.is_empty());
@@ -36,7 +43,7 @@ fn capture_accepts_human_governance_intent_flags() {
             assert_eq!(zone.as_deref(), Some("payments"));
             assert_eq!(owner.as_deref(), Some("platform"));
         }
-        other => panic!("expected Capture, got {other:?}"),
+        other => panic!("expected Goal, got {other:?}"),
     }
 }
 
@@ -55,7 +62,16 @@ fn run_accepts_local_governance_without_business_fields() {
     .unwrap();
 
     match cli.command {
-        DeveloperCommand::Run { workspace, goal, brief, governance, risk, zone, owner, .. } => {
+        Some(DeveloperCommand::Run {
+            workspace,
+            goal,
+            brief,
+            governance,
+            risk,
+            zone,
+            owner,
+            ..
+        }) => {
             assert_eq!(workspace, Some(PathBuf::from("/tmp/ws")));
             assert_eq!(goal.as_deref(), Some("Fix the failing checkout flow"));
             assert!(brief.is_empty());

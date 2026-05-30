@@ -8,11 +8,10 @@ use boundline::domain::workflow::{ProjectScalePathKind, ProjectScaleStageKind};
 fn session_json_persists_project_scale_path_stage_work_unit_and_trace_refs() {
     let workspace = temp_fixture_workspace("boundline-project-scale-contract");
 
-    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
     assert_eq!(
         run_boundline_in(
             &workspace,
-            &["capture", "--goal", "Build a customer onboarding capability with audit logging",],
+            &["goal", "--goal", "Build a customer onboarding capability with audit logging",],
         )
         .status
         .code(),

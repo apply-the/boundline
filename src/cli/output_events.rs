@@ -8,7 +8,7 @@ fn diagnostic_follow_up_actions(report: &DiagnosticsReport) -> Vec<String> {
 
     match report.subject {
         crate::cli::diagnostics::DiagnosticsSubject::Workspace => vec![format!(
-            "- start a session: boundline start --workspace {}",
+            "- capture a goal: boundline goal --workspace {} --goal <goal>",
             report.workspace_ref.as_deref().unwrap_or("<workspace>")
         )],
         crate::cli::diagnostics::DiagnosticsSubject::Install => {
@@ -107,6 +107,20 @@ pub(crate) fn review_event_line(event_type: TraceEventType, payload: &Value) -> 
             .and_then(Value::as_str)
             .map(|trigger| format!("review_trigger_ignored: {trigger}")),
         TraceEventType::ReviewerCompleted => reviewer_event_line(payload),
+        TraceEventType::ReviewCouncilAssembled => payload
+            .get("selection_summary")
+            .and_then(Value::as_str)
+            .map(|summary| format!("review_council: {summary}"))
+            .or_else(|| {
+                payload
+                    .get("council_profile")
+                    .and_then(Value::as_str)
+                    .map(|profile| format!("review_council: {profile}"))
+            }),
+        TraceEventType::ReviewStopSemanticsRecorded => payload
+            .get("stop_semantics")
+            .and_then(Value::as_str)
+            .map(|stop_semantics| format!("review_stop_semantics: {stop_semantics}")),
         TraceEventType::ReviewVoteResolved => payload
             .get(KEY_SUMMARY)
             .and_then(Value::as_str)

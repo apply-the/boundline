@@ -1,13 +1,13 @@
-# Control Graduation Model In Boundline 0.63.0
+# Control Graduation Model In Boundline 0.64.0
 
-Boundline `0.63.0` resolves one explicit runtime governance posture for each
+Boundline `0.64.0` resolves one explicit runtime governance posture for each
 governed boundary. Canon supplies semantic inputs. Boundline decides what the
 runtime does with them.
 
 This adaptive-governance slice keeps the primary operator path unchanged:
 
 ```text
-start -> capture -> plan -> run -> status -> next -> inspect
+init -> goal -> plan -> run -> status -> next -> inspect
 ```
 
 Control graduation is therefore not a second orchestration system. It is a

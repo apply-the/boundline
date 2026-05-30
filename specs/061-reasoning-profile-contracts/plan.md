@@ -53,7 +53,7 @@ window.
 
 - **PASS** Delivery identity: The feature directly improves bounded engineering delivery by making stronger challenge executable inside the existing session lifecycle for planning, verification, and review work. See Summary and Technical Context.
 - **PASS** Delivery-first scope: The plan prioritizes activation, bounded execution, explicit disagreement handling, confidence handoff, and validation before polish or documentation-only work. See Summary and Constraints.
-- **PASS** Primary workflow: The primary operator path remains `start -> capture -> plan -> run -> status -> next -> inspect`; explicit compatibility and fixture-backed testing remain available but do not replace the session-native story. See Summary and Execution Model.
+- **PASS** Primary workflow: The primary operator path remains `goal -> plan -> run -> status -> next -> inspect`; explicit compatibility and fixture-backed testing remain available but do not replace the session-native story. See Summary and Execution Model.
 - **PASS** Bounded execution: Reasoning profiles start only from explicit stage activation, carry explicit participant and budget limits, and terminate in completion, degradation, blocked, interrupted, escalated, or terminal states. See Technical Context and contracts.
 - **PASS** Stateful execution: Activation records, participant topology, disagreement outcomes, confidence contribution, and trace evidence are persisted in existing task, session, and trace state. See Technical Context and Project Structure.
 - **PASS** Mutable planning: The plan reuses the current replanning-capable session runtime so reasoning-profile activation can refine or challenge an existing plan without freezing workflow state into a second runtime. See Summary and research.

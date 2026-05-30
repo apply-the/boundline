@@ -1013,24 +1013,33 @@ pub enum ReviewProfileError {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeMap;
-
     use serde_json::json;
+    use std::collections::{BTreeMap, BTreeSet};
 
-    use super::*;
+    use super::{
+        AdjudicationDecision, AdjudicationDefinition, CouncilAssemblyDecision, CouncilQuorumState,
+        FindingConfidence, FindingSeverity, ProducerResponseDisposition, ReviewProfileError,
+        ReviewScenario, ReviewTrigger, ReviewerDefinition, ReviewerDisposition, ReviewerFinding,
+        ReviewerIndependenceState, ReviewerParticipation, ReviewerParticipationStatus,
+        VoteDecision, VoteRuleDefinition, VoteStrategy, VotingBoundaryInput, VotingBoundaryTrigger,
+        VotingStageRisk, council_profile_id, first_blocking_duplicate_route, independence_guard,
+        join_roles, required_reviewers_for_profile, resolve_council_assembly,
+        voting_boundary_decision,
+    };
+    use crate::domain::governance::CouncilProfile;
 
     fn sample_reviewers() -> Vec<ReviewerDefinition> {
         vec![
             ReviewerDefinition {
                 reviewer_id: "safety".to_string(),
                 role: "Safety".to_string(),
-                source: Some("copilot/gpt-5.5".to_string()),
+                source: Some("copilot/gpt-4.1".to_string()),
                 weight: 1,
             },
             ReviewerDefinition {
                 reviewer_id: "maintainability".to_string(),
                 role: "Maintainability".to_string(),
-                source: Some("claude/sonnet-4.6".to_string()),
+                source: Some("claude/sonnet-4".to_string()),
                 weight: 1,
             },
         ]
@@ -1104,13 +1113,13 @@ mod tests {
             ReviewerDefinition {
                 reviewer_id: "safety".to_string(),
                 role: "Safety".to_string(),
-                source: Some("copilot/gpt-5.5".to_string()),
+                source: Some("copilot/gpt-4.1".to_string()),
                 weight: 1,
             },
             ReviewerDefinition {
                 reviewer_id: "maintainability".to_string(),
                 role: "Maintainability".to_string(),
-                source: Some("claude/sonnet-4.6".to_string()),
+                source: Some("claude/sonnet-4".to_string()),
                 weight: 1,
             },
             ReviewerDefinition {
@@ -1142,11 +1151,8 @@ mod tests {
             VoteRuleDefinition::default().resolve(&reviewers, &findings, None).unwrap();
 
         assert_eq!(resolution.decision, VoteDecision::Rejected);
-        assert_eq!(resolution.participants[0].effective_route.as_deref(), Some("copilot/gpt-5.5"));
-        assert_eq!(
-            resolution.participants[1].effective_route.as_deref(),
-            Some("claude/sonnet-4.6")
-        );
+        assert_eq!(resolution.participants[0].effective_route.as_deref(), Some("copilot/gpt-4.1"));
+        assert_eq!(resolution.participants[1].effective_route.as_deref(), Some("claude/sonnet-4"));
         assert_eq!(
             resolution.participants[2].effective_route.as_deref(),
             Some("gemini/gemini-2.5-pro")
@@ -1159,13 +1165,13 @@ mod tests {
             ReviewerDefinition {
                 reviewer_id: "safety".to_string(),
                 role: "Safety".to_string(),
-                source: Some("copilot/gpt-5.5".to_string()),
+                source: Some("copilot/gpt-4.1".to_string()),
                 weight: 3,
             },
             ReviewerDefinition {
                 reviewer_id: "maintainability".to_string(),
                 role: "Maintainability".to_string(),
-                source: Some("claude/sonnet-4.6".to_string()),
+                source: Some("claude/sonnet-4".to_string()),
                 weight: 1,
             },
         ];
@@ -1262,8 +1268,8 @@ mod tests {
     #[test]
     fn resolve_includes_effective_routes_for_completed_reviewers() {
         let routes = BTreeMap::from([
-            ("safety".to_string(), "copilot/gpt-5.5".to_string()),
-            ("maintainability".to_string(), "claude/sonnet-4.6".to_string()),
+            ("safety".to_string(), "copilot/gpt-4.1".to_string()),
+            ("maintainability".to_string(), "claude/sonnet-4".to_string()),
         ]);
 
         let resolution = VoteRuleDefinition::default()
@@ -1272,11 +1278,8 @@ mod tests {
 
         assert_eq!(resolution.decision, VoteDecision::Accepted);
         assert_eq!(resolution.participants.len(), 2);
-        assert_eq!(resolution.participants[0].effective_route.as_deref(), Some("copilot/gpt-5.5"));
-        assert_eq!(
-            resolution.participants[1].effective_route.as_deref(),
-            Some("claude/sonnet-4.6")
-        );
+        assert_eq!(resolution.participants[0].effective_route.as_deref(), Some("copilot/gpt-4.1"));
+        assert_eq!(resolution.participants[1].effective_route.as_deref(), Some("claude/sonnet-4"));
     }
 
     #[test]
@@ -1294,8 +1297,8 @@ mod tests {
     #[test]
     fn resolve_council_assembly_rejects_duplicate_effective_routes() {
         let routes = BTreeMap::from([
-            ("safety".to_string(), "copilot/gpt-5.5".to_string()),
-            ("maintainability".to_string(), "copilot/gpt-5.5".to_string()),
+            ("safety".to_string(), "copilot/gpt-4.1".to_string()),
+            ("maintainability".to_string(), "copilot/gpt-4.1".to_string()),
         ]);
 
         let resolution = VoteRuleDefinition::default()
@@ -1317,7 +1320,7 @@ mod tests {
                 route,
             } if first_reviewer == "safety"
                 && second_reviewer == "maintainability"
-                && route == "copilot/gpt-5.5"
+                && route == "copilot/gpt-4.1"
         ));
     }
 
@@ -1327,19 +1330,19 @@ mod tests {
             ReviewerDefinition {
                 reviewer_id: "safety".to_string(),
                 role: "Safety".to_string(),
-                source: Some("copilot/gpt-5.5".to_string()),
+                source: Some("copilot/gpt-4.1".to_string()),
                 weight: 1,
             },
             ReviewerDefinition {
                 reviewer_id: "maintainability".to_string(),
                 role: "Maintainability".to_string(),
-                source: Some("claude/sonnet-4.6".to_string()),
+                source: Some("claude/sonnet-4".to_string()),
                 weight: 1,
             },
             ReviewerDefinition {
                 reviewer_id: "ux".to_string(),
                 role: "UX".to_string(),
-                source: Some("copilot/gpt-5.5".to_string()),
+                source: Some("copilot/gpt-4.1".to_string()),
                 weight: 1,
             },
         ];
@@ -1384,13 +1387,13 @@ mod tests {
             ReviewerDefinition {
                 reviewer_id: "safety".to_string(),
                 role: "Safety".to_string(),
-                source: Some("copilot/gpt-5.5".to_string()),
+                source: Some("copilot/gpt-4.1".to_string()),
                 weight: 1,
             },
             ReviewerDefinition {
                 reviewer_id: "maintainability".to_string(),
                 role: "Maintainability".to_string(),
-                source: Some("claude/sonnet-4.6".to_string()),
+                source: Some("claude/sonnet-4".to_string()),
                 weight: 1,
             },
             ReviewerDefinition {
@@ -1405,7 +1408,7 @@ mod tests {
                 reviewer_id: "safety".to_string(),
                 status: ReviewerParticipationStatus::Completed,
                 reason: None,
-                effective_route: Some("copilot/gpt-5.5".to_string()),
+                effective_route: Some("copilot/gpt-4.1".to_string()),
             },
             ReviewerParticipation {
                 reviewer_id: "ux".to_string(),
@@ -1642,7 +1645,7 @@ mod tests {
                     reviewer_id: "maintainability".to_string(),
                     status: ReviewerParticipationStatus::Completed,
                     reason: None,
-                    effective_route: Some("claude/sonnet-4.6".to_string()),
+                    effective_route: Some("claude/sonnet-4".to_string()),
                 },
             ],
         )

@@ -21,7 +21,7 @@ use crate::domain::configuration::{
 };
 use crate::domain::decision::{DecisionType, EvidenceRef};
 use crate::domain::domain_templates::{
-    DomainFamily, ExternalContextBinding, ExternalContextStatus, detect_domain_families,
+    DomainFamily, ExternalContextBinding, ExternalContextStatus, detect_domain_families_with_goal,
 };
 use crate::domain::goal_plan::{
     CanonExpertiseInputConsideration, CanonExpertiseInputDisposition, ContextInput,
@@ -51,6 +51,42 @@ const MAX_SCAN_DEPTH: usize = 4;
 const MAX_CONTEXT_FILES: usize = 5;
 const MAX_SYMBOL_HINTS: usize = 3;
 const MIN_UNPAIRED_SOURCE_CUE_LENGTH: usize = 5;
+const MAX_GREENFIELD_TARGET_TERMS: usize = 4;
+const GREENFIELD_DEFAULT_TARGET_LABEL: &str = "greenfield";
+const GREENFIELD_GOAL_TARGET_PREFIX: &str = "goal:";
+const GREENFIELD_GOAL_INPUT_SOURCE: &str = "goal_seed";
+const GREENFIELD_GOAL_INPUT_RATIONALE: &str =
+    "preserves the captured goal as the initial bounded planning seed for an empty workspace";
+const GREENFIELD_IMPLEMENTATION_FILE_EXTENSIONS: &[&str] =
+    &["rs", "ts", "tsx", "js", "jsx", "py", "go", "java", "kt", "cs"];
+const GREENFIELD_GOAL_INTENT_KEYWORDS: &[&str] = &[
+    "add",
+    "bootstrap",
+    "build",
+    "create",
+    "develop",
+    "implement",
+    "init",
+    "initialize",
+    "scaffold",
+    "setup",
+    "ship",
+    "start",
+];
+const GREENFIELD_SERVICE_SHAPE_KEYWORDS: &[&str] = &[
+    "api",
+    "apis",
+    "axum",
+    "backend",
+    "grpc",
+    "microservice",
+    "microservizio",
+    "rest",
+    "restful",
+    "server",
+    "service",
+    "servizio",
+];
 const GOAL_CUE_STOP_WORDS: &[&str] = &[
     "fix",
     "bug",
@@ -225,6 +261,82 @@ fn goal_signal_keywords(goal_text: &str) -> Vec<String> {
         .into_iter()
         .filter(|keyword| !GOAL_CUE_STOP_WORDS.contains(&keyword.as_str()))
         .collect()
+}
+
+fn greenfield_goal_terms(goal_text: &str) -> Vec<String> {
+    let mut terms = Vec::new();
+    for raw in goal_text.split(|ch: char| !ch.is_ascii_alphanumeric()) {
+        let term = raw.trim();
+        if term.len() < 3 {
+            continue;
+        }
+        let term = term.to_ascii_lowercase();
+        if !terms.iter().any(|existing| existing == &term) {
+            terms.push(term);
+        }
+    }
+    terms
+}
+
+fn has_greenfield_goal_intent(goal_text: &str) -> bool {
+    let goal_text_lower = goal_text.to_ascii_lowercase();
+    goal_text_lower.contains("set up")
+        || greenfield_goal_terms(goal_text)
+            .iter()
+            .any(|term| GREENFIELD_GOAL_INTENT_KEYWORDS.contains(&term.as_str()))
+}
+
+fn has_greenfield_goal_shape(goal_text: &str) -> bool {
+    greenfield_goal_terms(goal_text)
+        .iter()
+        .any(|term| GREENFIELD_SERVICE_SHAPE_KEYWORDS.contains(&term.as_str()))
+}
+
+fn workspace_has_implementation_surface(file_refs: &[String]) -> bool {
+    file_refs.iter().any(|file_ref| {
+        file_ref.starts_with("src/")
+            || file_ref.starts_with("tests/")
+            || file_ref.starts_with("test/")
+            || file_ref.starts_with("spec/")
+            || file_ref.starts_with("specs/")
+            || Path::new(file_ref).extension().and_then(|extension| extension.to_str()).is_some_and(
+                |extension| GREENFIELD_IMPLEMENTATION_FILE_EXTENSIONS.contains(&extension),
+            )
+    })
+}
+
+fn allows_greenfield_goal_seed(
+    workspace_ref: &Path,
+    goal_text: &str,
+    relevant_files: &[String],
+    canon_memory_targets: &[String],
+    canon_artifacts: &[String],
+) -> bool {
+    let workspace_file_refs = collect_workspace_file_refs(workspace_ref);
+    relevant_files.is_empty()
+        && canon_memory_targets.is_empty()
+        && canon_artifacts.is_empty()
+        && !workspace_has_implementation_surface(&workspace_file_refs)
+        && (has_greenfield_goal_intent(goal_text) || has_greenfield_goal_shape(goal_text))
+}
+
+fn build_greenfield_goal_target(goal_text: &str) -> String {
+    let mut terms = greenfield_goal_terms(goal_text);
+    terms.truncate(MAX_GREENFIELD_TARGET_TERMS);
+    if terms.is_empty() {
+        terms.push(GREENFIELD_DEFAULT_TARGET_LABEL.to_string());
+    }
+    format!("{GREENFIELD_GOAL_TARGET_PREFIX}{}", terms.join("-"))
+}
+
+fn build_greenfield_goal_input(goal_text: &str) -> ContextInput {
+    ContextInput {
+        kind: ContextInputKind::AuthoredBrief,
+        reference: goal_text.trim().to_string(),
+        rationale: GREENFIELD_GOAL_INPUT_RATIONALE.to_string(),
+        source: GREENFIELD_GOAL_INPUT_SOURCE.to_string(),
+        primary: true,
+    }
 }
 
 fn file_name_lower(path: &str) -> Option<String> {
@@ -675,6 +787,7 @@ fn expert_pack_signal(
 }
 
 fn build_expert_pack_selection(
+    goal_text: &str,
     workspace_ref: &Path,
     context_pack: &ContextPack,
 ) -> ExpertPackSelectionOutcome {
@@ -682,7 +795,8 @@ fn build_expert_pack_selection(
         context_pack.selected_targets.first().cloned().unwrap_or_else(|| "workspace".to_string());
     let effective_routing = resolve_effective_routing_for_workspace(workspace_ref);
     let reviewer_role_ids = effective_routing.reviewer_roles.keys().cloned().collect::<Vec<_>>();
-    let families = detect_domain_families(workspace_ref, Some(target_ref.as_str()));
+    let families =
+        detect_domain_families_with_goal(workspace_ref, Some(target_ref.as_str()), Some(goal_text));
     let selected_family_ids =
         families.iter().map(|family| family.as_str().to_string()).collect::<BTreeSet<_>>();
 
@@ -1011,13 +1125,15 @@ fn canon_input_disposition(
 fn resolve_domain_context(
     workspace_ref: &Path,
     selected_target: Option<&str>,
+    goal_text: Option<&str>,
 ) -> Option<DomainContextOutcome> {
     let effective_templates = resolve_effective_domain_templates_for_workspace(workspace_ref);
     if effective_templates.is_empty() {
         return None;
     }
 
-    let candidate_families = detect_domain_families(workspace_ref, selected_target);
+    let candidate_families =
+        detect_domain_families_with_goal(workspace_ref, selected_target, goal_text);
     let active_families = effective_templates
         .iter()
         .filter_map(|(family, template)| template.enabled.then_some(*family))
@@ -1193,6 +1309,16 @@ struct ContextCredibilityEvaluation {
     memory_staleness_reason: Option<String>,
 }
 
+struct ContextSummaryInputs<'a> {
+    goal_text: &'a str,
+    relevant_files: &'a [String],
+    canon_artifacts: &'a [String],
+    canon_memory_targets: &'a [String],
+    context_sources: &'a PlanningContextSources,
+    greenfield_goal_seed: bool,
+    domain_outcome: Option<&'a DomainContextOutcome>,
+}
+
 fn extend_symbol_hint_inputs(inputs: &mut Vec<ContextInput>, symbol_hints: Vec<String>) {
     for symbol_hint in symbol_hints {
         inputs.push(ContextInput {
@@ -1294,6 +1420,8 @@ fn selected_target_for_domain(
     relevant_files: &[String],
     canon_memory_targets: &[String],
     canon_artifacts: &[String],
+    goal_text: &str,
+    greenfield_goal_seed: bool,
     workspace_ref: &Path,
 ) -> Option<String> {
     relevant_files
@@ -1301,6 +1429,7 @@ fn selected_target_for_domain(
         .cloned()
         .or_else(|| canon_memory_targets.first().cloned())
         .or_else(|| canon_artifacts.first().cloned())
+        .or_else(|| greenfield_goal_seed.then(|| build_greenfield_goal_target(goal_text)))
         .or_else(|| {
             let primary = select_primary_target(workspace_ref);
             (!primary.is_empty()).then_some(primary)
@@ -1333,9 +1462,11 @@ fn evaluate_context_credibility(
     relevant_files: &[String],
     canon_artifacts: &[String],
     context_sources: &PlanningContextSources,
+    greenfield_goal_seed: bool,
     domain_outcome: Option<&DomainContextOutcome>,
 ) -> ContextCredibilityEvaluation {
     let has_credible_context = !relevant_files.is_empty()
+        || greenfield_goal_seed
         || has_authored_context(context_sources)
         || context_sources
             .compacted_canon_memory
@@ -1378,25 +1509,27 @@ fn evaluate_context_credibility(
 }
 
 fn build_context_summary(
-    goal_text: &str,
-    relevant_files: &[String],
-    canon_artifacts: &[String],
-    canon_memory_targets: &[String],
-    context_sources: &PlanningContextSources,
-    domain_outcome: Option<&DomainContextOutcome>,
+    inputs: &ContextSummaryInputs<'_>,
     credibility: &ContextCredibilityEvaluation,
 ) -> String {
     let mut summary = if credibility.has_credible_context {
-        format!(
-            "bounded context from {} primary input(s)",
-            usize::max(relevant_files.len(), canon_artifacts.len().max(canon_memory_targets.len()))
+        if inputs.greenfield_goal_seed {
+            format!("bounded context from greenfield goal seed '{}'", inputs.goal_text.trim())
+        } else {
+            format!(
+                "bounded context from {} primary input(s)",
+                usize::max(
+                    inputs.relevant_files.len(),
+                    inputs.canon_artifacts.len().max(inputs.canon_memory_targets.len())
+                )
                 .max(1)
-        )
+            )
+        }
     } else {
-        format!("no credible bounded context found for planning `{}`", goal_text.trim())
+        format!("no credible bounded context found for planning `{}`", inputs.goal_text.trim())
     };
 
-    if let Some(domain_outcome) = domain_outcome {
+    if let Some(domain_outcome) = inputs.domain_outcome {
         summary.push_str("; ");
         summary.push_str(&domain_outcome.summary_clause);
         if let Some(reason) = domain_outcome.blocking_reason.as_deref()
@@ -1408,7 +1541,7 @@ fn build_context_summary(
     }
 
     if credibility.has_credible_context
-        && let Some(memory) = context_sources.compacted_canon_memory.as_ref()
+        && let Some(memory) = inputs.context_sources.compacted_canon_memory.as_ref()
     {
         summary.push_str("; ");
         summary.push_str(&memory.summary_text());
@@ -1452,6 +1585,8 @@ fn select_context_targets(
     relevant_files: Vec<String>,
     canon_memory_targets: Vec<String>,
     canon_artifacts: Vec<String>,
+    goal_text: &str,
+    greenfield_goal_seed: bool,
     context_sources: &PlanningContextSources,
 ) -> Vec<String> {
     if !canon_memory_targets.is_empty()
@@ -1464,6 +1599,8 @@ fn select_context_targets(
         canon_memory_targets
     } else if !relevant_files.is_empty() {
         relevant_files
+    } else if greenfield_goal_seed {
+        vec![build_greenfield_goal_target(goal_text)]
     } else {
         canon_artifacts
     }
@@ -1509,19 +1646,34 @@ fn build_context_pack_with_policy(
         .as_ref()
         .map(|memory| memory.artifact_refs.clone())
         .unwrap_or_default();
+    let greenfield_goal_seed = allows_greenfield_goal_seed(
+        workspace_ref,
+        goal_text,
+        &relevant_files,
+        &canon_memory_targets,
+        &canon_artifacts,
+    );
 
     let mut inputs = workspace_inputs;
     extend_symbol_hint_inputs(&mut inputs, symbol_hints);
     extend_context_source_inputs(&mut inputs, context_sources, &relevant_files, &canon_artifacts);
+    if greenfield_goal_seed {
+        inputs.push(build_greenfield_goal_input(goal_text));
+    }
 
     let selected_target_for_domain = selected_target_for_domain(
         &relevant_files,
         &canon_memory_targets,
         &canon_artifacts,
+        goal_text,
+        greenfield_goal_seed,
         workspace_ref,
     );
-    let domain_outcome =
-        resolve_domain_context(workspace_ref, selected_target_for_domain.as_deref());
+    let domain_outcome = resolve_domain_context(
+        workspace_ref,
+        selected_target_for_domain.as_deref(),
+        Some(goal_text),
+    );
     extend_domain_inputs(&mut inputs, domain_outcome.as_ref());
 
     let credibility = evaluate_context_credibility(
@@ -1529,15 +1681,19 @@ fn build_context_pack_with_policy(
         &relevant_files,
         &canon_artifacts,
         context_sources,
+        greenfield_goal_seed,
         domain_outcome.as_ref(),
     );
     let summary = build_context_summary(
-        goal_text,
-        &relevant_files,
-        &canon_artifacts,
-        &canon_memory_targets,
-        context_sources,
-        domain_outcome.as_ref(),
+        &ContextSummaryInputs {
+            goal_text,
+            relevant_files: &relevant_files,
+            canon_artifacts: &canon_artifacts,
+            canon_memory_targets: &canon_memory_targets,
+            context_sources,
+            greenfield_goal_seed,
+            domain_outcome: domain_outcome.as_ref(),
+        },
         &credibility,
     );
     let staleness_reason = build_staleness_reason(
@@ -1550,6 +1706,8 @@ fn build_context_pack_with_policy(
         relevant_files,
         canon_memory_targets,
         canon_artifacts,
+        goal_text,
+        greenfield_goal_seed,
         context_sources,
     );
     // Build the advanced-context projection while the planner still has the
@@ -1652,6 +1810,9 @@ fn infer_verification_strategy(
     compacted_canon_memory: Option<&CompactedCanonMemory>,
 ) -> String {
     let source_target = select_source_target(context_pack, workspace_ref);
+    if source_target.starts_with(GREENFIELD_GOAL_TARGET_PREFIX) {
+        return "review the initial workspace scaffold against the captured goal".to_string();
+    }
     if let Some(memory) = compacted_canon_memory
         && memory.credibility == MemoryCredibilityState::Credible
     {
@@ -2041,7 +2202,7 @@ pub fn build_goal_plan_with_sources(
         routing_policy_summary.as_deref(),
         context_sources.compacted_canon_memory.as_ref(),
     );
-    let expert_selection = build_expert_pack_selection(workspace_ref, &context_pack);
+    let expert_selection = build_expert_pack_selection(goal_text, workspace_ref, &context_pack);
     // Planning resolves only planning-phase capability selection here so the
     // resulting plan carries a stable, inspectable guidance story before any
     // implementation or verification work starts.
@@ -2120,7 +2281,7 @@ pub fn build_goal_plan(
 /// Errors produced while building a native goal plan.
 #[derive(Debug, Error)]
 pub enum GoalPlannerError {
-    #[error("no goal text provided — run `boundline capture` first")]
+    #[error("no goal text provided — run `boundline goal` first")]
     MissingGoal,
     #[error("goal planning stopped because the bounded context is not credible: {summary}")]
     InsufficientContext { summary: String, goal_plan: Box<GoalPlan> },
@@ -2868,7 +3029,7 @@ mod tests {
                     "frontend".to_string(),
                     crate::domain::configuration::ModelRoute {
                         runtime: crate::domain::configuration::RuntimeKind::Copilot,
-                        model: "gpt-5.5".to_string(),
+                        model: "gpt-4.1".to_string(),
                     },
                 )]),
                 ..RoutingConfig::default()
@@ -3248,6 +3409,43 @@ mod tests {
     }
 
     #[test]
+    fn build_goal_plan_with_sources_accepts_greenfield_service_goal_with_support_files_only() {
+        let workspace = temp_workspace("goal-planner-greenfield-support-files");
+        fs::write(
+            workspace.join("plan.md"),
+            "Microservizio rust edition 2024\nAxum\nGrpc\nHandle user management.\n",
+        )
+        .unwrap();
+        fs::write(workspace.join(".env"), "COPILOT_GITHUB_TOKEN=\n").unwrap();
+        fs::write(workspace.join(".env.template"), "COPILOT_GITHUB_TOKEN=\n").unwrap();
+
+        let plan = build_goal_plan_with_sources(
+            "un servizio rust edition 2024 scritto con framework axum e che esponga api restful per gestire user entities",
+            &workspace,
+            &PlanningContextSources::default(),
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(
+            plan.context_pack.as_ref().map(|pack| pack.credibility),
+            Some(ContextPackCredibility::Credible)
+        );
+        assert!(plan.context_pack.as_ref().is_some_and(|pack| {
+            pack.summary.contains("greenfield goal seed")
+                && pack.selected_targets.len() == 1
+                && pack.selected_targets[0].starts_with("goal:")
+                && pack
+                    .inputs
+                    .iter()
+                    .any(|input| input.source == super::GREENFIELD_GOAL_INPUT_SOURCE)
+        }));
+        assert!(plan.tasks.iter().all(|task| task.target.starts_with("goal:")));
+
+        fs::remove_dir_all(workspace).unwrap();
+    }
+
+    #[test]
     fn build_context_pack_uses_recent_changed_files_after_failed_validation() {
         let workspace = temp_workspace("goal-planner-recent-changes");
         fs::create_dir_all(workspace.join("src")).unwrap();
@@ -3356,7 +3554,8 @@ mod tests {
             },
         );
 
-        let outcome = resolve_domain_context(&workspace, Some("src/components/App.tsx")).unwrap();
+        let outcome =
+            resolve_domain_context(&workspace, Some("src/components/App.tsx"), None).unwrap();
 
         assert_eq!(outcome.credibility, ContextPackCredibility::Insufficient);
         assert!(outcome.summary_clause.contains("domain context unavailable"));
@@ -3402,7 +3601,8 @@ mod tests {
             },
         );
 
-        let outcome = resolve_domain_context(&workspace, Some("src/components/App.tsx")).unwrap();
+        let outcome =
+            resolve_domain_context(&workspace, Some("src/components/App.tsx"), None).unwrap();
 
         assert_eq!(outcome.credibility, ContextPackCredibility::Stale);
         assert!(outcome.summary_clause.contains("domain: react"));

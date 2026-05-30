@@ -10,7 +10,7 @@ entry and follow-up instead of introducing a separate multi-workspace runtime
 surface.
 
 **Rationale**: The roadmap explicitly says the primary operator path should stay
-session-native. Reusing the existing `start -> capture -> plan -> run -> status
+session-native. Reusing the existing `goal -> plan -> run -> status
 -> next -> inspect` story keeps orchestration authority legible and avoids
 teaching users a second delivery model just to cross repository boundaries.
 

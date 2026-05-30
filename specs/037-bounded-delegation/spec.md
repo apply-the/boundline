@@ -19,7 +19,7 @@ implicit guesswork rather than a bounded delivery feature.
 
 **Independent Test**: Configure a workspace with different runtime capabilities
 and effort policies for planning, implementation, verification, and review, then
-run `start -> capture -> plan -> run`. The resulting bounded plan and next
+run `goal -> plan -> run`. The resulting bounded plan and next
 action must reflect those declared limits before execution attempts the blocked
 step.
 
@@ -175,7 +175,7 @@ creation, and stuck detection, then run the release validation suite.
   latest authoritative follow-up state comes from an explicit compatibility run,
   while reusing the same delegation and escalation vocabulary where that path
   provides it.
-- **FR-013**: System MUST keep delegated execution bounded by the captured goal,
+- **FR-013**: System MUST keep delegated execution bounded by the recorded goal,
   negotiated acceptance boundary, current goal plan, and session execution
   limits instead of turning delegation into generic multi-agent orchestration.
 - **FR-014**: System MUST remain sequential-first on the main operator path;

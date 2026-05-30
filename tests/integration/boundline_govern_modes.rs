@@ -3,7 +3,6 @@ use crate::workspace_fixture::{run_boundline_in, temp_fixture_workspace, termina
 #[test]
 fn govern_routes_explicit_canon_modes_through_boundline_session_state() {
     let workspace = temp_fixture_workspace("boundline-govern-modes");
-    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
 
     for mode in [
         "architecture",

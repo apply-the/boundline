@@ -42,14 +42,14 @@ independently testable while still closing one full release-aligned feature.
 
 ## Phase 3: User Story 1 - Select Bounded Context From Explicit Evidence (Priority: P1) 🎯 MVP
 
-**Goal**: Make `start -> capture -> plan` admit primary context files and artifacts from explicit evidence instead of heuristic keyword scoring.
+**Goal**: Make `goal -> plan` admit primary context files and artifacts from explicit evidence instead of heuristic keyword scoring.
 
 **Independent Test**: Run representative native planning scenarios with failing tests, authored briefs, or reusable Canon artifacts and verify that the resulting context pack selects files or artifacts because of those evidence anchors.
 
 ### Tests for User Story 1
 
 - [x] T007 [P] [US1] Add contract coverage for evidence-backed context selection in `/Users/rt/workspace/synod/tests/contract/goal_plan_contract.rs`
-- [x] T008 [P] [US1] Add integration coverage for evidence-selected `start -> capture -> plan` behavior in `/Users/rt/workspace/synod/tests/integration/session_native_flow.rs`
+- [x] T008 [P] [US1] Add integration coverage for evidence-selected `goal -> plan` behavior in `/Users/rt/workspace/synod/tests/integration/session_native_flow.rs`
 - [x] T009 [P] [US1] Add unit coverage for evidence candidate construction and bounded selection in `/Users/rt/workspace/synod/tests/unit/goal_planner.rs`
 
 ### Implementation for User Story 1

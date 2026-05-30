@@ -7,7 +7,7 @@ goal-plan proposal on the native session path.
 
 ## Preconditions
 
-- A session exists with a captured goal.
+- A session exists with a recorded goal.
 - No blocking negotiation or authored-brief clarification remains unresolved.
 - The workspace can be inspected for bounded context.
 

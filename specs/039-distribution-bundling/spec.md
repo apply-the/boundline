@@ -21,7 +21,7 @@ product remains harder to adopt than it should be.
 **Independent Test**: On a fresh supported macOS or Windows machine, install
 Boundline from the official channel, verify the CLI is runnable, verify the Canon
 companion state is acceptable, and complete the first `doctor -> start ->
-capture -> plan -> run` flow without source-build steps.
+goal -> plan -> run` flow without source-build steps.
 
 **Acceptance Scenarios**:
 

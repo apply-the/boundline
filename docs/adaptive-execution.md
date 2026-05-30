@@ -2,7 +2,7 @@
 
 Boundline `0.24.0` keeps bounded adaptive execution as an explicit compatibility
 mode inside the broader session-native runtime. The primary operator path is
-still `start -> capture -> plan -> run -> status -> next -> inspect` with a
+still `init -> goal -> plan -> run -> status -> next -> inspect` with a
 bounded `GoalPlan`; adaptive behavior still uses
 `<workspace>/.boundline/execution.json` when the operator intentionally chooses the
 manifest-backed compatibility path.

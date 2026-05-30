@@ -35,7 +35,7 @@ formatting, focused tests, and coverage on modified files.
 
 - **PASS** Delivery identity: The feature directly improves bounded engineering delivery by making planning depend on an explicit, inspectable context substrate instead of ambient repository assumptions. See Summary and Technical Context.
 - **PASS** Delivery-first scope: The slice prioritizes context credibility, stop behavior, runtime state, and inspectability before optimization or polish. See Summary and Constraints.
-- **PASS** Primary workflow: The main operator path remains session-native `start -> capture -> plan -> run -> status -> next -> inspect`, with Canon enrichment available only as an explicit compatibility input. See Summary, Execution Model, and Constraints.
+- **PASS** Primary workflow: The main operator path remains session-native `goal -> plan -> run -> status -> next -> inspect`, with Canon enrichment available only as an explicit compatibility input. See Summary, Execution Model, and Constraints.
 - **PASS** Bounded execution: Substrate construction runs as a bounded sequential step, yields explicit credible or non-credible outcomes, and stops or replans before execution when context is not credible. See Execution Model, Performance Goals, and Constraints.
 - **PASS** Stateful execution: Runtime indexes, context-pack credibility, and traceable provenance are written into existing Boundline runtime and plan surfaces rather than recomputed opaquely. See Storage, Observability Surface, and Summary.
 - **PASS** Mutable planning: The substrate feeds existing planning and replanning behavior, allowing step insertion or replacement when context changes without introducing a second planner. See Summary and Execution Model.

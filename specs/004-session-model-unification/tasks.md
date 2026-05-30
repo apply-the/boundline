@@ -63,9 +63,9 @@
 
 ## Phase 4: User Story 2 - Plan and Execute Through Shared Session State (Priority: P2)
 
-**Goal**: Let developers capture a goal, plan it, and execute stepwise or end-to-end while keeping the session, trace reference, and latest outcome synchronized.
+**Goal**: Let developers record a goal, plan it, and execute stepwise or end-to-end while keeping the session, trace reference, and latest outcome synchronized.
 
-**Independent Test**: Capture a goal inside an active session, plan it, execute one step and a full run, and verify the persisted session always reflects the latest plan position, trace reference, and terminal or recovery state.
+**Independent Test**: Record a goal inside an active session, plan it, execute one step and a full run, and verify the persisted session always reflects the latest plan position, trace reference, and terminal or recovery state.
 
 ### Tests for User Story 2
 

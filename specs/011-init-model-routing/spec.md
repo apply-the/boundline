@@ -30,7 +30,7 @@ to trust it.
 
 **Independent Test**: In a repository that does not already contain Boundline
 workspace files, run `boundline init`, choose a delivery template, confirm the
-setup summary, and verify that the workspace is ready for `doctor`, `capture`,
+setup summary, and verify that the workspace is ready for `doctor`, `goal`,
 `plan`, and `run` without the user manually editing internal configuration.
 
 **Acceptance Scenarios**:

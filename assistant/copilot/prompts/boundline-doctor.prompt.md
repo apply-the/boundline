@@ -1,5 +1,12 @@
 ---
 description: "Verify Boundline and Canon installation readiness"
+handoffs:
+  - label: Set Goal
+    agent: boundline-goal
+    prompt: Define the active session goal
+  - label: Check Status
+    agent: boundline-status
+    prompt: Show current session status
 ---
 
 # Command: /boundline-doctor

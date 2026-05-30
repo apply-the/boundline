@@ -3,7 +3,6 @@ use crate::workspace_fixture::{run_boundline_in, temp_fixture_workspace, termina
 #[test]
 fn pr_ready_triggers_voting_but_low_risk_refactor_with_evidence_skips_it() {
     let workspace = temp_fixture_workspace("boundline-voting-pr-ready");
-    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
 
     let pr_ready = run_boundline_in(
         &workspace,

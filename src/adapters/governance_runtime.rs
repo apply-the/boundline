@@ -12,6 +12,7 @@ use crate::domain::governance::{
     CanonCapabilitySnapshot, CanonMode, CanonSemanticArtifactDescriptorV1Envelope,
     GovernanceLifecycleState, GovernanceRuntimeKind, GovernedStagePacket, PacketReadiness,
     SystemContextBinding, classify_packet_readiness, derived_packet_missing_sections,
+    deserialize_known_canon_modes,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -327,7 +328,7 @@ struct CanonCapabilitiesWireResponse {
     pub supported_schema_versions: Vec<String>,
     #[serde(default)]
     pub operations: Vec<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_known_canon_modes")]
     pub supported_modes: Vec<CanonMode>,
     #[serde(default)]
     pub status_values: Vec<String>,
@@ -1014,6 +1015,29 @@ mod tests {
         assert_eq!(snapshot.canon_version, crate::domain::distribution::SUPPORTED_CANON_VERSION);
         assert_eq!(snapshot.supported_modes.len(), 3);
         assert!(snapshot.compatibility_notes.contains(&"stable-json".to_string()));
+    }
+
+    #[test]
+    fn parse_canon_capabilities_ignores_additive_unknown_modes() {
+        let stdout = format!(
+            r#"{{
+            "canon_version": "{}",
+            "supported_schema_versions": ["v1"],
+            "operations": ["start", "refresh", "capabilities"],
+            "supported_modes": ["discovery", "verification", "domain-language", "domain-model"],
+            "status_values": ["pending_selection", "running", "governed_ready", "awaiting_approval", "blocked", "completed", "failed"],
+            "approval_state_values": ["not_needed", "requested", "granted", "rejected", "expired"],
+            "packet_readiness_values": ["pending", "incomplete", "reusable", "rejected"],
+            "compatibility_notes": ["stable-json"]
+        }}"#,
+            crate::domain::distribution::SUPPORTED_CANON_VERSION
+        );
+
+        let snapshot = parse_canon_capabilities(stdout.as_bytes()).unwrap();
+
+        assert_eq!(snapshot.canon_version, crate::domain::distribution::SUPPORTED_CANON_VERSION);
+        assert_eq!(snapshot.supported_modes, vec![CanonMode::Discovery, CanonMode::Verification]);
+        assert_eq!(snapshot.supported_schema_versions, vec!["v1".to_string()]);
     }
 
     #[test]

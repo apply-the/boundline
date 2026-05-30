@@ -40,7 +40,7 @@ cargo run --bin boundline -- config set \
   --scope workspace \
   --slot planning \
   --runtime codex \
-  --model gpt-5-codex
+  --model openai/gpt-5.4
 
 cargo run --bin boundline -- config show \
   --scope effective
@@ -72,7 +72,7 @@ cargo run --bin boundline -- config set \
   --scope workspace \
   --adjudicator \
   --runtime codex \
-  --model gpt-5-codex
+  --model openai/gpt-5.4
 
 cargo run --bin boundline -- config show \
   --scope effective

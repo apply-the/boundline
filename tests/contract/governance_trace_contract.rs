@@ -6,9 +6,8 @@ use crate::workspace_fixture::{
 };
 
 fn bootstrap_bug_fix(workspace: &Path) {
-    assert_eq!(run_boundline_in(workspace, &["start"]).status.code(), Some(0));
     assert_eq!(
-        run_boundline_in(workspace, &["capture", "--goal", "Fix the failing checkout flow"])
+        run_boundline_in(workspace, &["goal", "--goal", "Fix the failing checkout flow"])
             .status
             .code(),
         Some(0)

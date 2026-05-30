@@ -6,7 +6,14 @@ use thiserror::Error;
 
 use crate::domain::configuration::{ConfigFile, RoutingConfig};
 
+const GLOBAL_CONFIG_DIR_NAME: &str = "boundline";
+const GLOBAL_CONFIG_FILE_NAME: &str = "config.toml";
 const LOCAL_CONFIG_RELATIVE: &str = ".boundline/config.toml";
+const GLOBAL_ENV_FILE_NAME: &str = "providers.env";
+const GLOBAL_ENV_TEMPLATE_FILE_NAME: &str = "providers.env.template";
+const LOCAL_ENV_FILE_NAME: &str = ".env";
+const LOCAL_ENV_LOCAL_FILE_NAME: &str = ".env.local";
+const LOCAL_ENV_TEMPLATE_FILE_NAME: &str = ".env.template";
 
 #[derive(Debug, Clone)]
 pub struct FileConfigStore {
@@ -22,13 +29,37 @@ impl FileConfigStore {
         self.workspace.join(LOCAL_CONFIG_RELATIVE)
     }
 
-    pub fn global_config_path() -> PathBuf {
+    pub fn local_env_path(&self) -> PathBuf {
+        self.workspace.join(LOCAL_ENV_FILE_NAME)
+    }
+
+    pub fn local_env_local_path(&self) -> PathBuf {
+        self.workspace.join(LOCAL_ENV_LOCAL_FILE_NAME)
+    }
+
+    pub fn local_env_template_path(&self) -> PathBuf {
+        self.workspace.join(LOCAL_ENV_TEMPLATE_FILE_NAME)
+    }
+
+    pub fn global_config_dir() -> PathBuf {
         if let Some(xdg_home) = env::var_os("XDG_CONFIG_HOME") {
-            return PathBuf::from(xdg_home).join("boundline/config.toml");
+            return PathBuf::from(xdg_home).join(GLOBAL_CONFIG_DIR_NAME);
         }
 
         let home = env::var_os("HOME").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("."));
-        home.join(".config/boundline/config.toml")
+        home.join(".config").join(GLOBAL_CONFIG_DIR_NAME)
+    }
+
+    pub fn global_config_path() -> PathBuf {
+        Self::global_config_dir().join(GLOBAL_CONFIG_FILE_NAME)
+    }
+
+    pub fn global_env_path() -> PathBuf {
+        Self::global_config_dir().join(GLOBAL_ENV_FILE_NAME)
+    }
+
+    pub fn global_env_template_path() -> PathBuf {
+        Self::global_config_dir().join(GLOBAL_ENV_TEMPLATE_FILE_NAME)
     }
 
     pub fn load_local(&self) -> Result<Option<ConfigFile>, ConfigStoreError> {
@@ -115,14 +146,12 @@ mod tests {
     use std::ffi::OsString;
     use std::fs;
     use std::path::Path;
-    use std::sync::{Mutex, MutexGuard, OnceLock};
+    use std::sync::{Mutex, MutexGuard};
 
     use uuid::Uuid;
 
     use super::{ConfigStoreError, FileConfigStore};
     use crate::domain::configuration::{ConfigFile, ModelRoute, RoutingConfig, RuntimeKind};
-
-    static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
     struct EnvRestore<'a> {
         old_xdg: Option<OsString>,
@@ -150,7 +179,10 @@ mod tests {
         home: Option<&Path>,
         action: impl FnOnce() -> T,
     ) -> T {
-        let lock = ENV_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap();
+        let lock = super::super::SHARED_ENV_LOCK
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let restore = EnvRestore {
             old_xdg: env::var_os("XDG_CONFIG_HOME"),
             old_home: env::var_os("HOME"),
@@ -176,7 +208,7 @@ mod tests {
     fn valid_config() -> ConfigFile {
         let mut cfg = ConfigFile::default();
         cfg.routing.planning =
-            Some(ModelRoute { runtime: RuntimeKind::Codex, model: "gpt-5-codex".to_string() });
+            Some(ModelRoute { runtime: RuntimeKind::Codex, model: "o4-mini".to_string() });
         cfg
     }
 
@@ -192,7 +224,7 @@ mod tests {
         assert!(path.ends_with(".boundline/config.toml"));
 
         let loaded = store.load_local().unwrap().unwrap();
-        assert_eq!(loaded.routing.planning.unwrap().model, "gpt-5-codex");
+        assert_eq!(loaded.routing.planning.unwrap().model, "o4-mini");
     }
 
     #[test]
@@ -230,11 +262,32 @@ mod tests {
         let home = std::env::temp_dir().join(format!("boundline-home-{}", Uuid::new_v4()));
 
         with_config_env(Some(&xdg_home), Some(&home), || {
+            assert_eq!(FileConfigStore::global_config_dir(), xdg_home.join("boundline"));
             assert_eq!(
                 FileConfigStore::global_config_path(),
                 xdg_home.join("boundline/config.toml")
             );
+            assert_eq!(
+                FileConfigStore::global_env_path(),
+                xdg_home.join("boundline/providers.env")
+            );
+            assert_eq!(
+                FileConfigStore::global_env_template_path(),
+                xdg_home.join("boundline/providers.env.template")
+            );
         });
+    }
+
+    #[test]
+    fn local_env_paths_resolve_from_workspace_root() {
+        let workspace =
+            std::env::temp_dir().join(format!("boundline-config-env-{}", Uuid::new_v4()));
+        fs::create_dir_all(&workspace).unwrap();
+
+        let store = FileConfigStore::for_workspace(&workspace);
+        assert_eq!(store.local_env_path(), workspace.join(".env"));
+        assert_eq!(store.local_env_local_path(), workspace.join(".env.local"));
+        assert_eq!(store.local_env_template_path(), workspace.join(".env.template"));
     }
 
     #[test]
@@ -282,7 +335,7 @@ mod tests {
         with_config_env(Some(&xdg_home), None, || {
             FileConfigStore::save_global(&valid_config()).unwrap();
             let routing = FileConfigStore::global_routing().unwrap().unwrap();
-            assert_eq!(routing.planning.unwrap().model, "gpt-5-codex");
+            assert_eq!(routing.planning.unwrap().model, "o4-mini");
         });
     }
 

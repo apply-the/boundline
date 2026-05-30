@@ -542,6 +542,8 @@ pub fn render_run_trace(
                 TraceEventType::ReviewStarted
                 | TraceEventType::ReviewTriggerIgnored
                 | TraceEventType::ReviewerCompleted
+                | TraceEventType::ReviewCouncilAssembled
+                | TraceEventType::ReviewStopSemanticsRecorded
                 | TraceEventType::ReviewVoteResolved
                 | TraceEventType::ReviewAdjudicated
                 | TraceEventType::ReviewTerminalRecorded => {

@@ -14,12 +14,12 @@ negotiation packet that makes the intended outcome, acceptance boundary,
 binding constraints, and unresolved clarifications explicit before planning
 starts.
 
-**Why this priority**: Planning quality is currently limited by a captured goal
+**Why this priority**: Planning quality is currently limited by a recorded goal
 that is inspectable but still too implicit. The smallest valuable next step is
 to make bounded acceptance and constraint decisions visible before Boundline turns
 that goal into a plan.
 
-**Independent Test**: Start a session, capture a goal with or without authored
+**Independent Test**: Start a session, record a goal with or without authored
 brief inputs, and verify that Boundline stores one negotiation packet showing the
 normalized goal, acceptance boundary, key constraints, and any blocking
 clarification state without requiring planning to run.
@@ -35,7 +35,7 @@ clarification state without requiring planning to run.
    **When** the operator runs the capture step, **Then** Boundline still derives a
    negotiation packet with explicit defaults rather than leaving planning to
    infer hidden constraints.
-3. **Given** a captured goal whose acceptance boundary or required constraints
+3. **Given** a recorded goal whose acceptance boundary or required constraints
    are materially ambiguous, **When** Boundline cannot derive a credible negotiated
    packet, **Then** it stops before planning with an explicit clarification or
    blocked state that names what must be resolved.

@@ -30,6 +30,7 @@ pub struct SetConfigRequest<'a> {
     pub cluster: Option<&'a Path>,
     pub scope: ConfigWriteScope,
     pub slot: Option<RouteSlot>,
+    pub chat: bool,
     pub reviewer: Option<&'a str>,
     pub adjudicator: bool,
     pub runtime: RuntimeKind,
@@ -191,6 +192,13 @@ pub fn execute_show(
                 source_text(resolved.review.source)
             ));
             lines.push(format!(
+                "chat: {}",
+                resolved.chat.as_ref().map_or_else(
+                    || "<unset>".to_string(),
+                    |route| format!("{} [{}]", route_text(&route.route), source_text(route.source))
+                )
+            ));
+            lines.push(format!(
                 "adjudication: {} [{}]",
                 route_text(&resolved.adjudication.route),
                 source_text(resolved.adjudication.source)
@@ -265,7 +273,8 @@ pub fn execute_show(
 pub fn execute_set(
     request: SetConfigRequest<'_>,
 ) -> Result<ConfigCommandReport, ConfigCommandError> {
-    let target = mutation_target(request.slot, request.reviewer, request.adjudicator)?;
+    let target =
+        mutation_target(request.slot, request.chat, request.reviewer, request.adjudicator)?;
     let route = ModelRoute { runtime: request.runtime, model: request.model.to_string() };
     route.validate().map_err(|source| ConfigCommandError::InvalidRoute(source.to_string()))?;
 
@@ -278,6 +287,7 @@ pub fn execute_set(
 
         match target {
             MutationTarget::Slot(slot) => config.routing.set_slot(slot, route),
+            MutationTarget::Chat => config.routing.chat = Some(route),
             MutationTarget::Reviewer(role) => {
                 config.routing.reviewer_roles.insert(role, route);
             }
@@ -300,6 +310,7 @@ pub fn execute_set(
 
     match target {
         MutationTarget::Slot(slot) => config.routing.set_slot(slot, route),
+        MutationTarget::Chat => config.routing.chat = Some(route),
         MutationTarget::Reviewer(role) => {
             config.routing.reviewer_roles.insert(role, route);
         }
@@ -393,10 +404,11 @@ pub fn execute_unset(
     cluster: Option<&Path>,
     scope: ConfigWriteScope,
     slot: Option<RouteSlot>,
+    chat: bool,
     reviewer: Option<&str>,
     adjudicator: bool,
 ) -> Result<ConfigCommandReport, ConfigCommandError> {
-    let target = mutation_target(slot, reviewer, adjudicator)?;
+    let target = mutation_target(slot, chat, reviewer, adjudicator)?;
 
     if scope == ConfigWriteScope::Cluster {
         let cluster = cluster.ok_or(ConfigCommandError::ClusterRequired)?;
@@ -407,6 +419,7 @@ pub fn execute_unset(
 
         match target {
             MutationTarget::Slot(slot) => config.routing.unset_slot(slot),
+            MutationTarget::Chat => config.routing.chat = None,
             MutationTarget::Reviewer(role) => {
                 config.routing.reviewer_roles.remove(&role);
             }
@@ -428,6 +441,7 @@ pub fn execute_unset(
 
     match target {
         MutationTarget::Slot(slot) => config.routing.unset_slot(slot),
+        MutationTarget::Chat => config.routing.chat = None,
         MutationTarget::Reviewer(role) => {
             config.routing.reviewer_roles.remove(&role);
         }
@@ -857,6 +871,10 @@ fn render_scope(scope: &str, config: &ConfigFile) -> String {
         config.routing.review.as_ref().map(route_text).unwrap_or_else(|| "<unset>".to_string())
     ));
     lines.push(format!(
+        "chat: {}",
+        config.routing.chat.as_ref().map(route_text).unwrap_or_else(|| "<unset>".to_string())
+    ));
+    lines.push(format!(
         "adjudication: {}",
         config
             .routing
@@ -1064,23 +1082,31 @@ fn binding_text(binding: &ExternalContextBinding, source: Option<ValueSource>) -
 
 enum MutationTarget {
     Slot(RouteSlot),
+    Chat,
     Reviewer(String),
     Adjudicator,
 }
 
 fn mutation_target(
     slot: Option<RouteSlot>,
+    chat: bool,
     reviewer: Option<&str>,
     adjudicator: bool,
 ) -> Result<MutationTarget, ConfigCommandError> {
-    let count =
-        usize::from(slot.is_some()) + usize::from(reviewer.is_some()) + usize::from(adjudicator);
+    let count = usize::from(slot.is_some())
+        + usize::from(chat)
+        + usize::from(reviewer.is_some())
+        + usize::from(adjudicator);
     if count != 1 {
         return Err(ConfigCommandError::InvalidTargetSelection);
     }
 
     if let Some(slot) = slot {
         return Ok(MutationTarget::Slot(slot));
+    }
+
+    if chat {
+        return Ok(MutationTarget::Chat);
     }
 
     if let Some(role) = reviewer {
@@ -1162,9 +1188,22 @@ mod tests {
 
     use uuid::Uuid;
 
-    use super::*;
+    use super::{
+        BindContextRequest, CapabilityState, ConfigCommandError, ConfigFile, ConfigShowScope,
+        ConfigWriteScope, EffortFallbackPolicy, EffortLevel, ExternalContextBinding, ModelRoute,
+        MutationTarget, RouteSlot, RuntimeCapabilityProfile, RuntimeKind,
+        SemanticAccelerationPolicyState, SetCapabilityRequest, SetConfigRequest, SetDomainRequest,
+        SetEffortRequest, SetSemanticAccelerationRequest, SlotEffortPolicy, ValueSource,
+        binding_text, domain_enabled_text, effort_policy_text, execute_bind_context, execute_set,
+        execute_set_capability, execute_set_domain, execute_set_effort,
+        execute_set_semantic_acceleration, execute_show, execute_unbind_context, execute_unset,
+        execute_unset_capability, execute_unset_domain, execute_unset_effort,
+        load_config_for_scope, mutation_target, profile_text, push_effective_domain_template_lines,
+        render_scope, route_text, save_config_for_scope, slot_label, source_text,
+    };
     use crate::adapters::cluster_store::FileClusterStore;
     use crate::adapters::config_store::FileConfigStore;
+    use crate::cli::CommandExitStatus;
     use crate::domain::cluster::{
         ClusterConfigFile, ClusterMemberRegistration, ClusterMemberRole, WorkspaceCluster,
     };
@@ -1227,6 +1266,7 @@ mod tests {
         let empty = render_scope("workspace", &ConfigFile::default());
         assert!(empty.contains("config: workspace"));
         assert!(empty.contains("planning: <unset>"));
+        assert!(empty.contains("chat: <unset>"));
         assert!(empty.contains("reviewer_roles: none"));
         assert!(empty.contains("assistant_runtimes: none"));
         assert!(empty.contains("runtime_capabilities: none"));
@@ -1246,15 +1286,17 @@ mod tests {
 
         let mut config = ConfigFile::default();
         config.routing.planning =
-            Some(ModelRoute { runtime: RuntimeKind::Codex, model: "gpt-5-codex".to_string() });
+            Some(ModelRoute { runtime: RuntimeKind::Codex, model: "o4-mini".to_string() });
         config.routing.implementation =
             Some(ModelRoute { runtime: RuntimeKind::Claude, model: "sonnet-4".to_string() });
         config.routing.verification =
-            Some(ModelRoute { runtime: RuntimeKind::Copilot, model: "gpt-5.4".to_string() });
+            Some(ModelRoute { runtime: RuntimeKind::Copilot, model: "gpt-4o".to_string() });
         config.routing.review =
             Some(ModelRoute { runtime: RuntimeKind::Gemini, model: "gemini-2.5-pro".to_string() });
+        config.routing.chat =
+            Some(ModelRoute { runtime: RuntimeKind::Codex, model: "openai/gpt-5.4".to_string() });
         config.routing.adjudication =
-            Some(ModelRoute { runtime: RuntimeKind::Codex, model: "gpt-5-codex".to_string() });
+            Some(ModelRoute { runtime: RuntimeKind::Codex, model: "o4-mini".to_string() });
         config.routing.reviewer_roles.insert(
             "security".to_string(),
             ModelRoute { runtime: RuntimeKind::Claude, model: "sonnet-4".to_string() },
@@ -1300,11 +1342,12 @@ mod tests {
 
         let rendered = render_scope("cluster", &config);
         assert!(rendered.contains("config: cluster"));
-        assert!(rendered.contains("planning: codex:gpt-5-codex"));
+        assert!(rendered.contains("planning: codex:o4-mini"));
         assert!(rendered.contains("implementation: claude:sonnet-4"));
-        assert!(rendered.contains("verification: copilot:gpt-5.4"));
+        assert!(rendered.contains("verification: copilot:gpt-4o"));
         assert!(rendered.contains("review: gemini:gemini-2.5-pro"));
-        assert!(rendered.contains("adjudication: codex:gpt-5-codex"));
+        assert!(rendered.contains("chat: codex:openai/gpt-5.4"));
+        assert!(rendered.contains("adjudication: codex:o4-mini"));
         assert!(rendered.contains("- security: claude:sonnet-4"));
         assert!(rendered.contains("assistant_runtimes: codex, copilot"));
         assert!(rendered.contains("runtime_capabilities:"));
@@ -1325,7 +1368,7 @@ mod tests {
             routing: RoutingConfig {
                 planning: Some(ModelRoute {
                     runtime: RuntimeKind::Codex,
-                    model: "gpt-5-codex".to_string(),
+                    model: "o4-mini".to_string(),
                 }),
                 ..RoutingConfig::default()
             },
@@ -1339,30 +1382,34 @@ mod tests {
 
         let (loaded, location) =
             load_config_for_scope(Some(workspace.as_path()), ConfigWriteScope::Workspace).unwrap();
-        assert_eq!(loaded.routing.planning.unwrap().model, "gpt-5-codex");
+        assert_eq!(loaded.routing.planning.unwrap().model, "o4-mini");
         assert!(location.contains(".boundline/config.toml"));
 
         assert!(matches!(
-            mutation_target(None, None, false),
+            mutation_target(None, false, None, false),
             Err(ConfigCommandError::InvalidTargetSelection)
         ));
         assert!(matches!(
-            mutation_target(Some(RouteSlot::Planning), Some("security"), false),
+            mutation_target(Some(RouteSlot::Planning), false, Some("security"), false),
             Err(ConfigCommandError::InvalidTargetSelection)
         ));
         assert!(matches!(
-            mutation_target(None, Some("   "), false),
+            mutation_target(None, false, Some("   "), false),
             Err(ConfigCommandError::InvalidReviewerRole)
         ));
         assert!(matches!(
-            mutation_target(Some(RouteSlot::Review), None, false),
+            mutation_target(Some(RouteSlot::Review), false, None, false),
             Ok(MutationTarget::Slot(RouteSlot::Review))
         ));
         assert!(matches!(
-            mutation_target(None, Some(" security "), false),
+            mutation_target(None, false, Some(" security "), false),
             Ok(MutationTarget::Reviewer(role)) if role == "security"
         ));
-        assert!(matches!(mutation_target(None, None, true), Ok(MutationTarget::Adjudicator)));
+        assert!(matches!(mutation_target(None, true, None, false), Ok(MutationTarget::Chat)));
+        assert!(matches!(
+            mutation_target(None, false, None, true),
+            Ok(MutationTarget::Adjudicator)
+        ));
 
         assert!(matches!(
             load_config_for_scope(None, ConfigWriteScope::Workspace),
@@ -1395,15 +1442,19 @@ mod tests {
             routing: RoutingConfig {
                 planning: Some(ModelRoute {
                     runtime: RuntimeKind::Codex,
-                    model: "gpt-5-codex".to_string(),
+                    model: "o4-mini".to_string(),
+                }),
+                chat: Some(ModelRoute {
+                    runtime: RuntimeKind::Codex,
+                    model: "openai/gpt-5.4".to_string(),
                 }),
                 review: Some(ModelRoute {
                     runtime: RuntimeKind::Copilot,
-                    model: "gpt-5.4".to_string(),
+                    model: "gpt-4o".to_string(),
                 }),
                 reviewer_roles: BTreeMap::from([(
                     "security".to_string(),
-                    ModelRoute { runtime: RuntimeKind::Copilot, model: "gpt-5.4".to_string() },
+                    ModelRoute { runtime: RuntimeKind::Copilot, model: "gpt-4o".to_string() },
                 )]),
                 assistant_runtimes: vec![RuntimeKind::Codex, RuntimeKind::Copilot],
                 ..RoutingConfig::default()
@@ -1441,6 +1492,7 @@ mod tests {
                 .unwrap();
         assert_eq!(workspace_view.exit_status, CommandExitStatus::Succeeded);
         assert!(workspace_view.terminal_output.contains("config: workspace"));
+        assert!(workspace_view.terminal_output.contains("chat: codex:openai/gpt-5.4"));
         assert!(workspace_view.terminal_output.contains("reviewer_roles:"));
         assert!(workspace_view.terminal_output.contains("assistant_runtimes: codex, copilot"));
 
@@ -1461,7 +1513,8 @@ mod tests {
         )
         .unwrap();
         assert!(effective_view.terminal_output.contains("config: effective"));
-        assert!(effective_view.terminal_output.contains("planning: codex:gpt-5-codex [workspace]"));
+        assert!(effective_view.terminal_output.contains("planning: codex:o4-mini [workspace]"));
+        assert!(effective_view.terminal_output.contains("chat: codex:openai/gpt-5.4 [workspace]"));
         assert!(
             effective_view.terminal_output.contains("implementation: claude:sonnet-4 [cluster]")
         );
@@ -1505,10 +1558,11 @@ mod tests {
             cluster: None,
             scope: ConfigWriteScope::Workspace,
             slot: Some(RouteSlot::Planning),
+            chat: false,
             reviewer: None,
             adjudicator: false,
             runtime: RuntimeKind::Codex,
-            model: "gpt-5-codex",
+            model: "o4-mini",
         })
         .unwrap();
         assert!(slot_report.terminal_output.contains("workspace config"));
@@ -1518,6 +1572,19 @@ mod tests {
             cluster: None,
             scope: ConfigWriteScope::Workspace,
             slot: None,
+            chat: true,
+            reviewer: None,
+            adjudicator: false,
+            runtime: RuntimeKind::Codex,
+            model: "openai/gpt-5.4",
+        })
+        .unwrap();
+        execute_set(SetConfigRequest {
+            workspace: Some(workspace.as_path()),
+            cluster: None,
+            scope: ConfigWriteScope::Workspace,
+            slot: None,
+            chat: false,
             reviewer: Some("security"),
             adjudicator: false,
             runtime: RuntimeKind::Claude,
@@ -1529,15 +1596,17 @@ mod tests {
             cluster: None,
             scope: ConfigWriteScope::Workspace,
             slot: None,
+            chat: false,
             reviewer: None,
             adjudicator: true,
             runtime: RuntimeKind::Copilot,
-            model: "gpt-5.4",
+            model: "gpt-4o",
         })
         .unwrap();
 
         let local = FileConfigStore::for_workspace(&workspace).load_local().unwrap().unwrap();
         assert_eq!(local.routing.planning.unwrap().runtime, RuntimeKind::Codex);
+        assert_eq!(local.routing.chat.unwrap().model, "openai/gpt-5.4");
         assert_eq!(
             local.routing.reviewer_roles.get("security").unwrap().runtime,
             RuntimeKind::Claude
@@ -1549,6 +1618,7 @@ mod tests {
             None,
             ConfigWriteScope::Workspace,
             Some(RouteSlot::Planning),
+            false,
             None,
             false,
         )
@@ -1558,6 +1628,17 @@ mod tests {
             None,
             ConfigWriteScope::Workspace,
             None,
+            true,
+            None,
+            false,
+        )
+        .unwrap();
+        execute_unset(
+            Some(workspace.as_path()),
+            None,
+            ConfigWriteScope::Workspace,
+            None,
+            false,
             Some("security"),
             false,
         )
@@ -1567,6 +1648,7 @@ mod tests {
             None,
             ConfigWriteScope::Workspace,
             None,
+            false,
             None,
             true,
         )
@@ -1574,6 +1656,7 @@ mod tests {
 
         let local = FileConfigStore::for_workspace(&workspace).load_local().unwrap().unwrap();
         assert!(local.routing.planning.is_none());
+        assert!(local.routing.chat.is_none());
         assert!(local.routing.reviewer_roles.is_empty());
         assert!(local.routing.adjudication.is_none());
 
@@ -1585,6 +1668,7 @@ mod tests {
             cluster: Some(workspace.as_path()),
             scope: ConfigWriteScope::Cluster,
             slot: Some(RouteSlot::Implementation),
+            chat: false,
             reviewer: None,
             adjudicator: false,
             runtime: RuntimeKind::Claude,
@@ -1596,10 +1680,11 @@ mod tests {
             cluster: Some(workspace.as_path()),
             scope: ConfigWriteScope::Cluster,
             slot: None,
-            reviewer: Some("safety"),
+            chat: true,
+            reviewer: None,
             adjudicator: false,
-            runtime: RuntimeKind::Copilot,
-            model: "gpt-5.4",
+            runtime: RuntimeKind::Codex,
+            model: "openai/gpt-5.4",
         })
         .unwrap();
         execute_set(SetConfigRequest {
@@ -1607,15 +1692,29 @@ mod tests {
             cluster: Some(workspace.as_path()),
             scope: ConfigWriteScope::Cluster,
             slot: None,
+            chat: false,
+            reviewer: Some("safety"),
+            adjudicator: false,
+            runtime: RuntimeKind::Copilot,
+            model: "gpt-4o",
+        })
+        .unwrap();
+        execute_set(SetConfigRequest {
+            workspace: Some(workspace.as_path()),
+            cluster: Some(workspace.as_path()),
+            scope: ConfigWriteScope::Cluster,
+            slot: None,
+            chat: false,
             reviewer: None,
             adjudicator: true,
             runtime: RuntimeKind::Codex,
-            model: "gpt-5-codex",
+            model: "o4-mini",
         })
         .unwrap();
 
         let cluster = FileClusterStore::for_workspace(&workspace).load().unwrap().unwrap();
         assert_eq!(cluster.routing.implementation.unwrap().runtime, RuntimeKind::Claude);
+        assert_eq!(cluster.routing.chat.unwrap().model, "openai/gpt-5.4");
         assert_eq!(
             cluster.routing.reviewer_roles.get("safety").unwrap().runtime,
             RuntimeKind::Copilot
@@ -1627,6 +1726,7 @@ mod tests {
             Some(workspace.as_path()),
             ConfigWriteScope::Cluster,
             Some(RouteSlot::Implementation),
+            false,
             None,
             false,
         )
@@ -1636,6 +1736,17 @@ mod tests {
             Some(workspace.as_path()),
             ConfigWriteScope::Cluster,
             None,
+            true,
+            None,
+            false,
+        )
+        .unwrap();
+        execute_unset(
+            Some(workspace.as_path()),
+            Some(workspace.as_path()),
+            ConfigWriteScope::Cluster,
+            None,
+            false,
             Some("safety"),
             false,
         )
@@ -1645,6 +1756,7 @@ mod tests {
             Some(workspace.as_path()),
             ConfigWriteScope::Cluster,
             None,
+            false,
             None,
             true,
         )
@@ -1652,6 +1764,7 @@ mod tests {
 
         let cluster = FileClusterStore::for_workspace(&workspace).load().unwrap().unwrap();
         assert!(cluster.routing.implementation.is_none());
+        assert!(cluster.routing.chat.is_none());
         assert!(cluster.routing.reviewer_roles.is_empty());
         assert!(cluster.routing.adjudication.is_none());
 
@@ -1661,10 +1774,11 @@ mod tests {
                 cluster: None,
                 scope: ConfigWriteScope::Workspace,
                 slot: None,
+                chat: false,
                 reviewer: None,
                 adjudicator: false,
                 runtime: RuntimeKind::Codex,
-                model: "gpt-5-codex",
+                model: "o4-mini",
             }),
             Err(ConfigCommandError::InvalidTargetSelection)
         ));
@@ -1674,6 +1788,7 @@ mod tests {
                 cluster: None,
                 scope: ConfigWriteScope::Workspace,
                 slot: Some(RouteSlot::Planning),
+                chat: false,
                 reviewer: None,
                 adjudicator: false,
                 runtime: RuntimeKind::Codex,

@@ -1020,7 +1020,16 @@ pub enum ContextIntelligenceError {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::{
+        AdvancedContextProjection, AuthorityRank, CandidateSelectionState,
+        ContextIntelligenceError, HybridOutcome, ImpactAnalysisFinding, ImpactFindingKind,
+        ImpactFindingSeverity, ImpactFindingStatus, RemoteTransmissionPolicyState,
+        RetrievalBudgets, RetrievalCompatibilityState, RetrievalIndexState, RetrievalMatchOrigin,
+        RetrievalMode, RetrievalScore, RetrievalSourceKind, RetrievalStalenessState,
+        RetrievalState, RetrievedEvidenceCandidate, SemanticCapabilityState, SemanticPolicyState,
+        SemanticTraceEventKind, SemanticTraceRecord,
+    };
+    use crate::domain::governance::CanonSemanticProvenanceBoundary;
 
     fn semantic_candidate() -> RetrievedEvidenceCandidate {
         RetrievedEvidenceCandidate {

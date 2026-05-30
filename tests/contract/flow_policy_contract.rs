@@ -1,7 +1,5 @@
 use boundline::adapters::session_store::{FileSessionStore, SessionStore};
-use boundline::cli::session::{
-    SessionCommandError, execute_capture, execute_plan, execute_run, execute_start,
-};
+use boundline::cli::session::{execute_goal, execute_plan, execute_run};
 use boundline::domain::goal_plan::GoalPlanFlowMode;
 
 use crate::runtime_refoundation::{
@@ -9,47 +7,26 @@ use crate::runtime_refoundation::{
 };
 
 #[test]
-fn proposed_flow_contract_blocks_run_until_operator_confirms_or_skips() {
+fn proposed_flow_contract_run_implicitly_confirms() {
     let workspace = temp_runtime_refoundation_workspace("flow-policy-contract-proposed");
 
-    execute_start(Some(&workspace)).unwrap();
-    execute_capture(
-        Some(&workspace),
-        Some("fix the failing add test"),
-        &[],
-        None,
-        None,
-        None,
-        None,
-    )
-    .unwrap();
-    execute_plan(Some(&workspace), None, false, false).unwrap();
+    execute_goal(Some(&workspace), Some("fix the failing add test"), &[], None, None, None, None)
+        .unwrap();
+    execute_plan(Some(&workspace), None, false).unwrap();
 
     let session = FileSessionStore::for_workspace(&workspace).load().unwrap().unwrap();
     assert_eq!(session.goal_plan.as_ref().unwrap().flow_state().mode, GoalPlanFlowMode::Proposed);
-    assert!(matches!(
-        execute_run(Some(&workspace)).unwrap_err(),
-        SessionCommandError::PlanConfirmationRequired { flow_name }
-            if flow_name.as_deref() == Some("bug-fix")
-    ));
+
+    assert!(execute_run(Some(&workspace)).is_ok());
 }
 
 #[test]
 fn confirmed_flow_contract_persists_explicit_override() {
     let workspace = temp_runtime_refoundation_workspace("flow-policy-contract-confirmed");
 
-    execute_start(Some(&workspace)).unwrap();
-    execute_capture(
-        Some(&workspace),
-        Some("fix the failing add test"),
-        &[],
-        None,
-        None,
-        None,
-        None,
-    )
-    .unwrap();
-    execute_plan(Some(&workspace), Some("change"), false, false).unwrap();
+    execute_goal(Some(&workspace), Some("fix the failing add test"), &[], None, None, None, None)
+        .unwrap();
+    execute_plan(Some(&workspace), Some("change"), false).unwrap();
 
     let session = FileSessionStore::for_workspace(&workspace).load().unwrap().unwrap();
     let flow_state = session.goal_plan.as_ref().unwrap().flow_state();
@@ -63,8 +40,7 @@ fn confirmed_flow_contract_persists_explicit_override() {
 fn skipped_flow_contract_persists_operator_skip_without_active_policy() {
     let workspace = temp_runtime_refoundation_no_action_workspace("flow-policy-contract-skipped");
 
-    execute_start(Some(&workspace)).unwrap();
-    execute_capture(
+    execute_goal(
         Some(&workspace),
         Some("implement workspace summary output"),
         &[],
@@ -74,7 +50,7 @@ fn skipped_flow_contract_persists_operator_skip_without_active_policy() {
         None,
     )
     .unwrap();
-    execute_plan(Some(&workspace), None, true, false).unwrap();
+    execute_plan(Some(&workspace), None, true).unwrap();
 
     let session = FileSessionStore::for_workspace(&workspace).load().unwrap().unwrap();
     let flow_state = session.goal_plan.as_ref().unwrap().flow_state();

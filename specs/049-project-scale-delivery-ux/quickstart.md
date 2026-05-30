@@ -43,7 +43,7 @@ Expected result:
 
 ```bash
 boundline start
-boundline capture --goal "Build a customer onboarding capability with audit logging"
+boundline goal --goal "Build a customer onboarding capability with audit logging"
 boundline plan
 ```
 

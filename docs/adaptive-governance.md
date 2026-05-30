@@ -1,6 +1,6 @@
-# Adaptive Governance In Boundline 0.63.0
+# Adaptive Governance In Boundline 0.64.0
 
-Boundline `0.63.0` can consume Canon `adaptive-governance-v1` as an additive
+Boundline `0.64.0` can consume Canon `adaptive-governance-v1` as an additive
 companion to the required `authority-governance-v1` baseline.
 
 The companion is semantic input, not runtime control.

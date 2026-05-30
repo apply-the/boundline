@@ -11,9 +11,9 @@ cd /tmp/test-workspace
 cargo init --name test-project
 echo 'fn broken() { panic!("fix me"); }' > src/lib.rs
 
-# Start a session and capture a goal
+# Start a session and record a goal
 boundline start
-boundline capture --goal "fix the broken function in src/lib.rs"
+boundline goal --goal "fix the broken function in src/lib.rs"
 
 # Plan from goal
 boundline plan
@@ -44,7 +44,7 @@ cat .boundline/session.json | jq '.status'
 ```bash
 cd /tmp/test-workspace
 boundline start
-boundline capture --goal "add input validation to the parse function"
+boundline goal --goal "add input validation to the parse function"
 boundline plan
 ```
 
@@ -63,13 +63,13 @@ cat .boundline/session.json | jq '.goal_plan'
 ```bash
 # Bug-fix goal
 boundline start
-boundline capture --goal "fix the failing test in auth.rs"
+boundline goal --goal "fix the failing test in auth.rs"
 boundline plan
 # Expected: proposes bug-fix flow
 
 # Change goal
 boundline start
-boundline capture --goal "add a new validation layer to the API"
+boundline goal --goal "add a new validation layer to the API"
 boundline plan
 # Expected: proposes change flow
 ```
@@ -95,7 +95,7 @@ boundline run
 
 ```bash
 boundline start
-boundline capture --goal "fix the broken test"
+boundline goal --goal "fix the broken test"
 boundline plan
 boundline run
 # If a verification fails, inspect the recovery decision

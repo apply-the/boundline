@@ -6,17 +6,64 @@
   "delightSignalAuthority": "CLI-reported time_to_first_useful_answer_ms, time_to_first_useful_answer_command, explanation_attribution_rate, next_action_acceptance_rate, and latest_next_action_outcome lines",
   "hostSupportModeAuthority": "assistant/global/manifest.json and assistant/plugin-metadata.json declare whether each host is repo-local-full, copy-ready-assets, or manual-fallback; the CLI remains authoritative for output and state",
   "projectScaleAuthority": "CLI-reported project_scale_path, project_scale_current_stage, project_scale_next_action, checkpoint refs, trace refs",
+  "briefArtifactAuthority": ".boundline/briefs/goal.md, .boundline/briefs/plan.md, and .boundline/briefs/run.md are the runtime-owned latest operator briefs; stage-specific planning briefs stay under .boundline/governance/planning/<stage>/brief.md",
   "palettePolicy": "Keep the default palette compact; explain-plan and doctor-context remain contextual follow-ups",
+  "operatorBriefContract": {
+    "defaultHumanReadableMode": "compact",
+    "defaultFields": [
+      "goal",
+      "authored_input_summary",
+      "authored_input_sources",
+      "routing",
+      "execution_condition",
+      "summary",
+      "artifacts",
+      "latest_status",
+      "next_command"
+    ],
+    "detailEscapes": [
+      "--verbose",
+      "inspect",
+      "trace refs",
+      "governed artifacts"
+    ]
+  },
   "hostSupportModes": {
     "claude": "repo-local-full",
     "codex": "repo-local-full",
     "cursor": "copy-ready-assets",
     "copilot": "repo-local-full",
-    "gemini": "manual-fallback"
+    "antigravity": "repo-local-full"
+  },
+  "hostActionRendering": {
+    "copilot": {
+      "actionStyle": "copilot-command-uri",
+      "commandIdStyle": "/boundline-*",
+      "notes": "Use command:github.copilot.chat.execute links for assistant-safe routes."
+    },
+    "codex": {
+      "actionStyle": "host-native-slash-command",
+      "commandIdStyle": "/boundline:*",
+      "notes": "Render host-native slash command actions."
+    },
+    "claude": {
+      "actionStyle": "host-native-slash-command",
+      "commandIdStyle": "/boundline:*",
+      "notes": "Render host-native slash command actions."
+    },
+    "antigravity": {
+      "actionStyle": "host-native-slash-command",
+      "commandIdStyle": "/boundline:*",
+      "notes": "Render host-native slash command actions; preserve workflow CLI guidance when relevant."
+    },
+    "cursor": {
+      "actionStyle": "copy-ready-fallback",
+      "commandIdStyle": "/boundline:*",
+      "notes": "Cursor remains copy-ready-assets; do not claim verified clickable URI parity."
+    }
   },
   "defaultPalette": [
-    "/boundline:start",
-    "/boundline:capture",
+    "/boundline:goal",
     "/boundline:plan",
     "/boundline:run",
     "/boundline:status",
@@ -43,46 +90,34 @@
   ],
   "commands": [
     {
-      "id": "/boundline:start",
-      "label": "start",
-      "purpose": "Open or reset the active Boundline session for a workspace.",
-      "boundlineCommand": "cargo run --bin boundline -- start --json",
+      "id": "/boundline:goal",
+      "label": "goal",
+      "purpose": "Open a new session goal or refine the active one, optionally with a supporting brief.",
+      "boundlineCommand": "boundline orchestrate --goal <goal> --brief <path> --until phase-request --json-stream",
       "skillRefs": {
-        "claude": "assistant/claude/commands/boundline-start.md",
-        "codex": "assistant/codex/commands/boundline-start.md",
-        "copilot": "assistant/copilot/prompts/boundline-start.prompt.md"
+        "claude": "assistant/claude/commands/boundline-goal.md",
+        "codex": "assistant/codex/commands/boundline-goal.md",
+        "copilot": "assistant/copilot/prompts/boundline-goal.prompt.md"
       },
-      "stateHandling": "Read .boundline/session.json through CLI output and preserve next_command plus blocked, clarification-required, failed, exhausted, and terminal states."
-    },
-    {
-      "id": "/boundline:capture",
-      "label": "capture",
-      "purpose": "Persist a goal or brief into the active session.",
-      "boundlineCommand": "cargo run --bin boundline -- capture --goal <goal> --json",
-      "skillRefs": {
-        "claude": "assistant/claude/commands/boundline-capture.md",
-        "codex": "assistant/codex/commands/boundline-capture.md",
-        "copilot": "assistant/copilot/prompts/boundline-capture.prompt.md"
-      },
-      "stateHandling": "Preserve .boundline/session.json, CLI-authored input fields, next_command, and explicit blocked, clarification-required, failed, exhausted, and terminal states."
+      "stateHandling": "Use orchestrate to open or refine the active session goal through a runtime-owned phase_request boundary; preserve .boundline/session.json, phase_request.request_id, authored input fields, assistant-safe resume routes, next_command, and explicit blocked, clarification-required, failed, exhausted, and terminal states. When goal clarification is requested, stop automatic continuation, collect one answer, and resume with the emitted request_id plus --answer contract."
     },
     {
       "id": "/boundline:plan",
       "label": "plan",
-      "purpose": "Ask Boundline to propose or confirm a bounded implementation plan.",
-      "boundlineCommand": "cargo run --bin boundline -- plan --json",
+      "purpose": "Ask Boundline to propose or confirm a bounded implementation plan for the active captured goal.",
+      "boundlineCommand": "boundline plan --json",
       "skillRefs": {
         "claude": "assistant/claude/commands/boundline-plan.md",
         "codex": "assistant/codex/commands/boundline-plan.md",
         "copilot": "assistant/copilot/prompts/boundline-plan.prompt.md"
       },
-      "stateHandling": "Treat unconfirmed proposals, blocked, clarification-required, failed, exhausted, and terminal states as real stop conditions; prefer next_command."
+      "stateHandling": "Treat MissingCapturedGoal, unconfirmed proposals, blocked, clarification-required, failed, exhausted, and terminal states as real stop conditions; when the goal is missing or changing, route to /boundline:goal instead of synthesizing goal capture inside /boundline:plan; prefer next_command."
     },
     {
       "id": "/boundline:continue",
       "label": "continue",
       "purpose": "Continue only from the active Boundline session source of truth.",
-      "boundlineCommand": "cargo run --bin boundline -- continue --json",
+      "boundlineCommand": "boundline continue --json",
       "skillRefs": {
         "claude": "assistant/claude/commands/boundline-next.md",
         "codex": "assistant/codex/commands/boundline-next.md",
@@ -94,7 +129,7 @@
       "id": "/boundline:run",
       "label": "run",
       "purpose": "Run the next bounded action through the real Boundline runtime.",
-      "boundlineCommand": "cargo run --bin boundline -- run --json",
+      "boundlineCommand": "boundline run --json",
       "skillRefs": {
         "claude": "assistant/claude/commands/boundline-run.md",
         "codex": "assistant/codex/commands/boundline-run.md",
@@ -106,7 +141,7 @@
       "id": "/boundline:status",
       "label": "status",
       "purpose": "Report the active session state and current next action.",
-      "boundlineCommand": "cargo run --bin boundline -- status --json",
+      "boundlineCommand": "boundline status --json",
       "skillRefs": {
         "claude": "assistant/claude/commands/boundline-status.md",
         "codex": "assistant/codex/commands/boundline-status.md",
@@ -118,7 +153,7 @@
       "id": "/boundline:inspect",
       "label": "inspect",
       "purpose": "Inspect the latest authoritative Boundline trace and session evidence.",
-      "boundlineCommand": "cargo run --bin boundline -- inspect --json",
+      "boundlineCommand": "boundline inspect --json",
       "skillRefs": {
         "claude": "assistant/claude/commands/boundline-inspect.md",
         "codex": "assistant/codex/commands/boundline-inspect.md",
@@ -130,7 +165,7 @@
       "id": "/boundline:why",
       "label": "why",
       "purpose": "Explain why the current bounded delivery state looks the way it does.",
-      "boundlineCommand": "cargo run --bin boundline -- inspect --workspace <workspace> --json",
+      "boundlineCommand": "boundline inspect --workspace <workspace> --json",
       "skillRefs": {
         "claude": "assistant/claude/commands/boundline-why.md",
         "codex": "assistant/codex/commands/boundline-why.md",
@@ -142,7 +177,7 @@
       "id": "/boundline:risk",
       "label": "risk",
       "purpose": "Summarize the current bounded-delivery risks from authoritative runtime evidence.",
-      "boundlineCommand": "cargo run --bin boundline -- inspect --workspace <workspace> --json",
+      "boundlineCommand": "boundline inspect --workspace <workspace> --json",
       "skillRefs": {
         "claude": "assistant/claude/commands/boundline-risk.md",
         "codex": "assistant/codex/commands/boundline-risk.md",
@@ -154,7 +189,7 @@
       "id": "/boundline:evidence",
       "label": "evidence",
       "purpose": "Show the runtime and governed evidence currently supporting the active answer.",
-      "boundlineCommand": "cargo run --bin boundline -- inspect --workspace <workspace> --json",
+      "boundlineCommand": "boundline inspect --workspace <workspace> --json",
       "skillRefs": {
         "claude": "assistant/claude/commands/boundline-evidence.md",
         "codex": "assistant/codex/commands/boundline-evidence.md",
@@ -166,7 +201,7 @@
       "id": "/boundline:next-best",
       "label": "next-best",
       "purpose": "Recommend the next best bounded action from the active session state.",
-      "boundlineCommand": "cargo run --bin boundline -- status --workspace <workspace> --json",
+      "boundlineCommand": "boundline status --workspace <workspace> --json",
       "skillRefs": {
         "claude": "assistant/claude/commands/boundline-next-best.md",
         "codex": "assistant/codex/commands/boundline-next-best.md",
@@ -178,7 +213,7 @@
       "id": "/boundline:assumptions",
       "label": "assumptions",
       "purpose": "Inspect grouped assumptions influencing the active bounded plan or execution.",
-      "boundlineCommand": "cargo run --bin boundline -- inspect --workspace <workspace> --json",
+      "boundlineCommand": "boundline inspect --workspace <workspace> --json",
       "skillRefs": {
         "claude": "assistant/claude/commands/boundline-assumptions.md",
         "codex": "assistant/codex/commands/boundline-assumptions.md",
@@ -190,7 +225,7 @@
       "id": "/boundline:hidden-impact",
       "label": "hidden-impact",
       "purpose": "Inspect likely indirect impact using structured runtime evidence and visible fallback disclosure.",
-      "boundlineCommand": "cargo run --bin boundline -- inspect --workspace <workspace> --json",
+      "boundlineCommand": "boundline inspect --workspace <workspace> --json",
       "skillRefs": {
         "claude": "assistant/claude/commands/boundline-hidden-impact.md",
         "codex": "assistant/codex/commands/boundline-hidden-impact.md",
@@ -202,7 +237,7 @@
       "id": "/boundline:challenge",
       "label": "challenge",
       "purpose": "Challenge the active bounded plan without obscuring governance boundaries.",
-      "boundlineCommand": "cargo run --bin boundline -- inspect --workspace <workspace> --json",
+      "boundlineCommand": "boundline inspect --workspace <workspace> --json",
       "skillRefs": {
         "claude": "assistant/claude/commands/boundline-challenge.md",
         "codex": "assistant/codex/commands/boundline-challenge.md",
@@ -214,7 +249,7 @@
       "id": "/boundline:explain-plan",
       "label": "explain-plan",
       "purpose": "Explain the active bounded plan in human terms from session-native runtime state.",
-      "boundlineCommand": "cargo run --bin boundline -- status --workspace <workspace> --json",
+      "boundlineCommand": "boundline status --workspace <workspace> --json",
       "visibility": "contextual",
       "skillRefs": {
         "claude": "assistant/claude/commands/boundline-explain-plan.md",
@@ -227,7 +262,7 @@
       "id": "/boundline:doctor-context",
       "label": "doctor-context",
       "purpose": "Diagnose missing workspace context, readiness signals, and evidence prerequisites for the active bounded task.",
-      "boundlineCommand": "cargo run --bin boundline -- doctor --workspace <workspace>",
+      "boundlineCommand": "boundline doctor --workspace <workspace>",
       "visibility": "contextual",
       "skillRefs": {
         "claude": "assistant/claude/commands/boundline-doctor-context.md",
@@ -240,7 +275,7 @@
       "id": "/boundline:recover",
       "label": "recover",
       "purpose": "Recover from blocked or failed session state using CLI-reported guidance.",
-      "boundlineCommand": "cargo run --bin boundline -- status --json",
+      "boundlineCommand": "boundline status --json",
       "skillRefs": {
         "claude": "assistant/claude/commands/boundline-recover.md",
         "codex": "assistant/codex/commands/boundline-recover.md",
@@ -252,7 +287,7 @@
       "id": "/boundline:govern",
       "label": "govern",
       "purpose": "Use optional Canon governance only when configured for the active Boundline session.",
-      "boundlineCommand": "cargo run --bin boundline -- config show --scope workspace --json",
+      "boundlineCommand": "boundline config show --scope workspace --json",
       "conditional": true,
       "skillRefs": {
         "claude": "assistant/claude/commands/boundline-govern.md",

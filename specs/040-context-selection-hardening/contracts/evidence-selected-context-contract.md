@@ -7,7 +7,7 @@ explicit bounded evidence on the primary session-native path.
 
 ## Preconditions
 
-- A session exists with a captured goal.
+- A session exists with a recorded goal.
 - Any authored brief metadata already recorded in session state is available.
 - The workspace or cluster scope is known.
 

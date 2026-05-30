@@ -16,7 +16,8 @@ use crate::domain::brief::{
 };
 use crate::domain::distribution::evaluate_canon_install;
 use crate::domain::governance::{
-    CanonMode, CanonModeSelectionPreference, GovernanceRuntimeKind, GovernedSessionLifecycle,
+    CanonAuthorityZone, CanonIntendedPersona, CanonMode, CanonModeSelectionPreference,
+    CanonRiskClass, GovernanceRuntimeKind, GovernedSessionLifecycle,
 };
 use crate::domain::limits::TerminalCondition;
 use crate::domain::session::{
@@ -31,6 +32,10 @@ use crate::fixture::{
     load_workspace_execution_profile,
 };
 use crate::orchestrator::engine::{Orchestrator, OrchestratorError};
+
+const DIRECT_RUN_BOUNDED_CONTEXT_HEADLINE: &str = "bounded context required before planning";
+const DIRECT_RUN_BOUNDED_CONTEXT_REPAIR: &str =
+    "provide a credible brief or concrete workspace target before retrying direct run";
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RunCommandReport {
@@ -62,8 +67,7 @@ pub fn execute_native_direct_run(
     let effective_zone = zone.or(resolution.default_zone.as_deref());
     let effective_owner = owner.or(resolution.default_owner.as_deref());
 
-    session::execute_start(Some(workspace)).map_err(RunCommandError::SessionCommand)?;
-    session::execute_capture(
+    session::execute_goal(
         Some(workspace),
         goal,
         briefs,
@@ -96,6 +100,7 @@ pub fn execute_native_direct_run(
             stage_records: Vec::new(),
             accumulated_context: Vec::new(),
             terminal_reason: None,
+            planning_input_fingerprint: None,
         };
         let session_store = FileSessionStore::for_workspace(workspace);
         if let Ok(Some(mut record)) = session_store.load() {
@@ -115,6 +120,7 @@ pub fn execute_native_direct_run(
             stage_records: Vec::new(),
             accumulated_context: Vec::new(),
             terminal_reason: None,
+            planning_input_fingerprint: None,
         };
         let session_store = FileSessionStore::for_workspace(workspace);
         if let Ok(Some(mut record)) = session_store.load() {
@@ -142,10 +148,7 @@ pub fn execute_native_direct_run(
         });
     }
 
-    session::execute_plan(Some(workspace), None, false, false)
-        .map_err(RunCommandError::SessionCommand)?;
-    session::execute_plan(Some(workspace), None, false, true)
-        .map_err(RunCommandError::SessionCommand)?;
+    session::execute_plan(Some(workspace), None, false).map_err(RunCommandError::SessionCommand)?;
     let report = session::execute_run(Some(workspace)).map_err(RunCommandError::SessionCommand)?;
     let trace_location = session_store
         .load()
@@ -320,6 +323,22 @@ pub enum RunCommandError {
     CanonSurfaceNotReady { repair_actions: String },
 }
 
+impl RunCommandError {
+    pub(crate) fn message(&self) -> String {
+        match self {
+            Self::SessionCommand(error) => format!("session command failed: {}", error.message()),
+            Self::FixtureRuntime(FixtureRuntimeError::NoSynthesizeableGoalPlanTarget {
+                goal,
+                workspace,
+            }) => format!(
+                "{DIRECT_RUN_BOUNDED_CONTEXT_HEADLINE}: {DIRECT_RUN_BOUNDED_CONTEXT_REPAIR} for goal '{goal}' in workspace {}",
+                workspace.display()
+            ),
+            _ => self.to_string(),
+        }
+    }
+}
+
 /// Result of Canon-default governance resolution.
 struct CanonGovernanceResolution {
     governance: Option<GovernanceRuntimeKind>,
@@ -365,9 +384,25 @@ fn resolve_canon_default_governance(
         }
         return Ok(CanonGovernanceResolution {
             governance: Some(governance),
-            default_risk: canon_prefs.as_ref().and_then(|prefs| prefs.default_risk.clone()),
-            default_zone: canon_prefs.as_ref().and_then(|prefs| prefs.default_zone.clone()),
-            default_owner: canon_prefs.as_ref().and_then(|prefs| prefs.default_owner.clone()),
+            default_risk: canon_prefs.as_ref().and_then(|prefs| prefs.default_risk.clone()).map(
+                |risk| {
+                    CanonRiskClass::canonicalize_label(&risk).map(str::to_string).unwrap_or(risk)
+                },
+            ),
+            default_owner: canon_prefs.as_ref().and_then(|prefs| prefs.default_owner.clone()).map(
+                |owner| {
+                    CanonIntendedPersona::canonicalize_label(&owner)
+                        .map(str::to_string)
+                        .unwrap_or(owner)
+                },
+            ),
+            default_zone: canon_prefs.as_ref().and_then(|prefs| prefs.default_zone.clone()).map(
+                |zone| {
+                    CanonAuthorityZone::canonicalize_label(&zone)
+                        .map(str::to_string)
+                        .unwrap_or(zone)
+                },
+            ),
             mode_selection_preference: canon_prefs.as_ref().map(|prefs| prefs.mode_selection),
         });
     }
@@ -378,9 +413,19 @@ fn resolve_canon_default_governance(
             verify_canon_surface_ready()?;
             Ok(CanonGovernanceResolution {
                 governance: Some(GovernanceRuntimeKind::Canon),
-                default_risk: canon_prefs.default_risk,
-                default_zone: canon_prefs.default_zone,
-                default_owner: canon_prefs.default_owner,
+                default_risk: canon_prefs.default_risk.map(|risk| {
+                    CanonRiskClass::canonicalize_label(&risk).map(str::to_string).unwrap_or(risk)
+                }),
+                default_zone: canon_prefs.default_zone.map(|zone| {
+                    CanonAuthorityZone::canonicalize_label(&zone)
+                        .map(str::to_string)
+                        .unwrap_or(zone)
+                }),
+                default_owner: canon_prefs.default_owner.map(|owner| {
+                    CanonIntendedPersona::canonicalize_label(&owner)
+                        .map(str::to_string)
+                        .unwrap_or(owner)
+                }),
                 mode_selection_preference: Some(canon_prefs.mode_selection),
             })
         }
@@ -389,7 +434,7 @@ fn resolve_canon_default_governance(
                 verify_canon_surface_ready()?;
                 return Ok(CanonGovernanceResolution {
                     governance: Some(GovernanceRuntimeKind::Canon),
-                    default_risk: Some("medium".to_string()),
+                    default_risk: Some(CanonRiskClass::BoundedImpact.as_str().to_string()),
                     default_zone: Some("engineering".to_string()),
                     default_owner: Some("platform".to_string()),
                     mode_selection_preference: Some(CanonModeSelectionPreference::default()),
@@ -483,7 +528,7 @@ mod tests {
     use uuid::Uuid;
 
     use super::{
-        active_session_has_meaningful_state, compatibility_terminal_output,
+        RunCommandError, active_session_has_meaningful_state, compatibility_terminal_output,
         native_direct_run_flow_for_mode, native_direct_run_requires_clarification,
         resolve_canon_default_governance,
     };
@@ -492,6 +537,7 @@ mod tests {
     use crate::domain::negotiation::{NegotiatedDeliveryPacket, NegotiationResolutionState};
     use crate::domain::session::{ActiveSessionRecord, SessionStatus};
     use crate::domain::task::{ClarificationReasonKind, ClarificationRecord, ClarificationStatus};
+    use crate::fixture::FixtureRuntimeError;
 
     fn temp_workspace(prefix: &str) -> Result<PathBuf, String> {
         let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
@@ -564,11 +610,13 @@ mod tests {
             deduplicated_sources: Vec::new(),
             governance_intent: None,
             resolution_state: AuthoredBriefResolutionState::ClarificationRequired,
+            goal_quality: Default::default(),
             clarification: Some(ClarificationRecord {
                 clarification_id: "clarification-1".to_string(),
                 reason_kind: ClarificationReasonKind::MissingContext,
                 prompt: "describe the expected outcome".to_string(),
                 missing_fields: vec!["acceptance".to_string()],
+                questions: Vec::new(),
                 blocking_sources: Vec::new(),
                 turn_index: 0,
                 status: ClarificationStatus::Open,
@@ -624,5 +672,22 @@ mod tests {
         assert!(implicit_local.mode_selection_preference.is_none());
 
         fs::remove_dir_all(&workspace).unwrap();
+    }
+
+    #[test]
+    fn run_command_error_message_covers_fixture_runtime_and_wildcard_branches() {
+        let no_synthesize_error =
+            RunCommandError::FixtureRuntime(FixtureRuntimeError::NoSynthesizeableGoalPlanTarget {
+                goal: "implement bounded checkout".to_string(),
+                workspace: PathBuf::from("/tmp/workspace"),
+            });
+        let msg = no_synthesize_error.message();
+        assert!(msg.contains("bounded context required"), "{msg}");
+        assert!(msg.contains("implement bounded checkout"), "{msg}");
+
+        let canon_error =
+            RunCommandError::CanonSurfaceNotReady { repair_actions: "run doctor".to_string() };
+        let msg = canon_error.message();
+        assert!(msg.contains("Canon governance"), "{msg}");
     }
 }

@@ -8,7 +8,7 @@
 ```bash
 cd /tmp/boundline-session-compatibility-continuity
 cargo run --bin boundline -- start
-cargo run --bin boundline -- capture --goal "Fix the failing add test"
+cargo run --bin boundline -- goal --goal "Fix the failing add test"
 cargo run --bin boundline -- plan --flow bug-fix
 cargo run --bin boundline -- run --goal "Fix the failing add test"
 cargo run --bin boundline -- status
@@ -40,7 +40,7 @@ cd /tmp/boundline-session-compatibility-continuity
 cargo run --bin boundline -- run --goal "Recover after adaptive validation points to helper.rs"
 cargo run --bin boundline -- inspect
 cargo run --bin boundline -- start
-cargo run --bin boundline -- capture --goal "Recover after adaptive validation points to helper.rs"
+cargo run --bin boundline -- goal --goal "Recover after adaptive validation points to helper.rs"
 cargo run --bin boundline -- plan --flow bug-fix
 cargo run --bin boundline -- run
 ```

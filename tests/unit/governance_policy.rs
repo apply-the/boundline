@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use boundline::domain::brief::AuthoredBriefResolutionState;
+use boundline::domain::brief::{AuthoredBriefResolutionState, GoalQualityAssessment};
 use boundline::domain::flow::FlowStepMetadata;
 use boundline::domain::governance::{
     CanonCapabilitySnapshot, CanonModeSummary, CanonResultActionSummary, CompactedCanonMemory,
@@ -19,8 +19,8 @@ use boundline::domain::task_context::{
     LATEST_GOVERNANCE_STAGE_KEY,
 };
 use boundline::orchestrator::governance::{
-    GovernanceProjectionSnapshot, governance_input_documents, overlay_stage_policy_with_intent,
-    requested_governance_intent,
+    GovernanceProjectionSnapshot, default_stage_canon_mode, governance_input_documents,
+    overlay_stage_policy_with_intent, requested_governance_intent,
 };
 use boundline::{
     ApprovalState, AuthoredBriefBundle, AutopilotAction, AutopilotDecisionRecord, CanonMode,
@@ -29,11 +29,11 @@ use boundline::{
     GovernanceRuntimeState, GovernanceStartupContext, GovernanceTransitionDirection,
     GovernedStagePacket, GovernedStageRecord, InputSourceKind, InputSourceReference,
     PacketReadiness, PacketReuseBinding, SUPPORTED_CANON_VERSION, StageGovernancePolicy,
-    StopSemantics, SystemContextBinding, autopilot_action_text, bounded_reused_packets,
-    build_autopilot_decision, classify_packet_readiness, escalation_target_stage_key,
-    governance_stage_key, governance_state_patch, narrowed_bounded_context,
-    resolve_governance_startup_posture, select_packet_reuse_binding, selected_stage_policy,
-    supported_canon_modes_for_stage,
+    StopSemantics, SystemContextBinding, assess_backlog_quality, autopilot_action_text,
+    bounded_reused_packets, build_autopilot_decision, classify_packet_readiness,
+    escalation_target_stage_key, governance_stage_key, governance_state_patch,
+    narrowed_bounded_context, resolve_governance_startup_posture, select_packet_reuse_binding,
+    selected_stage_policy, supported_canon_modes_for_stage,
 };
 use serde_json::json;
 
@@ -50,6 +50,7 @@ fn sample_record() -> GovernedStageRecord {
         previous_governance_attempt_id: None,
         packet_ref: Some(".boundline/governance/bug-fix-investigate/attempt-1".to_string()),
         decision_ref: Some("decision-1".to_string()),
+        stage_council: None,
         blocked_reason: None,
     }
 }
@@ -182,6 +183,7 @@ fn sample_authored_bundle(governance_intent: Option<GovernanceIntent>) -> Author
         deduplicated_sources: Vec::new(),
         governance_intent,
         resolution_state: AuthoredBriefResolutionState::Ready,
+        goal_quality: GoalQualityAssessment::default(),
         clarification: None,
         derived_task_draft: None,
         captured_at: 1,
@@ -449,6 +451,66 @@ fn packet_readiness_defaults_to_incomplete_without_expected_documents() {
     );
 
     assert_eq!(readiness, PacketReadiness::Incomplete);
+}
+
+#[test]
+fn backlog_quality_blocks_reusable_packet_without_stable_task_ids() {
+    let assessment = assess_backlog_quality(
+        Some(PacketReadiness::Reusable),
+        &[".canon/runs/backlog/backlog.md".to_string()],
+        &[],
+        &["# Backlog\n\n- Implement the session store in src/session.rs".to_string()],
+    );
+
+    assert_eq!(assessment.state.as_str(), "blocked");
+    assert_eq!(assessment.findings, vec!["missing_stable_task_ids".to_string()]);
+    assert_eq!(assessment.task_count, None);
+}
+
+#[test]
+fn backlog_quality_requires_dependency_order_and_mvp_scope() {
+    let assessment = assess_backlog_quality(
+        Some(PacketReadiness::Reusable),
+        &[".canon/runs/backlog/backlog.md".to_string()],
+        &[],
+        &[concat!(
+            "# Backlog\n\n",
+            "- [ ] T001 [US1] Implement session model in src/domain/session.rs\n",
+            "- [ ] T002 [US1] Render status in src/cli/output.rs\n"
+        )
+        .to_string()],
+    );
+
+    assert_eq!(assessment.state.as_str(), "clarification_required");
+    assert_eq!(
+        assessment.findings,
+        vec!["missing_dependency_order".to_string(), "missing_mvp_scope".to_string()]
+    );
+    assert_eq!(assessment.task_count, Some(2));
+}
+
+#[test]
+fn backlog_quality_accepts_valid_backlog_document() {
+    let assessment = assess_backlog_quality(
+        Some(PacketReadiness::Reusable),
+        &[".canon/runs/backlog/backlog.md".to_string()],
+        &[],
+        &[concat!(
+            "# Backlog\n\n",
+            "MVP: US1 session status projection\n\n",
+            "Dependencies: T001 before T002\n\n",
+            "- [ ] T001 [US1] Implement session model in src/domain/session.rs\n",
+            "- [ ] T002 [US1] Render status in src/cli/output.rs\n",
+            "Unmapped: post-launch adoption metric\n"
+        )
+        .to_string()],
+    );
+
+    assert_eq!(assessment.state.as_str(), "ready");
+    assert_eq!(assessment.findings, Vec::<String>::new());
+    assert_eq!(assessment.task_count, Some(2));
+    assert_eq!(assessment.mvp_scope.as_deref(), Some("US1 session status projection"));
+    assert_eq!(assessment.unmapped_items, vec!["post-launch adoption metric".to_string()]);
 }
 
 #[test]
@@ -778,6 +840,7 @@ fn canon_mode_helpers_expose_primary_documents_and_context_requirements() {
 fn supported_canon_modes_include_expected_stage_whitelist_entries() {
     let expectations = [
         ("delivery", "requirements", vec![CanonMode::Requirements]),
+        ("delivery", "system-shaping", vec![CanonMode::SystemShaping]),
         ("delivery", "architecture", vec![CanonMode::Architecture]),
         ("delivery", "backlog", vec![CanonMode::Backlog]),
         ("delivery", "implementation", vec![CanonMode::Implementation]),
@@ -816,6 +879,47 @@ fn supported_canon_modes_include_expected_stage_whitelist_entries() {
     }
 
     assert!(supported_canon_modes_for_stage("delivery", "unknown").is_empty());
+}
+
+#[test]
+fn default_stage_canon_mode_uses_authoritative_stage_candidate_order() {
+    let investigate_policy = StageGovernancePolicy {
+        flow_name: "bug-fix".to_string(),
+        stage_id: "investigate".to_string(),
+        enabled: true,
+        required: true,
+        autopilot: false,
+        require_adaptive_companion: false,
+        runtime: Some(GovernanceRuntimeKind::Canon),
+        canon_mode: None,
+        system_context: Some(SystemContextBinding::Existing),
+        risk: Some("medium".to_string()),
+        zone: Some("engineering".to_string()),
+        owner: Some("platform".to_string()),
+        reasoning_profile: None,
+    };
+    assert_eq!(
+        default_stage_canon_mode(&investigate_policy, GovernanceRuntimeKind::Local),
+        Some(CanonMode::Discovery)
+    );
+
+    let verify_policy =
+        StageGovernancePolicy { stage_id: "verify".to_string(), ..investigate_policy.clone() };
+    assert_eq!(
+        default_stage_canon_mode(&verify_policy, GovernanceRuntimeKind::Local),
+        Some(CanonMode::SecurityAssessment)
+    );
+
+    let inherited_canon_policy =
+        StageGovernancePolicy { runtime: None, ..investigate_policy.clone() };
+    assert_eq!(
+        default_stage_canon_mode(&inherited_canon_policy, GovernanceRuntimeKind::Canon),
+        Some(CanonMode::Discovery)
+    );
+    assert_eq!(
+        default_stage_canon_mode(&inherited_canon_policy, GovernanceRuntimeKind::Local),
+        None
+    );
 }
 
 #[test]
@@ -916,6 +1020,7 @@ fn governance_reuse_binding_uses_immediate_upstream_stage_context() {
             previous_governance_attempt_id: None,
             packet_ref: Some(".canon/runs/canon-run-1".to_string()),
             decision_ref: None,
+            stage_council: None,
             blocked_reason: None,
         })
         .unwrap();
@@ -975,6 +1080,7 @@ fn governance_reuse_binding_supports_same_stage_rerun() {
             previous_governance_attempt_id: Some("attempt-1".to_string()),
             packet_ref: Some(".canon/runs/canon-run-2".to_string()),
             decision_ref: None,
+            stage_council: None,
             blocked_reason: None,
         })
         .unwrap();

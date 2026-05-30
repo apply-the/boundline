@@ -1,5 +1,14 @@
+use std::collections::BTreeMap;
 use std::fs;
+use std::io::{Read, Write};
+use std::net::TcpListener;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
+use std::sync::mpsc;
+use std::sync::{Mutex, MutexGuard};
+use std::thread;
+use std::time::Duration;
 
 use serde_json::{Map, json};
 use uuid::Uuid;
@@ -11,25 +20,33 @@ use super::{
 };
 use crate::adapters::checkpoint_store::FileCheckpointStore;
 use crate::adapters::config_store::FileConfigStore;
+use crate::adapters::env_layer::{
+    DEEPSEEK_API_KEY_ENV, DEEPSEEK_BASE_URL_ENV, GROQ_API_KEY_ENV, GROQ_BASE_URL_ENV,
+    OPENAI_API_KEY_ENV, OPENAI_BASE_URL_ENV,
+};
 use crate::adapters::session_store::SessionStore;
 use crate::adapters::trace_store::TraceStore;
-use crate::domain::brief::normalize_inputs;
+use crate::domain::brief::{GovernanceIntent, normalize_inputs, normalize_inputs_with_governance};
 use crate::domain::cluster::{ClusterSessionProjection, ClusteredExecutionKind};
 use crate::domain::configuration::{
     CapabilityState, ConfigFile, EffortFallbackPolicy, EffortLevel, ModelRoute, RouteSlot,
     RoutingConfig, RuntimeCapabilityProfile, RuntimeKind, SlotEffortPolicy,
 };
 use crate::domain::decision::{Decision, DecisionType, EvidenceRef};
+use crate::domain::domain_templates::{
+    DomainFamily, DomainTemplateSettings, ExternalContextBinding, ExternalContextKind,
+};
 use crate::domain::execution::{
     ExecutionAttemptDefinition, ExecutionCommand, ExecutionFailureMode, WorkspaceChange,
     WorkspaceExecutionProfile,
 };
 use crate::domain::flow::{attach_stage_metadata, built_in_flow};
+use crate::domain::flow_policy::FlowPolicy;
 use crate::domain::goal_plan::{GoalPlan, InferredFlow, PlannedTask};
 use crate::domain::governance::{
-    ApprovalState, CanonMode, CanonRuntimeConfig, GovernanceLifecycleState, GovernanceProfile,
-    GovernanceRuntimeKind, GovernedStageRecord, PacketReadiness, StageGovernancePolicy,
-    SystemContextBinding,
+    ApprovalState, CanonMode, CanonModeSelectionPreference, CanonRuntimeConfig,
+    GovernanceLifecycleState, GovernanceProfile, GovernanceRuntimeKind, GovernedSessionLifecycle,
+    GovernedStageRecord, PacketReadiness, StageGovernancePolicy, SystemContextBinding,
 };
 use crate::domain::guidance::{
     CapabilityPhase, FindingConfidence, GuardianDisposition, GuardianFinding,
@@ -49,6 +66,10 @@ use crate::domain::reasoning::{
     ReasoningParticipantStatus, ReasoningProfileDefinition, ReasoningProfileFamily,
     ReasoningProfileId, ReasoningRoutePreference,
 };
+use crate::domain::review::{
+    AdjudicationDefinition, ReviewProfile, ReviewScenario, ReviewTrigger, ReviewerDefinition,
+    ReviewerDisposition, ReviewerFinding, VoteRuleDefinition,
+};
 use crate::domain::session::{
     ActiveSessionRecord, ContinuityAuthority, DelegationContinuityMode, DelegationContinuityState,
     SessionCommand, SessionStatus,
@@ -66,10 +87,72 @@ use crate::orchestrator::planner::StaticPlanner;
 use crate::registry::agent_registry::AgentRegistry;
 use crate::registry::tool_registry::ToolRegistry;
 
+struct EnvRestore<'a> {
+    saved: BTreeMap<&'static str, Option<std::ffi::OsString>>,
+    _lock: MutexGuard<'a, ()>,
+}
+
+impl Drop for EnvRestore<'_> {
+    fn drop(&mut self) {
+        unsafe {
+            for (key, value) in &self.saved {
+                match value {
+                    Some(value) => std::env::set_var(key, value),
+                    None => std::env::remove_var(key),
+                }
+            }
+        }
+    }
+}
+
 fn temp_workspace(prefix: &str) -> PathBuf {
     let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
     fs::create_dir_all(workspace.join(".boundline")).unwrap();
     workspace
+}
+
+fn request_headers_complete(buffer: &[u8]) -> Option<usize> {
+    buffer.windows(4).position(|window| window == b"\r\n\r\n").map(|index| index + 4)
+}
+
+fn request_content_length(buffer: &[u8]) -> Option<usize> {
+    let headers_end = request_headers_complete(buffer)?;
+    let headers = String::from_utf8_lossy(&buffer[..headers_end]);
+    headers.lines().find_map(|line| {
+        let (name, value) = line.split_once(':')?;
+        if !name.trim().eq_ignore_ascii_case("content-length") {
+            return None;
+        }
+        value.trim().parse::<usize>().ok()
+    })
+}
+
+fn request_complete(buffer: &[u8]) -> bool {
+    match (request_headers_complete(buffer), request_content_length(buffer)) {
+        (Some(headers_end), Some(content_length)) => buffer.len() >= headers_end + content_length,
+        (Some(_), None) => true,
+        _ => false,
+    }
+}
+
+fn with_env_test<T>(tracked_keys: &[&'static str], action: impl FnOnce() -> T) -> T {
+    let lock = crate::adapters::SHARED_ENV_LOCK
+        .get_or_init(|| Mutex::new(()))
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let saved =
+        tracked_keys.iter().map(|key| (*key, std::env::var_os(key))).collect::<BTreeMap<_, _>>();
+    let restore = EnvRestore { saved, _lock: lock };
+
+    unsafe {
+        for key in tracked_keys {
+            std::env::remove_var(key);
+        }
+    }
+
+    let result = action();
+    drop(restore);
+    result
 }
 
 fn sample_project_memory_lineage(run_ref: &str, mode: &str) -> LineageRef {
@@ -167,6 +250,154 @@ fn build_session(workspace: &Path, task: Task) -> ActiveSessionRecord {
         delight_feedback: None,
         latest_voting: None,
     }
+}
+
+fn spawn_scripted_response_server(
+    response_bodies: Vec<String>,
+) -> Result<(String, mpsc::Receiver<String>, thread::JoinHandle<()>), String> {
+    let listener = TcpListener::bind("127.0.0.1:0").map_err(|error| error.to_string())?;
+    let address = listener.local_addr().map_err(|error| error.to_string())?;
+    let (sender, receiver) = mpsc::channel();
+    let handle = thread::spawn(move || {
+        for response_body in response_bodies {
+            let Ok((mut stream, _)) = listener.accept() else {
+                return;
+            };
+
+            let mut buffer = Vec::new();
+            let mut chunk = [0_u8; 4096];
+            loop {
+                match stream.read(&mut chunk) {
+                    Ok(0) => break,
+                    Ok(read) => {
+                        buffer.extend_from_slice(&chunk[..read]);
+                        if request_complete(&buffer) {
+                            break;
+                        }
+                    }
+                    Err(_) => return,
+                }
+            }
+
+            let request_text = String::from_utf8_lossy(&buffer).to_string();
+            let _ = sender.send(request_text);
+            let response = format!(
+                "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
+                response_body.len(),
+                response_body
+            );
+            let _ = stream.write_all(response.as_bytes());
+            let _ = stream.flush();
+        }
+    });
+
+    Ok((format!("http://{address}"), receiver, handle))
+}
+
+fn openai_completion_response(payload: serde_json::Value) -> String {
+    json!({
+        "choices": [
+            {
+                "message": {
+                    "content": payload.to_string()
+                }
+            }
+        ]
+    })
+    .to_string()
+}
+
+#[cfg(unix)]
+fn write_fake_canon_command(workspace: &Path) -> PathBuf {
+    let packet_dir = workspace.join(".canon/planning-packet");
+    fs::create_dir_all(&packet_dir).unwrap();
+    fs::write(packet_dir.join("brief.md"), "planning packet\n").unwrap();
+    let response = serde_json::json!({
+        "status": "governed_ready",
+        "approval_state": "not_needed",
+        "run_ref": "canon-run-plan",
+        "packet_ref": ".canon/planning-packet",
+        "expected_document_refs": [".canon/planning-packet/brief.md"],
+        "document_refs": [".canon/planning-packet/brief.md"],
+        "packet_readiness": "reusable",
+        "headline": "planning packet ready",
+        "message": "planning governance completed"
+    });
+    let response_path = workspace.join("fake-canon-response.json");
+    fs::write(&response_path, response.to_string()).unwrap();
+    let command_path = workspace.join("fake-canon");
+    fs::write(
+        &command_path,
+        format!("#!/bin/sh\ncat >/dev/null\ncat '{}'\n", response_path.to_string_lossy()),
+    )
+    .unwrap();
+    let mut permissions = fs::metadata(&command_path).unwrap().permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&command_path, permissions).unwrap();
+    command_path
+}
+
+#[cfg(unix)]
+fn write_fake_execution_canon_command(workspace: &Path) -> (PathBuf, PathBuf) {
+    let requests_path = workspace.join("fake-canon-requests.ndjson");
+    let implementation_packet_dir = workspace.join(".canon/execution/implementation");
+    let verification_packet_dir = workspace.join(".canon/execution/verification");
+    fs::create_dir_all(&implementation_packet_dir).unwrap();
+    fs::create_dir_all(&verification_packet_dir).unwrap();
+    fs::write(implementation_packet_dir.join("brief.md"), "implementation packet\n").unwrap();
+    fs::write(verification_packet_dir.join("brief.md"), "verification packet\n").unwrap();
+
+    let implementation_response_path = workspace.join("fake-canon-implementation-response.json");
+    fs::write(
+        &implementation_response_path,
+        json!({
+            "status": "governed_ready",
+            "approval_state": "not_needed",
+            "run_ref": "canon-run-implementation",
+            "packet_ref": ".canon/execution/implementation",
+            "expected_document_refs": [".canon/execution/implementation/brief.md"],
+            "document_refs": [".canon/execution/implementation/brief.md"],
+            "packet_readiness": "reusable",
+            "headline": "implementation governance ready",
+            "message": "implementation governance completed"
+        })
+        .to_string(),
+    )
+    .unwrap();
+
+    let verification_response_path = workspace.join("fake-canon-verification-response.json");
+    fs::write(
+        &verification_response_path,
+        json!({
+            "status": "governed_ready",
+            "approval_state": "not_needed",
+            "run_ref": "canon-run-verification",
+            "packet_ref": ".canon/execution/verification",
+            "expected_document_refs": [".canon/execution/verification/brief.md"],
+            "document_refs": [".canon/execution/verification/brief.md"],
+            "packet_readiness": "reusable",
+            "headline": "verification governance ready",
+            "message": "verification governance completed"
+        })
+        .to_string(),
+    )
+    .unwrap();
+
+    let command_path = workspace.join("fake-execution-canon");
+    fs::write(
+        &command_path,
+        format!(
+            "#!/bin/sh\nrequest=$(cat)\nprintf '%s\\n' \"$request\" >> '{}'\nif printf '%s' \"$request\" | grep -q '\"mode\":\"verification\"'; then\n  cat '{}'\nelse\n  cat '{}'\nfi\n",
+            requests_path.to_string_lossy(),
+            verification_response_path.to_string_lossy(),
+            implementation_response_path.to_string_lossy(),
+        ),
+    )
+    .unwrap();
+    let mut permissions = fs::metadata(&command_path).unwrap().permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&command_path, permissions).unwrap();
+    (command_path, requests_path)
 }
 
 fn manual_runtime() -> FixtureRuntime {
@@ -298,7 +529,7 @@ fn sample_reasoning_participants() -> Vec<ParticipantAssignment> {
         ParticipantAssignment {
             role_id: "reviewer_primary".to_string(),
             participant_id: "participant-1".to_string(),
-            effective_route: "reviewer_roles.alpha:claude:sonnet-4.6".to_string(),
+            effective_route: "reviewer_roles.alpha:claude:sonnet-4".to_string(),
             provider_family: Some("claude".to_string()),
             context_basis: "reasoning_context:bug-fix:investigate".to_string(),
             prompting_pattern: "blind_reviewer".to_string(),
@@ -318,7 +549,7 @@ fn sample_reasoning_participants() -> Vec<ParticipantAssignment> {
         ParticipantAssignment {
             role_id: "reviewer_shadow".to_string(),
             participant_id: "participant-3".to_string(),
-            effective_route: "reviewer_roles.alpha:claude:sonnet-4.6".to_string(),
+            effective_route: "reviewer_roles.alpha:claude:sonnet-4".to_string(),
             provider_family: Some("claude".to_string()),
             context_basis: "reasoning_context:bug-fix:investigate".to_string(),
             prompting_pattern: "blind_reviewer".to_string(),
@@ -332,12 +563,12 @@ fn sample_reasoning_participants() -> Vec<ParticipantAssignment> {
 fn reasoning_route_for_review_kinds_falls_back_to_configured_reviewer_roles_in_order() {
     let workspace = temp_workspace("boundline-runtime-reasoning-reviewer-role-fallback");
     let mut routing = RoutingConfig {
-        review: Some(ModelRoute { runtime: RuntimeKind::Copilot, model: "gpt-5.5".to_string() }),
+        review: Some(ModelRoute { runtime: RuntimeKind::Copilot, model: "gpt-4.1".to_string() }),
         ..RoutingConfig::default()
     };
     routing.reviewer_roles.insert(
         "alpha".to_string(),
-        ModelRoute { runtime: RuntimeKind::Claude, model: "sonnet-4.6".to_string() },
+        ModelRoute { runtime: RuntimeKind::Claude, model: "sonnet-4".to_string() },
     );
     routing.reviewer_roles.insert(
         "beta".to_string(),
@@ -353,7 +584,7 @@ fn reasoning_route_for_review_kinds_falls_back_to_configured_reviewer_roles_in_o
                 ReasoningParticipantRoleKind::BlindReviewer,
                 ReasoningRoutePreference::Review,
             ),
-            "reviewer_roles.alpha:claude:sonnet-4.6",
+            "reviewer_roles.alpha:claude:sonnet-4",
         ),
         (
             review_kind_role(
@@ -369,7 +600,7 @@ fn reasoning_route_for_review_kinds_falls_back_to_configured_reviewer_roles_in_o
                 ReasoningParticipantRoleKind::Critic,
                 ReasoningRoutePreference::Review,
             ),
-            "reviewer_roles.alpha:claude:sonnet-4.6",
+            "reviewer_roles.alpha:claude:sonnet-4",
         ),
         (
             review_kind_role(
@@ -393,10 +624,10 @@ fn reasoning_route_for_review_kinds_falls_back_to_configured_reviewer_roles_in_o
 fn reasoning_route_for_arbiter_prefers_adjudication_slot() {
     let workspace = temp_workspace("boundline-runtime-reasoning-arbiter-route");
     let routing = RoutingConfig {
-        review: Some(ModelRoute { runtime: RuntimeKind::Claude, model: "sonnet-4.6".to_string() }),
+        review: Some(ModelRoute { runtime: RuntimeKind::Claude, model: "sonnet-4".to_string() }),
         adjudication: Some(ModelRoute {
             runtime: RuntimeKind::Codex,
-            model: "gpt-5-codex".to_string(),
+            model: "o4-mini".to_string(),
         }),
         ..RoutingConfig::default()
     };
@@ -412,7 +643,7 @@ fn reasoning_route_for_arbiter_prefers_adjudication_slot() {
     let (effective_route, provider_family) =
         super::reasoning_route_for_role(&role, &effective_routing, 0);
 
-    assert_eq!(effective_route, "adjudication:codex:gpt-5-codex");
+    assert_eq!(effective_route, "adjudication:codex:o4-mini");
     assert_eq!(provider_family.as_deref(), Some("codex"));
 }
 
@@ -941,7 +1172,7 @@ fn native_delegation_for_goal_plan_covers_mismatch_handoff_and_escalation_paths(
     let mut mismatch = RoutingConfig::default();
     mismatch.set_slot(
         RouteSlot::Implementation,
-        ModelRoute { runtime: RuntimeKind::Codex, model: "gpt-5.4".to_string() },
+        ModelRoute { runtime: RuntimeKind::Codex, model: "gpt-4o".to_string() },
     );
     mismatch.assistant_runtimes = vec![RuntimeKind::Claude];
     mismatch.set_runtime_capability(
@@ -966,7 +1197,7 @@ fn native_delegation_for_goal_plan_covers_mismatch_handoff_and_escalation_paths(
     let mut handoff = RoutingConfig::default();
     handoff.set_slot(
         RouteSlot::Implementation,
-        ModelRoute { runtime: RuntimeKind::Codex, model: "gpt-5.4".to_string() },
+        ModelRoute { runtime: RuntimeKind::Codex, model: "gpt-4o".to_string() },
     );
     handoff.assistant_runtimes = vec![RuntimeKind::Codex, RuntimeKind::Claude];
     handoff.set_runtime_capability(
@@ -1010,7 +1241,7 @@ fn native_delegation_for_goal_plan_covers_mismatch_handoff_and_escalation_paths(
     let mut escalation = RoutingConfig::default();
     escalation.set_slot(
         RouteSlot::Implementation,
-        ModelRoute { runtime: RuntimeKind::Codex, model: "gpt-5.4".to_string() },
+        ModelRoute { runtime: RuntimeKind::Codex, model: "gpt-4o".to_string() },
     );
     escalation.assistant_runtimes = vec![RuntimeKind::Codex];
     escalation.set_runtime_capability(
@@ -1198,6 +1429,17 @@ fn project_scale_helpers_classify_broad_goals_and_operational_entries() {
     assert!(!long_goal.capability_structure_unclear);
     assert_eq!(long_goal.operational_entry, None);
 
+    let concrete_feature_goal = project_scale_input_for_goal(
+        "Implement the first slice of a Rust user-management microservice with REST endpoints, gRPC methods, and OAuth2 authorization",
+    )
+    .expect("concrete feature goals should be classified as project-scale delivery work");
+    assert!(!concrete_feature_goal.existing_system_change);
+    assert!(!concrete_feature_goal.problem_unclear);
+    assert!(concrete_feature_goal.product_scope_unclear);
+    assert!(!concrete_feature_goal.capability_structure_unclear);
+    assert!(concrete_feature_goal.architecture_material);
+    assert_eq!(concrete_feature_goal.operational_entry, None);
+
     assert_eq!(project_scale_input_for_goal("Fix typo"), None);
 }
 
@@ -1225,6 +1467,18 @@ fn project_scale_state_uses_first_stage_and_work_unit_id() {
         Some(ProjectScaleStageKind::SecurityAssessment)
     );
     assert_eq!(security.next_action, "repair_context");
+
+    let concrete_feature = project_scale_state_for_goal(
+        "Implement the first slice of a Rust user-management microservice with REST endpoints, gRPC methods, and OAuth2 authorization",
+        "confirm_project_scale_path",
+    )
+    .expect("concrete feature goal should produce project-scale state");
+    assert_eq!(
+        concrete_feature.path.stages.first().map(|stage| stage.kind),
+        Some(ProjectScaleStageKind::Requirements)
+    );
+    assert_eq!(concrete_feature.active_work_unit_id.as_deref(), Some("stage-001-requirements"));
+    assert_eq!(concrete_feature.active_stage_text().as_deref(), Some("requirements"));
 
     assert_eq!(project_scale_state_for_goal("Fix typo", "repair_context"), None);
 }
@@ -2006,6 +2260,52 @@ fn session_lifecycle_helpers_cover_capture_selection_planning_and_cluster_projec
     assert_eq!(session.latest_status, SessionStatus::Planned);
     assert!(runtime.uses_native_goal_plan(&session).unwrap());
 
+    let mut gated_session = session.clone();
+    gated_session.goal_plan = Some(
+        GoalPlan::new(
+            "Drive a session runtime branch",
+            vec![PlannedTask {
+                task_id: "planned-task-gated".to_string(),
+                description: "Repair arithmetic".to_string(),
+                target: "src/lib.rs".to_string(),
+                expected_outcome: Some("tests pass".to_string()),
+                decision_type_hint: None,
+            }],
+        )
+        .unwrap(),
+    );
+    gated_session.governance_lifecycle = Some(GovernedSessionLifecycle {
+        governance_runtime: GovernanceRuntimeKind::Canon,
+        explicit_opt_out: false,
+        mode_selection_preference: CanonModeSelectionPreference::AutoConfirm,
+        selected_mode: Some(CanonMode::Requirements),
+        selected_mode_sequence: vec![CanonMode::Requirements, CanonMode::Architecture],
+        latest_reasoning_profile: None,
+        current_stage_index: 0,
+        stage_records: vec![GovernedStageRecord {
+            stage_key: "plan:requirements".to_string(),
+            runtime: GovernanceRuntimeKind::Canon,
+            lifecycle_state: GovernanceLifecycleState::AwaitingApproval,
+            required: true,
+            autopilot_enabled: false,
+            approval_state: ApprovalState::Requested,
+            canon_run_ref: Some("canon-run-plan".to_string()),
+            governance_attempt_id: "attempt-plan-1".to_string(),
+            previous_governance_attempt_id: None,
+            packet_ref: Some(".canon/planning-packet".to_string()),
+            decision_ref: None,
+            stage_council: None,
+            blocked_reason: Some("waiting for Canon approval".to_string()),
+        }],
+        accumulated_context: Vec::new(),
+        terminal_reason: Some("awaiting approval: waiting for Canon approval".to_string()),
+        planning_input_fingerprint: None,
+    });
+    assert!(matches!(
+        runtime.confirm_goal_plan(&mut gated_session),
+        Err(super::SessionRuntimeError::PlanningGovernanceUnresolved { .. })
+    ));
+
     session.active_task =
         Some(decision_task(workspace.to_string_lossy().as_ref(), json!({"ok": true})));
     let projection = ClusterSessionProjection {
@@ -2073,12 +2373,1047 @@ fn broad_goal_planning_persists_project_scale_state_when_context_is_insufficient
             .expect("plan_task should return clarification-required details");
     assert!(!prompt.trim().is_empty());
 
-    assert_eq!(session.latest_status, SessionStatus::GoalCaptured);
+    assert_eq!(session.latest_status, SessionStatus::Blocked);
     assert!(session.goal_plan.is_some());
     let project_scale = session.project_scale.expect("project scale state should be persisted");
     assert_eq!(project_scale.next_action, "repair_context");
     assert_eq!(project_scale.active_stage_text().as_deref(), Some("discovery"));
     assert!(project_scale.path.stage_names().contains("pr-review"));
+}
+
+#[test]
+fn plan_task_blocks_when_plan_quality_detects_stale_context() {
+    let workspace = temp_workspace("boundline-runtime-plan-quality-stale-context");
+    fs::write(workspace.join("package.json"), r#"{"dependencies":{"react":"18.0.0"}}"#).unwrap();
+    fs::create_dir_all(workspace.join("src/components")).unwrap();
+    fs::create_dir_all(workspace.join("design")).unwrap();
+    fs::write(workspace.join("design/reference.md"), "button guidance\n").unwrap();
+    thread::sleep(Duration::from_millis(20));
+    fs::write(
+        workspace.join("src/components/App.tsx"),
+        "export function App() { return <button>Save</button>; }\n",
+    )
+    .unwrap();
+
+    save_local_routing(
+        &workspace,
+        RoutingConfig {
+            domain_templates: BTreeMap::from([(
+                DomainFamily::React,
+                DomainTemplateSettings {
+                    enabled: Some(true),
+                    standards: Some("workspace react standards".to_string()),
+                    external_context_bindings: vec![ExternalContextBinding {
+                        kind: ExternalContextKind::DesignReference,
+                        reference: "design/reference.md".to_string(),
+                        required: true,
+                        notes: None,
+                    }],
+                },
+            )]),
+            ..RoutingConfig::default()
+        },
+    );
+
+    let runtime = SessionRuntime::for_workspace(&workspace);
+    let mut session = ActiveSessionRecord {
+        session_id: "session-runtime-stale-context".to_string(),
+        workspace_ref: workspace.to_string_lossy().into_owned(),
+        goal: None,
+        authored_brief: None,
+        negotiation_packet: None,
+        active_flow: None,
+        active_task: None,
+        goal_plan: None,
+        workflow_progress: None,
+        decisions: Vec::new(),
+        active_flow_policy: None,
+        latest_status: SessionStatus::Initialized,
+        latest_terminal_reason: None,
+        latest_trace_ref: None,
+        created_at: 10,
+        updated_at: 10,
+        governance_lifecycle: None,
+        project_scale: None,
+        delight_feedback: None,
+        latest_voting: None,
+    };
+
+    runtime
+        .capture_goal(
+            &mut session,
+            "Refresh src/components/App.tsx against the latest design guidance",
+        )
+        .unwrap();
+
+    let error = runtime.plan_task(&mut session, None, false).unwrap_err();
+    let rendered_error = error.to_string();
+
+    assert!(rendered_error.contains("required external context is stale"), "{rendered_error}");
+    assert_eq!(session.latest_status, SessionStatus::Blocked);
+    let goal_plan =
+        session.goal_plan.as_ref().expect("blocked planning should persist the goal plan");
+    assert_eq!(goal_plan.plan_quality_state().as_deref(), Some("blocked"));
+    assert_eq!(goal_plan.plan_quality_findings().unwrap(), vec!["context_pack_stale".to_string()]);
+}
+
+#[test]
+fn plan_goal_plan_populates_canon_mode_sequence_from_selected_flow() {
+    let workspace = temp_workspace("boundline-runtime-plan-canon-sequence");
+    fs::create_dir_all(workspace.join("src")).unwrap();
+    fs::create_dir_all(workspace.join("tests")).unwrap();
+    fs::write(
+        workspace.join("src/lib.rs"),
+        "pub fn add(left: i32, right: i32) -> i32 { left + right }\n",
+    )
+    .unwrap();
+    fs::write(
+        workspace.join("brief.md"),
+        "Deliver the feature through requirements, architecture, backlog, and implementation for src/lib.rs.\n",
+    )
+    .unwrap();
+
+    let runtime = SessionRuntime::for_workspace(&workspace);
+    let mut session = ActiveSessionRecord {
+        session_id: "session-runtime".to_string(),
+        workspace_ref: workspace.to_string_lossy().into_owned(),
+        goal: None,
+        authored_brief: None,
+        negotiation_packet: None,
+        active_flow: None,
+        active_task: None,
+        goal_plan: None,
+        workflow_progress: None,
+        decisions: Vec::new(),
+        active_flow_policy: None,
+        latest_status: SessionStatus::Initialized,
+        latest_terminal_reason: None,
+        latest_trace_ref: None,
+        created_at: 10,
+        updated_at: 10,
+        governance_lifecycle: Some(GovernedSessionLifecycle {
+            governance_runtime: GovernanceRuntimeKind::Canon,
+            explicit_opt_out: false,
+            mode_selection_preference: CanonModeSelectionPreference::AutoConfirm,
+            selected_mode: None,
+            selected_mode_sequence: Vec::new(),
+            latest_reasoning_profile: None,
+            current_stage_index: 0,
+            stage_records: Vec::new(),
+            accumulated_context: Vec::new(),
+            terminal_reason: None,
+            planning_input_fingerprint: None,
+        }),
+        project_scale: None,
+        delight_feedback: None,
+        latest_voting: None,
+    };
+
+    runtime.capture_goal(&mut session, "Deliver a governed feature").unwrap();
+    session.authored_brief = Some(
+        normalize_inputs_with_governance(
+            &workspace,
+            Some("Deliver a governed feature"),
+            &[PathBuf::from("brief.md")],
+            Some(GovernanceIntent {
+                requested: true,
+                runtime_preference: Some(GovernanceRuntimeKind::Canon),
+                risk: Some("medium".to_string()),
+                zone: Some("engineering".to_string()),
+                owner: Some("platform".to_string()),
+                explicit_mode: None,
+                explicit_no_canon: false,
+            }),
+        )
+        .unwrap(),
+    );
+    runtime.select_flow(&mut session, "delivery").unwrap();
+    runtime.plan_task(&mut session, None, false).unwrap();
+
+    let lifecycle = session.governance_lifecycle.expect("canon lifecycle should exist");
+    assert_eq!(lifecycle.selected_mode, Some(CanonMode::Requirements));
+    assert_eq!(
+        lifecycle.selected_mode_sequence,
+        vec![
+            CanonMode::Requirements,
+            CanonMode::SystemShaping,
+            CanonMode::Architecture,
+            CanonMode::Backlog,
+            CanonMode::Implementation,
+        ]
+    );
+    assert!(session.goal_plan.is_some());
+}
+
+#[test]
+fn prepare_planning_governance_requests_materializes_stage_briefs_for_delivery_flow() {
+    let workspace = temp_workspace("boundline-runtime-planning-governance-requests");
+    fs::create_dir_all(workspace.join("src")).unwrap();
+    fs::create_dir_all(workspace.join("tests")).unwrap();
+    fs::write(
+        workspace.join("src/lib.rs"),
+        "pub fn add(left: i32, right: i32) -> i32 { left + right }\n",
+    )
+    .unwrap();
+    fs::write(
+        workspace.join("brief.md"),
+        "Deliver the feature through requirements, architecture, backlog, and implementation for src/lib.rs.\n",
+    )
+    .unwrap();
+
+    let runtime = SessionRuntime::for_workspace(&workspace);
+    let mut session = ActiveSessionRecord {
+        session_id: "session-runtime".to_string(),
+        workspace_ref: workspace.to_string_lossy().into_owned(),
+        goal: None,
+        authored_brief: Some(
+            normalize_inputs_with_governance(
+                &workspace,
+                Some("Deliver a governed feature"),
+                &[PathBuf::from("brief.md")],
+                Some(GovernanceIntent {
+                    requested: true,
+                    runtime_preference: Some(GovernanceRuntimeKind::Canon),
+                    risk: Some("medium".to_string()),
+                    zone: Some("engineering".to_string()),
+                    owner: Some("platform".to_string()),
+                    explicit_mode: None,
+                    explicit_no_canon: false,
+                }),
+            )
+            .unwrap(),
+        ),
+        negotiation_packet: None,
+        active_flow: None,
+        active_task: None,
+        goal_plan: None,
+        workflow_progress: None,
+        decisions: Vec::new(),
+        active_flow_policy: None,
+        latest_status: SessionStatus::Initialized,
+        latest_terminal_reason: None,
+        latest_trace_ref: None,
+        created_at: 10,
+        updated_at: 10,
+        governance_lifecycle: Some(GovernedSessionLifecycle {
+            governance_runtime: GovernanceRuntimeKind::Canon,
+            explicit_opt_out: false,
+            mode_selection_preference: CanonModeSelectionPreference::AutoConfirm,
+            selected_mode: None,
+            selected_mode_sequence: Vec::new(),
+            latest_reasoning_profile: None,
+            current_stage_index: 0,
+            stage_records: Vec::new(),
+            accumulated_context: Vec::new(),
+            terminal_reason: None,
+            planning_input_fingerprint: None,
+        }),
+        project_scale: None,
+        delight_feedback: None,
+        latest_voting: None,
+    };
+
+    runtime.capture_goal(&mut session, "Deliver a governed feature").unwrap();
+    runtime.select_flow(&mut session, "delivery").unwrap();
+    runtime.plan_task(&mut session, None, false).unwrap();
+
+    let goal = session.goal.clone().unwrap();
+    let context_sources = runtime.planning_context_sources(&session, &goal);
+    let goal_plan = session.goal_plan.as_ref().unwrap().clone();
+    let requests = runtime
+        .prepare_planning_governance_requests(&mut session, &goal_plan, &context_sources)
+        .unwrap();
+
+    assert_eq!(requests.len(), 4);
+    assert_eq!(requests[0].request.stage_key, "plan:requirements");
+    assert_eq!(requests[0].request.mode, Some(CanonMode::Requirements));
+    assert_eq!(requests[0].request.risk.as_deref(), Some("bounded-impact"));
+    assert_eq!(requests[0].request.zone.as_deref(), Some("yellow"));
+    assert_eq!(requests[0].request.owner.as_deref(), Some("delivery-engineer"));
+    assert_eq!(requests[1].request.stage_key, "plan:system-shaping");
+    assert_eq!(requests[1].request.mode, Some(CanonMode::SystemShaping));
+    assert_eq!(requests[3].request.stage_key, "plan:backlog");
+    assert_eq!(requests[3].request.system_context, Some(SystemContextBinding::Existing));
+
+    let stage_brief_ref = requests[0]
+        .request
+        .bounded_context
+        .stage_brief_ref
+        .as_deref()
+        .expect("planning request should reference a stage brief");
+    let stage_brief_path = workspace.join(stage_brief_ref);
+    assert!(stage_brief_path.exists());
+
+    let stage_brief = fs::read_to_string(stage_brief_path).unwrap();
+    assert!(stage_brief.contains("stage_key: plan:requirements"));
+    assert!(stage_brief.contains("canon_mode: requirements"));
+    assert!(stage_brief.contains("goal: Deliver a governed feature"));
+    assert!(stage_brief.contains("## Problem Domain"));
+    assert!(stage_brief.contains("## Known Facts"));
+    assert!(stage_brief.contains("## Unknowns"));
+    assert!(stage_brief.contains("## Assumptions"));
+    assert!(stage_brief.contains("## Validation Targets"));
+    assert!(stage_brief.contains("## Confidence Levels"));
+    assert!(stage_brief.contains("## Discovery Handoff"));
+}
+
+#[cfg(unix)]
+#[test]
+fn plan_task_executes_canon_planning_requests_and_persists_stage_records() {
+    let workspace = temp_workspace("boundline-runtime-plan-canon-execution");
+    fs::create_dir_all(workspace.join("src")).unwrap();
+    fs::create_dir_all(workspace.join("tests")).unwrap();
+    fs::write(
+        workspace.join("src/lib.rs"),
+        "pub fn add(left: i32, right: i32) -> i32 { left + right }\n",
+    )
+    .unwrap();
+    fs::write(
+        workspace.join("brief.md"),
+        "Deliver the feature through requirements, architecture, backlog, and implementation for src/lib.rs.\n",
+    )
+    .unwrap();
+
+    let canon_command = write_fake_canon_command(&workspace);
+    fs::write(
+        workspace.join(".boundline/execution.json"),
+        serde_json::to_string_pretty(&WorkspaceExecutionProfile {
+            name: "session-runtime-profile".to_string(),
+            read_targets: vec!["src/lib.rs".to_string()],
+            validation_command: ExecutionCommand {
+                program: "cargo".to_string(),
+                args: vec!["test".to_string(), "--quiet".to_string()],
+            },
+            attempts: vec![ExecutionAttemptDefinition {
+                attempt_id: "plan-execution".to_string(),
+                summary: String::new(),
+                failure_mode: ExecutionFailureMode::Terminal,
+                changes: vec![WorkspaceChange {
+                    path: "src/lib.rs".to_string(),
+                    find: "left + right".to_string(),
+                    replace: "left + right".to_string(),
+                }],
+            }],
+            adaptive: None,
+            limits: RunLimits::default(),
+            governance: Some(GovernanceProfile {
+                default_runtime: GovernanceRuntimeKind::Canon,
+                canon: Some(CanonRuntimeConfig {
+                    command: canon_command.to_string_lossy().into_owned(),
+                    default_owner: Some("platform".to_string()),
+                    default_risk: Some("medium".to_string()),
+                    default_zone: Some("engineering".to_string()),
+                    default_system_context: Some(SystemContextBinding::Existing),
+                }),
+                stages: Vec::new(),
+            }),
+            review: None,
+            legacy_source: None,
+        })
+        .unwrap(),
+    )
+    .unwrap();
+
+    let runtime = SessionRuntime::for_workspace(&workspace);
+    let mut session = ActiveSessionRecord {
+        session_id: "session-runtime".to_string(),
+        workspace_ref: workspace.to_string_lossy().into_owned(),
+        goal: None,
+        authored_brief: Some(
+            normalize_inputs_with_governance(
+                &workspace,
+                Some("Deliver a governed feature"),
+                &[PathBuf::from("brief.md")],
+                Some(GovernanceIntent {
+                    requested: true,
+                    runtime_preference: Some(GovernanceRuntimeKind::Canon),
+                    risk: Some("medium".to_string()),
+                    zone: Some("engineering".to_string()),
+                    owner: Some("platform".to_string()),
+                    explicit_mode: None,
+                    explicit_no_canon: false,
+                }),
+            )
+            .unwrap(),
+        ),
+        negotiation_packet: None,
+        active_flow: None,
+        active_task: None,
+        goal_plan: None,
+        workflow_progress: None,
+        decisions: Vec::new(),
+        active_flow_policy: None,
+        latest_status: SessionStatus::Initialized,
+        latest_terminal_reason: None,
+        latest_trace_ref: None,
+        created_at: 10,
+        updated_at: 10,
+        governance_lifecycle: Some(GovernedSessionLifecycle {
+            governance_runtime: GovernanceRuntimeKind::Canon,
+            explicit_opt_out: false,
+            mode_selection_preference: CanonModeSelectionPreference::AutoConfirm,
+            selected_mode: None,
+            selected_mode_sequence: Vec::new(),
+            latest_reasoning_profile: None,
+            current_stage_index: 0,
+            stage_records: Vec::new(),
+            accumulated_context: Vec::new(),
+            terminal_reason: None,
+            planning_input_fingerprint: None,
+        }),
+        project_scale: None,
+        delight_feedback: None,
+        latest_voting: None,
+    };
+
+    runtime.capture_goal(&mut session, "Deliver a governed feature").unwrap();
+    runtime.select_flow(&mut session, "delivery").unwrap();
+    runtime.plan_task(&mut session, None, false).unwrap();
+
+    let lifecycle = session.governance_lifecycle.as_ref().unwrap();
+    assert_eq!(
+        lifecycle.stage_records.len(),
+        4,
+        "stage_records={:#?}\nselected_mode_sequence={:#?}\nterminal_reason={:#?}",
+        lifecycle.stage_records,
+        lifecycle.selected_mode_sequence,
+        lifecycle.terminal_reason,
+    );
+    assert_eq!(lifecycle.stage_records[0].stage_key, "plan:requirements");
+    assert_eq!(lifecycle.stage_records[1].stage_key, "plan:system-shaping");
+    assert_eq!(lifecycle.stage_records[2].stage_key, "plan:architecture");
+    assert_eq!(lifecycle.stage_records[3].stage_key, "plan:backlog");
+    assert!(lifecycle.stage_records.iter().all(|record| {
+        record.lifecycle_state == GovernanceLifecycleState::GovernedReady
+            && record.packet_ref.as_deref() == Some(".canon/planning-packet")
+            && record.canon_run_ref.as_deref() == Some("canon-run-plan")
+    }));
+    assert_eq!(lifecycle.accumulated_context.len(), 4);
+    assert!(lifecycle.terminal_reason.is_none());
+    assert_eq!(lifecycle.current_stage_index, 4);
+    assert_eq!(
+        session
+            .goal_plan
+            .as_ref()
+            .and_then(|goal_plan| goal_plan.compacted_canon_memory.as_ref())
+            .and_then(|memory| memory.stage_key.as_deref()),
+        Some("plan:backlog")
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn plan_task_skips_canon_for_completed_planning_stages() {
+    let workspace = temp_workspace("boundline-runtime-plan-canon-completed-skip");
+    fs::create_dir_all(workspace.join("src")).unwrap();
+    fs::create_dir_all(workspace.join("tests")).unwrap();
+    fs::write(
+        workspace.join("src/lib.rs"),
+        "pub fn add(left: i32, right: i32) -> i32 { left + right }\n",
+    )
+    .unwrap();
+    fs::write(
+        workspace.join("brief.md"),
+        "Deliver the feature through requirements, architecture, backlog, and implementation for src/lib.rs.\n",
+    )
+    .unwrap();
+
+    let canon_command = write_fake_canon_command(&workspace);
+    fs::write(
+        workspace.join(".boundline/execution.json"),
+        serde_json::to_string_pretty(&WorkspaceExecutionProfile {
+            name: "session-runtime-profile".to_string(),
+            read_targets: vec!["src/lib.rs".to_string()],
+            validation_command: ExecutionCommand {
+                program: "cargo".to_string(),
+                args: vec!["test".to_string(), "--quiet".to_string()],
+            },
+            attempts: vec![ExecutionAttemptDefinition {
+                attempt_id: "plan-execution".to_string(),
+                summary: String::new(),
+                failure_mode: ExecutionFailureMode::Terminal,
+                changes: vec![WorkspaceChange {
+                    path: "src/lib.rs".to_string(),
+                    find: "left + right".to_string(),
+                    replace: "left + right".to_string(),
+                }],
+            }],
+            adaptive: None,
+            limits: RunLimits::default(),
+            governance: Some(GovernanceProfile {
+                default_runtime: GovernanceRuntimeKind::Canon,
+                canon: Some(CanonRuntimeConfig {
+                    command: canon_command.to_string_lossy().into_owned(),
+                    default_owner: Some("platform".to_string()),
+                    default_risk: Some("medium".to_string()),
+                    default_zone: Some("engineering".to_string()),
+                    default_system_context: Some(SystemContextBinding::Existing),
+                }),
+                stages: Vec::new(),
+            }),
+            review: None,
+            legacy_source: None,
+        })
+        .unwrap(),
+    )
+    .unwrap();
+
+    let runtime = SessionRuntime::for_workspace(&workspace);
+    let mut session = ActiveSessionRecord {
+        session_id: "session-runtime-completed".to_string(),
+        workspace_ref: workspace.to_string_lossy().into_owned(),
+        goal: None,
+        authored_brief: Some(
+            normalize_inputs_with_governance(
+                &workspace,
+                Some("Deliver a governed feature"),
+                &[PathBuf::from("brief.md")],
+                Some(GovernanceIntent {
+                    requested: true,
+                    runtime_preference: Some(GovernanceRuntimeKind::Canon),
+                    risk: Some("medium".to_string()),
+                    zone: Some("engineering".to_string()),
+                    owner: Some("platform".to_string()),
+                    explicit_mode: None,
+                    explicit_no_canon: false,
+                }),
+            )
+            .unwrap(),
+        ),
+        negotiation_packet: None,
+        active_flow: None,
+        active_task: None,
+        goal_plan: None,
+        workflow_progress: None,
+        decisions: Vec::new(),
+        active_flow_policy: None,
+        latest_status: SessionStatus::Initialized,
+        latest_terminal_reason: None,
+        latest_trace_ref: None,
+        created_at: 10,
+        updated_at: 10,
+        governance_lifecycle: Some(GovernedSessionLifecycle {
+            governance_runtime: GovernanceRuntimeKind::Canon,
+            explicit_opt_out: false,
+            mode_selection_preference: CanonModeSelectionPreference::AutoConfirm,
+            selected_mode: None,
+            selected_mode_sequence: Vec::new(),
+            latest_reasoning_profile: None,
+            current_stage_index: 0,
+            stage_records: Vec::new(),
+            accumulated_context: Vec::new(),
+            terminal_reason: None,
+            planning_input_fingerprint: None,
+        }),
+        project_scale: None,
+        delight_feedback: None,
+        latest_voting: None,
+    };
+
+    runtime.capture_goal(&mut session, "Deliver a governed feature").unwrap();
+    runtime.select_flow(&mut session, "delivery").unwrap();
+    runtime.plan_task(&mut session, None, false).unwrap();
+
+    // All 4 stages should be GovernedReady after the first plan_task call.
+    let lifecycle = session.governance_lifecycle.as_ref().unwrap();
+    assert_eq!(lifecycle.stage_records.len(), 4);
+    assert!(
+        lifecycle
+            .stage_records
+            .iter()
+            .all(|record| record.lifecycle_state == GovernanceLifecycleState::GovernedReady)
+    );
+
+    // Simulate complete_planning_stage: mark first two stages as Completed.
+    let lifecycle = session.governance_lifecycle.as_mut().unwrap();
+    lifecycle.stage_records[0].lifecycle_state = GovernanceLifecycleState::Completed;
+    lifecycle.stage_records[1].lifecycle_state = GovernanceLifecycleState::Completed;
+
+    // Re-plan: the fix ensures Completed stages are skipped, not re-executed.
+    runtime.plan_task(&mut session, None, false).unwrap();
+
+    let lifecycle = session.governance_lifecycle.as_ref().unwrap();
+    assert_eq!(lifecycle.stage_records.len(), 4);
+    assert_eq!(
+        lifecycle.stage_records[0].lifecycle_state,
+        GovernanceLifecycleState::Completed,
+        "first completed stage should remain Completed, not re-executed"
+    );
+    assert_eq!(
+        lifecycle.stage_records[1].lifecycle_state,
+        GovernanceLifecycleState::Completed,
+        "second completed stage should remain Completed, not re-executed"
+    );
+    assert_eq!(lifecycle.stage_records[2].lifecycle_state, GovernanceLifecycleState::GovernedReady);
+    assert_eq!(lifecycle.stage_records[3].lifecycle_state, GovernanceLifecycleState::GovernedReady);
+}
+
+#[cfg(unix)]
+#[test]
+fn plan_task_adopts_workspace_canon_governance_without_explicit_session_selection() {
+    let workspace = temp_workspace("boundline-runtime-plan-canon-autoadopt");
+    fs::create_dir_all(workspace.join("src")).unwrap();
+    fs::create_dir_all(workspace.join("tests")).unwrap();
+    fs::write(
+        workspace.join("src/lib.rs"),
+        "pub fn add(left: i32, right: i32) -> i32 { left + right }\n",
+    )
+    .unwrap();
+    fs::write(
+        workspace.join("brief.md"),
+        "Deliver the feature through requirements, architecture, backlog, and implementation for src/lib.rs.\n",
+    )
+    .unwrap();
+
+    let canon_command = write_fake_canon_command(&workspace);
+    fs::write(
+        workspace.join(".boundline/execution.json"),
+        serde_json::to_string_pretty(&WorkspaceExecutionProfile {
+            name: "session-runtime-profile".to_string(),
+            read_targets: vec!["src/lib.rs".to_string()],
+            validation_command: ExecutionCommand {
+                program: "cargo".to_string(),
+                args: vec!["test".to_string(), "--quiet".to_string()],
+            },
+            attempts: vec![ExecutionAttemptDefinition {
+                attempt_id: "plan-execution".to_string(),
+                summary: String::new(),
+                failure_mode: ExecutionFailureMode::Terminal,
+                changes: vec![WorkspaceChange {
+                    path: "src/lib.rs".to_string(),
+                    find: "left + right".to_string(),
+                    replace: "left + right".to_string(),
+                }],
+            }],
+            adaptive: None,
+            limits: RunLimits::default(),
+            governance: Some(GovernanceProfile {
+                default_runtime: GovernanceRuntimeKind::Canon,
+                canon: Some(CanonRuntimeConfig {
+                    command: canon_command.to_string_lossy().into_owned(),
+                    default_owner: Some("platform".to_string()),
+                    default_risk: Some("medium".to_string()),
+                    default_zone: Some("engineering".to_string()),
+                    default_system_context: Some(SystemContextBinding::Existing),
+                }),
+                stages: Vec::new(),
+            }),
+            review: None,
+            legacy_source: None,
+        })
+        .unwrap(),
+    )
+    .unwrap();
+    FileConfigStore::for_workspace(&workspace)
+        .save_local(&ConfigFile {
+            version: 1,
+            routing: RoutingConfig::default(),
+            canon: Some(crate::domain::configuration::CanonPreferences {
+                mode_selection: CanonModeSelectionPreference::AutoConfirm,
+                default_risk: Some("medium".to_string()),
+                default_zone: Some("engineering".to_string()),
+                default_owner: Some("platform".to_string()),
+                default_system_context: Some("existing".to_string()),
+            }),
+        })
+        .unwrap();
+
+    let runtime = SessionRuntime::for_workspace(&workspace);
+    let mut session = ActiveSessionRecord {
+        session_id: "session-runtime".to_string(),
+        workspace_ref: workspace.to_string_lossy().into_owned(),
+        goal: None,
+        authored_brief: normalize_inputs_with_governance(
+            &workspace,
+            Some("Deliver a governed feature"),
+            &[PathBuf::from("brief.md")],
+            None,
+        )
+        .ok(),
+        negotiation_packet: None,
+        active_flow: None,
+        active_task: None,
+        goal_plan: None,
+        workflow_progress: None,
+        decisions: Vec::new(),
+        active_flow_policy: None,
+        latest_status: SessionStatus::Initialized,
+        latest_terminal_reason: None,
+        latest_trace_ref: None,
+        created_at: 10,
+        updated_at: 10,
+        governance_lifecycle: None,
+        project_scale: None,
+        delight_feedback: None,
+        latest_voting: None,
+    };
+
+    runtime.capture_goal(&mut session, "Deliver a governed feature").unwrap();
+    runtime.select_flow(&mut session, "delivery").unwrap();
+    runtime.plan_task(&mut session, None, false).unwrap();
+
+    let lifecycle = session.governance_lifecycle.as_ref().unwrap();
+    assert_eq!(lifecycle.governance_runtime, GovernanceRuntimeKind::Canon);
+    assert_eq!(lifecycle.mode_selection_preference, CanonModeSelectionPreference::AutoConfirm);
+    assert_eq!(lifecycle.stage_records.len(), 4, "{:#?}", lifecycle.stage_records);
+    assert!(lifecycle.stage_records.iter().all(|record| {
+        record.lifecycle_state == GovernanceLifecycleState::GovernedReady
+            && record.packet_ref.as_deref() == Some(".canon/planning-packet")
+            && record.canon_run_ref.as_deref() == Some("canon-run-plan")
+    }));
+    assert_eq!(
+        session
+            .goal_plan
+            .as_ref()
+            .and_then(|goal_plan| goal_plan.compacted_canon_memory.as_ref())
+            .and_then(|memory| memory.stage_key.as_deref()),
+        Some("plan:backlog")
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn plan_task_blocks_nested_workspace_before_canon_targets_parent_git_root() {
+    let repo_root = temp_workspace("boundline-runtime-plan-canon-nested-root");
+    fs::create_dir_all(repo_root.join(".git")).unwrap();
+    let workspace = repo_root.join("tmp");
+    fs::create_dir_all(workspace.join(".boundline")).unwrap();
+    fs::create_dir_all(workspace.join("src")).unwrap();
+    fs::create_dir_all(workspace.join("tests")).unwrap();
+    fs::write(
+        workspace.join("src/lib.rs"),
+        "pub fn add(left: i32, right: i32) -> i32 { left + right }\n",
+    )
+    .unwrap();
+    fs::write(
+        workspace.join("brief.md"),
+        "Deliver the feature through requirements, architecture, backlog, and implementation for src/lib.rs.\n",
+    )
+    .unwrap();
+
+    let canon_command = write_fake_canon_command(&workspace);
+    fs::write(
+        workspace.join(".boundline/execution.json"),
+        serde_json::to_string_pretty(&WorkspaceExecutionProfile {
+            name: "session-runtime-profile".to_string(),
+            read_targets: vec!["src/lib.rs".to_string()],
+            validation_command: ExecutionCommand {
+                program: "cargo".to_string(),
+                args: vec!["test".to_string(), "--quiet".to_string()],
+            },
+            attempts: vec![ExecutionAttemptDefinition {
+                attempt_id: "plan-execution".to_string(),
+                summary: String::new(),
+                failure_mode: ExecutionFailureMode::Terminal,
+                changes: vec![WorkspaceChange {
+                    path: "src/lib.rs".to_string(),
+                    find: "left + right".to_string(),
+                    replace: "left + right".to_string(),
+                }],
+            }],
+            adaptive: None,
+            limits: RunLimits::default(),
+            governance: Some(GovernanceProfile {
+                default_runtime: GovernanceRuntimeKind::Canon,
+                canon: Some(CanonRuntimeConfig {
+                    command: canon_command.to_string_lossy().into_owned(),
+                    default_owner: Some("platform".to_string()),
+                    default_risk: Some("medium".to_string()),
+                    default_zone: Some("engineering".to_string()),
+                    default_system_context: Some(SystemContextBinding::Existing),
+                }),
+                stages: Vec::new(),
+            }),
+            review: None,
+            legacy_source: None,
+        })
+        .unwrap(),
+    )
+    .unwrap();
+    FileConfigStore::for_workspace(&workspace)
+        .save_local(&ConfigFile {
+            version: 1,
+            routing: RoutingConfig::default(),
+            canon: Some(crate::domain::configuration::CanonPreferences {
+                mode_selection: CanonModeSelectionPreference::AutoConfirm,
+                default_risk: Some("medium".to_string()),
+                default_zone: Some("engineering".to_string()),
+                default_owner: Some("platform".to_string()),
+                default_system_context: Some("existing".to_string()),
+            }),
+        })
+        .unwrap();
+
+    let runtime = SessionRuntime::for_workspace(&workspace);
+    let mut session = ActiveSessionRecord {
+        session_id: "session-runtime".to_string(),
+        workspace_ref: workspace.to_string_lossy().into_owned(),
+        goal: None,
+        authored_brief: normalize_inputs_with_governance(
+            &workspace,
+            Some("Deliver a governed feature"),
+            &[PathBuf::from("brief.md")],
+            None,
+        )
+        .ok(),
+        negotiation_packet: None,
+        active_flow: None,
+        active_task: None,
+        goal_plan: None,
+        workflow_progress: None,
+        decisions: Vec::new(),
+        active_flow_policy: None,
+        latest_status: SessionStatus::Initialized,
+        latest_terminal_reason: None,
+        latest_trace_ref: None,
+        created_at: 10,
+        updated_at: 10,
+        governance_lifecycle: None,
+        project_scale: None,
+        delight_feedback: None,
+        latest_voting: None,
+    };
+
+    runtime.capture_goal(&mut session, "Deliver a governed feature").unwrap();
+    runtime.select_flow(&mut session, "delivery").unwrap();
+    runtime.plan_task(&mut session, None, false).unwrap();
+
+    let lifecycle = session.governance_lifecycle.as_ref().unwrap();
+    assert_eq!(lifecycle.governance_runtime, GovernanceRuntimeKind::Canon);
+    assert_eq!(lifecycle.stage_records.len(), 1, "{:#?}", lifecycle.stage_records);
+    assert_eq!(lifecycle.stage_records[0].lifecycle_state, GovernanceLifecycleState::Blocked);
+    assert!(
+        lifecycle.stage_records[0]
+            .blocked_reason
+            .as_deref()
+            .is_some_and(|reason| reason.contains("would target git root"))
+    );
+    assert!(
+        lifecycle
+            .terminal_reason
+            .as_deref()
+            .is_some_and(|reason| reason.contains("would target git root"))
+    );
+}
+
+#[test]
+fn plan_task_blocks_when_canon_is_selected_but_not_initialized() {
+    let workspace = write_governed_execution_profile_workspace(
+        "boundline-runtime-plan-canon-uninitialized",
+        vec![ExecutionAttemptDefinition {
+            attempt_id: "plan-execution".to_string(),
+            summary: String::new(),
+            failure_mode: ExecutionFailureMode::Terminal,
+            changes: vec![WorkspaceChange {
+                path: "src/lib.rs".to_string(),
+                find: "left + right".to_string(),
+                replace: "left + right".to_string(),
+            }],
+        }],
+        vec!["src/lib.rs".to_string()],
+        None,
+    );
+    assert!(fs::create_dir_all(workspace.join("src")).is_ok());
+    assert!(fs::create_dir_all(workspace.join("tests")).is_ok());
+    assert!(
+        fs::write(
+            workspace.join("src/lib.rs"),
+            "pub fn add(left: i32, right: i32) -> i32 { left + right }\n",
+        )
+        .is_ok()
+    );
+    assert!(
+        fs::write(
+            workspace.join("brief.md"),
+            "Deliver the feature through requirements, architecture, backlog, and implementation for src/lib.rs.\n",
+        )
+        .is_ok()
+    );
+    assert!(
+        FileConfigStore::for_workspace(&workspace)
+            .save_local(&ConfigFile {
+                version: 1,
+                routing: RoutingConfig::default(),
+                canon: Some(crate::domain::configuration::CanonPreferences {
+                    mode_selection: CanonModeSelectionPreference::AutoConfirm,
+                    default_risk: Some("medium".to_string()),
+                    default_zone: Some("engineering".to_string()),
+                    default_owner: Some("platform".to_string()),
+                    default_system_context: Some("existing".to_string()),
+                }),
+            })
+            .is_ok()
+    );
+
+    let runtime = SessionRuntime::for_workspace(&workspace);
+    let mut session = ActiveSessionRecord {
+        session_id: "session-runtime".to_string(),
+        workspace_ref: workspace.to_string_lossy().into_owned(),
+        goal: None,
+        authored_brief: normalize_inputs_with_governance(
+            &workspace,
+            Some("Deliver a governed feature"),
+            &[PathBuf::from("brief.md")],
+            Some(GovernanceIntent {
+                requested: true,
+                runtime_preference: Some(GovernanceRuntimeKind::Canon),
+                risk: Some("medium".to_string()),
+                zone: Some("engineering".to_string()),
+                owner: Some("platform".to_string()),
+                explicit_mode: None,
+                explicit_no_canon: false,
+            }),
+        )
+        .ok(),
+        negotiation_packet: None,
+        active_flow: None,
+        active_task: None,
+        goal_plan: None,
+        workflow_progress: None,
+        decisions: Vec::new(),
+        active_flow_policy: None,
+        latest_status: SessionStatus::Initialized,
+        latest_terminal_reason: None,
+        latest_trace_ref: None,
+        created_at: 10,
+        updated_at: 10,
+        governance_lifecycle: Some(GovernedSessionLifecycle {
+            governance_runtime: GovernanceRuntimeKind::Canon,
+            explicit_opt_out: false,
+            mode_selection_preference: CanonModeSelectionPreference::AutoConfirm,
+            selected_mode: None,
+            selected_mode_sequence: Vec::new(),
+            latest_reasoning_profile: None,
+            current_stage_index: 0,
+            stage_records: Vec::new(),
+            accumulated_context: Vec::new(),
+            terminal_reason: None,
+            planning_input_fingerprint: None,
+        }),
+        project_scale: None,
+        delight_feedback: None,
+        latest_voting: None,
+    };
+
+    assert!(runtime.capture_goal(&mut session, "Deliver a governed feature").is_ok());
+    assert!(runtime.select_flow(&mut session, "delivery").is_ok());
+    assert!(runtime.plan_task(&mut session, None, false).is_ok());
+
+    assert_eq!(
+        session.governance_lifecycle.as_ref().map(|lifecycle| lifecycle.stage_records.len()),
+        Some(1)
+    );
+    assert_eq!(
+        session
+            .governance_lifecycle
+            .as_ref()
+            .and_then(|lifecycle| lifecycle.stage_records.first())
+            .map(|record| record.stage_key.as_str()),
+        Some("plan:requirements")
+    );
+    assert_eq!(
+        session
+            .governance_lifecycle
+            .as_ref()
+            .and_then(|lifecycle| lifecycle.stage_records.first())
+            .map(|record| record.lifecycle_state),
+        Some(GovernanceLifecycleState::Blocked)
+    );
+    assert!(
+        session
+            .governance_lifecycle
+            .as_ref()
+            .and_then(|lifecycle| lifecycle.stage_records.first())
+            .and_then(|record| record.blocked_reason.as_deref())
+            .is_some_and(|reason| reason.contains("missing governance.canon"))
+    );
+    assert!(
+        session
+            .governance_lifecycle
+            .as_ref()
+            .and_then(|lifecycle| lifecycle.terminal_reason.as_deref())
+            .is_some_and(|reason| reason.contains("missing governance.canon"))
+    );
+    assert_eq!(
+        session
+            .goal_plan
+            .as_ref()
+            .and_then(|goal_plan| goal_plan.compacted_canon_memory.as_ref())
+            .and_then(|memory| memory.stage_key.as_deref()),
+        Some("plan:requirements")
+    );
+}
+
+#[test]
+fn run_to_terminal_rejects_unresolved_planning_governance_for_confirmed_goal_plan() {
+    let workspace = temp_workspace("boundline-runtime-plan-governance-run-gate");
+    let runtime = SessionRuntime::for_workspace(&workspace);
+    let mut goal_plan = GoalPlan::new(
+        "Ship the governed feature",
+        vec![PlannedTask {
+            task_id: "planned-task-plan-gate".to_string(),
+            description: "Implement the governed change".to_string(),
+            target: "src/lib.rs".to_string(),
+            expected_outcome: Some("tests pass".to_string()),
+            decision_type_hint: None,
+        }],
+    )
+    .unwrap();
+    goal_plan.confirm().unwrap();
+
+    let mut session = ActiveSessionRecord {
+        session_id: "session-runtime".to_string(),
+        workspace_ref: workspace.to_string_lossy().into_owned(),
+        goal: Some("Ship the governed feature".to_string()),
+        authored_brief: None,
+        negotiation_packet: None,
+        active_flow: None,
+        active_task: None,
+        goal_plan: Some(goal_plan),
+        workflow_progress: None,
+        decisions: Vec::new(),
+        active_flow_policy: None,
+        latest_status: SessionStatus::Planned,
+        latest_terminal_reason: None,
+        latest_trace_ref: None,
+        created_at: 10,
+        updated_at: 10,
+        governance_lifecycle: Some(GovernedSessionLifecycle {
+            governance_runtime: GovernanceRuntimeKind::Canon,
+            explicit_opt_out: false,
+            mode_selection_preference: CanonModeSelectionPreference::AutoConfirm,
+            selected_mode: Some(CanonMode::Requirements),
+            selected_mode_sequence: vec![CanonMode::Requirements, CanonMode::Architecture],
+            latest_reasoning_profile: None,
+            current_stage_index: 0,
+            stage_records: vec![GovernedStageRecord {
+                stage_key: "plan:requirements".to_string(),
+                runtime: GovernanceRuntimeKind::Canon,
+                lifecycle_state: GovernanceLifecycleState::AwaitingApproval,
+                required: true,
+                autopilot_enabled: false,
+                approval_state: ApprovalState::Requested,
+                canon_run_ref: Some("canon-run-plan".to_string()),
+                governance_attempt_id: "attempt-plan-1".to_string(),
+                previous_governance_attempt_id: None,
+                packet_ref: Some(".canon/planning-packet".to_string()),
+                decision_ref: None,
+                stage_council: None,
+                blocked_reason: Some("waiting for Canon approval".to_string()),
+            }],
+            accumulated_context: Vec::new(),
+            terminal_reason: Some("awaiting approval: waiting for Canon approval".to_string()),
+            planning_input_fingerprint: None,
+        }),
+        project_scale: None,
+        delight_feedback: None,
+        latest_voting: None,
+    };
+
+    assert!(matches!(
+        runtime.run_to_terminal(&mut session),
+        Err(super::SessionRuntimeError::PlanningGovernanceUnresolved { .. })
+    ));
 }
 
 #[test]
@@ -2231,6 +3566,709 @@ fn execute_next_step_creates_a_compatibility_task_for_flow_selected_goal_plans()
     assert!(session.active_task.is_some());
     assert_eq!(session.latest_status, SessionStatus::Running);
     assert!(session.goal_plan.is_some());
+}
+
+#[test]
+fn run_to_terminal_uses_provider_analysis_and_change_routes_for_flow_selected_goal_plans()
+-> Result<(), Box<dyn std::error::Error>> {
+    with_env_test(&[OPENAI_BASE_URL_ENV, OPENAI_API_KEY_ENV], || {
+        let (base_url, receiver, handle) = spawn_scripted_response_server(vec![
+            openai_completion_response(json!({
+                "headline": "Inspect arithmetic",
+                "summary": "The requested branch still subtracts instead of adding.",
+                "risks": []
+            })),
+            openai_completion_response(json!({
+                "headline": "Repair arithmetic",
+                "summary": "Switch subtraction to addition.",
+                "changes": [
+                    {
+                        "path": "src/lib.rs",
+                        "find": "left - right",
+                        "replace": "left + right"
+                    }
+                ]
+            })),
+        ])
+        .map_err(std::io::Error::other)?;
+
+        unsafe {
+            std::env::set_var(OPENAI_BASE_URL_ENV, &base_url);
+            std::env::set_var(OPENAI_API_KEY_ENV, "token");
+        }
+
+        let workspace = temp_workspace("boundline-runtime-native-provider-flow");
+        fs::create_dir_all(workspace.join("src"))?;
+        fs::write(
+            workspace.join("src/lib.rs"),
+            "fn compute(left: i32, right: i32) -> i32 {\n    left - right\n}\n",
+        )?;
+
+        let execution_profile = WorkspaceExecutionProfile {
+            name: "session-runtime-provider-profile".to_string(),
+            read_targets: vec!["src/lib.rs".to_string()],
+            validation_command: ExecutionCommand { program: "true".to_string(), args: Vec::new() },
+            attempts: vec![ExecutionAttemptDefinition {
+                attempt_id: "fix-add".to_string(),
+                summary: "repair arithmetic".to_string(),
+                failure_mode: ExecutionFailureMode::Terminal,
+                changes: vec![WorkspaceChange {
+                    path: "src/lib.rs".to_string(),
+                    find: "left - right".to_string(),
+                    replace: "left + right".to_string(),
+                }],
+            }],
+            adaptive: None,
+            limits: RunLimits::default(),
+            governance: None,
+            review: None,
+            legacy_source: None,
+        };
+        fs::write(
+            workspace.join(".boundline/execution.json"),
+            serde_json::to_string_pretty(&execution_profile)?,
+        )?;
+
+        save_local_routing(
+            &workspace,
+            RoutingConfig {
+                planning: Some(ModelRoute {
+                    runtime: RuntimeKind::Codex,
+                    model: "openai/gpt-5.4".to_string(),
+                }),
+                implementation: Some(ModelRoute {
+                    runtime: RuntimeKind::Codex,
+                    model: "openai/gpt-5.4".to_string(),
+                }),
+                ..RoutingConfig::default()
+            },
+        );
+
+        let runtime = SessionRuntime::for_workspace(&workspace);
+        let mut goal_plan = GoalPlan::new(
+            "Drive a session runtime branch",
+            vec![
+                PlannedTask {
+                    task_id: "planned-task-1".to_string(),
+                    description: "Inspect arithmetic inputs".to_string(),
+                    target: "src/lib.rs".to_string(),
+                    expected_outcome: Some(
+                        "analysis identifies the arithmetic mismatch".to_string(),
+                    ),
+                    decision_type_hint: Some(DecisionType::Analyze),
+                },
+                PlannedTask {
+                    task_id: "planned-task-2".to_string(),
+                    description: "Repair arithmetic".to_string(),
+                    target: "src/lib.rs".to_string(),
+                    expected_outcome: Some(
+                        "implementation switches subtraction to addition".to_string(),
+                    ),
+                    decision_type_hint: Some(DecisionType::Code),
+                },
+            ],
+        )?;
+        goal_plan.confirm()?;
+
+        let mut session = ActiveSessionRecord {
+            session_id: "session-runtime".to_string(),
+            workspace_ref: workspace.to_string_lossy().into_owned(),
+            goal: Some("Drive a session runtime branch".to_string()),
+            authored_brief: None,
+            negotiation_packet: None,
+            active_flow: None,
+            active_task: None,
+            goal_plan: Some(goal_plan),
+            workflow_progress: None,
+            decisions: Vec::new(),
+            active_flow_policy: Some(FlowPolicy::from_builtin("bug-fix")?),
+            latest_status: SessionStatus::Planned,
+            latest_terminal_reason: None,
+            latest_trace_ref: None,
+            created_at: 10,
+            updated_at: 10,
+            governance_lifecycle: None,
+            project_scale: None,
+            delight_feedback: None,
+            latest_voting: None,
+        };
+
+        let response = runtime.run_to_terminal(&mut session)?;
+
+        assert_eq!(response.terminal_status, TaskStatus::Succeeded);
+        assert_eq!(session.decisions.len(), 2);
+        assert_eq!(session.decisions[0].decision_type, DecisionType::Analyze);
+        assert_eq!(session.decisions[1].decision_type, DecisionType::Code);
+        assert!(fs::read_to_string(workspace.join("src/lib.rs"))?.contains("left + right"));
+
+        let analysis_request = receiver.recv_timeout(Duration::from_secs(2))?;
+        let change_request = receiver.recv_timeout(Duration::from_secs(2))?;
+        assert!(analysis_request.contains("Drive a session runtime branch"));
+        assert!(analysis_request.contains("src/lib.rs"));
+        assert!(analysis_request.contains("left - right"));
+        assert!(change_request.contains("Drive a session runtime branch"));
+        assert!(change_request.contains("src/lib.rs"));
+        assert!(change_request.contains("left - right"));
+
+        let _ = handle.join();
+        Ok(())
+    })
+}
+
+#[test]
+fn run_to_terminal_executes_provider_review_for_native_goal_plans()
+-> Result<(), Box<dyn std::error::Error>> {
+    with_env_test(&[OPENAI_BASE_URL_ENV, OPENAI_API_KEY_ENV], || {
+        let (base_url, receiver, handle) = spawn_scripted_response_server(vec![
+            openai_completion_response(json!({
+                "headline": "Inspect arithmetic",
+                "summary": "The requested branch still subtracts instead of adding.",
+                "risks": []
+            })),
+            openai_completion_response(json!({
+                "headline": "Repair arithmetic",
+                "summary": "Switch subtraction to addition.",
+                "changes": [
+                    {
+                        "path": "src/lib.rs",
+                        "find": "left - right",
+                        "replace": "left + right"
+                    }
+                ]
+            })),
+            openai_completion_response(json!({
+                "disposition": "approve",
+                "summary": "Bounded change is acceptable.",
+                "details": "The review confirmed the arithmetic fix.",
+                "required_action": null,
+                "evidence_refs": ["src/lib.rs"]
+            })),
+        ])
+        .map_err(std::io::Error::other)?;
+
+        unsafe {
+            std::env::set_var(OPENAI_BASE_URL_ENV, &base_url);
+            std::env::set_var(OPENAI_API_KEY_ENV, "token");
+        }
+
+        let workspace = temp_workspace("boundline-runtime-native-provider-review");
+        fs::create_dir_all(workspace.join("src"))?;
+        fs::write(
+            workspace.join("src/lib.rs"),
+            "fn compute(left: i32, right: i32) -> i32 {\n    left - right\n}\n",
+        )?;
+
+        save_local_routing(
+            &workspace,
+            RoutingConfig {
+                planning: Some(ModelRoute {
+                    runtime: RuntimeKind::Codex,
+                    model: "openai/gpt-5.4".to_string(),
+                }),
+                implementation: Some(ModelRoute {
+                    runtime: RuntimeKind::Codex,
+                    model: "openai/gpt-5.4".to_string(),
+                }),
+                review: Some(ModelRoute {
+                    runtime: RuntimeKind::Codex,
+                    model: "openai/gpt-5.4".to_string(),
+                }),
+                ..RoutingConfig::default()
+            },
+        );
+
+        let runtime = SessionRuntime::for_workspace(&workspace);
+        let mut goal_plan = GoalPlan::new(
+            "Ship the arithmetic fix",
+            vec![
+                PlannedTask {
+                    task_id: "planned-task-1".to_string(),
+                    description: "Inspect arithmetic inputs".to_string(),
+                    target: "src/lib.rs".to_string(),
+                    expected_outcome: Some(
+                        "analysis identifies the arithmetic mismatch".to_string(),
+                    ),
+                    decision_type_hint: Some(DecisionType::Analyze),
+                },
+                PlannedTask {
+                    task_id: "planned-task-2".to_string(),
+                    description: "Repair arithmetic".to_string(),
+                    target: "src/lib.rs".to_string(),
+                    expected_outcome: Some(
+                        "implementation switches subtraction to addition".to_string(),
+                    ),
+                    decision_type_hint: Some(DecisionType::Code),
+                },
+            ],
+        )?;
+        goal_plan.confirm()?;
+
+        let mut session = ActiveSessionRecord {
+            session_id: "session-runtime".to_string(),
+            workspace_ref: workspace.to_string_lossy().into_owned(),
+            goal: Some("Ship the arithmetic fix".to_string()),
+            authored_brief: None,
+            negotiation_packet: None,
+            active_flow: None,
+            active_task: None,
+            goal_plan: Some(goal_plan),
+            workflow_progress: None,
+            decisions: Vec::new(),
+            active_flow_policy: None,
+            latest_status: SessionStatus::Planned,
+            latest_terminal_reason: None,
+            latest_trace_ref: None,
+            created_at: 10,
+            updated_at: 10,
+            governance_lifecycle: None,
+            project_scale: None,
+            delight_feedback: None,
+            latest_voting: None,
+        };
+
+        let response = runtime.run_to_terminal(&mut session)?;
+
+        assert_eq!(response.terminal_status, TaskStatus::Succeeded);
+        assert_eq!(session.latest_status, SessionStatus::Succeeded);
+        assert_eq!(session.decisions.len(), 2);
+        assert_eq!(
+            response
+                .final_context
+                .state
+                .get("latest_review_outcome")
+                .and_then(|value| value.as_str()),
+            Some("accepted")
+        );
+        assert_eq!(
+            response
+                .final_context
+                .state
+                .get("latest_validation_status")
+                .and_then(|value| value.as_str()),
+            Some("passed")
+        );
+        assert!(
+            response
+                .final_context
+                .state
+                .get("latest_changed_files")
+                .and_then(|value| value.as_array())
+                .is_some_and(|items| items.iter().any(|item| item.as_str() == Some("src/lib.rs")))
+        );
+
+        let analysis_request = receiver.recv_timeout(Duration::from_secs(2))?;
+        let change_request = receiver.recv_timeout(Duration::from_secs(2))?;
+        let review_request = receiver.recv_timeout(Duration::from_secs(2))?;
+        assert!(analysis_request.contains("Ship the arithmetic fix"));
+        assert!(change_request.contains("Ship the arithmetic fix"));
+        assert!(review_request.contains("provider-review"));
+        assert!(review_request.contains("Provider Review"));
+        assert!(review_request.contains("latest_changed_files"));
+        assert!(review_request.contains("src/lib.rs"));
+
+        let _ = handle.join();
+        Ok(())
+    })
+}
+
+#[test]
+fn run_to_terminal_executes_provider_adjudication_for_flow_selected_goal_plans()
+-> Result<(), Box<dyn std::error::Error>> {
+    with_env_test(
+        &[
+            OPENAI_BASE_URL_ENV,
+            OPENAI_API_KEY_ENV,
+            DEEPSEEK_BASE_URL_ENV,
+            DEEPSEEK_API_KEY_ENV,
+            GROQ_BASE_URL_ENV,
+            GROQ_API_KEY_ENV,
+        ],
+        || {
+            let (base_url, receiver, handle) = spawn_scripted_response_server(vec![
+                openai_completion_response(json!({
+                    "headline": "Inspect arithmetic",
+                    "summary": "The requested branch still subtracts instead of adding.",
+                    "risks": []
+                })),
+                openai_completion_response(json!({
+                    "headline": "Repair arithmetic",
+                    "summary": "Switch subtraction to addition.",
+                    "changes": [
+                        {
+                            "path": "src/lib.rs",
+                            "find": "left - right",
+                            "replace": "left + right"
+                        }
+                    ]
+                })),
+                openai_completion_response(json!({
+                    "disposition": "approve",
+                    "summary": "Arithmetic change looks bounded.",
+                    "details": "The implementation matches the requested fix.",
+                    "required_action": null,
+                    "evidence_refs": ["src/lib.rs"]
+                })),
+                openai_completion_response(json!({
+                    "disposition": "concern",
+                    "summary": "Verification evidence should be double-checked.",
+                    "details": "The change is small but review wants an explicit tie-break.",
+                    "required_action": "confirm validation evidence",
+                    "evidence_refs": ["src/lib.rs"]
+                })),
+                openai_completion_response(json!({
+                    "disposition": "approve",
+                    "summary": "Adjudication accepts the bounded change.",
+                    "details": "The council disagreement is resolved in favor of the fix.",
+                    "required_action": null,
+                    "evidence_refs": ["src/lib.rs"]
+                })),
+            ])
+            .map_err(std::io::Error::other)?;
+
+            unsafe {
+                std::env::set_var(OPENAI_BASE_URL_ENV, &base_url);
+                std::env::set_var(OPENAI_API_KEY_ENV, "token");
+                std::env::set_var(DEEPSEEK_BASE_URL_ENV, &base_url);
+                std::env::set_var(DEEPSEEK_API_KEY_ENV, "token");
+                std::env::set_var(GROQ_BASE_URL_ENV, &base_url);
+                std::env::set_var(GROQ_API_KEY_ENV, "token");
+            }
+
+            let workspace = temp_workspace("boundline-runtime-provider-adjudication");
+            fs::create_dir_all(workspace.join("src"))?;
+            fs::write(
+                workspace.join("src/lib.rs"),
+                "fn compute(left: i32, right: i32) -> i32 {\n    left - right\n}\n",
+            )?;
+
+            let execution_profile = WorkspaceExecutionProfile {
+                name: "session-runtime-provider-adjudication".to_string(),
+                read_targets: vec!["src/lib.rs".to_string()],
+                validation_command: ExecutionCommand {
+                    program: "true".to_string(),
+                    args: Vec::new(),
+                },
+                attempts: vec![ExecutionAttemptDefinition {
+                    attempt_id: "fix-add".to_string(),
+                    summary: "repair arithmetic".to_string(),
+                    failure_mode: ExecutionFailureMode::Terminal,
+                    changes: vec![WorkspaceChange {
+                        path: "src/lib.rs".to_string(),
+                        find: "left - right".to_string(),
+                        replace: "left + right".to_string(),
+                    }],
+                }],
+                adaptive: None,
+                limits: RunLimits::default(),
+                governance: None,
+                review: Some(ReviewProfile {
+                    triggers: vec![ReviewTrigger::PrReady],
+                    reviewers: vec![
+                        ReviewerDefinition {
+                            reviewer_id: "alpha".to_string(),
+                            role: "Safety".to_string(),
+                            source: None,
+                            weight: 1,
+                        },
+                        ReviewerDefinition {
+                            reviewer_id: "beta".to_string(),
+                            role: "Maintainability".to_string(),
+                            source: None,
+                            weight: 1,
+                        },
+                    ],
+                    vote_rule: VoteRuleDefinition::default(),
+                    adjudication: AdjudicationDefinition {
+                        enabled: true,
+                        reviewer_id: Some("arbiter".to_string()),
+                    },
+                    scenarios: vec![ReviewScenario {
+                        trigger: ReviewTrigger::PrReady,
+                        findings: vec![
+                            ReviewerFinding::new(
+                                "alpha".to_string(),
+                                ReviewerDisposition::Approve,
+                                "placeholder approval".to_string(),
+                            ),
+                            ReviewerFinding::new(
+                                "beta".to_string(),
+                                ReviewerDisposition::Concern,
+                                "placeholder concern".to_string(),
+                            ),
+                        ],
+                        adjudication_finding: Some(ReviewerFinding::new(
+                            "arbiter".to_string(),
+                            ReviewerDisposition::Approve,
+                            "placeholder adjudication".to_string(),
+                        )),
+                    }],
+                }),
+                legacy_source: None,
+            };
+            fs::write(
+                workspace.join(".boundline/execution.json"),
+                serde_json::to_string_pretty(&execution_profile)?,
+            )?;
+
+            let mut routing = RoutingConfig {
+                planning: Some(ModelRoute {
+                    runtime: RuntimeKind::Codex,
+                    model: "openai/gpt-5.4".to_string(),
+                }),
+                implementation: Some(ModelRoute {
+                    runtime: RuntimeKind::Codex,
+                    model: "openai/gpt-5.4".to_string(),
+                }),
+                review: Some(ModelRoute {
+                    runtime: RuntimeKind::Codex,
+                    model: "openai/gpt-5.4".to_string(),
+                }),
+                adjudication: Some(ModelRoute {
+                    runtime: RuntimeKind::Codex,
+                    model: "groq/llama-3.1-8b-instant".to_string(),
+                }),
+                ..RoutingConfig::default()
+            };
+            routing.reviewer_roles.insert(
+                "alpha".to_string(),
+                ModelRoute { runtime: RuntimeKind::Codex, model: "openai/gpt-5.4".to_string() },
+            );
+            routing.reviewer_roles.insert(
+                "beta".to_string(),
+                ModelRoute {
+                    runtime: RuntimeKind::Codex,
+                    model: "deepseek/deepseek-chat".to_string(),
+                },
+            );
+            save_local_routing(&workspace, routing);
+
+            let runtime = SessionRuntime::for_workspace(&workspace);
+            let mut goal_plan = GoalPlan::new(
+                "Ship the arithmetic fix",
+                vec![
+                    PlannedTask {
+                        task_id: "planned-task-1".to_string(),
+                        description: "Inspect arithmetic inputs".to_string(),
+                        target: "src/lib.rs".to_string(),
+                        expected_outcome: Some(
+                            "analysis identifies the arithmetic mismatch".to_string(),
+                        ),
+                        decision_type_hint: Some(DecisionType::Analyze),
+                    },
+                    PlannedTask {
+                        task_id: "planned-task-2".to_string(),
+                        description: "Repair arithmetic".to_string(),
+                        target: "src/lib.rs".to_string(),
+                        expected_outcome: Some(
+                            "implementation switches subtraction to addition".to_string(),
+                        ),
+                        decision_type_hint: Some(DecisionType::Code),
+                    },
+                ],
+            )?;
+            goal_plan.confirm()?;
+
+            let mut session = ActiveSessionRecord {
+                session_id: "session-runtime".to_string(),
+                workspace_ref: workspace.to_string_lossy().into_owned(),
+                goal: Some("Ship the arithmetic fix".to_string()),
+                authored_brief: None,
+                negotiation_packet: None,
+                active_flow: None,
+                active_task: None,
+                goal_plan: Some(goal_plan),
+                workflow_progress: None,
+                decisions: Vec::new(),
+                active_flow_policy: Some(FlowPolicy::from_builtin("bug-fix")?),
+                latest_status: SessionStatus::Planned,
+                latest_terminal_reason: None,
+                latest_trace_ref: None,
+                created_at: 10,
+                updated_at: 10,
+                governance_lifecycle: None,
+                project_scale: None,
+                delight_feedback: None,
+                latest_voting: None,
+            };
+
+            let response = runtime.run_to_terminal(&mut session)?;
+
+            assert_eq!(response.terminal_status, TaskStatus::Succeeded);
+            assert_eq!(session.latest_status, SessionStatus::Succeeded);
+            assert_eq!(
+                response
+                    .final_context
+                    .state
+                    .get("latest_review_outcome")
+                    .and_then(|value| value.as_str()),
+                Some("accepted")
+            );
+            let adjudication = response
+                .final_context
+                .state
+                .get("latest_review_adjudication")
+                .cloned()
+                .and_then(|value| serde_json::from_value::<ReviewerFinding>(value).ok())
+                .ok_or("expected persisted adjudication finding")?;
+            assert_eq!(adjudication.reviewer_id, "arbiter");
+            assert_eq!(adjudication.disposition, ReviewerDisposition::Approve);
+
+            let analysis_request = receiver.recv_timeout(Duration::from_secs(2))?;
+            let change_request = receiver.recv_timeout(Duration::from_secs(2))?;
+            let alpha_review_request = receiver.recv_timeout(Duration::from_secs(2))?;
+            let beta_review_request = receiver.recv_timeout(Duration::from_secs(2))?;
+            let arbiter_review_request = receiver.recv_timeout(Duration::from_secs(2))?;
+
+            assert!(analysis_request.contains("Ship the arithmetic fix"));
+            assert!(change_request.contains("Ship the arithmetic fix"));
+            assert!(alpha_review_request.contains("alpha"));
+            assert!(beta_review_request.contains("beta"));
+            assert!(arbiter_review_request.contains("arbiter"));
+
+            let _ = handle.join();
+            Ok(())
+        },
+    )
+}
+
+#[cfg(unix)]
+#[test]
+fn run_to_terminal_executes_post_implementation_canon_governance()
+-> Result<(), Box<dyn std::error::Error>> {
+    let workspace = temp_workspace("boundline-runtime-execution-canon");
+    fs::create_dir_all(workspace.join("src"))?;
+    fs::write(
+        workspace.join("src/lib.rs"),
+        "fn compute(left: i32, right: i32) -> i32 {\n    left - right\n}\n",
+    )?;
+
+    let (canon_command, requests_path) = write_fake_execution_canon_command(&workspace);
+    let execution_profile = WorkspaceExecutionProfile {
+        name: "session-runtime-canon-execution-profile".to_string(),
+        read_targets: vec!["src/lib.rs".to_string()],
+        validation_command: ExecutionCommand { program: "true".to_string(), args: Vec::new() },
+        attempts: vec![ExecutionAttemptDefinition {
+            attempt_id: "fix-add".to_string(),
+            summary: "repair arithmetic".to_string(),
+            failure_mode: ExecutionFailureMode::Terminal,
+            changes: vec![WorkspaceChange {
+                path: "src/lib.rs".to_string(),
+                find: "left - right".to_string(),
+                replace: "left + right".to_string(),
+            }],
+        }],
+        adaptive: None,
+        limits: RunLimits::default(),
+        governance: Some(GovernanceProfile {
+            default_runtime: GovernanceRuntimeKind::Canon,
+            canon: Some(CanonRuntimeConfig {
+                command: canon_command.to_string_lossy().into_owned(),
+                default_owner: Some("platform".to_string()),
+                default_risk: Some("medium".to_string()),
+                default_zone: Some("engineering".to_string()),
+                default_system_context: Some(SystemContextBinding::Existing),
+            }),
+            stages: Vec::new(),
+        }),
+        review: None,
+        legacy_source: None,
+    };
+    fs::write(
+        workspace.join(".boundline/execution.json"),
+        serde_json::to_string_pretty(&execution_profile)?,
+    )?;
+
+    let runtime = SessionRuntime::for_workspace(&workspace);
+    let mut goal_plan = GoalPlan::new(
+        "Drive a governed session runtime branch",
+        vec![PlannedTask {
+            task_id: "planned-task-1".to_string(),
+            description: "Repair arithmetic".to_string(),
+            target: "src/lib.rs".to_string(),
+            expected_outcome: Some("implementation switches subtraction to addition".to_string()),
+            decision_type_hint: Some(DecisionType::Code),
+        }],
+    )?;
+    goal_plan.confirm()?;
+
+    let mut session = ActiveSessionRecord {
+        session_id: "session-runtime".to_string(),
+        workspace_ref: workspace.to_string_lossy().into_owned(),
+        goal: Some("Drive a governed session runtime branch".to_string()),
+        authored_brief: None,
+        negotiation_packet: None,
+        active_flow: None,
+        active_task: None,
+        goal_plan: Some(goal_plan),
+        workflow_progress: None,
+        decisions: Vec::new(),
+        active_flow_policy: Some(FlowPolicy::from_builtin("bug-fix")?),
+        latest_status: SessionStatus::Planned,
+        latest_terminal_reason: None,
+        latest_trace_ref: None,
+        created_at: 10,
+        updated_at: 10,
+        governance_lifecycle: Some(GovernedSessionLifecycle {
+            governance_runtime: GovernanceRuntimeKind::Canon,
+            explicit_opt_out: false,
+            mode_selection_preference: CanonModeSelectionPreference::AutoConfirm,
+            selected_mode: None,
+            selected_mode_sequence: Vec::new(),
+            latest_reasoning_profile: None,
+            current_stage_index: 0,
+            stage_records: Vec::new(),
+            accumulated_context: Vec::new(),
+            terminal_reason: None,
+            planning_input_fingerprint: None,
+        }),
+        project_scale: None,
+        delight_feedback: None,
+        latest_voting: None,
+    };
+
+    let response = runtime.run_to_terminal(&mut session)?;
+
+    assert_eq!(response.terminal_status, TaskStatus::Succeeded);
+    assert!(!session.decisions.is_empty());
+
+    let requests = fs::read_to_string(&requests_path)?;
+    assert!(requests.contains("\"stage_key\":\"run:implementation\""), "{requests}");
+    assert!(requests.contains("\"stage_key\":\"run:verification\""), "{requests}");
+    assert!(
+        requests.contains(".boundline/governance/execution/implementation/brief.md"),
+        "{requests}"
+    );
+    assert!(
+        requests.contains(".boundline/governance/execution/verification/brief.md"),
+        "{requests}"
+    );
+
+    assert!(workspace.join(".boundline/governance/execution/implementation/brief.md").exists());
+    assert!(workspace.join(".boundline/governance/execution/verification/brief.md").exists());
+
+    let lifecycle = session.governance_lifecycle.as_ref().unwrap();
+    assert!(lifecycle.stage_records.iter().any(|record| {
+        record.stage_key == "run:implementation"
+            && record.runtime == GovernanceRuntimeKind::Canon
+            && record.lifecycle_state == GovernanceLifecycleState::GovernedReady
+    }));
+    assert!(lifecycle.stage_records.iter().any(|record| {
+        record.stage_key == "run:verification"
+            && record.runtime == GovernanceRuntimeKind::Canon
+            && record.lifecycle_state == GovernanceLifecycleState::GovernedReady
+    }));
+    assert!(lifecycle.accumulated_context.iter().any(|document| {
+        document.stage_key == "run:implementation"
+            && document.canon_mode == CanonMode::Implementation
+    }));
+    assert!(lifecycle.accumulated_context.iter().any(|document| {
+        document.stage_key == "run:verification" && document.canon_mode == CanonMode::Verification
+    }));
+    assert!(
+        session.goal_plan.as_ref().and_then(|plan| plan.compacted_canon_memory.as_ref()).is_some()
+    );
+
+    Ok(())
 }
 
 #[test]
@@ -2427,7 +4465,7 @@ fn execute_next_step_reassesses_reasoning_profile_after_routing_changes() {
     );
     let runtime = SessionRuntime::for_workspace(&workspace);
     let collapsed_routing = RoutingConfig {
-        review: Some(ModelRoute { runtime: RuntimeKind::Codex, model: "gpt-5-codex".to_string() }),
+        review: Some(ModelRoute { runtime: RuntimeKind::Codex, model: "o4-mini".to_string() }),
         ..RoutingConfig::default()
     };
     save_local_routing(&workspace, collapsed_routing.clone());
@@ -2489,7 +4527,7 @@ fn execute_next_step_reassesses_reasoning_profile_after_routing_changes() {
     let mut recovered_routing = collapsed_routing;
     recovered_routing.reviewer_roles.insert(
         "reviewer_primary".to_string(),
-        ModelRoute { runtime: RuntimeKind::Claude, model: "sonnet-4.6".to_string() },
+        ModelRoute { runtime: RuntimeKind::Claude, model: "sonnet-4".to_string() },
     );
     recovered_routing.reviewer_roles.insert(
         "reviewer_secondary".to_string(),
@@ -2708,6 +4746,12 @@ fn native_persistence_projects_cluster_story_and_copies_changes() {
                     None,
                 ),
                 limits: RunLimits::default(),
+                native_context: TaskContext::new(
+                    "session-runtime",
+                    workspace.to_string_lossy().into_owned(),
+                    RunLimits::default(),
+                    Map::new(),
+                ),
                 record_terminal_event: true,
                 projected_task: None,
             },
@@ -2881,6 +4925,7 @@ fn refresh_governance_state_handles_refreshable_and_non_refreshable_records() {
             previous_governance_attempt_id: None,
             packet_ref: None,
             decision_ref: None,
+            stage_council: None,
             blocked_reason: None,
         })
         .unwrap();
@@ -2907,6 +4952,7 @@ fn refresh_governance_state_handles_refreshable_and_non_refreshable_records() {
             previous_governance_attempt_id: Some("attempt-1".to_string()),
             packet_ref: None,
             decision_ref: None,
+            stage_council: None,
             blocked_reason: Some("still blocked".to_string()),
         })
         .unwrap();
@@ -3099,6 +5145,46 @@ fn required_canon_governance_reports_missing_configuration_and_mode() {
         _ => panic!("expected terminal governance block"),
     }
 
+    let command_workspace = temp_workspace("boundline-runtime-governance-required-mode-command");
+    let command_path = command_workspace.join("fake-canon");
+    let response_path = command_workspace.join("canon-response.json");
+    let document_ref = ".canon/runs/canon-run-investigate/discovery.md";
+    fs::write(
+        &response_path,
+        json!({
+            "status": "governed_ready",
+            "approval_state": "not_needed",
+            "message": "Canon completed the governed stage",
+            "run_ref": "canon-run-investigate",
+            "packet_ref": ".canon/runs/canon-run-investigate",
+            "expected_document_refs": [document_ref],
+            "document_refs": [document_ref],
+            "packet_readiness": "reusable",
+            "missing_sections": [],
+            "authority_governance": {
+                "contract_line": "authority-governance-v1",
+                "authority_zone": "green",
+                "change_class": "low-impact",
+                "intended_persona": "delivery-engineer",
+                "approval_state": "not_needed",
+                "packet_readiness": "reusable",
+                "risk": "low-impact"
+            },
+            "headline": "discovery packet ready",
+            "reason_code": "packet_ready"
+        })
+        .to_string(),
+    )
+    .unwrap();
+    fs::write(
+        &command_path,
+        format!("#!/bin/sh\ncat >/dev/null\ncat '{}'\n", response_path.to_string_lossy()),
+    )
+    .unwrap();
+    let mut permissions = fs::metadata(&command_path).unwrap().permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&command_path, permissions).unwrap();
+
     let workspace_missing_mode = write_governed_execution_profile_workspace(
         "boundline-runtime-governance-required-mode",
         vec![ExecutionAttemptDefinition {
@@ -3115,7 +5201,7 @@ fn required_canon_governance_reports_missing_configuration_and_mode() {
         Some(GovernanceProfile {
             default_runtime: GovernanceRuntimeKind::Local,
             canon: Some(CanonRuntimeConfig {
-                command: "true".to_string(),
+                command: command_path.to_string_lossy().into_owned(),
                 default_owner: Some("platform".to_string()),
                 default_risk: Some("medium".to_string()),
                 default_zone: Some("engineering".to_string()),
@@ -3138,6 +5224,9 @@ fn required_canon_governance_reports_missing_configuration_and_mode() {
             }],
         }),
     );
+    let document_path = workspace_missing_mode.join(document_ref);
+    fs::create_dir_all(document_path.parent().unwrap()).unwrap();
+    fs::write(&document_path, "# Discovery\n\nCredible governed evidence.\n").unwrap();
     let runtime_missing_mode = SessionRuntime::for_workspace(&workspace_missing_mode);
     let mut missing_mode_session = ActiveSessionRecord {
         session_id: "session-runtime".to_string(),
@@ -3165,14 +5254,12 @@ fn required_canon_governance_reports_missing_configuration_and_mode() {
     runtime_missing_mode.select_flow(&mut missing_mode_session, "bug-fix").unwrap();
     runtime_missing_mode.plan_task(&mut missing_mode_session, None, false).unwrap();
     runtime_missing_mode.execute_next_step(&mut missing_mode_session).unwrap();
-    assert!(
-        missing_mode_session
-            .latest_terminal_reason
-            .as_ref()
-            .unwrap()
-            .message
-            .contains("requires an explicit Canon mode")
-    );
+    let task = missing_mode_session.active_task.as_ref().unwrap();
+    let governed_stage = task.context.latest_governance_stage().unwrap().unwrap();
+    let governed_packet = task.context.latest_governance_packet().unwrap().unwrap();
+    assert_eq!(governed_stage.runtime, GovernanceRuntimeKind::Canon);
+    assert_eq!(governed_stage.lifecycle_state, GovernanceLifecycleState::GovernedReady);
+    assert_eq!(governed_packet.canon_mode, Some(CanonMode::Discovery));
 }
 
 #[test]
@@ -3217,9 +5304,12 @@ fn prepare_checkpoint_for_mutation_records_workspace_projection_on_task_context(
     );
 
     fs::write(workspace.join("src/lib.rs"), "left + right").unwrap();
-    runtime.refresh_checkpoint_projection(&projection).unwrap();
+    runtime.refresh_checkpoint_projection(&session, &projection).unwrap();
 
-    let manifest = runtime.checkpoint_store().load(&projection.checkpoint_id).unwrap().unwrap();
+    let manifest = FileCheckpointStore::for_session(&workspace, &session.session_id)
+        .load(&projection.checkpoint_id)
+        .unwrap()
+        .unwrap();
     assert_ne!(
         manifest.captured_files[0].captured_fingerprint,
         manifest.captured_files[0].observed_after_capture_fingerprint
@@ -3286,12 +5376,504 @@ fn prepare_checkpoint_for_mutation_creates_grouped_cluster_checkpoints() {
 
     fs::write(primary.join("src/lib.rs"), "after").unwrap();
     fs::write(member.join("src/member.rs"), "after").unwrap();
-    runtime.refresh_checkpoint_projection(&projection).unwrap();
+    runtime.refresh_checkpoint_projection(&session, &projection).unwrap();
 
-    let primary_manifests =
-        FileCheckpointStore::for_workspace(&primary).load_group(&projection.checkpoint_id).unwrap();
-    let member_manifests =
-        FileCheckpointStore::for_workspace(&member).load_group(&projection.checkpoint_id).unwrap();
+    let primary_manifests = FileCheckpointStore::for_session(&primary, &session.session_id)
+        .load_group(&projection.checkpoint_id)
+        .unwrap();
+    let member_manifests = FileCheckpointStore::for_session(&member, &session.session_id)
+        .load_group(&projection.checkpoint_id)
+        .unwrap();
     assert_eq!(primary_manifests.len(), 1);
     assert_eq!(member_manifests.len(), 1);
+}
+
+#[cfg(unix)]
+#[test]
+fn reset_planning_governance_clears_blocked_records_on_retry_with_same_fingerprint() {
+    let workspace = temp_workspace("boundline-runtime-reset-planning-blocked");
+    fs::create_dir_all(workspace.join("src")).unwrap();
+    fs::create_dir_all(workspace.join("tests")).unwrap();
+    fs::write(
+        workspace.join("src/lib.rs"),
+        "pub fn add(left: i32, right: i32) -> i32 { left + right }\n",
+    )
+    .unwrap();
+    fs::write(
+        workspace.join("brief.md"),
+        "Deliver the feature through requirements and architecture for src/lib.rs.\n",
+    )
+    .unwrap();
+
+    let canon_command = write_fake_canon_command(&workspace);
+    fs::write(
+        workspace.join(".boundline/execution.json"),
+        serde_json::to_string_pretty(&WorkspaceExecutionProfile {
+            name: "reset-planning-profile".to_string(),
+            read_targets: vec!["src/lib.rs".to_string()],
+            validation_command: ExecutionCommand {
+                program: "cargo".to_string(),
+                args: vec!["test".to_string(), "--quiet".to_string()],
+            },
+            attempts: vec![ExecutionAttemptDefinition {
+                attempt_id: "plan-execution".to_string(),
+                summary: String::new(),
+                failure_mode: ExecutionFailureMode::Terminal,
+                changes: vec![WorkspaceChange {
+                    path: "src/lib.rs".to_string(),
+                    find: "left + right".to_string(),
+                    replace: "left + right".to_string(),
+                }],
+            }],
+            adaptive: None,
+            limits: RunLimits::default(),
+            governance: Some(GovernanceProfile {
+                default_runtime: GovernanceRuntimeKind::Canon,
+                canon: Some(CanonRuntimeConfig {
+                    command: canon_command.to_string_lossy().into_owned(),
+                    default_owner: Some("platform".to_string()),
+                    default_risk: Some("medium".to_string()),
+                    default_zone: Some("engineering".to_string()),
+                    default_system_context: Some(SystemContextBinding::Existing),
+                }),
+                stages: Vec::new(),
+            }),
+            review: None,
+            legacy_source: None,
+        })
+        .unwrap(),
+    )
+    .unwrap();
+
+    let runtime = SessionRuntime::for_workspace(&workspace);
+    let mut session = ActiveSessionRecord {
+        session_id: "session-reset-blocked".to_string(),
+        workspace_ref: workspace.to_string_lossy().into_owned(),
+        goal: None,
+        authored_brief: Some(
+            normalize_inputs_with_governance(
+                &workspace,
+                Some("Deliver a governed feature"),
+                &[PathBuf::from("brief.md")],
+                Some(GovernanceIntent {
+                    requested: true,
+                    runtime_preference: Some(GovernanceRuntimeKind::Canon),
+                    risk: Some("medium".to_string()),
+                    zone: Some("engineering".to_string()),
+                    owner: Some("platform".to_string()),
+                    explicit_mode: None,
+                    explicit_no_canon: false,
+                }),
+            )
+            .unwrap(),
+        ),
+        negotiation_packet: None,
+        active_flow: None,
+        active_task: None,
+        goal_plan: None,
+        workflow_progress: None,
+        decisions: Vec::new(),
+        active_flow_policy: None,
+        latest_status: SessionStatus::Initialized,
+        latest_terminal_reason: None,
+        latest_trace_ref: None,
+        created_at: 10,
+        updated_at: 10,
+        governance_lifecycle: Some(GovernedSessionLifecycle {
+            governance_runtime: GovernanceRuntimeKind::Canon,
+            explicit_opt_out: false,
+            mode_selection_preference: CanonModeSelectionPreference::AutoConfirm,
+            selected_mode: None,
+            selected_mode_sequence: Vec::new(),
+            latest_reasoning_profile: None,
+            current_stage_index: 0,
+            stage_records: Vec::new(),
+            accumulated_context: Vec::new(),
+            terminal_reason: None,
+            planning_input_fingerprint: None,
+        }),
+        project_scale: None,
+        delight_feedback: None,
+        latest_voting: None,
+    };
+
+    runtime.capture_goal(&mut session, "Deliver a governed feature").unwrap();
+    runtime.select_flow(&mut session, "delivery").unwrap();
+    runtime.plan_task(&mut session, None, false).unwrap();
+
+    // All 4 stages should be GovernedReady.
+    let lifecycle = session.governance_lifecycle.as_ref().unwrap();
+    assert_eq!(lifecycle.stage_records.len(), 4);
+    assert!(lifecycle.planning_input_fingerprint.is_some());
+
+    // Simulate a blocked stage: mark first two as Blocked while keeping fingerprint unchanged.
+    let lifecycle = session.governance_lifecycle.as_mut().unwrap();
+    lifecycle.stage_records[0].lifecycle_state = GovernanceLifecycleState::Blocked;
+    lifecycle.stage_records[0].blocked_reason = Some("Canon rejected packet".to_string());
+    lifecycle.stage_records[1].lifecycle_state = GovernanceLifecycleState::Blocked;
+    lifecycle.stage_records[1].blocked_reason = Some("Canon rejected packet".to_string());
+
+    // Re-plan with same fingerprint: blocked records should be cleared and re-executed.
+    runtime.plan_task(&mut session, None, false).unwrap();
+
+    let lifecycle = session.governance_lifecycle.as_ref().unwrap();
+    assert_eq!(lifecycle.stage_records.len(), 4);
+    assert_eq!(
+        lifecycle.stage_records[0].lifecycle_state,
+        GovernanceLifecycleState::GovernedReady,
+        "previously blocked stage should be re-executed and now GovernedReady"
+    );
+    assert_eq!(
+        lifecycle.stage_records[1].lifecycle_state,
+        GovernanceLifecycleState::GovernedReady,
+        "previously blocked stage should be re-executed and now GovernedReady"
+    );
+    assert_eq!(lifecycle.stage_records[2].lifecycle_state, GovernanceLifecycleState::GovernedReady);
+    assert_eq!(lifecycle.stage_records[3].lifecycle_state, GovernanceLifecycleState::GovernedReady);
+}
+
+#[cfg(unix)]
+#[test]
+fn reset_planning_governance_preserves_completed_records_when_others_are_blocked() {
+    let workspace = temp_workspace("boundline-runtime-reset-planning-mixed");
+    fs::create_dir_all(workspace.join("src")).unwrap();
+    fs::create_dir_all(workspace.join("tests")).unwrap();
+    fs::write(
+        workspace.join("src/lib.rs"),
+        "pub fn add(left: i32, right: i32) -> i32 { left + right }\n",
+    )
+    .unwrap();
+    fs::write(
+        workspace.join("brief.md"),
+        "Deliver the feature through requirements and architecture for src/lib.rs.\n",
+    )
+    .unwrap();
+
+    let canon_command = write_fake_canon_command(&workspace);
+    fs::write(
+        workspace.join(".boundline/execution.json"),
+        serde_json::to_string_pretty(&WorkspaceExecutionProfile {
+            name: "reset-planning-mixed".to_string(),
+            read_targets: vec!["src/lib.rs".to_string()],
+            validation_command: ExecutionCommand {
+                program: "cargo".to_string(),
+                args: vec!["test".to_string(), "--quiet".to_string()],
+            },
+            attempts: vec![ExecutionAttemptDefinition {
+                attempt_id: "plan-execution".to_string(),
+                summary: String::new(),
+                failure_mode: ExecutionFailureMode::Terminal,
+                changes: vec![WorkspaceChange {
+                    path: "src/lib.rs".to_string(),
+                    find: "left + right".to_string(),
+                    replace: "left + right".to_string(),
+                }],
+            }],
+            adaptive: None,
+            limits: RunLimits::default(),
+            governance: Some(GovernanceProfile {
+                default_runtime: GovernanceRuntimeKind::Canon,
+                canon: Some(CanonRuntimeConfig {
+                    command: canon_command.to_string_lossy().into_owned(),
+                    default_owner: Some("platform".to_string()),
+                    default_risk: Some("medium".to_string()),
+                    default_zone: Some("engineering".to_string()),
+                    default_system_context: Some(SystemContextBinding::Existing),
+                }),
+                stages: Vec::new(),
+            }),
+            review: None,
+            legacy_source: None,
+        })
+        .unwrap(),
+    )
+    .unwrap();
+
+    let runtime = SessionRuntime::for_workspace(&workspace);
+    let mut session = ActiveSessionRecord {
+        session_id: "session-reset-mixed".to_string(),
+        workspace_ref: workspace.to_string_lossy().into_owned(),
+        goal: None,
+        authored_brief: Some(
+            normalize_inputs_with_governance(
+                &workspace,
+                Some("Deliver a governed feature"),
+                &[PathBuf::from("brief.md")],
+                Some(GovernanceIntent {
+                    requested: true,
+                    runtime_preference: Some(GovernanceRuntimeKind::Canon),
+                    risk: Some("medium".to_string()),
+                    zone: Some("engineering".to_string()),
+                    owner: Some("platform".to_string()),
+                    explicit_mode: None,
+                    explicit_no_canon: false,
+                }),
+            )
+            .unwrap(),
+        ),
+        negotiation_packet: None,
+        active_flow: None,
+        active_task: None,
+        goal_plan: None,
+        workflow_progress: None,
+        decisions: Vec::new(),
+        active_flow_policy: None,
+        latest_status: SessionStatus::Initialized,
+        latest_terminal_reason: None,
+        latest_trace_ref: None,
+        created_at: 10,
+        updated_at: 10,
+        governance_lifecycle: Some(GovernedSessionLifecycle {
+            governance_runtime: GovernanceRuntimeKind::Canon,
+            explicit_opt_out: false,
+            mode_selection_preference: CanonModeSelectionPreference::AutoConfirm,
+            selected_mode: None,
+            selected_mode_sequence: Vec::new(),
+            latest_reasoning_profile: None,
+            current_stage_index: 0,
+            stage_records: Vec::new(),
+            accumulated_context: Vec::new(),
+            terminal_reason: None,
+            planning_input_fingerprint: None,
+        }),
+        project_scale: None,
+        delight_feedback: None,
+        latest_voting: None,
+    };
+
+    runtime.capture_goal(&mut session, "Deliver a governed feature").unwrap();
+    runtime.select_flow(&mut session, "delivery").unwrap();
+    runtime.plan_task(&mut session, None, false).unwrap();
+
+    // Mark first two stages as Completed, third as Blocked.
+    let lifecycle = session.governance_lifecycle.as_mut().unwrap();
+    lifecycle.stage_records[0].lifecycle_state = GovernanceLifecycleState::Completed;
+    lifecycle.stage_records[1].lifecycle_state = GovernanceLifecycleState::Completed;
+    lifecycle.stage_records[2].lifecycle_state = GovernanceLifecycleState::Blocked;
+    lifecycle.stage_records[2].blocked_reason = Some("Canon rejected packet".to_string());
+
+    // Re-plan: completed records stay, blocked record is cleared and retried.
+    runtime.plan_task(&mut session, None, false).unwrap();
+
+    let lifecycle = session.governance_lifecycle.as_ref().unwrap();
+    assert_eq!(lifecycle.stage_records.len(), 4);
+    assert_eq!(
+        lifecycle.stage_records[0].lifecycle_state,
+        GovernanceLifecycleState::Completed,
+        "completed stage should be preserved"
+    );
+    assert_eq!(
+        lifecycle.stage_records[1].lifecycle_state,
+        GovernanceLifecycleState::Completed,
+        "completed stage should be preserved"
+    );
+    assert_eq!(
+        lifecycle.stage_records[2].lifecycle_state,
+        GovernanceLifecycleState::GovernedReady,
+        "previously blocked stage should be re-executed and now GovernedReady"
+    );
+    assert_eq!(lifecycle.stage_records[3].lifecycle_state, GovernanceLifecycleState::GovernedReady);
+}
+
+#[cfg(unix)]
+#[test]
+fn prepare_planning_requests_uses_refresh_when_stage_has_existing_run_ref() {
+    use crate::domain::governance::CanonCapabilitySnapshot;
+
+    let workspace = temp_workspace("boundline-runtime-planning-refresh");
+    fs::create_dir_all(workspace.join("src")).unwrap();
+    fs::create_dir_all(workspace.join("tests")).unwrap();
+    fs::write(
+        workspace.join("src/lib.rs"),
+        "pub fn add(left: i32, right: i32) -> i32 { left + right }\n",
+    )
+    .unwrap();
+    fs::write(
+        workspace.join("brief.md"),
+        "Deliver the feature through requirements and architecture for src/lib.rs.\n",
+    )
+    .unwrap();
+
+    let canon_command = write_fake_canon_command(&workspace);
+    fs::write(
+        workspace.join(".boundline/execution.json"),
+        serde_json::to_string_pretty(&WorkspaceExecutionProfile {
+            name: "planning-refresh-profile".to_string(),
+            read_targets: vec!["src/lib.rs".to_string()],
+            validation_command: ExecutionCommand {
+                program: "cargo".to_string(),
+                args: vec!["test".to_string(), "--quiet".to_string()],
+            },
+            attempts: vec![ExecutionAttemptDefinition {
+                attempt_id: "plan-execution".to_string(),
+                summary: String::new(),
+                failure_mode: ExecutionFailureMode::Terminal,
+                changes: vec![WorkspaceChange {
+                    path: "src/lib.rs".to_string(),
+                    find: "left + right".to_string(),
+                    replace: "left + right".to_string(),
+                }],
+            }],
+            adaptive: None,
+            limits: RunLimits::default(),
+            governance: Some(GovernanceProfile {
+                default_runtime: GovernanceRuntimeKind::Canon,
+                canon: Some(CanonRuntimeConfig {
+                    command: canon_command.to_string_lossy().into_owned(),
+                    default_owner: Some("platform".to_string()),
+                    default_risk: Some("medium".to_string()),
+                    default_zone: Some("engineering".to_string()),
+                    default_system_context: Some(SystemContextBinding::Existing),
+                }),
+                stages: Vec::new(),
+            }),
+            review: None,
+            legacy_source: None,
+        })
+        .unwrap(),
+    )
+    .unwrap();
+
+    let runtime = SessionRuntime::for_workspace(&workspace);
+    let mut session = ActiveSessionRecord {
+        session_id: "session-planning-refresh".to_string(),
+        workspace_ref: workspace.to_string_lossy().into_owned(),
+        goal: None,
+        authored_brief: Some(
+            normalize_inputs_with_governance(
+                &workspace,
+                Some("Deliver a governed feature"),
+                &[PathBuf::from("brief.md")],
+                Some(GovernanceIntent {
+                    requested: true,
+                    runtime_preference: Some(GovernanceRuntimeKind::Canon),
+                    risk: Some("medium".to_string()),
+                    zone: Some("engineering".to_string()),
+                    owner: Some("platform".to_string()),
+                    explicit_mode: None,
+                    explicit_no_canon: false,
+                }),
+            )
+            .unwrap(),
+        ),
+        negotiation_packet: None,
+        active_flow: None,
+        active_task: None,
+        goal_plan: None,
+        workflow_progress: None,
+        decisions: Vec::new(),
+        active_flow_policy: None,
+        latest_status: SessionStatus::Initialized,
+        latest_terminal_reason: None,
+        latest_trace_ref: None,
+        created_at: 10,
+        updated_at: 10,
+        governance_lifecycle: Some(GovernedSessionLifecycle {
+            governance_runtime: GovernanceRuntimeKind::Canon,
+            explicit_opt_out: false,
+            mode_selection_preference: CanonModeSelectionPreference::AutoConfirm,
+            selected_mode: None,
+            selected_mode_sequence: Vec::new(),
+            latest_reasoning_profile: None,
+            current_stage_index: 0,
+            stage_records: Vec::new(),
+            accumulated_context: Vec::new(),
+            terminal_reason: None,
+            planning_input_fingerprint: None,
+        }),
+        project_scale: None,
+        delight_feedback: None,
+        latest_voting: None,
+    };
+
+    runtime.capture_goal(&mut session, "Deliver a governed feature").unwrap();
+    runtime.select_flow(&mut session, "delivery").unwrap();
+    runtime.plan_task(&mut session, None, false).unwrap();
+
+    // First plan produces GovernedReady with canon_run_ref from the fake Canon.
+    let lifecycle = session.governance_lifecycle.as_ref().unwrap();
+    assert_eq!(lifecycle.stage_records.len(), 4);
+    let first_run_ref = lifecycle.stage_records[0].canon_run_ref.clone();
+    assert!(first_run_ref.is_some(), "fake Canon should have set canon_run_ref");
+
+    // Mark first stage as Blocked (simulating a Canon rejection after a prior start).
+    let lifecycle = session.governance_lifecycle.as_mut().unwrap();
+    lifecycle.stage_records[0].lifecycle_state = GovernanceLifecycleState::Blocked;
+    lifecycle.stage_records[0].blocked_reason = Some("Canon rejected packet".to_string());
+
+    // Set up canon_capability_snapshot with "refresh" in operations via active_task context.
+    let snapshot = CanonCapabilitySnapshot {
+        canon_version: "0.45.0".to_string(),
+        supported_schema_versions: vec!["2026-02-01".to_string()],
+        operations: vec!["capabilities".to_string(), "start".to_string(), "refresh".to_string()],
+        supported_modes: vec![
+            CanonMode::Requirements,
+            CanonMode::SystemShaping,
+            CanonMode::Architecture,
+            CanonMode::Backlog,
+        ],
+        status_values: Vec::new(),
+        approval_state_values: Vec::new(),
+        packet_readiness_values: Vec::new(),
+        compatibility_notes: Vec::new(),
+    };
+    let mut task_context = TaskContext::new(
+        "session-planning-refresh".to_string(),
+        workspace.to_string_lossy().into_owned(),
+        RunLimits::default(),
+        Map::new(),
+    );
+    task_context.set_latest_canon_capability_snapshot(&snapshot).unwrap();
+    session.active_task = Some(Task {
+        id: "refresh-probe".to_string(),
+        goal: "Deliver a governed feature".to_string(),
+        input: json!({}),
+        context: task_context,
+        plan: Plan {
+            revision: 0,
+            steps: Vec::new(),
+            current_step_index: 0,
+            status: crate::domain::plan::PlanStatus::Active,
+        },
+        status: TaskStatus::Running,
+        limits: RunLimits::default(),
+        terminal_reason: None,
+        retry_count: 0,
+        replan_count: 0,
+        total_step_attempts: 0,
+    });
+
+    let goal = session.goal.clone().unwrap();
+    let context_sources = runtime.planning_context_sources(&session, &goal);
+    assert!(
+        context_sources.canon_capability_snapshot.is_some(),
+        "capability snapshot must be available for refresh test"
+    );
+
+    let goal_plan = session.goal_plan.as_ref().unwrap().clone();
+    let requests = runtime
+        .prepare_planning_governance_requests(&mut session, &goal_plan, &context_sources)
+        .unwrap();
+
+    // The first stage should use Refresh (it has an existing canon_run_ref).
+    assert_eq!(requests[0].request.stage_key, "plan:requirements");
+    assert_eq!(
+        requests[0].request.request_kind,
+        super::GovernanceRequestKind::Refresh,
+        "retrying a blocked stage with existing run_ref should use Refresh"
+    );
+    assert_eq!(
+        requests[0].request.run_ref.as_ref(),
+        first_run_ref.as_ref(),
+        "refresh request should carry the previous canon_run_ref"
+    );
+
+    // Stages without prior canon_run_ref should use Start.
+    // Stages 1-3 were GovernedReady (which means they already have run refs too from the first
+    // plan_task), so they may also use Refresh. The second stage should show Refresh as well.
+    assert_eq!(
+        requests[1].request.request_kind,
+        super::GovernanceRequestKind::Refresh,
+        "stage with existing run_ref and refresh capability should use Refresh"
+    );
 }

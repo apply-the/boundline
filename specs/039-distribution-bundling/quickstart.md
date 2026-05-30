@@ -39,7 +39,7 @@ with a clear next step, and the second report becomes `ready` or
 2. Follow only the quick path section to install Boundline, verify it, initialize a
    workspace, and run the first bounded task.
 
-Expected result: a new user reaches `start -> capture -> plan -> run -> status
+Expected result: a new user reaches `goal -> plan -> run -> status
 -> next -> inspect` without needing to read compatibility internals or Canon
 governance details.
 

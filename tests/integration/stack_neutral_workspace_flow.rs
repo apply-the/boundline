@@ -1,10 +1,10 @@
 use crate::workspace_fixture::{
-    run_boundline_in, temp_empty_workspace, temp_python_workspace, terminal_text,
+    run_boundline_in, temp_git_workspace, temp_python_workspace, terminal_text,
 };
 
 #[test]
 fn doctor_accepts_initialized_stack_neutral_workspace_without_cargo_manifest() {
-    let workspace = temp_empty_workspace("boundline-stack-neutral-doctor");
+    let workspace = temp_git_workspace("boundline-stack-neutral-doctor");
 
     let init = run_boundline_in(
         &workspace,

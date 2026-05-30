@@ -18,7 +18,7 @@ guesswork.
 every later planning and execution decision becomes less trustworthy.
 
 **Independent Test**: In a representative workspace, run the session-native
-flow through `capture` and `plan` and verify that Boundline can expose the
+flow through `goal` and `plan` and verify that Boundline can expose the
 constructed context pack, including matched files, selected evidence signals,
 and missing-context warnings, without requiring Canon.
 

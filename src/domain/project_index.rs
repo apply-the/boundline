@@ -185,7 +185,9 @@ pub enum ProjectIndexError {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::path::PathBuf;
+
+    use super::{ProjectDocRoots, ProjectIndex, ProjectIndexError};
 
     #[test]
     fn parses_project_index_contract_shape_and_docs_overrides() {

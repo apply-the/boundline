@@ -8,9 +8,9 @@
 ## Summary
 
 Add one explicit negotiated delivery packet to the existing session-native
-`capture -> plan -> run -> status -> next -> inspect` story. The slice derives
+`goal -> plan -> run -> status -> next -> inspect` story. The slice derives
 acceptance boundaries, scope limits, binding constraints, and tradeoff summaries
-from the captured goal plus authored inputs, blocks planning when negotiation is
+from the recorded goal plus authored inputs, blocks planning when negotiation is
 not credible, carries the negotiated story into follow-up and inspection
 surfaces, keeps explicit compatibility behavior visibly separate, and closes as
 `0.26.0` with version bump, impacted docs, changelog, coverage refresh for
@@ -25,7 +25,7 @@ modified Rust files, clippy cleanup, and formatting.
 **Target Platform**: macOS/Linux developer workstations and Linux CI
 **Project Type**: Single Rust CLI/library crate with file-backed session and trace state  
 **Execution Model**: Sequential session-native orchestration with bounded retries and replans; negotiation runs during capture, planning stays explicit, and compatibility follow-up remains a separate named route rather than a second control loop  
-**Observability Surface**: Persisted session state, task context, execution traces, CLI `capture`, `plan`, `run`, `status`, `next`, and `inspect` summaries, plus assistant/operator documentation that explains acceptance boundaries, binding constraints, and tradeoff decisions  
+**Observability Surface**: Persisted session state, task context, execution traces, CLI `goal`, `plan`, `run`, `status`, `next`, and `inspect` summaries, plus assistant/operator documentation that explains acceptance boundaries, binding constraints, and tradeoff decisions  
 **Performance Goals**: Operators should identify the negotiated outcome and binding constraints from capture or follow-up output in under 2 minutes; representative ambiguous requests must stop before plan confirmation 100% of the time; maintainers should validate the `0.26.0` story from docs plus runtime output in under 20 minutes  
 **Constraints**: Session-native remains the primary path; no new standalone negotiation runtime or background loop; no Canon-owned planning control flow; no hidden compatibility authority; goal-only sessions must remain supported through explicit defaults; cluster sessions, when present, keep packet authority in the primary workspace  
 **Scale/Scope**: One bounded session at a time, representative goal-only and authored-brief flows, explicit success plus non-success negotiation states, and focused code changes in existing session, plan, trace, CLI, test, and documentation surfaces
@@ -57,7 +57,7 @@ specs/026-goal-constraint-modeling/
 ├── data-model.md
 ├── quickstart.md
 ├── contracts/
-│   ├── negotiated-capture-surface-contract.md
+│   ├── negotiated-goal-surface-contract.md
 │   ├── constraint-follow-up-surface-contract.md
 │   └── compatibility-negotiation-boundary-contract.md
 └── tasks.md

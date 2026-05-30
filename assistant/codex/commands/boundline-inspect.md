@@ -8,6 +8,7 @@ Boundline owns orchestration; Canon is only the optional governed companion.
 
 ## Intent
 Inspect a specific or session-resolved Boundline trace and summarize the outcome.
+When the user asks for the full session audit trail, actor attribution, voting lineage, or algorithm outcomes, switch to the dedicated audit surface by appending `--audit`.
 
 If the resolved workspace trace reports compatibility ownership, keep that explicit: it now means the prior direct run opted into `--compatibility`, not that plain `run --goal` defaults there.
 
@@ -16,22 +17,46 @@ If the resolved workspace trace reports compatibility ownership, keep that expli
 - Preserve any confirmed `latest_trace_ref` from prior turns
 
 ## Shell-Enabled Path
-If `trace_ref` is known, run `cargo run --bin boundline -- inspect --trace <trace> --json`. Otherwise, if `workspace_ref` is known, run `cargo run --bin boundline -- inspect --workspace <workspace> --json`. If the assistant is already anchored in the target workspace and neither field is missing, run `cargo run --bin boundline -- inspect --json` exactly once. Workspace-based inspect may reuse the active session's `latest_trace_ref` before falling back to the latest workspace trace.
+If the user wants the audit trail specifically, run the matching `inspect` command with `--audit`:
+
+`boundline inspect --trace <trace> --audit --json`
+
+or
+
+`boundline inspect --workspace <workspace> --audit --json`
+
+Otherwise, if `trace_ref` is known, run `boundline inspect --trace <trace> --json`. Otherwise, if `workspace_ref` is known, run `boundline inspect --workspace <workspace> --json`. If the assistant is already anchored in the target workspace and neither field is missing, run `boundline inspect --json` exactly once. Workspace-based inspect may reuse the active session's `latest_trace_ref` before falling back to the latest workspace trace.
 
 ## Chat-Only Path
 Ask only for the missing `trace_ref` or `workspace_ref`, then provide one exact copyable command:
 
-`cargo run --bin boundline -- inspect --trace <trace> --json`
+`boundline inspect --trace <trace> --json`
+
+or, for audit-specific inspection,
+
+`boundline inspect --trace <trace> --audit --json`
 
 or
 
-`cargo run --bin boundline -- inspect --workspace <workspace> --json`
+`boundline inspect --workspace <workspace> --json`
 
-Wait for pasted output before continuing. If workspace-based inspect reports a session error, route to `/boundline-start`. If trace reading fails, ask for a corrected trace reference or workspace and provide the replacement inspect command.
+or
+
+`boundline inspect --workspace <workspace> --audit --json`
+
+Wait for pasted output before continuing. If workspace-based inspect reports a session error, route to `/boundline-goal`. If trace reading fails, ask for a corrected trace reference or workspace and provide the replacement inspect command.
+
+## Cross-Surface Consistency
+Treat `status`, `inspect`, and assistant-rendered session summaries as projections of the same runtime state. Preserve degraded reasons, diagnostics, governed references, and fallback commands exactly, and never claim assistant-only state exists.
 
 ## Output Interpretation
-Summarize `inspection_target`, `trace`, `routing_summary`, `route_owner`, `route_config_projection`, `execution_condition`, `goal_plan_summary`, `negotiation_goal_summary`, `negotiation_resolution`, `negotiation_acceptance_boundary`, `context_summary`, `context_credibility`, `context_primary_inputs`, `context_provenance`, `context_staleness_reason`, `delegation_mode`, `delegation_packet_id`, `delegation_packet_kind`, `delegation_packet_state`, `delegation_target_owner`, `delegation_headline`, `delegation_evidence_summary`, `decision_timeline`, `failure_evidence`, `changed_files`, validation summaries, `follow_through_guidance`, `follow_through_evidence_source`, `follow_through_next_action`, `follow_through_stop_reason`, `terminal_status`, `terminal_reason`, `authored_input_summary`, `authored_input_sources`, `authored_input_deduplicated_sources` when present, governance runtime, mode, run-ref, packet provenance, `governance_next_action` when present, `corrected_command` on failures, and the CLI-reported `next_command`. Preserve `effective_routing`, `assistant_bindings`, `runtime_capabilities`, and `slot_effort_policies` when the route projection includes the persisted execution snapshot. When the context fields include domain-template selection, winning standards source, or external-input status, preserve that wording exactly and treat missing or stale required domain inputs as a real stop condition. When the context or governance fields are Canon-grounded, preserve governed artifact refs, credibility, and stale-memory wording exactly.
+Provide a conversational, human-readable summary of the session state. Do NOT use raw JSON keys or snake_case field names (like `next_command`, `latest_status`, `authored_input_summary`, etc.) in your response. Translate all state into natural language.
+When suggesting the next step, you MUST output a VS Code Copilot command link to render a clickable button. Use EXACTLY this syntax format:
+`[Run /boundline-plan](command:github.copilot.chat.execute?%5B%22%2Fboundline-plan%22%5D)` (replace /boundline-plan with the actual command). Do not use plain text or unicode arrows.
+Reply as a compact operator brief by default: preserve `inspection_target` when present, `goal`, `authored_input_summary` or `authored_input_sources`, `routing` or `route_owner`, `execution_condition`, a concise inspection summary, key artifacts such as `trace` and checkpoint refs, governance blockers or `governance_next_action`, `latest_status`, and the CLI-reported `next_command`. Only surface raw `route_config_projection`, `context_provenance`, decision timelines, failure evidence dumps, or other deep trace detail when the user explicitly asks for deeper detail or wants the CLI `--verbose` view. Preserve `latest_trace_ref`, `authored_input_deduplicated_sources`, `governance_next_action`, `follow_through_guidance`, `follow_through_evidence_source`, `changed_files`, `validation`, and `corrected_command` exactly when present. Preserve `corrected_command` on failures, and keep delegated continuity, domain-template gaps, and Canon-governed credibility or stale-memory wording as real stop conditions.
+When inspect reports `planning_analysis_state`, `planning_analysis_findings`, or `planning_analysis_coverage`, preserve them exactly. Treat `planning_analysis_state: blocked` as a real execution stop and route back to `/boundline:plan` instead of `/boundline:run`.
+When `--audit` is used, treat the audit projection as the primary payload: preserve `audit_entry_count`, `audit_session_ref`, `audit_latest`, and the ordered `audit_timeline`. If any entry includes `participant_routes` or `mixed_routes`, keep that multi-route attribution explicit.
 
 ## Next-Step Routing
-If workspace-based inspect reports a session error, route to `/boundline-start`. Otherwise prefer the CLI-reported `next_command`.
-Allowed follow-up commands: `/boundline-next`, `/boundline-run`, `/boundline-step`, `/boundline-status`, `/boundline-start`.
+If workspace-based inspect reports a session error, route to `/boundline-goal`. Otherwise prefer the CLI-reported `next_command`.
+Allowed follow-up commands: `/boundline-next`, `/boundline-run`, `/boundline-step`, `/boundline-status`, `/boundline-goal`.

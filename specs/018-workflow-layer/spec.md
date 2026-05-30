@@ -9,7 +9,7 @@
 
 ### User Story 1 - Run A Named Delivery Workflow (Priority: P1)
 
-A developer can start one named workflow for a local engineering task and have Boundline drive that work through the same bounded session-native path it already uses for direct `start -> capture -> plan -> run` delivery, instead of requiring the developer to remember or script each phase manually.
+A developer can start one named workflow for a local engineering task and have Boundline drive that work through the same bounded session-native path it already uses for direct `goal -> plan -> run` delivery, instead of requiring the developer to remember or script each phase manually.
 
 **Why this priority**: This is the smallest independently valuable workflow slice. If a named workflow cannot start real delivery work through the existing runtime, the rest of the workflow layer is ornamental.
 

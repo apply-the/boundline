@@ -80,11 +80,8 @@ fn terminal_text(output: &Output) -> String {
 #[test]
 fn change_flow_status_and_next_include_flow_stage_fields() {
     let workspace = temp_workspace();
-    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
     assert_eq!(
-        run_boundline_in(&workspace, &["capture", "--goal", "Apply the pricing change"])
-            .status
-            .code(),
+        run_boundline_in(&workspace, &["goal", "--goal", "Apply the pricing change"]).status.code(),
         Some(0)
     );
     assert_eq!(run_boundline_in(&workspace, &["flow", "change"]).status.code(), Some(0));
@@ -112,9 +109,8 @@ fn change_flow_status_and_next_include_flow_stage_fields() {
 #[test]
 fn status_without_a_flow_omits_flow_specific_fields() {
     let workspace = temp_workspace();
-    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
     assert_eq!(
-        run_boundline_in(&workspace, &["capture", "--goal", "Fix the checkout flow"]).status.code(),
+        run_boundline_in(&workspace, &["goal", "--goal", "Fix the checkout flow"]).status.code(),
         Some(0)
     );
     assert_eq!(run_boundline_in(&workspace, &["plan"]).status.code(), Some(0));

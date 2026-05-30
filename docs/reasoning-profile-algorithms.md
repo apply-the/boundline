@@ -1,6 +1,6 @@
 # Reasoning Profile Algorithms
 
-Boundline `0.63.0` ships reasoning profiles inside the existing session-native
+Boundline `0.64.0` ships reasoning profiles inside the existing session-native
 runtime. Canon can require a challenge posture, but Boundline still owns
 profile selection, participant assignment, independence checking, bounded
 outcomes, trace emission, and operator-facing projection.
@@ -80,7 +80,7 @@ Current runtime shape:
 - minimum participants: `1`
 - independence posture: no multi-party distinctness requirement
 - bounded behavior: branch exploration stays limited by the declared reasoning budget
-- shipped-status note: `0.63.0` keeps the concrete shipped claim inherited from the earlier contract slice; the follow-through release extends the same reasoning story into explanation and inspect surfaces rather than promoting a second orchestration path
+- shipped-status note: `0.64.0` keeps the concrete shipped claim inherited from the earlier contract slice; the follow-through release extends the same reasoning story into explanation and inspect surfaces rather than promoting a second orchestration path
 
 ### 4.2 `independent_pair_review`
 
@@ -129,7 +129,7 @@ That means:
 
 - the domain and trace model can represent debate-oriented rounds
 - bounded debate vocabulary can support other reasoning or review flows
-- Boundline `0.63.0` does not claim a standalone shipped V1 debate profile id
+- Boundline `0.64.0` does not claim a standalone shipped V1 debate profile id
 
 ### 5.2 Adjudication
 
@@ -139,7 +139,7 @@ That means:
 
 - it can appear as an arbiter role, an adjudication step, or a terminal disagreement-resolution outcome
 - it remains reusable across reasoning and review flows
-- Boundline `0.63.0` does not claim adjudication as a standalone shipped reasoning profile
+- Boundline `0.64.0` does not claim adjudication as a standalone shipped reasoning profile
 
 ## 6. Operator Reading Guide
 

@@ -1226,25 +1226,25 @@ mod tests {
     #[test]
     fn compatibility_window_admits_supported_pair() {
         let window = ReasoningCompatibilityWindow {
-            boundline_min: "0.63.0".to_string(),
-            boundline_max_exclusive: "0.64.0".to_string(),
-            canon_min: "0.59.0".to_string(),
-            canon_max_exclusive: "0.60.0".to_string(),
+            boundline_min: "0.64.0".to_string(),
+            boundline_max_exclusive: "0.65.0".to_string(),
+            canon_min: "0.62.0".to_string(),
+            canon_max_exclusive: "0.63.0".to_string(),
             contract_line: REASONING_POSTURE_V1_CONTRACT_LINE.to_string(),
         };
 
         assert!(window.validate().is_ok());
-        assert!(window.admits_versions("0.63.0", "0.59.0"));
-        assert!(!window.admits_versions("0.64.0", "0.59.0"));
+        assert!(window.admits_versions("0.64.0", "0.62.0"));
+        assert!(!window.admits_versions("0.65.0", "0.62.0"));
     }
 
     #[test]
     fn compatibility_window_rejects_unsupported_contract_line() {
         let window = ReasoningCompatibilityWindow {
-            boundline_min: "0.63.0".to_string(),
-            boundline_max_exclusive: "0.64.0".to_string(),
-            canon_min: "0.59.0".to_string(),
-            canon_max_exclusive: "0.60.0".to_string(),
+            boundline_min: "0.64.0".to_string(),
+            boundline_max_exclusive: "0.65.0".to_string(),
+            canon_min: "0.62.0".to_string(),
+            canon_max_exclusive: "0.63.0".to_string(),
             contract_line: "governed_reasoning_posture_v2".to_string(),
         };
 
@@ -1261,10 +1261,10 @@ mod tests {
         let posture = CanonChallengePostureInput {
             contract_line: REASONING_POSTURE_V1_CONTRACT_LINE.to_string(),
             compatibility_window: ReasoningCompatibilityWindow {
-                boundline_min: "0.63.0".to_string(),
-                boundline_max_exclusive: "0.64.0".to_string(),
-                canon_min: "0.59.0".to_string(),
-                canon_max_exclusive: "0.60.0".to_string(),
+                boundline_min: "0.64.0".to_string(),
+                boundline_max_exclusive: "0.65.0".to_string(),
+                canon_min: "0.62.0".to_string(),
+                canon_max_exclusive: "0.63.0".to_string(),
                 contract_line: REASONING_POSTURE_V1_CONTRACT_LINE.to_string(),
             },
             required_profile_family: None,
@@ -1292,10 +1292,10 @@ mod tests {
         let posture = CanonChallengePostureInput {
             contract_line: "governed_reasoning_posture_v2".to_string(),
             compatibility_window: ReasoningCompatibilityWindow {
-                boundline_min: "0.63.0".to_string(),
-                boundline_max_exclusive: "0.64.0".to_string(),
-                canon_min: "0.59.0".to_string(),
-                canon_max_exclusive: "0.60.0".to_string(),
+                boundline_min: "0.64.0".to_string(),
+                boundline_max_exclusive: "0.65.0".to_string(),
+                canon_min: "0.62.0".to_string(),
+                canon_max_exclusive: "0.63.0".to_string(),
                 contract_line: REASONING_POSTURE_V1_CONTRACT_LINE.to_string(),
             },
             required_profile_family: Some(ReasoningProfileFamily::BlindReview),
@@ -1325,10 +1325,10 @@ mod tests {
         let posture = CanonChallengePostureInput {
             contract_line: REASONING_POSTURE_V1_CONTRACT_LINE.to_string(),
             compatibility_window: ReasoningCompatibilityWindow {
-                boundline_min: "0.63.0".to_string(),
-                boundline_max_exclusive: "0.64.0".to_string(),
-                canon_min: "0.59.0".to_string(),
-                canon_max_exclusive: "0.60.0".to_string(),
+                boundline_min: "0.64.0".to_string(),
+                boundline_max_exclusive: "0.65.0".to_string(),
+                canon_min: "0.62.0".to_string(),
+                canon_max_exclusive: "0.63.0".to_string(),
                 contract_line: "governed_reasoning_posture_v2".to_string(),
             },
             required_profile_family: Some(ReasoningProfileFamily::BlindReview),
@@ -1360,8 +1360,8 @@ mod tests {
             compatibility_window: ReasoningCompatibilityWindow {
                 boundline_min: "0.63.0".to_string(),
                 boundline_max_exclusive: "0.64.0".to_string(),
-                canon_min: "0.60.0".to_string(),
-                canon_max_exclusive: "0.61.0".to_string(),
+                canon_min: "0.61.0".to_string(),
+                canon_max_exclusive: "0.62.0".to_string(),
                 contract_line: REASONING_POSTURE_V1_CONTRACT_LINE.to_string(),
             },
             required_profile_family: Some(ReasoningProfileFamily::BlindReview),
@@ -1708,7 +1708,7 @@ mod tests {
             boundline_min: "not-a-version".to_string(),
             boundline_max_exclusive: "0.64.0".to_string(),
             canon_min: "0.59.0".to_string(),
-            canon_max_exclusive: "0.60.0".to_string(),
+            canon_max_exclusive: "0.61.0".to_string(),
             contract_line: REASONING_POSTURE_V1_CONTRACT_LINE.to_string(),
         };
         assert_eq!(
@@ -1817,7 +1817,7 @@ mod tests {
                 ParticipantAssignment {
                     role_id: "reviewer-a".to_string(),
                     participant_id: "participant-a".to_string(),
-                    effective_route: "review:claude:sonnet-4.6".to_string(),
+                    effective_route: "review:claude:sonnet-4".to_string(),
                     provider_family: Some("claude".to_string()),
                     context_basis: "governance_stage:verify".to_string(),
                     prompting_pattern: "blind_reviewer".to_string(),

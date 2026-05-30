@@ -11,11 +11,8 @@ fn fixture_vertical_slice_drives_a_failing_test_to_green() {
         Command::new("cargo").args(["test", "--quiet"]).current_dir(&workspace).output().unwrap();
     assert!(!initial.status.success(), "{}", terminal_text(&initial));
 
-    assert_eq!(run_boundline_in(&workspace, &["start"]).status.code(), Some(0));
     assert_eq!(
-        run_boundline_in(&workspace, &["capture", "--goal", "Fix the failing add test"])
-            .status
-            .code(),
+        run_boundline_in(&workspace, &["goal", "--goal", "Fix the failing add test"]).status.code(),
         Some(0)
     );
     assert_eq!(run_boundline_in(&workspace, &["plan", "--flow", "bug-fix"]).status.code(), Some(0));
@@ -25,9 +22,12 @@ fn fixture_vertical_slice_drives_a_failing_test_to_green() {
     let trace_path = extract_trace_path(&text);
 
     assert_eq!(output.status.code(), Some(0), "{text}");
-    assert!(text.contains("created: analyze"), "{text}");
-    assert!(text.contains("created: fix"), "{text}");
-    assert!(text.contains("created: test"), "{text}");
+    assert!(
+        text.contains(
+            "routing: native (goal_plan) - goal plan trace came from the session-native runtime"
+        ),
+        "{text}"
+    );
     assert!(text.contains("goal plan completed through the native decision loop"), "{text}");
     assert!(text.contains("terminal_status: succeeded"), "{text}");
     assert!(trace_path.as_ref().is_some_and(|path| path.exists()), "{text}");

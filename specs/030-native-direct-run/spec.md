@@ -23,7 +23,7 @@
 An operator can start from a workspace plus a goal and use one `run` command to
 enter the primary session-native delivery path, reach real workspace changes,
 run validation, and inspect persisted follow-up state without manually calling
-`start`, `capture`, and `plan` first.
+`start`, `goal`, and `plan` first.
 
 **Why this priority**: The roadmap says the meaningful delivery story must stop
 depending on the explicit compatibility path. If direct `run --goal` still goes
@@ -126,7 +126,7 @@ formatting results.
 -->
 
 - What happens when direct `run --goal` is invoked against a workspace that
-  already has a captured or planned native session?
+  already has a recorded or planned native session?
 - How does the system handle a direct native run that fails validation or has no
   deterministic workspace change available for the current target?
 - How does the system surface primary native routing versus an explicitly chosen
@@ -146,16 +146,16 @@ formatting results.
 
 - **FR-001**: System MUST let `boundline run --goal <goal>`
   enter the primary session-native delivery path without requiring a prior
-  manual `start`, `capture`, or `plan` command sequence.
+  manual `start`, `goal`, or `plan` command sequence.
 - **FR-002**: System MUST persist the same core native session state a manual
-  session-native flow would create, including captured goal state, negotiation
+  session-native flow would create, including recorded goal state, negotiation
   projection, goal-plan state, decisions, and trace continuity needed by later
   `status`, `next`, and `inspect` commands.
 - **FR-003**: System MUST turn direct-run input into an immediately executable
   bounded native route by confirming an inferred built-in flow when credible or
   by using no-flow native planning when no credible flow is inferred.
 - **FR-004**: System MUST NOT silently overwrite an active session that already
-  contains meaningful captured, planned, or in-progress delivery state when a
+  contains meaningful recorded, planned, or in-progress delivery state when a
   new direct-run goal is provided.
 - **FR-005**: System MUST keep explicit compatibility execution available only
   when the operator chooses it deliberately, and MUST continue surfacing

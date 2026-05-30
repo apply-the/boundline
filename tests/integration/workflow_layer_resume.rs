@@ -38,7 +38,7 @@ fn workflow_status_reports_paused_capture_state_and_resume_guidance() {
 		"{text}"
 	);
     assert!(
-        text.contains("next_command: boundline capture --workspace ")
+        text.contains("next_command: boundline goal --update --workspace ")
             && text.contains("--goal <goal>"),
         "{text}"
     );
@@ -51,11 +51,11 @@ fn workflow_resume_continues_after_goal_capture_without_replaying_completed_phas
     let start = run_boundline_in(&workspace, &["workflow", "run", "default"]);
     assert_eq!(start.status.code(), Some(0), "{}", terminal_text(&start));
 
-    let capture = run_boundline_in(
+    let goal = run_boundline_in(
         &workspace,
-        &["capture", "--workspace", ".", "--goal", "Fix the failing add test"],
+        &["goal", "--update", "--workspace", ".", "--goal", "Fix the failing add test"],
     );
-    assert_eq!(capture.status.code(), Some(0), "{}", terminal_text(&capture));
+    assert_eq!(goal.status.code(), Some(0), "{}", terminal_text(&goal));
 
     let output = run_boundline_in(&workspace, &["workflow", "resume", "--workspace", "."]);
     let text = terminal_text(&output);

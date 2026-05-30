@@ -1,9 +1,9 @@
 # Quickstart: Dynamic Planning And Flow Inference
 
-## Scenario 1: Capture a goal and generate a bounded proposal
+## Scenario 1: Record a goal and generate a bounded proposal
 
 1. Start or resume a session.
-2. Capture a goal and any authored brief material.
+2. Record a goal and any authored brief material.
 3. Run `boundline plan --workspace <repo>`.
 4. Confirm that the output shows:
    - inferred flow with evidence-based rationale,

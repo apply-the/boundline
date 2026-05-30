@@ -245,7 +245,7 @@ active repository, the command stops with an error.
 | `/boundline-config-show` | `boundline config show` | |
 | `/boundline-config-set-canon` | `boundline config set-canon` | |
 | `/boundline-config-set` | `boundline config set` | |
-| `/boundline-capture` | `boundline capture` | |
+| `/boundline-goal` | `boundline goal` | |
 | `/boundline-plan` | `boundline plan` | |
 | `/boundline-run` | `boundline run` | Default Canon path |
 | `/boundline-run <mode>` | `boundline run --mode <mode>` | |

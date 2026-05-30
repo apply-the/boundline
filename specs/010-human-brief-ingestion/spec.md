@@ -27,7 +27,7 @@ so that I can use Boundline without learning or authoring internal manifests.
 product leaks its internal state model and fails at the first operator touchpoint.
 
 **Independent Test**: Start a new task from either plain text or one Markdown
-brief, verify that Boundline captures the request, derives a bounded task draft, and
+brief, verify that Boundline records the request, derives a bounded task draft, and
 either plans the work or asks for one explicit clarification without requiring
 the user to edit internal files.
 

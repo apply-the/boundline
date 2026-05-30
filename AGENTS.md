@@ -128,7 +128,6 @@ Before 1.0.0, breaking changes MAY occur in minor versions.
 ## Recent Changes
 - 063-assistant-delight-followthrough: Added Rust 1.95.0, edition 2024, plus repository-managed Markdown and JSON assistant assets + existing workspace crates and runtime dependencies (`clap`, `dialoguer`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, `rusqlite`); no new runtime dependencies planned for the first slice
 - 062-reasoning-profile-closure: Added Rust 1.95.0, edition 2024 in Boundline; Markdown, TOML, and JSON repository artifacts; companion Canon updates only if the supported release pair changes + Existing workspace dependencies only (`serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, `clap`, `dialoguer`, `rusqlite` already present in workspace); no new runtime crates planned
-- 061-reasoning-profile-contracts: Added Rust 1.95.0, edition 2024 for Boundline and Canon runtime changes; Markdown and TOML or JSON contract artifacts for cross-repo contract surfaces + Existing Boundline workspace dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`) and Canon workspace dependencies of the same family; no new runtime crates planned for the first implementation line
 
 
 <!-- MANUAL ADDITIONS START -->
@@ -151,8 +150,28 @@ Before 1.0.0, breaking changes MAY occur in minor versions.
 	`enum` models with `serde` derives instead of ad hoc `serde_json::Map`
 	assembly, repeated raw field-name strings, or stable `json!` object
 	construction.
+
+## Repo Safety Rules
+
+- NEVER run `boundline` CLI commands against this repository root as a working
+	workspace. Doing so writes workspace-local `.boundline/` session state,
+	pollutes tracked repo history, and can dirty the developer worktree. Use a
+	temporary fixture workspace, isolated temp repo, or explicit test harness
+	instead.
 <!-- MANUAL ADDITIONS END -->
 
 
 <!-- MANUAL ADDITIONS START -->
+
+## Clean Code & Modularity (Strict Enforcement)
+- **NO GIGANTIC FILES**: Do not dump all logic into a single massive file. If a module grows complex, extract helpers, algorithms, and state transitions into private submodules (`pub(crate)`).
+- **APPLY DESIGN PATTERNS**: Do not use monolithic match statements or procedural god-functions. Extract responsibilities using appropriate design patterns (e.g. Builder, Strategy, Dependency Injection). Keep business logic strictly isolated from I/O and HTTP/CLI transport boundaries.
+- **ZERO MAGIC STRINGS/NUMBERS**: You MUST NOT use magic numbers, timeouts, retry limits, or repeated raw strings inline. Extract them into named `const` items or typed `enum`s.
+- **EXTRACT HELPERS PROACTIVELY**: Aim for <50 lines per function. If you need a comment to explain the middle of a function, extract that block into a well-named helper function.
+- **NO DEAD CODE**: Remove all commented-out code, unused variables, and unreachable branches immediately. `git` remembers.
+- **WHY NOT WHAT**: Documentation and comments must explain the *why*, business constraints, and invariants, not narrate the *what*.
+- **COMPREHENSIVE DOCUMENTATION**: Every folder/module MUST have a module-level doc comment (e.g. `//!` in `mod.rs` or `<module_name>.rs`) explaining its purpose, and these docs must be kept up to date. Furthermore, all structs, public functions, enums, and constants MUST have clear and up-to-date doc comments (`///`).
+- **LOGGING & SECRETS**: Log at major state-transition decision points using structured `tracing` spans/events. Always include reproducible context (IDs) but NEVER log secrets, tokens, or PII.
+- **CONCURRENCY**: Avoid `Arc<Mutex<T>>` lock-contention. Prefer message-passing (channels) or immutable data snapshots to share state across async boundaries.
+
 <!-- MANUAL ADDITIONS END -->

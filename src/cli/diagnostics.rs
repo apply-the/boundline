@@ -1,8 +1,9 @@
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::adapters::env_layer::provider_environment_status;
 use crate::adapters::trace_store::FileTraceStore;
 use crate::domain::distribution::{
     CanonInstallStatus, CompanionState, SUPPORTED_CANON_VERSION, evaluate_canon_install,
@@ -15,6 +16,8 @@ use crate::fixture::load_workspace_execution_profile;
 const ADVANCED_CONTEXT_INDEX_RELATIVE: &str =
     ".boundline/context-intelligence/retrieval-index.sqlite3";
 const CANON_GUIDANCE_DIR_RELATIVE: &str = ".canon/boundline/guidance";
+const CANON_BINARY_NAME: &str = "canon";
+const CANON_COMMAND_RESOLUTION_CHECK_NAME: &str = "canon_command_resolution";
 const SESSION_RECORD_RELATIVE: &str = ".boundline/session.json";
 const WORKSPACE_CONFIG_RELATIVE: &str = ".boundline/config.toml";
 const WORKSPACE_GUIDANCE_DIR_RELATIVE: &str = ".boundline/guidance";
@@ -106,6 +109,7 @@ fn diagnose_installation_from_current_exe(
             });
 
             let canon_status = evaluate_canon_install(&executable);
+            let named_canon_path = path_named_command(CANON_BINARY_NAME);
             if matches!(canon_status.state, CompanionState::Blocked | CompanionState::RepairNeeded)
             {
                 suggested_actions.extend(canon_status.suggested_actions.clone());
@@ -122,6 +126,12 @@ fn diagnose_installation_from_current_exe(
                     status: DiagnosticsStatus::Failed,
                     message: "Canon binary path could not be resolved".to_string(),
                 });
+            }
+            if let Some(check) = canon_command_resolution_check(
+                canon_status.location.as_deref(),
+                named_canon_path.as_deref(),
+            ) {
+                checks.push(check);
             }
             if let Some(surface) = canon_status.surface_verification.as_ref() {
                 checks.push(DiagnosticsCheck {
@@ -188,6 +198,7 @@ fn diagnose_installation_from_current_exe(
                 },
                 message: canon_status.message,
             });
+            extend_install_environment_diagnostics(&mut checks, &mut suggested_actions);
 
             return finalize_report(
                 checks,
@@ -220,6 +231,7 @@ fn diagnose_installation_from_current_exe(
                 "rerun `boundline doctor --install` from the installed Boundline executable in a normal shell"
                     .to_string(),
             );
+            extend_install_environment_diagnostics(&mut checks, &mut suggested_actions);
             None
         }
     };
@@ -286,7 +298,9 @@ fn diagnose_workspace_with_profile_requirement(
     });
 
     let trace_store = FileTraceStore::for_workspace(workspace);
-    let trace_root = trace_store.root();
+    let effective_trace_root =
+        trace_store.effective_root().unwrap_or_else(|_| trace_store.root().to_path_buf());
+    let trace_root = effective_trace_root.as_path();
     let trace_root_ready =
         if trace_root.exists() { trace_root.is_dir() } else { workspace_writable };
     checks.push(if trace_root_ready {
@@ -393,6 +407,8 @@ fn extend_workspace_context_diagnostics(report: &mut DiagnosticsReport, workspac
             format!("boundline config show --workspace {workspace_ref} --scope effective")
         }),
     );
+
+    extend_workspace_environment_diagnostics(report, workspace, &workspace_ref);
 
     let project_memory = read_project_memory(workspace);
     let project_memory_available = project_memory.has_credible_memory();
@@ -508,7 +524,8 @@ fn extend_workspace_context_diagnostics(report: &mut DiagnosticsReport, workspac
                 "session evidence is missing; start a session before expecting `why`, `risk`, or `next-best` to cite live runtime context".to_string()
             },
         },
-        (!has_session_evidence).then(|| format!("boundline start --workspace {workspace_ref}")),
+        (!has_session_evidence)
+            .then(|| format!("boundline goal --workspace {workspace_ref} --goal <goal>")),
     );
 }
 
@@ -517,14 +534,28 @@ fn path_has_entries(path: &Path) -> bool {
 }
 
 fn provider_readiness_context(workspace: &Path) -> (DiagnosticsStatus, String, Vec<String>) {
+    let named_canon_path = path_named_command(CANON_BINARY_NAME);
     let canon_status =
         std::env::current_exe().ok().map(|current_exe| evaluate_canon_install(&current_exe));
-    provider_readiness_context_from_status(workspace, canon_status)
+    provider_readiness_context_from_status_with_named_path(
+        workspace,
+        canon_status,
+        named_canon_path.as_deref(),
+    )
 }
 
+#[cfg(test)]
 fn provider_readiness_context_from_status(
     workspace: &Path,
     canon_status: Option<CanonInstallStatus>,
+) -> (DiagnosticsStatus, String, Vec<String>) {
+    provider_readiness_context_from_status_with_named_path(workspace, canon_status, None)
+}
+
+fn provider_readiness_context_from_status_with_named_path(
+    workspace: &Path,
+    canon_status: Option<CanonInstallStatus>,
+    named_canon_path: Option<&Path>,
 ) -> (DiagnosticsStatus, String, Vec<String>) {
     let fallback_action = "boundline doctor --install".to_string();
     let Some(canon_status) = canon_status else {
@@ -536,12 +567,18 @@ fn provider_readiness_context_from_status(
         );
     };
 
+    let shadowing_note =
+        canon_command_shadowing_note(canon_status.location.as_deref(), named_canon_path);
+
     if matches!(canon_status.state, CompanionState::Ready | CompanionState::AlreadySatisfied) {
         return (
             DiagnosticsStatus::Passed,
-            format!(
-                "provider readiness is confirmed for workspace diagnostics from {}",
-                workspace.display()
+            append_diagnostics_note(
+                format!(
+                    "provider readiness is confirmed for workspace diagnostics from {}",
+                    workspace.display()
+                ),
+                shadowing_note.as_deref(),
             ),
             Vec::new(),
         );
@@ -553,9 +590,212 @@ fn provider_readiness_context_from_status(
     }
     (
         DiagnosticsStatus::Advisory,
-        format!("provider readiness is not confirmed for this machine: {}", canon_status.message),
+        append_diagnostics_note(
+            format!(
+                "provider readiness is not confirmed for this machine: {}",
+                canon_status.message
+            ),
+            shadowing_note.as_deref(),
+        ),
         actions,
     )
+}
+
+fn canon_command_resolution_check(
+    selected_canon_path: Option<&Path>,
+    named_canon_path: Option<&Path>,
+) -> Option<DiagnosticsCheck> {
+    canon_command_shadowing_note(selected_canon_path, named_canon_path).map(|message| {
+        DiagnosticsCheck {
+            name: CANON_COMMAND_RESOLUTION_CHECK_NAME.to_string(),
+            status: DiagnosticsStatus::Advisory,
+            message,
+        }
+    })
+}
+
+fn canon_command_shadowing_note(
+    selected_canon_path: Option<&Path>,
+    named_canon_path: Option<&Path>,
+) -> Option<String> {
+    let selected_canon_path = selected_canon_path?;
+    let named_canon_path = named_canon_path?;
+    if paths_refer_to_same_file(selected_canon_path, named_canon_path) {
+        return None;
+    }
+    Some(format!(
+        "named `{CANON_BINARY_NAME}` resolves to {} but Boundline selected {} after compatibility checks",
+        named_canon_path.display(),
+        selected_canon_path.display()
+    ))
+}
+
+fn append_diagnostics_note(message: String, note: Option<&str>) -> String {
+    match note {
+        Some(note) if !note.is_empty() => format!("{message}; {note}"),
+        _ => message,
+    }
+}
+
+fn path_named_command(command_name: &str) -> Option<PathBuf> {
+    std::env::var_os("PATH")
+        .map(|paths| std::env::split_paths(&paths).collect::<Vec<_>>())
+        .unwrap_or_default()
+        .into_iter()
+        .map(|directory| directory.join(command_name))
+        .find(|candidate| candidate.is_file())
+}
+
+fn paths_refer_to_same_file(left: &Path, right: &Path) -> bool {
+    if left == right {
+        return true;
+    }
+    match (fs::canonicalize(left), fs::canonicalize(right)) {
+        (Ok(left_real), Ok(right_real)) => left_real == right_real,
+        _ => false,
+    }
+}
+
+fn extend_install_environment_diagnostics(
+    checks: &mut Vec<DiagnosticsCheck>,
+    suggested_actions: &mut Vec<String>,
+) {
+    let status = provider_environment_status(None);
+    checks.push(DiagnosticsCheck {
+        name: "global_provider_env_template".to_string(),
+        status: if status.global_env_template_present {
+            DiagnosticsStatus::Passed
+        } else {
+            DiagnosticsStatus::Advisory
+        },
+        message: if status.global_env_template_present {
+            format!(
+                "global provider env template is available at {}",
+                status.global_env_template_path.display()
+            )
+        } else {
+            format!(
+                "global provider env template is missing; bootstrap it at {}",
+                status.global_env_template_path.display()
+            )
+        },
+    });
+
+    let global_defaults_ready =
+        status.global_env_present || !status.process_keys_present.is_empty();
+    let global_defaults_message = if !status.process_keys_present.is_empty() {
+        format!(
+            "provider credentials are already present in process env: {}",
+            status.process_keys_present.join(", ")
+        )
+    } else if status.global_env_present {
+        format!(
+            "global provider env defaults are available at {}",
+            status.global_env_path.display()
+        )
+    } else {
+        format!(
+            "global provider env defaults are missing; create {} for install-wide defaults",
+            status.global_env_path.display()
+        )
+    };
+    checks.push(DiagnosticsCheck {
+        name: "global_provider_env_defaults".to_string(),
+        status: if global_defaults_ready {
+            DiagnosticsStatus::Passed
+        } else {
+            DiagnosticsStatus::Advisory
+        },
+        message: global_defaults_message,
+    });
+
+    if !status.global_env_template_present || !global_defaults_ready {
+        suggested_actions.push("boundline init --scope global --assistant copilot".to_string());
+    }
+}
+
+fn extend_workspace_environment_diagnostics(
+    report: &mut DiagnosticsReport,
+    workspace: &Path,
+    workspace_ref: &str,
+) {
+    let status = provider_environment_status(Some(workspace));
+
+    push_context_check(
+        report,
+        DiagnosticsCheck {
+            name: "workspace_provider_env_template".to_string(),
+            status: if status.workspace_env_template_present {
+                DiagnosticsStatus::Passed
+            } else {
+                DiagnosticsStatus::Advisory
+            },
+            message: if let Some(path) = status.workspace_env_template_path.as_ref() {
+                if status.workspace_env_template_present {
+                    format!("workspace provider env template is available at {}", path.display())
+                } else {
+                    format!(
+                        "workspace provider env template is missing; scaffold {} for repo-local overrides",
+                        path.display()
+                    )
+                }
+            } else {
+                "workspace provider env template path is unavailable".to_string()
+            },
+        },
+        (!status.workspace_env_template_present)
+            .then(|| format!("boundline init --scope both --workspace {workspace_ref}")),
+    );
+
+    let workspace_env_ready = status.workspace_env_present
+        || status.workspace_env_local_present
+        || status.global_env_present
+        || !status.process_keys_present.is_empty();
+    let workspace_env_message = if status.workspace_env_local_present {
+        format!(
+            "workspace provider overrides are available at {}",
+            status
+                .workspace_env_local_path
+                .as_ref()
+                .map(|path| path.display().to_string())
+                .unwrap_or_default()
+        )
+    } else if status.workspace_env_present {
+        format!(
+            "workspace provider defaults are available at {}",
+            status
+                .workspace_env_path
+                .as_ref()
+                .map(|path| path.display().to_string())
+                .unwrap_or_default()
+        )
+    } else if !status.process_keys_present.is_empty() {
+        format!(
+            "provider credentials are already present in process env: {}",
+            status.process_keys_present.join(", ")
+        )
+    } else if status.global_env_present {
+        format!(
+            "workspace inherits install-wide provider defaults from {}",
+            status.global_env_path.display()
+        )
+    } else {
+        "provider env sources are missing; configure install-wide defaults or add repo-local overrides before using direct provider runtimes".to_string()
+    };
+    push_context_check(
+        report,
+        DiagnosticsCheck {
+            name: "provider_env_sources".to_string(),
+            status: if workspace_env_ready {
+                DiagnosticsStatus::Passed
+            } else {
+                DiagnosticsStatus::Advisory
+            },
+            message: workspace_env_message,
+        },
+        (!workspace_env_ready)
+            .then(|| format!("boundline init --scope both --workspace {workspace_ref}")),
+    );
 }
 
 fn push_context_check(
@@ -633,14 +873,18 @@ mod tests {
     use uuid::Uuid;
 
     use super::{
-        ADVANCED_CONTEXT_INDEX_RELATIVE, CANON_GUIDANCE_DIR_RELATIVE, DiagnosticsCheck,
-        DiagnosticsReportContext, DiagnosticsStatus, DiagnosticsSubject, SESSION_RECORD_RELATIVE,
-        WORKSPACE_CONFIG_RELATIVE, WORKSPACE_GUIDANCE_DIR_RELATIVE, diagnose_installation,
+        ADVANCED_CONTEXT_INDEX_RELATIVE, CANON_COMMAND_RESOLUTION_CHECK_NAME,
+        CANON_GUIDANCE_DIR_RELATIVE, DiagnosticsCheck, DiagnosticsReportContext, DiagnosticsStatus,
+        DiagnosticsSubject, SESSION_RECORD_RELATIVE, WORKSPACE_CONFIG_RELATIVE,
+        WORKSPACE_GUIDANCE_DIR_RELATIVE, canon_command_resolution_check, diagnose_installation,
         diagnose_installation_from_current_exe, diagnose_native_direct_run_workspace,
         diagnose_workspace, diagnose_workspace_context, distribution_channel_message,
         finalize_report, provider_readiness_context_from_status,
+        provider_readiness_context_from_status_with_named_path,
     };
-    use crate::domain::distribution::{CanonInstallStatus, CompanionState};
+    use crate::domain::distribution::{
+        CanonInstallStatus, CompanionState, SUPPORTED_CANON_VERSION,
+    };
 
     fn temp_workspace() -> PathBuf {
         let workspace =
@@ -701,6 +945,17 @@ mod tests {
         )
         .unwrap();
         workspace
+    }
+
+    fn temp_distinct_canon_paths() -> (PathBuf, PathBuf) {
+        let root = std::env::temp_dir().join(format!("boundline-canon-shadow-{}", Uuid::new_v4()));
+        let selected_canon_path = root.join("selected/bin/canon");
+        let named_canon_path = root.join("named/bin/canon");
+        fs::create_dir_all(selected_canon_path.parent().unwrap()).unwrap();
+        fs::create_dir_all(named_canon_path.parent().unwrap()).unwrap();
+        fs::write(&selected_canon_path, "selected canon\n").unwrap();
+        fs::write(&named_canon_path, "named canon\n").unwrap();
+        (selected_canon_path, named_canon_path)
     }
 
     fn write_project_memory_surface(workspace: &Path) {
@@ -896,7 +1151,7 @@ mod tests {
             report
                 .suggested_actions
                 .iter()
-                .any(|action| action.contains("boundline start --workspace"))
+                .any(|action| action.contains("boundline goal --workspace"))
         );
     }
 
@@ -1017,6 +1272,51 @@ mod tests {
         assert_eq!(status, DiagnosticsStatus::Passed);
         assert!(message.contains("provider readiness is confirmed"));
         assert!(actions.is_empty());
+    }
+
+    #[test]
+    fn provider_readiness_context_reports_named_canon_shadowing_note() {
+        let (selected_canon_path, named_canon_path) = temp_distinct_canon_paths();
+        let selected_canon_display = selected_canon_path.display().to_string();
+        let named_canon_display = named_canon_path.display().to_string();
+        let (status, message, actions) = provider_readiness_context_from_status_with_named_path(
+            Path::new("/tmp/workspace"),
+            Some(CanonInstallStatus {
+                state: CompanionState::AlreadySatisfied,
+                version: Some(SUPPORTED_CANON_VERSION.to_string()),
+                location: Some(selected_canon_path),
+                bundled_with_boundline: false,
+                message: "Canon is ready".to_string(),
+                suggested_actions: Vec::new(),
+                surface_verification: None,
+            }),
+            Some(named_canon_path.as_path()),
+        );
+
+        assert_eq!(status, DiagnosticsStatus::Passed);
+        assert!(message.contains("provider readiness is confirmed"));
+        assert!(message.contains(&format!("named `canon` resolves to {named_canon_display}")));
+        assert!(message.contains(&selected_canon_display));
+        assert!(actions.is_empty());
+    }
+
+    #[test]
+    fn canon_command_resolution_check_surfaces_shadowed_named_command() {
+        let (selected_canon_path, named_canon_path) = temp_distinct_canon_paths();
+        let selected_canon_display = selected_canon_path.display().to_string();
+        let named_canon_display = named_canon_path.display().to_string();
+        let check = canon_command_resolution_check(
+            Some(selected_canon_path.as_path()),
+            Some(named_canon_path.as_path()),
+        )
+        .unwrap();
+
+        assert_eq!(check.name, CANON_COMMAND_RESOLUTION_CHECK_NAME);
+        assert_eq!(check.status, DiagnosticsStatus::Advisory);
+        assert!(
+            check.message.contains(&format!("named `canon` resolves to {named_canon_display}"))
+        );
+        assert!(check.message.contains(&selected_canon_display));
     }
 
     #[test]

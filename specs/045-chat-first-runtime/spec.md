@@ -27,7 +27,7 @@ host surface.
 
 1. **Given** a workspace with no active session, **When** an operator asks the
    primary host chat to begin bounded work on a concrete goal, **Then**
-   Boundline captures or creates the active session and returns the current
+   Boundline records or creates the active session and returns the current
    state, next action, and planning outcome in the same host surface.
 2. **Given** a workspace whose active session requires clarification or plan
    confirmation, **When** the operator continues from the host chat, **Then**

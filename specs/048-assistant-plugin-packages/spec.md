@@ -28,7 +28,7 @@ As a chat-surface user, I want namespaced Boundline commands to start, capture, 
 
 **Why this priority**: Package metadata is only valuable if it leads users into the real Boundline loop and preserves the CLI/runtime as the source of truth.
 
-**Independent Test**: Review command bindings and starter prompts to confirm `/boundline:start`, `/boundline:capture`, `/boundline:plan`, `/boundline:run`, `/boundline:status`, `/boundline:inspect`, `/boundline:recover`, and conditional `/boundline:govern` all guide or call the real runtime, preserve session-native state, and expose blocked, clarification-required, failed, exhausted, and terminal states explicitly.
+**Independent Test**: Review command bindings and starter prompts to confirm `/boundline:start`, `/boundline:goal`, `/boundline:plan`, `/boundline:run`, `/boundline:status`, `/boundline:inspect`, `/boundline:recover`, and conditional `/boundline:govern` all guide or call the real runtime, preserve session-native state, and expose blocked, clarification-required, failed, exhausted, and terminal states explicitly.
 
 **Acceptance Scenarios**:
 
@@ -69,7 +69,7 @@ As a Boundline maintainer, I want automated validation for host package manifest
 - **FR-002**: Each supported host package MUST declare Boundline name, display name, version, description, author, homepage, repository, license, keywords, capabilities, and supported paths where the host surface supports those fields.
 - **FR-003**: Host package language MUST position Boundline as a "Local delivery orchestrator for bounded engineering work", "Plan, act, verify, trace", "Turns bounded engineering goals into verified workspace changes", or "Session-native runtime for AI-assisted software delivery".
 - **FR-004**: Host package language MUST NOT describe Boundline as a generic agent framework, debate CLI, prompt library, governance runtime, replacement for Canon, or merely a raw CLI wrapper.
-- **FR-005**: Host packages MUST expose the required namespaced commands: `/boundline:start`, `/boundline:capture`, `/boundline:plan`, `/boundline:run`, `/boundline:status`, `/boundline:inspect`, and `/boundline:recover`.
+- **FR-005**: Host packages MUST expose the required namespaced commands: `/boundline:start`, `/boundline:goal`, `/boundline:plan`, `/boundline:run`, `/boundline:status`, `/boundline:inspect`, and `/boundline:recover`.
 - **FR-006**: Host packages MUST expose `/boundline:govern` only as conditional Canon-governance integration that is visible when governance is configured or explicitly documented as conditional.
 - **FR-007**: Command and skill bindings MUST call or guide Boundline's real CLI/runtime and MUST NOT duplicate runtime logic in markdown.
 - **FR-008**: Command and skill bindings MUST keep `.boundline/session.json` authoritative and MUST surface current runtime state and next action rather than relying only on chat history.

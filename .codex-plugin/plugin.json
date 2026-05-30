@@ -1,8 +1,8 @@
 {
   "name": "boundline",
   "displayName": "Boundline Assistant Support for Codex",
-  "version": "0.63.0",
-  "description": "Local delivery orchestrator for bounded engineering work",
+  "version": "0.64.0",
+  "description": "CLI-authoritative assistant support for bounded engineering work",
   "author": {
     "name": "Apply The",
     "url": "https://github.com/apply-the"
@@ -18,8 +18,7 @@
     "plan-act-verify-trace"
   ],
   "capabilities": [
-    {"id": "/boundline:start", "label": "start"},
-    {"id": "/boundline:capture", "label": "capture"},
+    {"id": "/boundline:goal", "label": "goal"},
     {"id": "/boundline:plan", "label": "plan"},
     {"id": "/boundline:run", "label": "run"},
     {"id": "/boundline:status", "label": "status"},
@@ -28,7 +27,7 @@
     {"id": "/boundline:govern", "label": "govern", "conditional": true}
   ],
   "positioning": [
-    "Local delivery orchestrator for bounded engineering work",
+    "CLI-authoritative assistant support for bounded engineering work",
     "Turns bounded engineering goals into verified workspace changes",
     "Session-native runtime for AI-assisted software delivery"
   ],
@@ -42,7 +41,7 @@
   },
   "interface": {
     "displayName": "Boundline",
-    "shortDescription": "Local delivery orchestrator for bounded engineering work",
+    "shortDescription": "CLI-authoritative assistant support for bounded engineering work",
     "longDescription": "Boundline turns bounded engineering goals into verified workspace changes through a session-native loop: plan, act, verify, trace.",
     "developerName": "Apply The",
     "category": "Productivity",

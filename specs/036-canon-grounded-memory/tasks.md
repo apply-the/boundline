@@ -39,14 +39,14 @@
 
 ## Phase 3: User Story 1 - Plan With Canon-Grounded Context (Priority: P1) 🎯 MVP
 
-**Goal**: Make `start -> capture -> plan` treat Canon packets, governed artifacts, artifact summaries, and capability signals as live bounded planning evidence instead of stage-end output only.
+**Goal**: Make `goal -> plan` treat Canon packets, governed artifacts, artifact summaries, and capability signals as live bounded planning evidence instead of stage-end output only.
 
 **Independent Test**: Run representative native planning scenarios on workspaces with reusable Canon-governed evidence and verify that the proposed plan, rationale, and verification strategy change because of that Canon-grounded input.
 
 ### Tests for User Story 1
 
 - [x] T007 [P] [US1] Add contract coverage for Canon-grounded proposal payloads and planning fallbacks in `/Users/rt/workspace/boundline/tests/contract/goal_plan_contract.rs` and `/Users/rt/workspace/boundline/tests/contract/runtime_refoundation_contract.rs`
-- [x] T008 [P] [US1] Add integration coverage for Canon-grounded `start -> capture -> plan` behavior in `/Users/rt/workspace/boundline/tests/integration/session_native_flow.rs`
+- [x] T008 [P] [US1] Add integration coverage for Canon-grounded `goal -> plan` behavior in `/Users/rt/workspace/boundline/tests/integration/session_native_flow.rs`
 - [x] T009 [P] [US1] Add unit coverage for Canon snapshot normalization, planning influence, and bounded-stop shaping in `/Users/rt/workspace/boundline/tests/unit/goal_planner.rs` and `/Users/rt/workspace/boundline/tests/unit/session_model.rs`
 
 ### Implementation for User Story 1
