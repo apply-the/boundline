@@ -6559,7 +6559,7 @@ mod tests {
         let _current_dir_guard = CurrentDirGuard::change_to(&workspace);
 
         let report =
-            execute_locked_init(copilot_canon_init_request(Path::new("."), InitTemplate::BugFix));
+            execute_init(copilot_canon_init_request(Path::new("."), InitTemplate::BugFix)).unwrap();
 
         assert_eq!(report.exit_status, CommandExitStatus::NonSuccess);
         assert!(report.terminal_output.contains("Canon workspace bootstrap failed"));
