@@ -117,6 +117,34 @@ If the report is a vulnerability, do not open a public exploit report. Follow
 - If you add a new test module under `tests/unit`, `tests/integration`, or `tests/contract`, you must also register it in the matching top-level harness file.
 - Prefer narrow, behavior-scoped tests while iterating, then run the full suite before finalizing the change.
 
+### Test Isolation: Process-Global State
+
+Rust test binaries run cases in parallel within the same process.
+Any test that mutates process-global state (environment variables, current
+directory) must hold the appropriate shared lock for the duration of the
+mutation:
+
+| Shared resource | Lock | Location |
+|-----------------|------|----------|
+| Provider env vars (`OPENAI_API_KEY_ENV`, `ANTHROPIC_*`, `GITHUB_*`, etc.) | `SHARED_ENV_LOCK` | `src/adapters.rs` (root crate) and `crates/boundline-adapters/src/adapters.rs` |
+| Config-path env vars (`XDG_CONFIG_HOME`, `HOME`) | Same `SHARED_ENV_LOCK` | Same locations |
+| Current directory and `PWD` | `acquire_process_state_lock()` | `crates/boundline-cli/src/test_support.rs` |
+
+Rules:
+
+1. **One lock per binary for env mutations.** All source test modules compiled
+   into the same library test binary must use `SHARED_ENV_LOCK` for any
+   `std::env::set_var` / `std::env::remove_var` call. Do not introduce a local
+   `static ENV_LOCK`; that serializes only within one module while other modules
+   run concurrently.
+2. **Poison-safe acquisition.** Always acquire with
+   `.unwrap_or_else(|poisoned| poisoned.into_inner())` so a panic in one test
+   does not cascade mutex-poison failures into unrelated tests.
+3. **Save and restore.** Capture the prior value before mutation, restore it
+   in a drop guard or explicit cleanup, and keep the lock held across both.
+4. **Scope the lock broadly.** The lock must be held from before the first
+   mutation through after the last assertion that depends on the mutated state.
+
 ## Docs Expectations
 
 If you change a user-visible command, session workflow, or flow behavior, update the relevant docs in the same change. Common files include:

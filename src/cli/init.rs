@@ -4683,7 +4683,14 @@ mod tests {
     }
 
     fn initialize_workspace_for_update(workspace: &Path) {
-        execute_init(copilot_canon_init_request(workspace, InitTemplate::BugFix)).unwrap();
+        let _ = execute_successful_init(copilot_canon_init_request(workspace, InitTemplate::BugFix));
+    }
+
+    fn execute_successful_init(request: InitRequest<'_>) -> super::InitCommandReport {
+        let _lock = acquire_process_state_lock();
+        let report = execute_init(request).unwrap();
+        assert_eq!(report.exit_status, CommandExitStatus::Succeeded);
+        report
     }
 
     fn load_workspace_scaffold_manifest(workspace: &Path) -> ScaffoldManifest {
@@ -4774,6 +4781,7 @@ mod tests {
 
     struct CanonInstallOverrideGuard {
         previous: Option<crate::domain::distribution::CanonInstallStatus>,
+        _lock: MutexGuard<'static, ()>,
     }
 
     impl Drop for CanonInstallOverrideGuard {
@@ -4787,8 +4795,9 @@ mod tests {
         status: crate::domain::distribution::CanonInstallStatus,
         action: impl FnOnce() -> T,
     ) -> T {
+        let lock = acquire_process_state_lock();
         let previous = super::replace_test_canon_install_status_override(Some(status));
-        let guard = CanonInstallOverrideGuard { previous };
+        let guard = CanonInstallOverrideGuard { previous, _lock: lock };
         let result = action();
         drop(guard);
         result
@@ -6333,12 +6342,10 @@ mod tests {
     #[test]
     fn execute_init_uses_spinner_path_when_interactive_terminal_override_is_true() {
         let workspace = temp_workspace("boundline-init-spinner");
-        let report = execute_init(InitRequest {
+        let report = execute_successful_init(InitRequest {
             interactive_terminal_override: Some(true),
             ..copilot_canon_init_request(&workspace, InitTemplate::Change)
-        })
-        .unwrap();
-        assert_eq!(report.exit_status, crate::cli::CommandExitStatus::Succeeded);
+        });
         assert!(
             report.terminal_output.contains("init: workspace initialized"),
             "{}",
@@ -6745,10 +6752,9 @@ mod tests {
         let workspace = temp_workspace("boundline-init-manifest");
 
         let report =
-            execute_init(copilot_canon_init_request(&workspace, InitTemplate::Change)).unwrap();
+            execute_successful_init(copilot_canon_init_request(&workspace, InitTemplate::Change));
 
         let manifest = load_workspace_scaffold_manifest(&workspace);
-        assert_eq!(report.exit_status, CommandExitStatus::Succeeded);
         assert_eq!(manifest.version, SCAFFOLD_MANIFEST_VERSION);
         assert_eq!(manifest.scaffold_epoch, INITIAL_SCAFFOLD_EPOCH);
         assert_eq!(manifest.boundline_version, BOUNDLINE_VERSION);
@@ -6822,7 +6828,8 @@ mod tests {
     #[test]
     fn execute_update_infers_execution_template_from_existing_profile() {
         let workspace = temp_workspace("boundline-update-execution-inference");
-        execute_init(copilot_canon_init_request(&workspace, InitTemplate::Delivery)).unwrap();
+        let _ =
+            execute_successful_init(copilot_canon_init_request(&workspace, InitTemplate::Delivery));
         fs::remove_file(workspace.join(BOUNDLINE_DIR_RELATIVE).join(SCAFFOLD_MANIFEST_FILE_NAME))
             .unwrap();
 
