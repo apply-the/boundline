@@ -146,14 +146,12 @@ mod tests {
     use std::ffi::OsString;
     use std::fs;
     use std::path::Path;
-    use std::sync::{Mutex, MutexGuard, OnceLock};
+    use std::sync::{Mutex, MutexGuard};
 
     use uuid::Uuid;
 
     use super::{ConfigStoreError, FileConfigStore};
     use crate::domain::configuration::{ConfigFile, ModelRoute, RoutingConfig, RuntimeKind};
-
-    static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
     struct EnvRestore<'a> {
         old_xdg: Option<OsString>,
@@ -181,7 +179,10 @@ mod tests {
         home: Option<&Path>,
         action: impl FnOnce() -> T,
     ) -> T {
-        let lock = ENV_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap();
+        let lock = super::super::SHARED_ENV_LOCK
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let restore = EnvRestore {
             old_xdg: env::var_os("XDG_CONFIG_HOME"),
             old_home: env::var_os("HOME"),
