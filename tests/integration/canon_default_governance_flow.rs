@@ -482,10 +482,7 @@ fn run_boundline_in_with_path(workspace: &Path, args: &[&str], path_prefix: &Pat
 }
 
 fn run_boundline_in_with_exact_path(workspace: &Path, args: &[&str], path: &Path) -> Output {
-    boundline_command_in(workspace, args)
-        .env("PATH", path)
-        .output()
-        .unwrap()
+    boundline_command_in(workspace, args).env("PATH", path).output().unwrap()
 }
 
 fn run_boundline_in_with_path_and_openai_env(
@@ -1070,8 +1067,12 @@ fn blocked_planning_stage_retries_with_refresh_and_progresses() {
             write_capturing_canon_on_path("blocked-retry-refresh", &workspace, &ready_response);
 
         // Second run: plan again — retry should use refresh (existing run_ref) and succeed.
-        let output2 =
-            run_boundline_in_with_path_and_openai_env(&workspace, &["plan"], &bin_dir, openai_base_url);
+        let output2 = run_boundline_in_with_path_and_openai_env(
+            &workspace,
+            &["plan"],
+            &bin_dir,
+            openai_base_url,
+        );
         let text2 = terminal_text(&output2);
 
         // The retry should have completed the previously-blocked stage.

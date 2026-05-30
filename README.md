@@ -9,142 +9,81 @@
 [![Coverage](https://codecov.io/gh/apply-the/boundline/branch/main/graph/badge.svg)](https://codecov.io/gh/apply-the/boundline)
 [![Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=apply-the_boundline&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=apply-the_boundline)
 
-**Boundline is a local delivery orchestrator for bounded engineering work.**
+**The local delivery orchestrator for bounded engineering work.** Turn goals into executed plans safely, without losing control to an opaque AI loop.
 
-It turns a workspace goal into explicit planning, execution, inspection, and
-recovery steps without treating chat history as the source of truth. Boundline
-owns the runtime, session state, traces, and next actions. Canon is optional
-and only matters when a route explicitly crosses a governance boundary.
+## 🚀 Why Boundline?
 
-## Quick Start
+- 🎯 **Goal-Driven Execution:** Translates high-level objectives into concrete, step-by-step technical plans.
+- 💾 **Session-Based State:** Maintains explicit, resumable session state locally on disk. You are never hostage to ephemeral chat memory.
+- 🛑 **Safe Delivery:** Executes steps safely using your repository's existing constraints and Canon governance rules.
+- 📝 **Explicit Traces:** Never lose context. Every execution step is recorded in local, auditable traces.
+- 🔌 **Agnostic Architecture:** Seamlessly plugs into external frameworks and capability providers.
 
-Use this path when you want the shortest credible setup:
+## 🧠 How it Works
+
+Boundline forces an explicit, inspectable workflow:
+1. `goal` -> Record the objective for the active session.
+2. `plan` -> Draft the bounded work from the repository evidence.
+3. `run` -> Execute the next approved step.
+4. `inspect` -> Report the authoritative runtime state.
+
+## ⚡ Quick Start
 
 ```bash
 boundline doctor --install
-cd <workspace>
-boundline init --assistant codex
+cd my-project
+boundline init --assistant codex --ide vscode 
 boundline goal --goal "Fix the failing add test"
 boundline plan
 boundline run
-boundline status
-boundline inspect
 ```
-
-What those commands do:
-
-- `boundline doctor --install` verifies the installed Boundline binary and the
-  supported Canon pairing for this release.
-- `boundline init --assistant <host>` bootstraps `.boundline/` and any
-  requested repo-local assistant package surface.
-- `boundline goal` records the bounded objective for the active session.
-- `boundline plan` drafts the bounded work from the current repository
-  evidence.
-- `boundline run` executes the next approved step.
-- `boundline status` and `boundline inspect` report the authoritative runtime
-  state.
-
-If you want the shortest execution path after init, use:
-
-```bash
-boundline run --goal "Fix the failing add test"
-```
-
-Treat that as a fast path. The primary product story is still `init -> goal ->
-plan -> run`.
-
-For an explicit planning seed during bootstrap, use `planning=copilot:gpt-4o`:
-
-```bash
-boundline init --assistant copilot --route planning=copilot:gpt-4o
-```
-
-## Optional Preflight Steps
-
-Use provider auth when the selected route needs a provider credential that is
-not already available in the environment:
-
-```bash
-boundline models auth login --provider github-copilot
-boundline models auth status
-```
-
-These credentials are user-scoped. They are not stored inside the repository.
-
-Use `probe` when you need a read-only readiness check before starting or
-resuming work:
-
-```bash
-boundline probe --workspace <workspace>
-```
-
-`probe` reports whether the workspace still needs bootstrap, needs repair, or
-is ready for `goal`, `plan`, or `run`. It does not mutate session state and it
-is not a repo-local `/boundline:*` assistant command.
 
 ## Use Boundline from chat
 
-Install global bootstrap assets with `boundline assistant install --host <host>
---scope user` when the assistant needs pre-init commands.
-
-- `/boundline:init` is the chat bootstrap entrypoint before repo-local runtime
-  state exists.
-- `/boundline:continue` is the chat resume entrypoint when the host should use
-  the current CLI/runtime continuation instead of inventing a new path from
-  chat history.
-
-Chat remains a host surface over the CLI runtime; chat history is not
-authoritative state.
+Install the assistant pack for your host with `boundline init --assistant <host>` or
+`boundline assistant install --host <host> --scope user`, then drive the same
+session-native lifecycle from chat. The assistant surface should keep
+`.boundline/session.json` authoritative, surface the runtime `next_command`, and
+stop cleanly on blocked, clarification-required, failed, exhausted, and terminal
+states instead of inventing parallel workflow state.
 
 ## Use Boundline from CLI
 
-The CLI remains the primary product surface. In session-native: start a session with `boundline init`, then continue with `goal -> plan -> run -> status -> inspect`.
-
-`boundline run --compatibility --goal "..."` stays available as an explicit compatibility path when you intentionally want the manifest-backed execution surface.
+The CLI remains the source of truth for repo state and delivery progress. Use
+`boundline doctor --install` to verify the local runtime, `boundline init` to
+bootstrap a workspace, then run `boundline goal`, `boundline plan`,
+`boundline run`, `boundline status`, `boundline next`, and
+`boundline inspect` as the bounded session advances.
 
 ## How chat commands map to CLI/runtime state
 
-- `/boundline:init` maps to `boundline init` and bootstraps `.boundline/` plus
-  any requested repo-local assistant package.
-- `/boundline:continue` maps to the current runtime continuation from
-  `.boundline/session.json`, traces, and CLI state instead of chat-only
-  memory.
-- repo-local assistant packages mirror the same runtime state the CLI reports
-  through `goal`, `plan`, `run`, `status`, `next`, and `inspect`.
+Chat command packs are thin wrappers over the Rust runtime. `/boundline:goal`,
+`/boundline:plan`, `/boundline:run`, `/boundline:status`, `/boundline:next`, and
+`/boundline:inspect` should map directly to the corresponding CLI commands and the
+same persisted session and trace state under `.boundline/session.json` and
+`.boundline/traces/`. Chat history is advisory only; the CLI runtime and its
+persisted outputs remain authoritative.
 
-## Assistant And Canon Boundaries
+## 🛠️ Key Commands
 
-- The CLI remains the primary product surface.
-- Repo-local assistant packages are generated by `boundline init --assistant
-  <host>` and surface the same session-native runtime.
-- Global assistant bootstrap surfaces are limited to readiness and init-style
-  commands.
-- The current release documents Canon `0.62.0` support for the machine-facing
-  `canon governance start|refresh|capabilities --json` `v1` adapter surface.
+| Command | What it does |
+|---|---|
+| `boundline goal` | Set the objective for the current session. |
+| `boundline plan` | Generate a technical plan to achieve the goal. |
+| `boundline run` | Execute the next pending step in the plan. |
+| `boundline status` | Check the current session status and next actions. |
+| `boundline inspect` | View detailed execution traces and evidence. |
 
-## Read More
+## 📚 Deep Dive Documentation
 
-- [docs/getting-started.md](docs/getting-started.md): first-run walkthrough
-- [docs/configuration.md](docs/configuration.md): config locations, precedence,
-  and runtime boundaries
-- [docs/architecture.md](docs/architecture.md): routing, governance, and Canon
-  compatibility boundaries
-- [docs/delivery-model.md](docs/delivery-model.md): project-scale delivery
-  model
-- [assistant/README.md](assistant/README.md): assistant command packs and host
-  behavior
-- [CHANGELOG.md](CHANGELOG.md): released and unreleased changes
-- [CONTRIBUTING.md](CONTRIBUTING.md): contributor workflow and repository
-  validation
-- [Boundline wiki](https://github.com/apply-the/boundline/wiki): navigable
-  operator docs
+- [Getting Started](docs/getting-started.md)
+- [Configuration and Precedence](docs/configuration.md)
+- [Architecture and Canon Boundaries](docs/architecture.md)
+- [Project Scale Delivery Model](docs/delivery-model.md)
+- [Assistant Command Packs](assistant/README.md)
 
-## Community And Support
-
-Use the repository templates and policies that match the change or report:
-
-- bug reports, documentation issues, feature requests, and general issues:
-  `.github/ISSUE_TEMPLATE/`
-- pull request expectations: `.github/PULL_REQUEST_TEMPLATE.md`
-- vulnerability reporting: [SECURITY.md](SECURITY.md)
-- participation expectations: `.github/CODE_OF_CONDUCT.md`
+## 🤝 Community And Support
+- Bug reports & feature requests: `.github/ISSUE_TEMPLATE/`
+- Vulnerability reporting: [SECURITY.md](SECURITY.md)
+- Participation expectations: `.github/CODE_OF_CONDUCT.md`
+- Contributor workflow: [CONTRIBUTING.md](CONTRIBUTING.md)
