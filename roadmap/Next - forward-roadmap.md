@@ -27,7 +27,6 @@ feature under `specs/`.
 
 | Priority | Feature Seed | Boundline Position |
 |---|---|---|
-| **01** | [sqlite-vec-activation-and-db-merge-strategy.md](features/01-sqlite-vec-activation-and-db-merge-strategy.md) | Advanced context substrate execution |
 | **02** | [agentic-framework-integration.md](features/02-agentic-framework-integration.md) | Architecture for external harness adapters |
 | **03** | [plan-quality-contract.md](features/03-plan-quality-contract.md) | Planning UX - plan readiness gate |
 | **04** | [backlog-contract.md](features/04-backlog-contract.md) | Planning UX - backlog execution gate |

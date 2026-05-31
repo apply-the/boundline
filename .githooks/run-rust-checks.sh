@@ -17,13 +17,13 @@ step_index=1
 step_total=4
 case "$hook_name" in
   pre-commit)
-    step_total=1
+    step_total=2
     ;;
   pre-push)
-    step_total=5
+    step_total=6
     ;;
   *)
-    step_total=5
+    step_total=6
     ;;
 esac
 
@@ -46,6 +46,16 @@ run_step() {
 }
 
 printf '%s\n' "[$hook_name] Running Rust quality checks in $repo_root"
+
+local_path_mode=--tracked
+if [ "$hook_name" = "pre-commit" ]; then
+  local_path_mode=--cached
+fi
+
+run_step \
+  "sh scripts/check-no-local-paths.sh $local_path_mode" \
+  "Remove machine-local absolute paths such as /Users/<name>/..., /home/<name>/..., or C:\\Users\\<name>\\... from tracked content before retrying." \
+  sh scripts/check-no-local-paths.sh "$local_path_mode"
 
 run_step \
   "cargo fmt --all -- --check" \

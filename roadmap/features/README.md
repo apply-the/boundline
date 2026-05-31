@@ -20,7 +20,7 @@ Use the local Speckit templates as the source of truth when converting a seed:
 3. Keep Boundline independently testable. Canon may provide governed inputs, but
    Canon must not define Boundline's core control flow.
 4. If a Boundline slice requires new Canon output or schema, stop and create a
-   Canon Speckit feature in `/Users/rt/workspace/apply-the/canon` first.
+   Canon Speckit feature in the sibling `canon` repo first.
 5. Treat trace, inspectability, blocked states, and recovery as mandatory parts
    of the first slice, not later polish.
 6. Avoid bundled systems. Provider protocol, sandboxing, browser validation,
@@ -42,7 +42,7 @@ Use the local Speckit templates as the source of truth when converting a seed:
 | Later | 14 | Browser validation | Implement as a concrete provider over S10, not as core runtime. |
 | Later | 15 | Memory hygiene | Start with confirmation-first trace distillation; no autonomous memory. |
 
-Seeds 01 and 02 are intentionally not revised by this pass.
+Seed 02 is intentionally not revised by this pass.
 
 ## Dependency Graph
 
