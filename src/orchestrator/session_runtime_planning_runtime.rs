@@ -1,4 +1,66 @@
-use super::*;
+use crate::adapters::agent::{FrameworkAdapterHost, FrameworkAdapterHostError};
+use crate::domain::execution::StageRoutingDecisionRecord;
+use crate::domain::framework_adapter::{
+    AdapterExecutionSource, AdapterFailureClass, AdapterLifecycleStageKey,
+    LifecycleStageExecutionStatus, StageClaimState, StageRoutingDecisionReason,
+};
+use crate::domain::session::{FrameworkAdapterStageFailureDetails, LifecycleStageExecutionRecord};
+
+use std::collections::{BTreeMap, BTreeSet};
+use std::fs;
+
+use serde_json::json;
+use uuid::Uuid;
+
+use super::{
+    ActiveSessionRecord, BacklogQualityAssessment, BacklogQualityState, CanonMode,
+    CanonModeSelectionPreference, ContextPackCredibility, CouncilProfile, FileConfigStore,
+    FlowPolicy, FrameworkAdapterStageFailedTracePayload, GoalPlan, GoalPlannerError,
+    GovernanceLifecycleState, GovernanceRuntimeKind, GovernedSessionLifecycle,
+    NegotiationResolutionState, PLAN_QUALITY_BLOCKED_DEFAULT_PROMPT, PLAN_QUALITY_BLOCKED_HEADLINE,
+    PLAN_QUALITY_CLARIFICATION_DEFAULT_PROMPT, PLAN_QUALITY_CLARIFICATION_HEADLINE,
+    PLAN_QUALITY_CLARIFICATION_PROMPT_PREFIX, PlanQualityAssessment, PlanQualityState,
+    PlanningAnalysisProjection, PlanningAnalysisState, PlanningContextSources,
+    ProviderReviewDisposition, ProviderReviewRequest, ProviderRevisionRequest,
+    ProviderWorkspaceFile, ReviewerFinding, ReviewerParticipation, ReviewerParticipationStatus,
+    SessionRuntime, SessionRuntimeError, SessionStatus, StageCouncilAdjudication,
+    StageCouncilArtifact, StageCouncilFinding, StageCouncilFindingDisposition, StageCouncilOutcome,
+    StageCouncilRequest, StageCouncilStatus, StageCouncilVoteResolution, Task, TraceEventType,
+    UPSTREAM_ARCHITECTURE_DECISIONS_FILE, UPSTREAM_CONSTRAINTS_FILE, UPSTREAM_DOMAIN_MODEL_FILE,
+    UPSTREAM_PRD_FILE, UPSTREAM_SCOPE_CUTS_FILE, UPSTREAM_SYSTEM_SHAPE_FILE, VoteDecision,
+    VoteRuleDefinition, backlog_quality_snapshot_for_lifecycle, build_fixture_plan_for_goal,
+    build_goal_plan_with_sources, build_task_request, build_terminal_reason, built_in_flow,
+    compute_planning_input_fingerprint, configured_framework_adapter_binding,
+    current_timestamp_millis, discovery_stage_council_reviewers,
+    framework_adapter_stage_failure_terminal_condition,
+    framework_adapter_stage_routing_trace_payload, framework_adapter_stage_routing_value,
+    load_workspace_execution_profile, map_framework_adapter_failure_class, model_route_label,
+    plain_goal_planning_clarification_prompt, plain_goal_requires_planning_clarification,
+    planned_canon_mode_sequence_for_flow, planning_canon_mode_for_stage_key,
+    planning_stage_brief_ref, project_scale_state_for_goal, protocol_error_code_from_host_error,
+    provider_review_disposition_text, read_upstream_artifact_capped, render_planning_stage_brief,
+    render_stage_council_blocked_markdown, resolve_council_assembly, review_workspace,
+    reviewer_disposition_from_provider, revise_artifact, route_is_available,
+    session_status_for_task_status, stage_council_disposition_from_provider,
+    supported_flow_names_csv, task_status_for_condition,
+};
+use crate::domain::limits::TerminalCondition;
+
+const PROJECT_SCALE_CONFIRM_PATH: &str = "confirm_project_scale_path";
+const PROJECT_SCALE_REPAIR_CONTEXT_PATH: &str = "repair_context";
+const ADAPTER_FALLBACK_REASON_UNAVAILABLE_BINARY: &str = "unavailable_binary";
+const ADAPTER_FALLBACK_REASON_UNSUPPORTED_TRANSPORT: &str = "unsupported_transport";
+const ADAPTER_FALLBACK_REASON_PREFLIGHT_BLOCKED: &str = "preflight_blocked";
+const STAGE_COUNCIL_PRODUCER_ARTIFACT_SUFFIX: &str = "producer";
+const STAGE_COUNCIL_REVISED_ARTIFACT_SUFFIX: &str = "revised";
+const STAGE_COUNCIL_VOTE_STRATEGY_BOUNDED_MAJORITY: &str = "bounded_majority";
+
+enum FrameworkAdapterPlanStageOutcome {
+    NotClaimed,
+    ClaimedSucceeded(StageRoutingDecisionRecord),
+    ClaimedBlocked(FrameworkAdapterStageFailureDetails),
+    ClaimedFailed(FrameworkAdapterStageFailureDetails),
+}
 
 impl SessionRuntime {
     // Builds a compatibility task when fixture execution remains the
@@ -52,7 +114,7 @@ impl SessionRuntime {
         no_flow: bool,
     ) -> Result<(), SessionRuntimeError> {
         let goal = session.goal.clone().ok_or(SessionRuntimeError::MissingGoal)?;
-        let project_scale_state = project_scale_state_for_goal(&goal, "confirm_project_scale_path");
+        let project_scale_state = project_scale_state_for_goal(&goal, PROJECT_SCALE_CONFIRM_PATH);
         if !no_flow
             && requested_flow.is_none()
             && let Some(active_flow) = &session.active_flow
@@ -145,7 +207,8 @@ impl SessionRuntime {
                 session.active_flow = native_flow_state.clone();
                 session.active_task = None;
                 session.goal_plan = Some(goal_plan);
-                session.project_scale = project_scale_state_for_goal(&goal, "repair_context");
+                session.project_scale =
+                    project_scale_state_for_goal(&goal, PROJECT_SCALE_REPAIR_CONTEXT_PATH);
                 session.decisions.clear();
                 session.active_flow_policy = preserved_flow_policy.clone();
                 session.latest_status = SessionStatus::Blocked;
@@ -173,7 +236,8 @@ impl SessionRuntime {
             session.active_flow = native_flow_state.clone();
             session.active_task = None;
             session.goal_plan = Some(goal_plan);
-            session.project_scale = project_scale_state_for_goal(&goal, "repair_context");
+            session.project_scale =
+                project_scale_state_for_goal(&goal, PROJECT_SCALE_REPAIR_CONTEXT_PATH);
             session.decisions.clear();
             session.active_flow_policy = preserved_flow_policy.clone();
             session.latest_status = SessionStatus::Blocked;
@@ -220,7 +284,8 @@ impl SessionRuntime {
             session.active_flow = native_flow_state.clone();
             session.active_task = None;
             session.goal_plan = Some(goal_plan);
-            session.project_scale = project_scale_state_for_goal(&goal, "repair_context");
+            session.project_scale =
+                project_scale_state_for_goal(&goal, PROJECT_SCALE_REPAIR_CONTEXT_PATH);
             session.decisions.clear();
             session.active_flow_policy = preserved_flow_policy.clone();
             session.latest_status = SessionStatus::Blocked;
@@ -230,11 +295,8 @@ impl SessionRuntime {
 
             return Err(SessionRuntimeError::ClarificationRequired { headline, prompt });
         }
-        if requested_flow.is_some() || session.active_flow.is_some() || no_flow {
-            goal_plan
-                .confirm()
-                .map_err(|error| SessionRuntimeError::GoalPlan(error.to_string()))?;
-        }
+        let should_confirm_goal_plan =
+            requested_flow.is_some() || session.active_flow.is_some() || no_flow;
 
         self.ensure_workspace_governance_lifecycle(session);
         let planning_fingerprint = compute_planning_input_fingerprint(&goal, session);
@@ -262,19 +324,145 @@ impl SessionRuntime {
             .as_ref()
             .is_some_and(|projection| matches!(projection.state, PlanningAnalysisState::Blocked));
 
+        let mut framework_adapter_trace_ref = None;
+        let mut framework_adapter_blocked_reason = None;
+        match self.maybe_apply_framework_adapter_plan_stage(&mut goal_plan)? {
+            FrameworkAdapterPlanStageOutcome::NotClaimed => {
+                if should_confirm_goal_plan {
+                    goal_plan
+                        .confirm()
+                        .map_err(|error| SessionRuntimeError::GoalPlan(error.to_string()))?;
+                }
+            }
+            FrameworkAdapterPlanStageOutcome::ClaimedSucceeded(routing_record) => {
+                if should_confirm_goal_plan {
+                    goal_plan
+                        .confirm()
+                        .map_err(|error| SessionRuntimeError::GoalPlan(error.to_string()))?;
+                }
+                let mut trace = self.build_goal_plan_trace(&session.session_id, &goal_plan);
+                trace.record_event(
+                    TraceEventType::StageRouted,
+                    None,
+                    goal_plan.proposal_revision,
+                    framework_adapter_stage_routing_value(
+                        framework_adapter_stage_routing_trace_payload(routing_record),
+                    )?,
+                );
+                framework_adapter_trace_ref =
+                    Some(self.persist_trace(&session.session_id, &mut trace)?);
+            }
+            FrameworkAdapterPlanStageOutcome::ClaimedBlocked(blocked) => {
+                let terminal_reason = build_terminal_reason(
+                    TerminalCondition::NoCredibleNextStep,
+                    blocked.summary.clone(),
+                    Some(serde_json::to_value(&blocked).map_err(|error| {
+                        SessionRuntimeError::ExecutionInvariant(format!(
+                            "failed to serialize framework-adapter plan-stage blocked details: {error}"
+                        ))
+                    })?),
+                );
+                let mut trace = self.build_goal_plan_trace(&session.session_id, &goal_plan);
+                trace.record_event(
+                    TraceEventType::StageRouted,
+                    None,
+                    goal_plan.proposal_revision,
+                    framework_adapter_stage_routing_value(
+                        framework_adapter_stage_routing_trace_payload(
+                            plan_stage_routing_record_from_blocked(&blocked),
+                        ),
+                    )?,
+                );
+                framework_adapter_trace_ref =
+                    Some(self.persist_trace(&session.session_id, &mut trace)?);
+                framework_adapter_blocked_reason = Some(terminal_reason);
+            }
+            FrameworkAdapterPlanStageOutcome::ClaimedFailed(failure) => {
+                let terminal_reason = build_terminal_reason(
+                    framework_adapter_stage_failure_terminal_condition(&failure),
+                    failure.summary.clone(),
+                    Some(serde_json::to_value(&failure).map_err(|error| {
+                        SessionRuntimeError::ExecutionInvariant(format!(
+                            "failed to serialize framework-adapter plan-stage failure details: {error}"
+                        ))
+                    })?),
+                );
+                let terminal_status = task_status_for_condition(terminal_reason.condition);
+                let mut trace = self.build_goal_plan_trace(&session.session_id, &goal_plan);
+                trace.record_event(
+                    TraceEventType::StageRouted,
+                    None,
+                    goal_plan.proposal_revision,
+                    framework_adapter_stage_routing_value(
+                        framework_adapter_stage_routing_trace_payload(
+                            plan_stage_routing_record_from_failure(&failure),
+                        ),
+                    )?,
+                );
+                trace.record_event(
+                    TraceEventType::StageFailed,
+                    None,
+                    goal_plan.proposal_revision,
+                    serde_json::to_value(&FrameworkAdapterStageFailedTracePayload {
+                        stage_id: AdapterLifecycleStageKey::Plan.as_str().to_string(),
+                        stage_key: AdapterLifecycleStageKey::Plan,
+                        reason: failure.summary.clone(),
+                        summary: failure.summary.clone(),
+                        framework_adapter_stage_failure: failure.clone(),
+                    })
+                    .map_err(|error| {
+                        SessionRuntimeError::ExecutionInvariant(format!(
+                            "failed to serialize framework-adapter plan-stage trace payload: {error}"
+                        ))
+                    })?,
+                );
+                trace.record_event(
+                    TraceEventType::TerminalRecorded,
+                    None,
+                    goal_plan.proposal_revision,
+                    json!({
+                        "cluster_delivery_story": serde_json::Value::Null,
+                        "terminal_status": terminal_status,
+                        "terminal_reason": terminal_reason.clone(),
+                    }),
+                );
+                trace.finalize(terminal_status, terminal_reason.clone());
+                let trace_location = self.persist_trace(&session.session_id, &mut trace)?;
+
+                session.active_flow = native_flow_state;
+                session.active_task = None;
+                session.goal_plan = Some(goal_plan);
+                session.project_scale = project_scale_state;
+                session.decisions.clear();
+                session.active_flow_policy = preserved_flow_policy;
+                session.latest_status = session_status_for_task_status(terminal_status);
+                session.latest_terminal_reason = Some(terminal_reason);
+                session.latest_trace_ref = Some(trace_location);
+                session.updated_at = current_timestamp_millis();
+
+                return Err(SessionRuntimeError::ExecutionInvariant(format!(
+                    "framework-adapter plan stage execution failed after claim: {}",
+                    failure.summary
+                )));
+            }
+        }
+
         session.active_flow = native_flow_state;
         session.active_task = None;
         session.goal_plan = Some(goal_plan);
         session.project_scale = project_scale_state;
         session.decisions.clear();
         session.active_flow_policy = preserved_flow_policy;
-        session.latest_status = if planning_blocked || planning_analysis_blocked {
+        session.latest_status = if framework_adapter_blocked_reason.is_some()
+            || planning_blocked
+            || planning_analysis_blocked
+        {
             SessionStatus::Blocked
         } else {
             SessionStatus::Planned
         };
-        session.latest_terminal_reason = None;
-        session.latest_trace_ref = None;
+        session.latest_terminal_reason = framework_adapter_blocked_reason;
+        session.latest_trace_ref = framework_adapter_trace_ref;
         session.updated_at = current_timestamp_millis();
 
         Ok(())
@@ -363,6 +551,128 @@ impl SessionRuntime {
         }
     }
 
+    fn maybe_apply_framework_adapter_plan_stage(
+        &self,
+        goal_plan: &mut GoalPlan,
+    ) -> Result<FrameworkAdapterPlanStageOutcome, SessionRuntimeError> {
+        let binding =
+            configured_framework_adapter_binding(&self.workspace_ref).map_err(|error| {
+                SessionRuntimeError::ExecutionInvariant(format!(
+                    "failed to load framework-adapter runtime binding: {error}"
+                ))
+            })?;
+        let Some(binding) = binding else {
+            return Ok(FrameworkAdapterPlanStageOutcome::NotClaimed);
+        };
+        let adapter_id = binding.selection.selection.adapter_id.clone();
+
+        let describe = match binding.host.describe() {
+            Ok(describe) => describe,
+            Err(_) => {
+                append_adapter_fallback_reason(
+                    goal_plan,
+                    ADAPTER_FALLBACK_REASON_UNAVAILABLE_BINARY,
+                );
+                return Ok(FrameworkAdapterPlanStageOutcome::NotClaimed);
+            }
+        };
+
+        if !describe
+            .declared_stage_overrides
+            .contains(&crate::orchestrator::FrameworkStageKey::Plan)
+        {
+            return Ok(FrameworkAdapterPlanStageOutcome::NotClaimed);
+        }
+
+        if !crate::adapters::framework_adapter_supports_v1_transport(&describe.supported_transports)
+        {
+            append_adapter_fallback_reason(
+                goal_plan,
+                ADAPTER_FALLBACK_REASON_UNSUPPORTED_TRANSPORT,
+            );
+            return Ok(FrameworkAdapterPlanStageOutcome::NotClaimed);
+        }
+
+        let config_values = framework_adapter_config_values(&binding.selection);
+        let preflight =
+            match binding.host.preflight(&crate::adapters::FrameworkAdapterPreflightRequest {
+                boundline_version: env!("CARGO_PKG_VERSION").to_string(),
+                workspace_ref: self.workspace_ref.to_string_lossy().into_owned(),
+                non_interactive: true,
+                config_values: config_values.clone(),
+            }) {
+                Ok(preflight) => preflight,
+                Err(_) => {
+                    append_adapter_fallback_reason(
+                        goal_plan,
+                        ADAPTER_FALLBACK_REASON_UNAVAILABLE_BINARY,
+                    );
+                    return Ok(FrameworkAdapterPlanStageOutcome::NotClaimed);
+                }
+            };
+
+        if preflight.status == crate::adapters::FrameworkAdapterPreflightStatus::Blocked {
+            append_adapter_fallback_reason(goal_plan, ADAPTER_FALLBACK_REASON_PREFLIGHT_BLOCKED);
+            return Ok(FrameworkAdapterPlanStageOutcome::NotClaimed);
+        }
+
+        let runtime_config_values = if preflight.normalized_config_values.is_empty() {
+            config_values
+        } else {
+            preflight.normalized_config_values.clone()
+        };
+
+        let run_id = Uuid::new_v4();
+        match binding.host.execute_stage(&crate::adapters::FrameworkAdapterExecuteStageRequest {
+            run_id,
+            stage_key: crate::orchestrator::FrameworkStageKey::Plan,
+            stage_attempt: 1,
+            workspace_ref: self.workspace_ref.to_string_lossy().into_owned(),
+            adapter_id,
+            config_values: runtime_config_values,
+            context_artifacts: Vec::new(),
+        }) {
+            Ok(response)
+                if response.status
+                    == crate::adapters::FrameworkAdapterStageExecutionStatus::Succeeded =>
+            {
+                Ok(FrameworkAdapterPlanStageOutcome::ClaimedSucceeded(
+                    plan_stage_routing_record_from_success(
+                        run_id,
+                        binding.selection.selection.adapter_id.clone(),
+                        response.produced_artifacts,
+                    ),
+                ))
+            }
+            Ok(response)
+                if response.status
+                    == crate::adapters::FrameworkAdapterStageExecutionStatus::Blocked =>
+            {
+                Ok(FrameworkAdapterPlanStageOutcome::ClaimedBlocked(
+                    plan_stage_blocked_from_execute_response(
+                        run_id,
+                        binding.selection.selection.adapter_id.clone(),
+                        response,
+                    ),
+                ))
+            }
+            Ok(response) => Ok(FrameworkAdapterPlanStageOutcome::ClaimedFailed(
+                plan_stage_failure_from_execute_response(
+                    run_id,
+                    binding.selection.selection.adapter_id.clone(),
+                    response,
+                ),
+            )),
+            Err(error) => Ok(FrameworkAdapterPlanStageOutcome::ClaimedFailed(
+                plan_stage_failure_from_host_error(
+                    run_id,
+                    binding.selection.selection.adapter_id.clone(),
+                    error,
+                ),
+            )),
+        }
+    }
+
     pub(super) fn ensure_workspace_governance_lifecycle(&self, session: &mut ActiveSessionRecord) {
         if session.governance_lifecycle.is_some() {
             return;
@@ -442,7 +752,7 @@ impl SessionRuntime {
         lifecycle.terminal_reason = None;
     }
 
-    fn resolve_workspace_governance_runtime(
+    pub(super) fn resolve_workspace_governance_runtime(
         &self,
         session: &ActiveSessionRecord,
     ) -> Option<GovernanceRuntimeKind> {
@@ -484,7 +794,7 @@ impl SessionRuntime {
             .unwrap_or_default()
     }
 
-    fn sync_governed_planning_sequence(
+    pub(super) fn sync_governed_planning_sequence(
         &self,
         session: &mut ActiveSessionRecord,
         flow_name: Option<&str>,
@@ -709,8 +1019,11 @@ impl SessionRuntime {
                 current_artifact_path.display()
             ))
         })?;
-        let producer_ref =
-            self.write_stage_council_artifact(request, "producer", &current_artifact)?;
+        let producer_ref = self.write_stage_council_artifact(
+            request,
+            STAGE_COUNCIL_PRODUCER_ARTIFACT_SUFFIX,
+            &current_artifact,
+        )?;
         let producer_output = StageCouncilArtifact {
             route_slot: request.producer_slot.clone(),
             evidence_ref: producer_ref.clone(),
@@ -975,13 +1288,16 @@ impl SessionRuntime {
             }
         };
 
-        let revised_ref =
-            self.write_stage_council_artifact(request, "revised", &revised_artifact_text)?;
+        let revised_ref = self.write_stage_council_artifact(
+            request,
+            STAGE_COUNCIL_REVISED_ARTIFACT_SUFFIX,
+            &revised_artifact_text,
+        )?;
         let outcome = StageCouncilOutcome {
             producer_output,
             reviewer_findings: stage_findings,
             vote_resolution: StageCouncilVoteResolution {
-                strategy: "bounded_majority".to_string(),
+                strategy: STAGE_COUNCIL_VOTE_STRATEGY_BOUNDED_MAJORITY.to_string(),
                 accepted_findings,
                 rejected_findings,
                 independent_review: true,
@@ -1006,4 +1322,222 @@ impl SessionRuntime {
         outcome.validate().map_err(SessionRuntimeError::ExecutionInvariant)?;
         Ok(outcome)
     }
+}
+
+pub(super) fn plan_stage_failure_from_execute_response(
+    run_id: Uuid,
+    adapter_id: String,
+    response: crate::adapters::FrameworkAdapterExecuteStageResponse,
+) -> FrameworkAdapterStageFailureDetails {
+    let finished_at = current_timestamp_millis();
+    let failure_class = response
+        .failure_class
+        .map(map_framework_adapter_failure_class)
+        .or(Some(AdapterFailureClass::AdapterRuntime));
+    let status = match response.status {
+        crate::adapters::FrameworkAdapterStageExecutionStatus::Succeeded => {
+            LifecycleStageExecutionStatus::Succeeded
+        }
+        crate::adapters::FrameworkAdapterStageExecutionStatus::Blocked => {
+            LifecycleStageExecutionStatus::Blocked
+        }
+        crate::adapters::FrameworkAdapterStageExecutionStatus::Failed => {
+            LifecycleStageExecutionStatus::Failed
+        }
+    };
+
+    FrameworkAdapterStageFailureDetails {
+        execution: LifecycleStageExecutionRecord {
+            run_id: run_id.to_string(),
+            stage_key: AdapterLifecycleStageKey::Plan,
+            execution_source: AdapterExecutionSource::Adapter,
+            adapter_id: Some(adapter_id),
+            status,
+            intervention_required: true,
+            failure_class,
+            produced_artifacts: response.produced_artifacts,
+            started_at: Some(finished_at),
+            finished_at: Some(finished_at),
+        },
+        claim_state: StageClaimState::FailedAfterClaim,
+        summary: response.summary,
+        detail: None,
+        protocol_error_code: None,
+    }
+}
+
+pub(super) fn plan_stage_failure_from_host_error(
+    run_id: Uuid,
+    adapter_id: String,
+    error: FrameworkAdapterHostError,
+) -> FrameworkAdapterStageFailureDetails {
+    let (failure_class, protocol_error_code) = match &error {
+        FrameworkAdapterHostError::DeserializeResponse { .. }
+        | FrameworkAdapterHostError::InvalidEnvelope { .. }
+        | FrameworkAdapterHostError::ProtocolError { .. } => {
+            (AdapterFailureClass::ProtocolError, protocol_error_code_from_host_error(&error))
+        }
+        FrameworkAdapterHostError::EmptyCommand
+        | FrameworkAdapterHostError::SerializeRequest { .. }
+        | FrameworkAdapterHostError::Spawn { .. }
+        | FrameworkAdapterHostError::WriteRequest { .. }
+        | FrameworkAdapterHostError::Wait { .. }
+        | FrameworkAdapterHostError::ProcessFailed { .. } => {
+            (AdapterFailureClass::TransportFailure, None)
+        }
+    };
+    let summary = match failure_class {
+        AdapterFailureClass::ProtocolError => {
+            let code_suffix = protocol_error_code
+                .as_deref()
+                .map(|code| format!(" code={code}"))
+                .unwrap_or_default();
+            format!(
+                "framework-adapter returned a protocol error after claiming plan stage{code_suffix}"
+            )
+        }
+        AdapterFailureClass::TransportFailure => {
+            "framework-adapter transport failed after claiming plan stage".to_string()
+        }
+        _ => "framework-adapter plan stage failed after claim".to_string(),
+    };
+    let finished_at = current_timestamp_millis();
+
+    FrameworkAdapterStageFailureDetails {
+        execution: LifecycleStageExecutionRecord {
+            run_id: run_id.to_string(),
+            stage_key: AdapterLifecycleStageKey::Plan,
+            execution_source: AdapterExecutionSource::Adapter,
+            adapter_id: Some(adapter_id),
+            status: LifecycleStageExecutionStatus::Failed,
+            intervention_required: true,
+            failure_class: Some(failure_class),
+            produced_artifacts: Vec::new(),
+            started_at: Some(finished_at),
+            finished_at: Some(finished_at),
+        },
+        claim_state: StageClaimState::FailedAfterClaim,
+        summary,
+        detail: Some(error.to_string()),
+        protocol_error_code,
+    }
+}
+
+pub(super) fn plan_stage_routing_record_from_failure(
+    failure: &FrameworkAdapterStageFailureDetails,
+) -> StageRoutingDecisionRecord {
+    StageRoutingDecisionRecord {
+        run_id: failure.execution.run_id.clone(),
+        stage_key: failure.execution.stage_key,
+        execution_source: failure.execution.execution_source,
+        decision_reason: StageRoutingDecisionReason::DeclaredOverride,
+        claim_state: failure.claim_state,
+        adapter_id: failure.execution.adapter_id.clone(),
+        stage_status: Some(failure.execution.status),
+        produced_artifacts: failure.execution.produced_artifacts.clone(),
+        recorded_at: current_timestamp_millis(),
+    }
+}
+
+pub(super) fn plan_stage_routing_record_from_success(
+    run_id: Uuid,
+    adapter_id: String,
+    produced_artifacts: Vec<String>,
+) -> StageRoutingDecisionRecord {
+    StageRoutingDecisionRecord {
+        run_id: run_id.to_string(),
+        stage_key: AdapterLifecycleStageKey::Plan,
+        execution_source: AdapterExecutionSource::Adapter,
+        decision_reason: StageRoutingDecisionReason::DeclaredOverride,
+        claim_state: StageClaimState::Completed,
+        adapter_id: Some(adapter_id),
+        stage_status: Some(LifecycleStageExecutionStatus::Succeeded),
+        produced_artifacts,
+        recorded_at: current_timestamp_millis(),
+    }
+}
+
+pub(super) fn plan_stage_routing_record_from_blocked(
+    blocked: &FrameworkAdapterStageFailureDetails,
+) -> StageRoutingDecisionRecord {
+    StageRoutingDecisionRecord {
+        run_id: blocked.execution.run_id.clone(),
+        stage_key: blocked.execution.stage_key,
+        execution_source: blocked.execution.execution_source,
+        decision_reason: StageRoutingDecisionReason::DeclaredOverride,
+        claim_state: blocked.claim_state,
+        adapter_id: blocked.execution.adapter_id.clone(),
+        stage_status: Some(blocked.execution.status),
+        produced_artifacts: blocked.execution.produced_artifacts.clone(),
+        recorded_at: current_timestamp_millis(),
+    }
+}
+
+pub(super) fn plan_stage_blocked_from_execute_response(
+    run_id: Uuid,
+    adapter_id: String,
+    response: crate::adapters::FrameworkAdapterExecuteStageResponse,
+) -> FrameworkAdapterStageFailureDetails {
+    let finished_at = current_timestamp_millis();
+
+    FrameworkAdapterStageFailureDetails {
+        execution: LifecycleStageExecutionRecord {
+            run_id: run_id.to_string(),
+            stage_key: AdapterLifecycleStageKey::Plan,
+            execution_source: AdapterExecutionSource::Adapter,
+            adapter_id: Some(adapter_id),
+            status: LifecycleStageExecutionStatus::Blocked,
+            intervention_required: true,
+            failure_class: None,
+            produced_artifacts: response.produced_artifacts,
+            started_at: Some(finished_at),
+            finished_at: Some(finished_at),
+        },
+        claim_state: StageClaimState::Claimed,
+        summary: response.summary,
+        detail: response.next_action,
+        protocol_error_code: None,
+    }
+}
+
+pub(super) fn append_adapter_fallback_reason(goal_plan: &mut GoalPlan, reason: &str) {
+    let note = format!("adapter_fallback_reason: {reason}");
+    goal_plan.planning_rationale = Some(match goal_plan.planning_rationale.take() {
+        Some(existing) if existing.contains(&note) => existing,
+        Some(existing) => format!("{existing}; {note}"),
+        None => note,
+    });
+}
+
+pub(super) fn framework_adapter_config_values(
+    selection: &crate::domain::configuration::PersistedAdapterConfiguration,
+) -> Vec<crate::adapters::FrameworkAdapterConfigValue> {
+    selection
+        .values
+        .iter()
+        .map(|value| crate::adapters::FrameworkAdapterConfigValue {
+            field_key: value.field_key.clone(),
+            value_kind: match value.value_kind {
+                crate::domain::framework_adapter::AdapterValueKind::String => {
+                    crate::adapters::FrameworkAdapterFieldValueKind::String
+                }
+                crate::domain::framework_adapter::AdapterValueKind::Path => {
+                    crate::adapters::FrameworkAdapterFieldValueKind::Path
+                }
+                crate::domain::framework_adapter::AdapterValueKind::Boolean => {
+                    crate::adapters::FrameworkAdapterFieldValueKind::Boolean
+                }
+                crate::domain::framework_adapter::AdapterValueKind::Integer => {
+                    crate::adapters::FrameworkAdapterFieldValueKind::Integer
+                }
+                crate::domain::framework_adapter::AdapterValueKind::Enum => {
+                    crate::adapters::FrameworkAdapterFieldValueKind::Enum
+                }
+            },
+            string_value: value.string_value.clone(),
+            path_value: value.path_value.clone(),
+            bool_value: value.bool_value,
+            int_value: value.int_value,
+        })
+        .collect()
 }

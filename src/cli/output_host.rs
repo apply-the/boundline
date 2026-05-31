@@ -7,6 +7,8 @@ use crate::cli::{CommandExitStatus, DeveloperCommand};
 use crate::domain::session::SessionStatusView;
 use crate::domain::trace::TraceSummaryView;
 
+use super::runtime::framework_adapter_output_projection;
+
 /// Exit-code families used by host-facing command wrappers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CommandExitCode {
@@ -47,6 +49,30 @@ pub struct HostCommandEnvelope {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub session_status: Option<SessionStatusView>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub framework_adapter_status: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub framework_adapter_execution_source: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub framework_adapter_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub framework_adapter_config_state: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub framework_adapter_interactive_resolution: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub framework_adapter_value_count: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub framework_adapter_discovery_state: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub framework_adapter_discovery_hint: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub framework_adapter_activation_required: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub framework_adapter_supported_transports: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub framework_adapter_compatibility_gate: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub framework_adapter_blocked_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub trace_summary: Option<TraceSummaryView>,
 }
 
@@ -74,12 +100,50 @@ pub fn render_host_command_json(
     session_status: Option<&SessionStatusView>,
     trace_summary: Option<&TraceSummaryView>,
 ) -> String {
+    let adapter_projection =
+        session_status.map(|view| framework_adapter_output_projection(&view.workspace_ref));
     match serde_json::to_string_pretty(&HostCommandEnvelope {
         command_name: command_name.to_string(),
         exit_status: command_exit_status_label(exit_status).to_string(),
         rendered_output: rendered_output.to_string(),
         trace_location: trace_location.map(str::to_string),
         session_status: session_status.cloned(),
+        framework_adapter_status: adapter_projection
+            .as_ref()
+            .map(|projection| projection.status.clone()),
+        framework_adapter_execution_source: adapter_projection
+            .as_ref()
+            .map(|projection| projection.execution_source.clone()),
+        framework_adapter_id: adapter_projection
+            .as_ref()
+            .and_then(|projection| projection.adapter_id.clone()),
+        framework_adapter_config_state: adapter_projection
+            .as_ref()
+            .and_then(|projection| projection.config_state.clone()),
+        framework_adapter_interactive_resolution: adapter_projection
+            .as_ref()
+            .and_then(|projection| projection.interactive_resolution),
+        framework_adapter_value_count: adapter_projection
+            .as_ref()
+            .and_then(|projection| projection.value_count),
+        framework_adapter_discovery_state: adapter_projection
+            .as_ref()
+            .and_then(|projection| projection.discovery_state.clone()),
+        framework_adapter_discovery_hint: adapter_projection
+            .as_ref()
+            .and_then(|projection| projection.discovery_hint.clone()),
+        framework_adapter_activation_required: adapter_projection
+            .as_ref()
+            .and_then(|projection| projection.activation_required.clone()),
+        framework_adapter_supported_transports: adapter_projection
+            .as_ref()
+            .and_then(|projection| projection.supported_transports.clone()),
+        framework_adapter_compatibility_gate: adapter_projection
+            .as_ref()
+            .and_then(|projection| projection.compatibility_gate.clone()),
+        framework_adapter_blocked_reason: adapter_projection
+            .as_ref()
+            .and_then(|projection| projection.blocked_reason.clone()),
         trace_summary: trace_summary.cloned(),
     }) {
         Ok(rendered) => rendered,
@@ -138,6 +202,7 @@ pub fn command_name(command: &DeveloperCommand) -> &'static str {
         DeveloperCommand::Init { .. } => "init",
         DeveloperCommand::Update { .. } => "update",
         DeveloperCommand::Config { .. } => "config",
+        DeveloperCommand::Adapter { .. } => "adapter",
         DeveloperCommand::Cluster { .. } => "cluster",
         DeveloperCommand::Models { .. } => "models",
     }
@@ -254,6 +319,7 @@ mod tests {
             non_interactive: false,
             template: None,
             assistant: Vec::new(),
+            adapter: None,
             ide: Vec::new(),
             auto_approve: None,
             semantic_index_hook_action: None,

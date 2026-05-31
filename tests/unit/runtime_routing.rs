@@ -1,10 +1,18 @@
+use std::error::Error;
+use std::fs;
+
 use serde_json::json;
 
+use boundline::adapters::audit_store::{FileSessionAuditStore, FrameworkAdapterHookAuditStore};
 use boundline::domain::brief::{
     AuthoredBriefBundle, AuthoredBriefResolutionState, GoalQualityAssessment, InputSourceKind,
     InputSourceReference,
 };
 use boundline::domain::flow_policy::FlowPolicy;
+use boundline::domain::framework_adapter::{
+    AdapterExecutionSource, AdapterFailureClass, AdapterHookKey, AdapterLifecycleStageKey,
+    HookDispatchStatus, LifecycleStageExecutionStatus, StageClaimState, StageRoutingDecisionReason,
+};
 use boundline::domain::goal_plan::{GoalPlan, GoalPlanFlowMode, InferredFlow, PlannedTask};
 use boundline::domain::limits::RunLimits;
 use boundline::domain::negotiation::{
@@ -17,8 +25,10 @@ use boundline::domain::step::Step;
 use boundline::domain::task::{
     ClarificationReasonKind, ClarificationRecord, ClarificationStatus, Task, TaskRunRequest,
 };
+use boundline::domain::trace::HookEventDispatchRecord;
 use boundline::normalize_brief_inputs;
 use boundline::orchestrator::session_runtime::{SessionRuntime, SessionRuntimeError};
+use uuid::Uuid;
 
 fn build_task(workspace_ref: &str) -> Task {
     let request = TaskRunRequest {
@@ -80,6 +90,79 @@ fn goal_plan_flow_state_reports_proposed_and_confirmed_modes() {
     )
     .unwrap();
     assert_eq!(unconstrained.flow_state().mode, GoalPlanFlowMode::Absent);
+}
+
+#[test]
+fn framework_adapter_hook_audit_store_round_trips_sidecar_records() -> Result<(), Box<dyn Error>> {
+    let workspace = std::env::temp_dir()
+        .join(format!("boundline-runtime-routing-hook-audit-{}", Uuid::new_v4()));
+    fs::create_dir_all(&workspace)?;
+
+    let store = FileSessionAuditStore::for_session(&workspace, "session-1");
+    let record = HookEventDispatchRecord {
+        run_id: "run-1".to_string(),
+        hook_key: AdapterHookKey::StageCompleted,
+        stage_key: AdapterLifecycleStageKey::Plan,
+        adapter_id: "speckit".to_string(),
+        stage_claimed: true,
+        payload_ref: ".boundline/traces/trace-1.json".to_string(),
+        dispatch_status: HookDispatchStatus::Delivered,
+        summary: "hook delivered".to_string(),
+        recorded_at: 42,
+    };
+
+    let path = store.append_hook_dispatch(&record)?;
+    assert!(path.ends_with("framework-adapter-hooks.jsonl"));
+
+    let loaded = store.load_hook_dispatches()?;
+    assert_eq!(loaded, vec![record]);
+
+    Ok(())
+}
+
+#[test]
+fn framework_adapter_domain_strings_cover_remaining_variant_helpers() {
+    assert_eq!(AdapterLifecycleStageKey::Goal.as_str(), "goal");
+    assert_eq!(AdapterLifecycleStageKey::Plan.as_str(), "plan");
+    assert_eq!(AdapterLifecycleStageKey::Run.as_str(), "run");
+    assert_eq!(AdapterLifecycleStageKey::Review.as_str(), "review");
+
+    assert_eq!(AdapterHookKey::StageCompleted.as_str(), "stage_completed");
+    assert_eq!(AdapterHookKey::StageFailed.as_str(), "stage_failed");
+
+    assert_eq!(AdapterExecutionSource::BuiltIn.as_str(), "built_in");
+    assert_eq!(AdapterExecutionSource::Adapter.as_str(), "adapter");
+
+    assert_eq!(StageRoutingDecisionReason::NoAdapterSelected.as_str(), "no_adapter_selected");
+    assert_eq!(StageRoutingDecisionReason::UndeclaredStage.as_str(), "undeclared_stage");
+    assert_eq!(StageRoutingDecisionReason::DeclaredOverride.as_str(), "declared_override");
+    assert_eq!(StageRoutingDecisionReason::PreflightBlocked.as_str(), "preflight_blocked");
+    assert_eq!(StageRoutingDecisionReason::InvalidManifest.as_str(), "invalid_manifest");
+    assert_eq!(StageRoutingDecisionReason::CompatibilityBlocked.as_str(), "compatibility_blocked");
+
+    assert_eq!(StageClaimState::NotClaimed.as_str(), "not_claimed");
+    assert_eq!(StageClaimState::Claimed.as_str(), "claimed");
+    assert_eq!(StageClaimState::Completed.as_str(), "completed");
+    assert_eq!(StageClaimState::FailedAfterClaim.as_str(), "failed_after_claim");
+
+    assert_eq!(AdapterFailureClass::Preflight.as_str(), "preflight");
+    assert_eq!(AdapterFailureClass::Manifest.as_str(), "manifest");
+    assert_eq!(AdapterFailureClass::MissingConfig.as_str(), "missing_config");
+    assert_eq!(AdapterFailureClass::AdapterRuntime.as_str(), "adapter_runtime");
+    assert_eq!(AdapterFailureClass::Compatibility.as_str(), "compatibility");
+    assert_eq!(AdapterFailureClass::ProtocolError.as_str(), "protocol_error");
+    assert_eq!(AdapterFailureClass::TransportFailure.as_str(), "transport_failure");
+    assert_eq!(AdapterFailureClass::HookWarningOnly.as_str(), "hook_warning_only");
+
+    assert_eq!(LifecycleStageExecutionStatus::Succeeded.as_str(), "succeeded");
+    assert_eq!(LifecycleStageExecutionStatus::Failed.as_str(), "failed");
+    assert_eq!(LifecycleStageExecutionStatus::Blocked.as_str(), "blocked");
+    assert_eq!(LifecycleStageExecutionStatus::Skipped.as_str(), "skipped");
+
+    assert_eq!(HookDispatchStatus::Delivered.as_str(), "delivered");
+    assert_eq!(HookDispatchStatus::Ignored.as_str(), "ignored");
+    assert_eq!(HookDispatchStatus::Warning.as_str(), "warning");
+    assert_eq!(HookDispatchStatus::Failed.as_str(), "failed");
 }
 
 #[test]

@@ -3,8 +3,8 @@
 class Boundline < Formula
   desc "Local delivery orchestrator for bounded engineering work"
   homepage "https://github.com/apply-the/boundline"
-  url "https://github.com/apply-the/boundline", using: :git, tag: "0.65.0"
-  version "0.65.0"
+  url "https://github.com/apply-the/boundline", using: :git, tag: "0.66.0"
+  version "0.66.0"
   license "MIT"
 
   head "https://github.com/apply-the/boundline", branch: "main", using: :git
@@ -45,7 +45,7 @@ class Boundline < Formula
 
   def caveats
     <<~EOS
-      Run boundline doctor --install after install or upgrade to verify the Boundline 0.65.0 + Canon 0.62.0 pairing.
+      Run boundline doctor --install after install or upgrade to verify the Boundline 0.66.0 + Canon 0.62.0 pairing.
     EOS
   end
 

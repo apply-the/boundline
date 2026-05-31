@@ -2,14 +2,16 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::adapters::audit_store::{FileSessionAuditStore, SessionAuditStore};
+use crate::adapters::audit_store::{
+    FileSessionAuditStore, FrameworkAdapterHookAuditStore, SessionAuditStore,
+};
 use crate::adapters::session_store::{FileSessionStore, SessionStore, SessionStoreError};
 use crate::adapters::trace_store::{FileTraceStore, TraceStore};
 use crate::domain::audit::SessionAuditProjection;
 use crate::domain::session::{
     session_goal_brief_ref, session_plan_brief_ref, session_run_brief_ref,
 };
-use crate::domain::trace::ExecutionTrace;
+use crate::domain::trace::{ExecutionTrace, HookEventDispatchRecord};
 
 use super::{InspectCommandError, TraceResolutionTarget, TraceSummaryError, resolve_trace_path};
 
@@ -18,6 +20,7 @@ pub(super) struct ResolvedTraceArtifacts {
     pub(super) session_plan_brief_ref: Option<String>,
     pub(super) run_brief_ref: Option<String>,
     pub(super) session_audit: Option<SessionAuditProjection>,
+    pub(super) latest_framework_adapter_hook_dispatch: Option<HookEventDispatchRecord>,
 }
 
 // Load the requested trace using explicit trace path first, then active-session
@@ -98,12 +101,18 @@ pub(super) fn resolve_trace_artifacts(
         .map(|workspace| load_session_audit_projection(workspace, session_id))
         .transpose()?
         .flatten();
+    let latest_framework_adapter_hook_dispatch = workspace_root
+        .as_ref()
+        .map(|workspace| load_latest_framework_adapter_hook_dispatch(workspace, session_id))
+        .transpose()?
+        .flatten();
 
     Ok(ResolvedTraceArtifacts {
         goal_brief_ref,
         session_plan_brief_ref,
         run_brief_ref,
         session_audit,
+        latest_framework_adapter_hook_dispatch,
     })
 }
 
@@ -132,4 +141,13 @@ fn load_session_audit_projection(
     }
 
     Ok(Some(SessionAuditProjection::from_entries(session_id.to_string(), entries)))
+}
+
+fn load_latest_framework_adapter_hook_dispatch(
+    workspace: &Path,
+    session_id: &str,
+) -> Result<Option<HookEventDispatchRecord>, TraceSummaryError> {
+    let store = FileSessionAuditStore::for_session(workspace, session_id);
+    let dispatches = store.load_hook_dispatches().map_err(TraceSummaryError::SessionAuditStore)?;
+    Ok(dispatches.into_iter().last())
 }

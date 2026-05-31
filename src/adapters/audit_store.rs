@@ -3,11 +3,15 @@ use std::fs::{self, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::domain::audit::SessionAuditEntry;
 use crate::domain::session::{session_audit_cursor_ref, session_audit_events_ref};
+use crate::domain::trace::HookEventDispatchRecord;
+
+const FRAMEWORK_ADAPTER_HOOK_EVENTS_FILE_NAME: &str = "framework-adapter-hooks.jsonl";
 
 pub trait SessionAuditStore: Send + Sync {
     fn append(&self, entry: &SessionAuditEntry) -> Result<PathBuf, SessionAuditStoreError>;
@@ -17,6 +21,18 @@ pub trait SessionAuditStore: Send + Sync {
         &self,
         cursor: &SessionAuditCursor,
     ) -> Result<PathBuf, SessionAuditStoreError>;
+}
+
+/// Persistence surface for framework-adapter hook dispatch audit records.
+pub trait FrameworkAdapterHookAuditStore: Send + Sync {
+    /// Appends one hook dispatch record to the session-scoped hook audit log.
+    fn append_hook_dispatch(
+        &self,
+        record: &HookEventDispatchRecord,
+    ) -> Result<PathBuf, SessionAuditStoreError>;
+
+    /// Loads all hook dispatch records recorded for the session.
+    fn load_hook_dispatches(&self) -> Result<Vec<HookEventDispatchRecord>, SessionAuditStoreError>;
 }
 
 #[derive(Debug, Clone)]
@@ -45,45 +61,22 @@ impl FileSessionAuditStore {
     pub fn cursor_path(&self) -> &Path {
         &self.cursor_path
     }
+
+    pub fn framework_adapter_hook_events_path(&self) -> PathBuf {
+        self.events_path
+            .parent()
+            .map(|parent| parent.join(FRAMEWORK_ADAPTER_HOOK_EVENTS_FILE_NAME))
+            .unwrap_or_else(|| PathBuf::from(FRAMEWORK_ADAPTER_HOOK_EVENTS_FILE_NAME))
+    }
 }
 
 impl SessionAuditStore for FileSessionAuditStore {
     fn append(&self, entry: &SessionAuditEntry) -> Result<PathBuf, SessionAuditStoreError> {
-        if let Some(parent) = self.events_path.parent() {
-            fs::create_dir_all(parent).map_err(SessionAuditStoreError::CreateDirectory)?;
-        }
-
-        let mut file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&self.events_path)
-            .map_err(SessionAuditStoreError::Open)?;
-        let contents = serde_json::to_vec(entry).map_err(SessionAuditStoreError::Serialize)?;
-        file.write_all(&contents).map_err(SessionAuditStoreError::Write)?;
-        file.write_all(b"\n").map_err(SessionAuditStoreError::Write)?;
-        Ok(self.events_path.clone())
+        append_jsonl_record(&self.events_path, entry)
     }
 
     fn load_all(&self) -> Result<Vec<SessionAuditEntry>, SessionAuditStoreError> {
-        if !self.events_path.is_file() {
-            return Ok(Vec::new());
-        }
-
-        let file = fs::File::open(&self.events_path).map_err(SessionAuditStoreError::Read)?;
-        let reader = BufReader::new(file);
-        let mut entries = Vec::new();
-
-        for line in reader.lines() {
-            let line = line.map_err(SessionAuditStoreError::Read)?;
-            if line.trim().is_empty() {
-                continue;
-            }
-            let entry = serde_json::from_str::<SessionAuditEntry>(&line)
-                .map_err(SessionAuditStoreError::Deserialize)?;
-            entries.push(entry);
-        }
-
-        Ok(entries)
+        load_jsonl_records(&self.events_path)
     }
 
     fn load_cursor(&self) -> Result<SessionAuditCursor, SessionAuditStoreError> {
@@ -108,6 +101,60 @@ impl SessionAuditStore for FileSessionAuditStore {
         fs::write(&self.cursor_path, contents).map_err(SessionAuditStoreError::Write)?;
         Ok(self.cursor_path.clone())
     }
+}
+
+impl FrameworkAdapterHookAuditStore for FileSessionAuditStore {
+    fn append_hook_dispatch(
+        &self,
+        record: &HookEventDispatchRecord,
+    ) -> Result<PathBuf, SessionAuditStoreError> {
+        append_jsonl_record(&self.framework_adapter_hook_events_path(), record)
+    }
+
+    fn load_hook_dispatches(&self) -> Result<Vec<HookEventDispatchRecord>, SessionAuditStoreError> {
+        load_jsonl_records(&self.framework_adapter_hook_events_path())
+    }
+}
+
+fn append_jsonl_record<T: Serialize>(
+    path: &Path,
+    record: &T,
+) -> Result<PathBuf, SessionAuditStoreError> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(SessionAuditStoreError::CreateDirectory)?;
+    }
+
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .map_err(SessionAuditStoreError::Open)?;
+    let contents = serde_json::to_vec(record).map_err(SessionAuditStoreError::Serialize)?;
+    file.write_all(&contents).map_err(SessionAuditStoreError::Write)?;
+    file.write_all(b"\n").map_err(SessionAuditStoreError::Write)?;
+    Ok(path.to_path_buf())
+}
+
+fn load_jsonl_records<T: DeserializeOwned>(path: &Path) -> Result<Vec<T>, SessionAuditStoreError> {
+    if !path.is_file() {
+        return Ok(Vec::new());
+    }
+
+    let file = fs::File::open(path).map_err(SessionAuditStoreError::Read)?;
+    let reader = BufReader::new(file);
+    let mut records = Vec::new();
+
+    for line in reader.lines() {
+        let line = line.map_err(SessionAuditStoreError::Read)?;
+        if line.trim().is_empty() {
+            continue;
+        }
+        let record =
+            serde_json::from_str::<T>(&line).map_err(SessionAuditStoreError::Deserialize)?;
+        records.push(record);
+    }
+
+    Ok(records)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]

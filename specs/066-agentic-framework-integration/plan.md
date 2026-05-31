@@ -19,14 +19,28 @@ reusable Rust scaffold for third-party adapters; and the sibling
 ships the `boundline-adapter-speckit` binary.
 
 The initial slice stays intentionally bounded: one active adapter or none,
-sequential stage execution, one-shot JSON stdin/stdout subprocess calls, and
-explicit fallback boundaries. Boundline performs adapter discovery and config
-preflight before adapter-owned stage execution begins, falls back to built-in
-behavior when no adapter is selected or preflight fails before ownership is
-claimed, and marks the current stage failed with required operator intervention
-when an adapter fails after claiming a stage. Known-profile activation remains
-explicit through `boundline adapter add speckit`; PATH discovery may assist
-setup, but it must never auto-enable the adapter.
+sequential stage execution, one-shot JSON stdin/stdout subprocess calls, a
+standard host-visible success/error response envelope, and explicit fallback
+boundaries. Boundline performs adapter discovery and config preflight before
+adapter-owned stage execution begins, requires `describe` to declare supported
+transports so V1 explicitly advertises JSON over stdin/stdout while leaving
+room for future transports, falls back to built-in behavior when no adapter is
+selected or preflight fails before ownership is claimed, and marks the current
+stage failed with required operator intervention when an adapter fails after
+claiming a stage. Optional structured stderr may be ingested into traces when
+adapters emit it, but graceful shutdown and other long-running transport
+lifecycle concerns remain out of scope because V1 stays on one-shot
+subprocesses. Known-profile activation remains explicit through
+`boundline adapter add speckit`; PATH discovery may assist setup, but it must
+never auto-enable the adapter. When a declared `plan` or `run` stage passes
+preflight, the adapter becomes the authoritative execution path for that stage:
+Boundline may assemble host-owned context first, but it must not complete the
+built-in stage result before the adapter returns. Successful adapter responses
+become the persisted stage outcomes; blocked responses leave the stage blocked
+and incomplete; post-claim failures stop the lifecycle. The template repository may
+remain a generic scaffold, but the Speckit repository must bridge real Speckit
+workflow execution and return real produced artifacts or actionable blocked and
+failure outcomes.
 
 ## Technical Context
 
@@ -38,12 +52,17 @@ setup, but it must never auto-enable the adapter.
 
 **Testing**: `cargo fmt --all`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`,
 focused unit tests for config parsing, known-profile lookup, preflight, and
-stage-routing decisions, contract tests for CLI JSON and adapter wire payloads,
+stage-routing decisions, contract tests for CLI JSON and adapter wire payloads
+including standard success or error envelope classification, `describe`
+transport-declaration enforcement, and best-effort structured stderr handling,
 temp-workspace integration tests covering default no-adapter execution,
 `boundline adapter add speckit`, custom adapter registration, interactive
-required-field collection, non-interactive missing-config failure, and
-post-claim stage-failure stop semantics, plus cross-repo compile and smoke tests
-for the template and Speckit repos against the released protocol line
+required-field collection, non-interactive missing-config failure,
+unsupported-transport blocking before stage claim, and post-claim stage-failure
+stop semantics, plus authoritative-routing tests that prove built-in `plan` and
+`run` completion is not treated as the completed stage outcome once an adapter
+claims those stages, and cross-repo compile plus end-to-end tests for the
+template and Speckit repos against the released protocol line
 
 **Target Platform**: macOS and Linux developer workstations, plus Linux CI,
 with trusted local adapter binaries discovered on `PATH` or configured through
@@ -53,15 +72,22 @@ an explicit command/path override
 
 **Execution Model**: sequential one-run/one-adapter local subprocess model.
 Boundline loads adapter capabilities once per lifecycle run, validates required
-config before adapter-owned stages begin, invokes one-shot subprocess commands
-over JSON stdin/stdout, records ownership per stage and hook, and never starts
-background daemons, hidden retries, or concurrent adapters
+config before adapter-owned stages begin, requires `describe` to declare
+supported transports, invokes every one-shot subprocess command over JSON
+stdin/stdout using the same standard host-visible success/error response
+envelope with command-specific outcomes kept inside `data`, records ownership
+per stage and hook, may ingest optional structured stderr diagnostics into
+traces without letting stderr change result classification, routes declared
+`plan` and `run` stages to the adapter as the authoritative stage path after
+successful preflight, persists the adapter response as the stage outcome, and
+never starts background daemons, hidden retries, or concurrent adapters
 
 **Observability Surface**: `boundline adapter add|show|remove`, `boundline init`,
 `boundline config show`, `boundline goal|plan|run|status|inspect`,
 `.boundline/config.toml`, `.boundline/session.json`, `.boundline/traces/`, and
 adapter audit records that expose execution source, capability compatibility,
-hook delivery, and intervention-required failure reasons
+hook delivery, optional structured adapter diagnostics when emitted, and
+intervention-required failure reasons
 
 **Performance Goals**: preserve the current no-adapter path with effectively no
 behavioral regression, keep capability discovery and preflight to one bounded
@@ -74,8 +100,11 @@ explicit operator selection is the only activation path; non-interactive runs
 with missing adapter config must fail before adapter execution begins; stage
 ownership cannot silently revert mid-stage; external adapters remain trusted
 local subprocesses only; no MCP core dependency is introduced; committed
-cross-repo path dependencies are forbidden; and the sibling template repo must
-be bootstrapped from its currently empty Git state
+cross-repo path dependencies are forbidden; V1 accepts only a declared JSON
+over stdin/stdout transport; graceful shutdown for persistent transports is
+deferred; the known Speckit profile cannot satisfy this slice with placeholder
+claimed-stage markers alone; and the sibling template repo must be bootstrapped
+from its currently empty Git state
 
 **Scale/Scope**: one Boundline host repo, one empty adapter-template repo to
 bootstrap, one known Speckit adapter repo with an initial commit, one shipped

@@ -9,6 +9,9 @@ use super::{
     TraceEventType, TraceSummaryView, resolve_effective_routing,
     resolve_effective_runtime_capabilities, resolve_effective_slot_effort_policies,
 };
+use crate::domain::framework_adapter::{
+    AdapterExecutionSource, AdapterLifecycleStageKey, LifecycleStageExecutionStatus,
+};
 use crate::domain::session::ContinuityAuthority;
 
 pub fn render_route_outcome(outcome: &RoutingOutcome) -> String {
@@ -33,6 +36,12 @@ pub fn trace_execution_condition_text(summary: &TraceSummaryView) -> String {
 }
 
 fn routing_outcome_for_status_view(view: &SessionStatusView) -> RoutingOutcome {
+    if let Some(routing) = view.latest_framework_adapter_stage_routing.as_ref()
+        && routing.execution_source == AdapterExecutionSource::Adapter
+    {
+        return framework_adapter_routing_outcome(routing.stage_key, routing.stage_status);
+    }
+
     match view.execution_path.as_deref() {
         Some("native_goal_plan") => RoutingOutcome {
             mode: RoutingMode::Native,
@@ -93,6 +102,14 @@ pub(crate) fn session_route_owner(view: &SessionStatusView) -> &'static str {
         return "governance";
     }
 
+    if view
+        .latest_framework_adapter_stage_routing
+        .as_ref()
+        .is_some_and(|routing| routing.execution_source == AdapterExecutionSource::Adapter)
+    {
+        return "adapter";
+    }
+
     if view.latest_review_trigger.is_some()
         || view.latest_review_vote.is_some()
         || view.latest_review_outcome.is_some()
@@ -116,6 +133,53 @@ pub(crate) fn session_route_owner(view: &SessionStatusView) -> &'static str {
     }
 
     "native"
+}
+
+fn framework_adapter_routing_outcome(
+    stage_key: AdapterLifecycleStageKey,
+    stage_status: Option<LifecycleStageExecutionStatus>,
+) -> RoutingOutcome {
+    match (stage_key, stage_status) {
+        (AdapterLifecycleStageKey::Plan, Some(LifecycleStageExecutionStatus::Blocked)) => {
+            RoutingOutcome {
+                mode: RoutingMode::Blocked,
+                source: RoutingSource::SessionState,
+                reason:
+                    "framework-adapter blocked the claimed plan stage and left planning incomplete"
+                        .to_string(),
+            }
+        }
+        (AdapterLifecycleStageKey::Run, Some(LifecycleStageExecutionStatus::Blocked)) => {
+            RoutingOutcome {
+                mode: RoutingMode::Blocked,
+                source: RoutingSource::SessionState,
+                reason:
+                    "framework-adapter blocked the claimed run stage and left execution incomplete"
+                        .to_string(),
+            }
+        }
+        (AdapterLifecycleStageKey::Plan, _) => RoutingOutcome {
+            mode: RoutingMode::Native,
+            source: RoutingSource::SessionState,
+            reason: "framework-adapter owns the persisted plan-stage outcome".to_string(),
+        },
+        (AdapterLifecycleStageKey::Run, _) => RoutingOutcome {
+            mode: RoutingMode::Native,
+            source: RoutingSource::SessionState,
+            reason: "framework-adapter owns the persisted run-stage outcome".to_string(),
+        },
+        (_, Some(LifecycleStageExecutionStatus::Blocked)) => RoutingOutcome {
+            mode: RoutingMode::Blocked,
+            source: RoutingSource::SessionState,
+            reason: "framework-adapter blocked the claimed stage and left the session incomplete"
+                .to_string(),
+        },
+        _ => RoutingOutcome {
+            mode: RoutingMode::Native,
+            source: RoutingSource::SessionState,
+            reason: "framework-adapter owns the persisted stage outcome".to_string(),
+        },
+    }
 }
 
 pub(crate) fn trace_route_owner(summary: &TraceSummaryView) -> &'static str {

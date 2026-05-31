@@ -1,5 +1,8 @@
 //! Persisted execution traces and flattened trace-summary projections.
 
+#[path = "trace/framework_adapter.rs"]
+pub mod framework_adapter;
+
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
@@ -9,13 +12,17 @@ use uuid::Uuid;
 use crate::domain::audit::SessionAuditProjection;
 use crate::domain::cluster::ClusterDeliveryStory;
 use crate::domain::context_intelligence::AdvancedContextProjection;
+use crate::domain::execution::StageRoutingDecisionRecord;
 use crate::domain::guidance::GuidanceGuardianProjection;
 use crate::domain::limits::TerminalCondition;
 use crate::domain::reasoning::ProfileActivationRecord;
 use crate::domain::routing_decision::RoutingDecisionProjection;
-use crate::domain::session::{DelegationStatusView, DelightFeedbackSignal};
+use crate::domain::session::{
+    DelegationStatusView, DelightFeedbackSignal, FrameworkAdapterStageFailureDetails,
+};
 use crate::domain::step::{StepKind, StepStatus};
 use crate::domain::task::{TaskStatus, TerminalReason};
+pub use framework_adapter::HookEventDispatchRecord;
 
 /// Returns the current UNIX timestamp in milliseconds.
 pub fn current_timestamp_millis() -> u64 {
@@ -66,6 +73,7 @@ pub enum TraceEventType {
     StageRetryScheduled,
     Replanned,
     StageReplanned,
+    StageRouted,
     StageFailed,
     TerminalRecorded,
     DecisionCreated,
@@ -328,6 +336,12 @@ pub struct TraceSummaryView {
     pub session_audit: Option<SessionAuditProjection>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub delight_feedback: Option<DelightFeedbackSignal>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub framework_adapter_stage_routing: Option<StageRoutingDecisionRecord>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub framework_adapter_hook_dispatch: Option<HookEventDispatchRecord>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub framework_adapter_stage_failure: Option<FrameworkAdapterStageFailureDetails>,
     pub terminal_status: TaskStatus,
     pub terminal_reason: TerminalReason,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -389,6 +403,9 @@ impl Default for TraceSummaryView {
             review_timeline: Vec::new(),
             session_audit: None,
             delight_feedback: None,
+            framework_adapter_stage_routing: None,
+            framework_adapter_hook_dispatch: None,
+            framework_adapter_stage_failure: None,
             terminal_status: TaskStatus::Planned,
             terminal_reason: TerminalReason::new(TerminalCondition::GoalSatisfied, "", None),
             duration: None,

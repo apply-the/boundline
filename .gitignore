@@ -10,6 +10,7 @@ target
 *.prof*
 *.log
 .env
+.env*
 .canon/
 .boundline/
 

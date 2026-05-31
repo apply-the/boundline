@@ -1,4 +1,13 @@
-use super::*;
+use serde_json::json;
+
+use crate::adapters::trace_store::{FileTraceStore, TraceStore};
+use crate::domain::session::ActiveSessionRecord;
+use crate::domain::task::{Task, TaskRunResponse, TaskStatus, TerminalReason};
+use crate::domain::trace::{ExecutionTrace, TraceEventType, current_timestamp_millis};
+use crate::orchestrator::review_trace::record_reasoning_profile_events;
+use crate::orchestrator::terminal::task_status_for_condition;
+
+use super::{SessionRuntime, SessionRuntimeError, session_status_for_task_status};
 
 impl SessionRuntime {
     // Applies terminal state to task, trace, and session in one place so the

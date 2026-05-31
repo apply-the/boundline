@@ -1,3 +1,5 @@
+#[path = "../../../src/cli/adapter.rs"]
+pub mod adapter;
 #[path = "../../../src/cli/assistant_assets.rs"]
 pub mod assistant_assets;
 #[path = "../../../src/cli/checkpoint.rs"]

@@ -111,6 +111,26 @@ fn init_accepts_canon_preferences_and_model_routes() {
 }
 
 #[test]
+fn init_accepts_known_framework_adapter_profile() {
+    let cli = Cli::try_parse_from([
+        "boundline",
+        "init",
+        "--workspace",
+        "/tmp/ws",
+        "--adapter",
+        "speckit",
+    ])
+    .unwrap();
+
+    match cli.command {
+        Some(DeveloperCommand::Init { adapter, .. }) => {
+            assert_eq!(adapter.as_deref(), Some("speckit"));
+        }
+        other => panic!("expected Init, got {other:?}"),
+    }
+}
+
+#[test]
 fn init_accepts_domain_templates_standards_and_bindings() {
     let cli = Cli::try_parse_from([
         "boundline",
@@ -383,6 +403,7 @@ fn init_help_explains_supported_assistants_route_shape_and_defaults() {
     assert!(help.contains("SLOT=RUNTIME:MODEL"), "{help}");
     assert!(help.contains("planning, implementation, verification, review"), "{help}");
     assert!(help.contains("planning=copilot:gpt-4o"), "{help}");
+    assert!(help.contains("--adapter <ADAPTER>"), "{help}");
     assert!(help.contains("--export-docs"), "{help}");
     assert!(help.contains("--refresh"), "{help}");
     assert!(help.contains("--diff"), "{help}");

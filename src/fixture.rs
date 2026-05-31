@@ -5807,6 +5807,7 @@ mod tests {
                 ..RoutingConfig::default()
             },
             canon: None,
+            adapter: None,
         };
         FileConfigStore::for_workspace(&workspace).save_local(&review_config).unwrap();
         let review_goal_plan_runtime = build_fixture_runtime_for_goal_plan(
@@ -5889,6 +5890,7 @@ mod tests {
                 ..RoutingConfig::default()
             },
             canon: None,
+            adapter: None,
         };
         FileConfigStore::for_workspace(&workspace).save_local(&config).unwrap();
 
@@ -5930,6 +5932,7 @@ mod tests {
                 ..RoutingConfig::default()
             },
             canon: None,
+            adapter: None,
         };
         FileConfigStore::for_workspace(&workspace).save_local(&generic_config).unwrap();
         let generic_routes = provider_review_routes_for_profile(&workspace, &profile);
@@ -5952,6 +5955,7 @@ mod tests {
                 ..RoutingConfig::default()
             },
             canon: None,
+            adapter: None,
         };
         FileConfigStore::for_workspace(&workspace).save_local(&explicit_config).unwrap();
         let explicit_routes = provider_review_routes_for_profile(&workspace, &profile);
@@ -6474,6 +6478,7 @@ mod tests {
                     default_zone: None,
                     default_system_context: None,
                 }),
+                adapter: None,
             })
             .unwrap();
 
@@ -6545,6 +6550,7 @@ mod tests {
                     default_zone: None,
                     default_system_context: None,
                 }),
+                adapter: None,
             })
             .unwrap();
 

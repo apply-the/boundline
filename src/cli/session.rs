@@ -22,6 +22,7 @@ use crate::cli::output;
 use crate::cli::workspace as cli_workspace;
 use crate::domain::cluster::{ClusterDeliveryStory, ClusterSessionProjection};
 use crate::domain::decision::ActionSelector;
+use crate::domain::execution::StageRoutingDecisionRecord;
 use crate::domain::goal_plan::PlanQualityState;
 use crate::domain::governance::{
     BacklogQualityAssessment, CanonModeSelectionPreference, GovernanceLifecycleState,
@@ -33,23 +34,23 @@ use crate::domain::negotiation::NegotiatedDeliveryPacket;
 use crate::domain::reasoning::ReasoningAdmissionEffect;
 use crate::domain::session::{
     ActiveSessionRecord, CompatibilityFollowUpMode, CompatibilityFollowUpView, ContinuityAuthority,
-    SessionStatus, SessionStatusView, date_prefix_from_millis, decision_status_text,
-    delegation_next_command, delegation_status_view, execution_path_text, generate_session_ref,
-    routing_outcome, session_branch_ref, session_goal_brief_ref, session_plan_brief_ref,
-    session_run_brief_ref, session_storage_root_ref, task_state_attempt_lineage_summary,
-    task_state_canon_memory_context_credibility, task_state_canon_memory_context_summary,
-    task_state_canon_memory_primary_inputs, task_state_canon_memory_provenance,
-    task_state_canon_memory_staleness_reason, task_state_governance_approval_provenance,
-    task_state_governance_approval_text, task_state_governance_blocked_reason,
-    task_state_governance_candidate_actions, task_state_governance_canon_run_ref,
-    task_state_governance_contract_lines, task_state_governance_decision_headline,
-    task_state_governance_mode_text, task_state_governance_next_action,
-    task_state_governance_packet_binding_reason, task_state_governance_packet_ref,
-    task_state_governance_packet_source_stage, task_state_governance_reason,
-    task_state_governance_rollout_profile_text, task_state_governance_runtime_state_text,
-    task_state_governance_runtime_text, task_state_governance_stage_key,
-    task_state_governance_state_text, task_state_string, task_state_strings,
-    task_state_workspace_slice_summary,
+    FrameworkAdapterStageFailureDetails, SessionStatus, SessionStatusView, date_prefix_from_millis,
+    decision_status_text, delegation_next_command, delegation_status_view, execution_path_text,
+    generate_session_ref, routing_outcome, session_branch_ref, session_goal_brief_ref,
+    session_plan_brief_ref, session_run_brief_ref, session_storage_root_ref,
+    task_state_attempt_lineage_summary, task_state_canon_memory_context_credibility,
+    task_state_canon_memory_context_summary, task_state_canon_memory_primary_inputs,
+    task_state_canon_memory_provenance, task_state_canon_memory_staleness_reason,
+    task_state_governance_approval_provenance, task_state_governance_approval_text,
+    task_state_governance_blocked_reason, task_state_governance_candidate_actions,
+    task_state_governance_canon_run_ref, task_state_governance_contract_lines,
+    task_state_governance_decision_headline, task_state_governance_mode_text,
+    task_state_governance_next_action, task_state_governance_packet_binding_reason,
+    task_state_governance_packet_ref, task_state_governance_packet_source_stage,
+    task_state_governance_reason, task_state_governance_rollout_profile_text,
+    task_state_governance_runtime_state_text, task_state_governance_runtime_text,
+    task_state_governance_stage_key, task_state_governance_state_text, task_state_string,
+    task_state_strings, task_state_workspace_slice_summary,
 };
 use crate::domain::task::{ClarificationReasonKind, TaskStatus};
 use crate::domain::trace::{TraceSummaryView, current_timestamp_millis};
@@ -959,7 +960,11 @@ pub fn execute_plan_with_target_input(
     let plan_result = runtime.plan_task(&mut record, requested_flow, no_flow);
 
     if let Err(error) = plan_result {
-        if matches!(&error, SessionRuntimeError::ClarificationRequired { .. }) {
+        if matches!(&error, SessionRuntimeError::ClarificationRequired { .. })
+            || record.latest_terminal_reason.is_some()
+            || record.latest_trace_ref.is_some()
+            || record.latest_status.is_terminal()
+        {
             runtime.persist_session(&record).map_err(map_runtime_error)?;
         }
         return Err(map_runtime_error(error));
@@ -978,10 +983,22 @@ pub fn execute_plan_with_target_input(
         SessionBriefArtifactKind::Plan,
         &preview_view,
     )?;
-    let view = build_status_view(&record, suggested_next_command(&record), planning_explanation);
+    let mut view =
+        build_status_view(&record, suggested_next_command(&record), planning_explanation);
+    if let Some(trace_ref) = record.latest_trace_ref.as_deref()
+        && let Ok(trace) = runtime.trace_store().load(Path::new(trace_ref))
+    {
+        if let Ok(summary) = summarize_trace(Path::new(trace_ref), &trace) {
+            view.latest_framework_adapter_stage_routing = summary.framework_adapter_stage_routing;
+            view.latest_framework_adapter_hook_dispatch = summary.framework_adapter_hook_dispatch;
+        } else {
+            view.latest_framework_adapter_stage_routing =
+                latest_framework_adapter_stage_routing_from_trace(&trace);
+        }
+    }
 
     Ok(report_with_session_guidance(
-        CommandExitStatus::Succeeded,
+        exit_status_for_session(record.latest_status),
         view,
         record.goal_plan.as_ref().map(|goal_plan| &goal_plan.guidance_guardian),
     ))
@@ -1087,6 +1104,29 @@ pub fn execute_run_with_target(
     let mut response = runtime.run_to_terminal(&mut record).map_err(map_runtime_error)?;
     runtime.persist_session(&record).map_err(map_runtime_error)?;
 
+    if record.latest_status == SessionStatus::Blocked {
+        let mut view = build_status_view(
+            &record,
+            suggested_next_command(&record),
+            "framework-adapter blocked the claimed run stage and left the session incomplete"
+                .to_string(),
+        );
+        if let Some(trace_ref) = record.latest_trace_ref.as_deref()
+            && let Ok(trace) = runtime.trace_store().load(Path::new(trace_ref))
+        {
+            if let Ok(summary) = summarize_trace(Path::new(trace_ref), &trace) {
+                view.latest_framework_adapter_stage_routing =
+                    summary.framework_adapter_stage_routing;
+                view.latest_framework_adapter_hook_dispatch =
+                    summary.framework_adapter_hook_dispatch;
+            } else {
+                view.latest_framework_adapter_stage_routing =
+                    latest_framework_adapter_stage_routing_from_trace(&trace);
+            }
+        }
+        return Ok(report_with_session_status(exit_status_for_session(record.latest_status), view));
+    }
+
     if response.final_context.cluster_delivery_story().ok().flatten().is_none()
         && let Some(cluster_story) = cluster_delivery_story_for_record(&record)
     {
@@ -1115,7 +1155,6 @@ pub fn execute_run_with_target(
         .and_then(|trace| summarize_trace(Path::new(&response.trace_location), trace).ok());
     let next_command =
         suggested_next_command(&record).unwrap_or_else(|| "boundline inspect".to_string());
-    let routing_prefix = output::render_route_outcome(&routing_outcome(&record));
     let trace_location = Some(response.trace_location.clone());
     let run_brief_ref = if let Some(summary) = trace_summary.as_ref() {
         Some(persist_trace_summary_brief_artifact(
@@ -1136,6 +1175,10 @@ pub fn execute_run_with_target(
     if let (Some(summary), Some(run_brief_ref)) = (trace_summary.as_mut(), run_brief_ref.as_ref()) {
         summary.run_brief_ref = Some(run_brief_ref.clone());
     }
+    let routing_prefix = trace_summary
+        .as_ref()
+        .and_then(|summary| summary.routing_summary.clone())
+        .unwrap_or_else(|| output::render_route_outcome(&routing_outcome(&record)));
     let mut terminal_output = format!(
         "{routing_prefix}\n{}",
         output::render_run_trace("run", trace.as_ref(), &response, &next_command),
@@ -1202,13 +1245,21 @@ pub fn execute_status_with_target(
                 },
                 compatibility_follow_up,
             );
-            if view.cluster_delivery_story.is_none()
-                && let Some(trace_ref) = record.latest_trace_ref.as_deref()
+            if let Some(trace_ref) = record.latest_trace_ref.as_deref()
                 && let Ok(trace) = runtime.trace_store().load(Path::new(trace_ref))
-                && let Ok(summary) = summarize_trace(Path::new(trace_ref), &trace)
-                && let Some(cluster_story) = summary.cluster_delivery_story
             {
-                view.cluster_delivery_story = Some(cluster_story);
+                if let Ok(summary) = summarize_trace(Path::new(trace_ref), &trace) {
+                    if view.cluster_delivery_story.is_none() {
+                        view.cluster_delivery_story = summary.cluster_delivery_story;
+                    }
+                    view.latest_framework_adapter_stage_routing =
+                        summary.framework_adapter_stage_routing;
+                    view.latest_framework_adapter_hook_dispatch =
+                        summary.framework_adapter_hook_dispatch;
+                } else {
+                    view.latest_framework_adapter_stage_routing =
+                        latest_framework_adapter_stage_routing_from_trace(&trace);
+                }
             }
             Ok(report_with_session_guidance(
                 CommandExitStatus::Succeeded,
@@ -1796,6 +1847,12 @@ pub(crate) fn build_status_view_with_follow_up(
         session_plan_brief_ref,
         run_brief_ref,
         latest_trace_ref: record.latest_trace_ref.clone(),
+        latest_framework_adapter_stage_routing: None,
+        latest_framework_adapter_hook_dispatch: None,
+        latest_framework_adapter_stage_failure: record
+            .latest_terminal_reason
+            .as_ref()
+            .and_then(FrameworkAdapterStageFailureDetails::from_terminal_reason),
         latest_decision_status: latest_decision
             .map(|decision| decision_status_text(decision.status).to_string()),
         latest_decision_target: latest_decision.map(|decision| decision.target.clone()),
@@ -2281,6 +2338,18 @@ fn suggested_next_command(record: &ActiveSessionRecord) -> Option<String> {
         }
         SessionStatus::Invalid => Some("boundline goal --goal <goal>".to_string()),
     }
+}
+
+fn latest_framework_adapter_stage_routing_from_trace(
+    trace: &crate::domain::trace::ExecutionTrace,
+) -> Option<StageRoutingDecisionRecord> {
+    trace.events.iter().rev().find_map(|event| {
+        event
+            .payload
+            .get("framework_adapter_stage_routing")
+            .cloned()
+            .and_then(|value| serde_json::from_value::<StageRoutingDecisionRecord>(value).ok())
+    })
 }
 
 fn clarification_reason(record: &ActiveSessionRecord) -> Option<ClarificationReasonKind> {
@@ -3049,6 +3118,7 @@ fn red_to_green_addition() {
                 ..RoutingConfig::default()
             },
             canon: None,
+            adapter: None,
         };
         FileConfigStore::for_workspace(&workspace).save_local(&config).unwrap();
         workspace
@@ -3942,6 +4012,7 @@ fn red_to_green_addition() {
                 ..RoutingConfig::default()
             },
             canon: None,
+            adapter: None,
         };
         config.routing.slot_effort_policies.insert(
             RouteSlot::Implementation,

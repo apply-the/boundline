@@ -1,5 +1,8 @@
 //! Routing, runtime-capability, and domain-template configuration models.
 
+#[path = "configuration/framework_adapter.rs"]
+pub mod framework_adapter;
+
 use std::collections::BTreeMap;
 use std::fmt;
 
@@ -14,6 +17,10 @@ use crate::domain::domain_templates::{
     DomainFamily, DomainTemplateSettings, ExternalContextBinding,
 };
 use crate::domain::governance::CanonModeSelectionPreference;
+pub use framework_adapter::{
+    AdapterConfigValueRecord, AdapterSelectionRecord, KnownAdapterProfileDefinition,
+    KnownAdapterProfileFieldDefault, PersistedAdapterConfiguration, ResolvedAdapterConfigSet,
+};
 
 /// Supported assistant runtimes that can back configured routes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, ValueEnum)]
@@ -767,11 +774,18 @@ pub struct ConfigFile {
     pub routing: RoutingConfig,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub canon: Option<CanonPreferences>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub adapter: Option<PersistedAdapterConfiguration>,
 }
 
 impl Default for ConfigFile {
     fn default() -> Self {
-        Self { version: default_version(), routing: RoutingConfig::default(), canon: None }
+        Self {
+            version: default_version(),
+            routing: RoutingConfig::default(),
+            canon: None,
+            adapter: None,
+        }
     }
 }
 

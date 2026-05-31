@@ -18,6 +18,45 @@ The bundled catalog in `assistant/catalog/model-catalog.toml` was updated on
 2026-05-30 and already carries those current families for the repo's supported
 runtime surfaces, so this planning slice requires no catalog delta.
 
+## Release Validation Evidence
+
+Focused cross-repo validation was rerun on 2026-05-31 against the released
+`framework-adapter-v1` line.
+
+- Host contract validation passed with `cargo test --test contract
+  framework_adapter_protocol_contract::`; the green cases cover the declared
+  stdio JSON transport, stable stdout envelopes, transport failure handling,
+  unknown-stage and unknown-hook rejection, and stderr remaining trace-only
+  even when the adapter emits protocol or claimed-stage failures.
+- Host routing validation passed with `cargo test --test contract
+  runtime_routing_contract::`; the green cases confirm claimed-stage failures
+  remain explicit in status and inspect surfaces instead of silently reverting
+  to built-in behavior.
+- Host lifecycle activation and override validation passed with `cargo test
+  --test integration framework_adapter_activation::`, `cargo test --test
+  integration framework_adapter_override_flow::`, and `cargo test --test
+  integration framework_adapter_config_flow::`; those suites cover explicit
+  Speckit activation, unsupported-transport fallback before plan or run stage
+  claim, blocked-preflight fallback, hook delivery after claimed success, and
+  guided required-field setup with non-interactive failure.
+- Template validation passed with `cargo test --manifest-path
+  ../boundline-framework-template/Cargo.toml --test contract`; the scaffold
+  still declares V1 stdio transport metadata and returns the standard envelope
+  shape for `describe`, `preflight`, `execute-stage`, and `emit-hook`.
+- Speckit validation passed with `cargo test --manifest-path
+  ../boundline-adapter-speckit/Cargo.toml --test contract` and `cargo test
+  --manifest-path ../boundline-adapter-speckit/Cargo.toml --test config_flow`;
+  the known profile still declares the released transport metadata, requires
+  the two path fields, blocks when they are missing, and returns normalized
+  ready values.
+- The validated command surface is still one-shot only: `describe`,
+  `preflight`, `execute-stage`, and `emit-hook`. No graceful-shutdown or
+  long-lived daemon command exists in the released contract, so the no-shutdown
+  scope remains explicit rather than implicit.
+- The provider-catalog refresh result stayed no-change for this release line;
+  the 2026-05-31 provider recheck still required no update beyond the catalog
+  already refreshed on 2026-05-30.
+
 ## Decision 1: Keep Canon-aware behavior as the built-in default and make external adapters opt-in only
 
 **Decision**: Preserve the existing Canon-aware path as the built-in default
@@ -64,24 +103,36 @@ between first-run bootstrap and later maintenance.
 - Persist adapter state outside `.boundline/config.toml`: rejected because the
   workspace config already owns authoritative lifecycle preferences.
 
-## Decision 3: Use one-shot subprocess commands with typed JSON over stdin/stdout
+## Decision 3: Use one-shot subprocess commands with typed JSON over stdin/stdout and a standard response envelope
 
 **Decision**: Use a one-shot subprocess protocol over JSON stdin/stdout rather
 than a long-lived daemon. The host invokes bounded commands such as `describe`,
-`preflight`, `execute-stage`, and `emit-hook`, with request and response bodies
-modeled as typed serde structs owned by the Boundline contract.
+`preflight`, `execute-stage`, and `emit-hook`, with request bodies and
+host-visible success or error response envelopes modeled as typed serde structs
+owned by the Boundline contract. The `describe` exchange must declare supported
+transport(s) explicitly so V1 can advertise JSON over stdin/stdout while
+leaving room for future transports. Structured stderr remains optional
+best-effort trace input, and graceful shutdown for long-running transports is
+deferred beyond this initial slice.
 
 **Rationale**: One-shot commands fit the constitution's sequential-first and
 bounded-execution rules better than a resident adapter process. They make host
-timeouts, retry policy, and failure ownership explicit, simplify test harnesses,
-and let the template repo ship a minimal binary scaffold without background
-process management.
+timeouts, retry policy, failure ownership, and operator-visible outcomes
+explicit, simplify test harnesses, and let the template repo ship a minimal
+binary scaffold without background process management. A shared response
+envelope avoids ad hoc per-command top-level shapes, transport declarations in
+`describe` prevent hidden wire assumptions, and deferring graceful shutdown
+keeps V1 limited to trusted local one-shot subprocesses.
 
 **Alternatives considered**:
 
 - Long-lived JSON-RPC session or daemon: rejected because it adds connection
   lifecycle, reconnection, and hidden-state complexity before the first useful
   slice ships.
+- Add a V1 daemon-style logging or shutdown subsystem: rejected because
+  optional structured stderr is sufficient for bounded trace enrichment and the
+  one-shot transport avoids orphan-process concerns without additional
+  lifecycle controls.
 - Dynamic libraries or ABI-loaded plugins: rejected because they create fragile
   compatibility and distribution concerns across repositories.
 - Ad hoc shell-script execution: rejected because it would not provide the typed

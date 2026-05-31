@@ -90,6 +90,31 @@ runtime.
 These surfaces may render summaries, evidence, findings, checkpoints, and
 read-only governed references, but they do not own delivery state.
 
+## Framework Adapter Boundary
+
+Framework adapters extend the runtime without replacing it.
+
+- Boundline remains the orchestrator and the default execution path.
+- One workspace may select one adapter or none.
+- The host owns capability validation, config persistence, routing decisions,
+  and operator-visible status or inspect output.
+- Adapters only own the stages they explicitly declare and successfully claim.
+
+The V1 wire contract is deliberately bounded:
+
+- one-shot trusted local subprocess commands only
+- UTF-8 JSON over stdin/stdout only
+- one standard success or error envelope on stdout for every command
+- optional structured stderr lines that may be copied into traces, but never
+  change result classification on their own
+- no graceful shutdown, background daemon, or persistent transport lifecycle in
+  this release
+
+This makes transport inspection a first-class operator concern. The host can
+block activation or fall back before claim when `describe` does not declare a
+compatible stdin/stdout transport, and `adapter show --json` is the stable
+surface for confirming that compatibility before a stage runs.
+
 ## Planning, Guidance, And Traceability
 
 Planning in Boundline is evidence-driven:

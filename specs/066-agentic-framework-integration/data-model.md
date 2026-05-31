@@ -80,6 +80,10 @@ lifecycle run after `describe` and before stage routing begins.
 - `protocol_line`: declared protocol line such as `framework-adapter-v1`
 - `adapter_version`: semantic version reported by the adapter
 - `supported_boundline_range`: machine-readable Boundline version range
+- `supported_transports`: ordered list of adapter-declared transport
+  descriptors; each descriptor carries `transport`, `encoding`,
+  `request_channel`, and `response_channel`, and V1 expects at least one JSON
+  over stdin/stdout entry
 - `declared_stage_overrides`: ordered list of host-known stages the adapter
   wants to own
 - `declared_hook_subscriptions`: ordered list of host-known hooks the adapter
@@ -101,8 +105,14 @@ lifecycle run after `describe` and before stage routing begins.
 - unknown stage IDs or hook IDs force `snapshot_state = invalid_manifest`
 - mismatched protocol or version compatibility force
   `snapshot_state = incompatible`
+- a missing supported transport declaration, or a declaration that does not
+  include the V1 JSON-over-stdin/stdout transport, forces
+  `snapshot_state = incompatible`
+- the `describe` command must return a protocol-valid success envelope before
+  the host parses the capability body; a protocol error envelope or transport
+  failure blocks activation before manifest validation continues
 - a `validated` snapshot may exist only when the selected adapter identity,
-  command, and manifest identity agree
+  command, manifest identity, and supported transport declaration agree
 
 **State Transitions**:
 
@@ -246,8 +256,11 @@ session state and traces.
 - `status`: `succeeded`, `failed`, `blocked`, or `skipped`
 - `intervention_required`: whether the operator must act before continuing
 - `failure_class`: `preflight`, `manifest`, `missing_config`, `adapter_runtime`,
-  `built_in`, or `hook_warning_only`
+  `adapter_protocol`, `adapter_transport`, `built_in`, or
+  `hook_warning_only`
 - `produced_artifacts`: bounded list of artifact refs returned by the stage
+- `diagnostic_trace_refs`: optional trace refs for structured adapter stderr
+  captured during stage execution, when emitted
 - `started_at`: start timestamp
 - `finished_at`: terminal timestamp
 
@@ -279,6 +292,8 @@ session state and traces.
 - `stage_claim_state`: whether the current stage had already been claimed by the
   adapter when the hook fired
 - `payload_ref`: trace or artifact ref for the hook payload
+- `diagnostic_trace_refs`: optional trace refs for structured adapter stderr
+  captured during hook delivery, when emitted
 - `error_summary`: surfaced failure summary when delivery is not successful
 
 **Relationships**:
@@ -293,8 +308,48 @@ session state and traces.
   retroactively convert a built-in stage into an adapter-owned failure
 - a hook fired after an adapter-owned stage has been claimed may contribute to
   the stage's terminal failure classification
+- missing or malformed structured stderr must not change `delivery_status` when
+  the stdout response envelope is otherwise protocol-valid
 
-## 10. ProtocolCompatibilityRecord
+## 10. AdapterCommandExchangeRecord
+
+**Purpose**: Represents one host-to-adapter stdio exchange, whether it happens
+during explicit adapter management or during lifecycle execution.
+
+**Key Fields**:
+
+- `surface`: `adapter_add`, `adapter_show`, `lifecycle_preflight`,
+  `stage_execution`, or `hook_delivery`
+- `command_key`: `describe`, `preflight`, `execute_stage`, or `emit_hook`
+- `transport_key`: normalized transport identifier; V1 is `stdio_json_v1`
+- `response_class`: `success_envelope`, `error_envelope`, `transport_failure`,
+  or `invalid_stdout`
+- `domain_status`: optional command-specific outcome from `data.status`, such as
+  `ready`, `blocked`, `succeeded`, `failed`, or `delivered`
+- `stderr_trace_refs`: optional trace refs for structured adapter stderr
+  captured during the exchange, when emitted and parseable
+- `recorded_at`: timestamp of the completed exchange
+
+**Relationships**:
+
+- may seed one `AdapterCapabilitySnapshot`
+- may block or normalize one `ResolvedAdapterConfigSet`
+- may be referenced by one `LifecycleStageExecutionRecord` or one
+  `HookEventDispatchRecord`
+
+**Validation Rules**:
+
+- `response_class = success_envelope` requires exit code `0` and a protocol-
+  valid stdout body with `success = true` and a `data` object
+- `response_class = error_envelope` requires exit code `0` and a protocol-valid
+  stdout body with `success = false` and an `error` object
+- non-zero exit codes, missing stdout, or malformed JSON classify the exchange
+  as `transport_failure` or `invalid_stdout` instead of an in-band domain
+  outcome
+- structured stderr may add `stderr_trace_refs`, but it must not change
+  `response_class` or `domain_status`
+
+## 11. ProtocolCompatibilityRecord
 
 **Purpose**: Represents the compatibility line shared across the host repo, the
 template repo, and concrete adapter repos.
@@ -330,12 +385,21 @@ template repo, and concrete adapter repos.
   must never create the selection implicitly.
 - Any unknown stage override or hook subscription makes the
   `AdapterCapabilitySnapshot` invalid and blocks activation.
+- Every validated `AdapterCapabilitySnapshot` must declare at least one host-
+  supported transport; V1 accepts only JSON over stdin/stdout and defers
+  long-running transport lifecycle management.
+- Every host-to-adapter subprocess exchange must be classified first as a
+  success envelope, error envelope, transport failure, or invalid stdout before
+  routing, blocking, or audit decisions are finalized.
 - Non-interactive execution with `ResolvedAdapterConfigSet.completeness_state =
   missing_required` must stop before any adapter-owned stage or hook delivery.
 - Once an adapter-owned stage is claimed, a runtime failure must surface as a
   failed `LifecycleStageExecutionRecord` with `intervention_required = true`.
 - Hook failures remain observable, but non-owning hook failures must not fail a
   built-in stage retroactively.
+- Optional structured adapter stderr may enrich trace outputs when parseable,
+  but absent or unstructured stderr must not invalidate an otherwise valid
+  stdout response or change the host's response classification.
 - The known `speckit` profile must stay aligned with adapter ID `speckit`,
   default binary `boundline-adapter-speckit`, and the sibling repos
   `../boundline-framework-template/` and `../boundline-adapter-speckit/`.

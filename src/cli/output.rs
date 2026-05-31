@@ -296,7 +296,11 @@ fn session_status_text(status: SessionStatus) -> &'static str {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+    use std::path::PathBuf;
+
     use serde_json::{Value, json};
+    use uuid::Uuid;
 
     use super::context::push_advanced_context_lines;
     use super::events::{
@@ -344,6 +348,12 @@ mod tests {
     use crate::domain::trace::{
         ExecutionTrace, TraceEventType, TraceRecoveryEvent, TraceStepSummary, TraceSummaryView,
     };
+
+    fn temp_output_workspace(prefix: &str) -> PathBuf {
+        let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
+        fs::create_dir_all(&workspace).unwrap();
+        workspace
+    }
 
     #[test]
     fn push_advanced_context_lines_surfaces_semantic_summary() {
@@ -847,6 +857,7 @@ mod tests {
                     non_interactive: false,
                     template: None,
                     assistant: Vec::new(),
+                    adapter: None,
                     ide: Vec::new(),
                     auto_approve: None,
                     semantic_index_hook_action: None,
@@ -1025,6 +1036,9 @@ mod tests {
             review_timeline: Vec::new(),
             session_audit: None,
             delight_feedback: None,
+            framework_adapter_stage_routing: None,
+            framework_adapter_hook_dispatch: None,
+            framework_adapter_stage_failure: None,
             terminal_status: TaskStatus::Failed,
             terminal_reason: TerminalReason::new(
                 TerminalCondition::UnrecoverableError,
@@ -1212,6 +1226,23 @@ mod tests {
         assert!(text.contains("next_command: boundline run"), "{text}");
         assert!(!text.contains("context_provenance:"), "{text}");
         assert!(!text.contains("route_config_projection:"), "{text}");
+    }
+
+    #[test]
+    fn render_session_status_brief_surfaces_framework_adapter_built_in_default() {
+        let workspace = temp_output_workspace("output-framework-adapter-built-in");
+        let view = SessionStatusView {
+            session_id: "session-brief-adapter".to_string(),
+            workspace_ref: workspace.to_string_lossy().into_owned(),
+            latest_status: SessionStatus::GoalCaptured,
+            explanation: "captured the goal and preserved built-in execution".to_string(),
+            ..SessionStatusView::default()
+        };
+
+        let text = render_session_status_brief(&view);
+
+        assert!(text.contains("framework_adapter_status: built_in_default"), "{text}");
+        assert!(text.contains("framework_adapter_execution_source: built_in"), "{text}");
     }
 
     #[test]
@@ -2258,6 +2289,9 @@ mod tests {
             ],
             session_audit: None,
             delight_feedback: None,
+            framework_adapter_stage_routing: None,
+            framework_adapter_hook_dispatch: None,
+            framework_adapter_stage_failure: None,
             terminal_status: TaskStatus::Succeeded,
             terminal_reason: TerminalReason::new(TerminalCondition::GoalSatisfied, "done", None),
             duration: Some(42),

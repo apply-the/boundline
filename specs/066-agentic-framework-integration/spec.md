@@ -23,6 +23,8 @@
 
 - Q: Where does the Speckit adapter itself live and where should local Speckit adapter work happen? → A: The Speckit adapter is maintained in the dedicated sibling repository `boundline-adapter-speckit`, and local work for that adapter happens in the parent-folder sibling workspace rather than inside this repository.
 - Q: What should happen if an operator exits guided adapter setup before all required fields are collected? → A: Guided setup is atomic in the initial release: partial values are not persisted, any existing valid adapter selection remains unchanged, and the operator receives feedback that setup is incomplete plus the command to resume it.
+- Q: What does a declared stage override mean after adapter preflight succeeds? → A: A declared override is authoritative stage ownership. Boundline may assemble host-owned context before invoking the adapter, but it must not complete the built-in implementation for that stage first. If the adapter succeeds, the adapter response becomes the stage outcome; if it blocks, the host records the stage as blocked and incomplete; if it fails after claim, the stage fails and the lifecycle stops pending operator intervention.
+- Q: What level of behavior must the known Speckit adapter provide in the initial release? → A: The Speckit adapter must act as a real bridge to Speckit workflows rather than a placeholder claimed-stage marker. It must consume host-provided context for declared stages, invoke the appropriate Speckit workflow, return real produced artifacts or actionable blocked and failure outcomes, and remain distinct from the generic template scaffold.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -52,6 +54,7 @@ As a framework author, I can declare only the lifecycle stages and hooks my adap
 **Acceptance Scenarios**:
 
 1. **Given** an adapter declares overrides for a subset of stages, **When** a lifecycle run reaches those stages, **Then** the adapter handles those stages and built-in behavior handles all other stages.
+1. **Given** an adapter declares overrides for a subset of stages and preflight succeeds, **When** a lifecycle run reaches one of those stages, **Then** the adapter owns that stage as the authoritative execution path, Boundline may prepare context before invocation, and built-in behavior must not complete that same stage first.
 2. **Given** an adapter declares specific lifecycle hooks, **When** matching lifecycle events occur, **Then** the adapter receives those events and unregistered hook events are ignored.
 3. **Given** an adapter has taken control of a declared stage, **When** the adapter fails after that stage has started, **Then** the stage is marked failed, the lifecycle run stops, and the operator is required to intervene before execution continues.
 
@@ -76,8 +79,14 @@ As a repository operator, I can complete adapter setup with guided prompts for r
 
 - Adapter executable is configured but unavailable at runtime.
 - Adapter returns an invalid or incomplete capability declaration.
+- Adapter returns a command-specific result that is not wrapped in the standard host-visible response envelope.
+- Adapter omits supported transport declarations or advertises only transports the initial release does not accept.
 - Adapter claims override for unsupported or unknown lifecycle stages.
 - Adapter fails during an overridden stage after prior stages completed; the current stage is marked failed and the run stops without mid-stage fallback.
+- Adapter emits plain-text or malformed structured stderr; trace ingestion remains best-effort and must not change lifecycle ownership or result classification on its own.
+- Adapter advertises a long-running transport that would require explicit shutdown semantics; the initial release must leave that transport unsupported rather than partially activating it.
+- Boundline assembles context for an adapter-owned `plan` or `run` stage, but must not finish the built-in stage result first and then treat the adapter as a post-processing side effect.
+- The known Speckit adapter returns only placeholder markers or generic scaffold success payloads instead of invoking Speckit and returning real produced artifacts.
 - Operator supplies partial configuration and exits setup before completion; the system must leave persisted adapter state unchanged and report setup as incomplete.
 - A non-interactive run starts with adapter-required configuration missing; the run must fail deterministically without implicit prompts or built-in fallback.
 - A locally discoverable adapter executable exists but was never explicitly selected; the system must not auto-enable it.
@@ -88,8 +97,8 @@ As a repository operator, I can complete adapter setup with guided prompts for r
 
 - **FR-001**: The system MUST execute the full lifecycle with built-in default behavior when no external adapter is configured.
 - **FR-002**: The system MUST allow operators to declare an external adapter command in configuration.
-- **FR-003**: The system MUST discover adapter capabilities before lifecycle execution and determine declared stage overrides and hook subscriptions.
-- **FR-004**: The system MUST apply adapter behavior only to the stages explicitly declared by the adapter and MUST preserve built-in behavior for undeclared stages.
+- **FR-003**: The system MUST discover adapter capabilities, including supported transports, before lifecycle execution and determine declared stage overrides and hook subscriptions.
+- **FR-004**: The system MUST apply adapter behavior only to the stages explicitly declared by the adapter, MUST preserve built-in behavior for undeclared stages, and MUST treat a declared override with successful preflight as authoritative ownership of that stage rather than post-processing after built-in completion.
 - **FR-005**: The system MUST collect any missing adapter-required configuration values through a guided operator workflow before first execution when the run is interactive.
 - **FR-006**: The system MUST pass the resolved adapter configuration and current run context to adapter executions.
 - **FR-007**: The system MUST detect malformed capability declarations and block adapter activation with actionable operator feedback.
@@ -107,18 +116,28 @@ As a repository operator, I can complete adapter setup with guided prompts for r
 - **FR-019**: The system MUST NOT auto-enable an adapter solely because its executable is locally discoverable; explicit operator selection remains required.
 - **FR-020**: The system MUST persist adapter registration in workspace configuration and use that configuration as the authoritative source for active adapter selection.
 - **FR-021**: The system MUST treat guided adapter setup as atomic in the initial release by leaving persisted adapter selection and configuration unchanged when the operator exits before all required values are collected, and it MUST report how to resume setup.
+- **FR-022**: The system MUST use a consistent host-visible success/error response envelope for all V1 stdio interactions with an adapter and MUST preserve command-specific domain outcomes within that envelope rather than using ad hoc top-level payload shapes.
+- **FR-023**: The system MUST require the adapter capability declaration returned by `describe` to list supported transport(s) and MUST accept JSON over stdin/stdout as the bounded V1 transport while leaving room for future transport declarations.
+- **FR-024**: The system MAY capture optional structured stderr diagnostics emitted by an adapter into Boundline trace records, but V1 MUST NOT require adapters to implement structured stderr or a long-running logging subsystem.
+- **FR-025**: The system MUST keep graceful shutdown and other long-running transport lifecycle concerns out of scope for the initial release, because the V1 one-shot subprocess model avoids orphan-process concerns without additional lifecycle management.
+- **FR-026**: Once a configured adapter has claimed a declared stage, Boundline MAY assemble host-owned context before invocation but MUST NOT complete the built-in implementation for that stage before the adapter returns.
+- **FR-027**: When a claimed-stage adapter invocation succeeds, the adapter response, including `produced_artifacts`, MUST become the authoritative stage outcome recorded by the host; when a claimed-stage adapter invocation returns a blocked outcome, the host MUST record the stage as blocked and incomplete rather than marking it completed through built-in behavior.
+- **FR-028**: The known Speckit adapter profile in this feature MUST act as a real bridge to Speckit workflows for its declared stages and MUST NOT satisfy acceptance only by returning placeholder marker files or generic scaffold success payloads.
 
 ### Key Entities *(include if feature involves data)*
 
 - **Built-in Canon-aware Behavior**: The default lifecycle behavior shipped with Boundline that remains available without any external adapter registration.
 - **Adapter Registration**: Operator-provided declaration of the external adapter identity and launch command.
-- **Adapter Capability Profile**: Adapter-declared metadata describing supported stage overrides, hook subscriptions, and required configuration fields.
+- **Adapter Capability Profile**: Adapter-declared metadata describing supported transport(s), stage overrides, hook subscriptions, and required configuration fields.
 - **Adapter Configuration Set**: Resolved adapter-specific settings, including operator-supplied values for required fields.
+- **Protocol Response Envelope**: The standard host-visible wrapper that separates protocol success or error from command-specific outcomes such as blocked preflight results or failed claimed stages.
+- **Optional Adapter Diagnostic Event**: A structured stderr line that an adapter may emit for trace ingestion without becoming a required part of the V1 contract.
 - **Known Adapter Profile**: A named external adapter setup path, such as Speckit, that simplifies registration compared with fully custom adapter configuration.
 - **Speckit Adapter Repository**: The dedicated external repository `boundline-adapter-speckit` that hosts the Speckit adapter implementation separately from Boundline core.
 - **Adapter Template Repository**: The dedicated reusable template repository, `boundline-framework-template`, where starter adapter scaffolding is maintained separately from this repository.
 - **Lifecycle Stage Execution Record**: Per-stage run record indicating whether built-in or adapter behavior was used and the resulting status.
 - **Hook Event Record**: Structured record of declared hook events delivered to the adapter and their outcomes.
+- **Claimed Stage Outcome Record**: The authoritative persisted outcome for one adapter-owned stage, including adapter status, produced artifacts, blocked or failure state, and any host-owned context references used before invocation.
 
 ## Success Criteria *(mandatory)*
 
@@ -131,6 +150,9 @@ As a repository operator, I can complete adapter setup with guided prompts for r
 - **SC-005**: In acceptance testing, audit records identify lifecycle stage execution source (built-in vs adapter) for 100% of completed stages.
 - **SC-006**: In non-interactive validation testing, 100% of runs with missing adapter-required configuration fail before adapter execution begins and identify the missing fields and recovery path in operator-visible feedback.
 - **SC-007**: In validation testing, 100% of runs without an explicitly selected external adapter continue to use built-in Canon-aware behavior even when adapter executables are locally discoverable.
+- **SC-008**: In contract validation, 100% of supported V1 adapter commands expose outcomes through the same host-visible success/error response structure, so operators receive consistent success and failure reporting across capability discovery, preflight, stage execution, and hook delivery.
+- **SC-009**: In authoritative-routing validation, 100% of successful claimed `plan` and `run` stages are recorded from adapter outcomes, and 0 claimed stages are first completed by built-in behavior before adapter invocation.
+- **SC-010**: In cross-repo Speckit validation, 100% of successful Speckit-claimed stages return at least one real Speckit-produced artifact or Speckit-authored artifact reference rather than only placeholder marker files.
 
 ## Assumptions
 
@@ -141,8 +163,13 @@ As a repository operator, I can complete adapter setup with guided prompts for r
 - The initial release does not support composing or chaining multiple adapters within the same lifecycle run.
 - Speckit is treated as a known external adapter profile in the initial release, while company-specific harnesses remain custom external adapters.
 - The Speckit adapter implementation is maintained in the sibling repository `boundline-adapter-speckit`, and local Speckit adapter work for this slice happens there rather than in this repository.
+- The generic template scaffold and the known Speckit adapter are not interchangeable acceptance targets; the template may stay placeholder, while the Speckit adapter must bridge real Speckit workflow behavior for claimed stages.
 - The reusable starter template for adapters is maintained in the sibling repository `boundline-framework-template`, and local template work for this slice happens there rather than in this repository.
 - Workspace configuration is the authoritative source of active adapter selection; local discovery is only a setup aid.
 - External adapters are distributed and versioned outside this repository.
 - Existing built-in lifecycle behavior remains the baseline contract for stages not overridden.
 - Interactive runs may collect missing adapter-required values through guided prompts, but non-interactive runs must fail deterministically instead of prompting.
+- The V1 adapter contract uses a standard host-visible success/error envelope while preserving command-specific domain outcomes inside successful response data.
+- Adapter capability declarations list supported transports explicitly, and the initial release accepts only JSON over stdin/stdout.
+- Structured stderr remains optional best-effort observability in the initial release rather than a required adapter feature.
+- Graceful shutdown and other lifecycle controls for long-running or persistent transports are deferred beyond the initial release because the one-shot subprocess model keeps V1 bounded.

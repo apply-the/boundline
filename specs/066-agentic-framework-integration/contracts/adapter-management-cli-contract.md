@@ -76,8 +76,8 @@ boundline adapter show --workspace <workspace> --json
 - when no adapter is selected, the command reports that built-in behavior is the
   active default
 - when an adapter is selected, the command reports adapter ID, display name,
-  command, compatibility line, last validated config state, declared stages, and
-  declared hooks
+  command, compatibility line, last validated config state, supported
+  transports, declared stages, and declared hooks
 - the JSON form includes the same stable fields plus machine-readable config and
   compatibility status
 
@@ -138,6 +138,37 @@ path_value = "../boundline-adapter-speckit"
   "selection_mode": "known_profile",
   "command": "boundline-adapter-speckit",
   "compatibility_line": "framework-adapter-v1",
+  "supported_transports": [
+    {
+      "transport": "stdio",
+      "encoding": "json",
+      "request_channel": "stdin",
+      "response_channel": "stdout"
+    }
+  ],
+  "declared_stage_overrides": ["plan", "run"],
+  "declared_hook_subscriptions": ["stage_completed", "stage_failed"],
+  "config_state": "complete"
+}
+```
+
+### `adapter show --json` when an adapter is selected
+
+```json
+{
+  "status": "ready",
+  "adapter_id": "speckit",
+  "selection_mode": "known_profile",
+  "command": "boundline-adapter-speckit",
+  "compatibility_line": "framework-adapter-v1",
+  "supported_transports": [
+    {
+      "transport": "stdio",
+      "encoding": "json",
+      "request_channel": "stdin",
+      "response_channel": "stdout"
+    }
+  ],
   "declared_stage_overrides": ["plan", "run"],
   "declared_hook_subscriptions": ["stage_completed", "stage_failed"],
   "config_state": "complete"

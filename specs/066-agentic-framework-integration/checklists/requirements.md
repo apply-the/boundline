@@ -33,5 +33,6 @@
 
 - Validation iteration 1: all checklist items passed.
 - Validation iteration 2: clarification updates preserved checklist pass status after documenting Canon as built-in default behavior, explicit adapter registration, and the dedicated Speckit adapter repository boundary.
+- Validation iteration 3: V1 contract refinements preserved checklist pass status after making the response envelope, supported transport declaration, optional structured stderr handling, and deferred graceful shutdown scope explicit.
 - No clarification markers remain; assumptions now capture single-adapter initial scope, operator configuration permissions, and the separation between this repository and sibling adapter repositories.
 - Items marked incomplete require spec updates before `/speckit.clarify` or `/speckit.plan`

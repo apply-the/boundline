@@ -10,6 +10,15 @@
 > - A local reference template exists in the sibling `boundline-framework-template` repo.
 > - **No MCP dependency as a core architectural layer**: capability abstraction uses our native Provider Protocol.
 
+## Delivery Status
+
+- Status: Delivered in Boundline `0.66.0`
+- Primary implementation: `specs/066-agentic-framework-integration/`
+- Outcome: Boundline now ships one explicit framework-adapter slot per
+  workspace, the `speckit` known profile, custom-adapter registration,
+  operator-visible routing and compatibility inspection, and the sibling
+  template plus Speckit scaffolds aligned to the released V1 stdio contract.
+
 ---
 
 ## 1. Architectural Vision: Canon as Default, Adapters as Overrides
@@ -123,12 +132,16 @@ A framework adapter can cover the logic of a company-specific `system-harness-te
 
 ---
 
-## 6. Next Steps (Action Items to Implement This Spec)
+## 6. Next Steps (Action Items To Extend This Delivered Spec)
 
-To make this vision concrete, the following work is needed:
-1. **Define the trait in Boundline**: isolate the current logic behind a `FrameworkAdapter` trait, with the existing Canon-backed code as the concrete default implementation.
-2. **Develop the subprocess host**: add the module that spawns the binary specified in configuration and orchestrates the JSON-RPC exchange.
-3. **Implement the handshake**: add `capabilities()` discovery and automatic config generation to `boundline init`.
-4. **Align the local template**: adapt the sibling `boundline-framework-template` repo so it consumes these JSON contracts correctly.
+The baseline feature is now shipped. Follow-up work belongs in new feature
+seeds or specs when one of these expansions becomes a bounded delivery slice:
+
+1. broaden the adapter stage or hook catalog beyond the initial bounded set
+2. replace duplicated sibling-repo protocol scaffolds with a released shared
+  dependency line when the packaging policy is ready
+3. add additional known profiles beyond `speckit`
+4. introduce future transports or graceful-shutdown semantics beyond the
+  current one-shot stdio contract
 
 This design keeps Boundline fully reusable and optionally framework-agnostic, while preserving a safe and polished default UX through Canon when no adapter is configured.

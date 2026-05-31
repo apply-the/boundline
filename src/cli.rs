@@ -18,8 +18,9 @@ use crate::domain::governance::{CanonMode, CanonModeSelectionPreference, Governa
 use crate::domain::trace::current_timestamp_millis;
 
 use super::{
-    assistant_assets, checkpoint, cluster, config, diagnostics, govern, index, init, inspect,
-    models_auth, orchestrate, output, probe, run, session, workflow, workspace as cli_workspace,
+    adapter, assistant_assets, checkpoint, cluster, config, diagnostics, govern, index, init,
+    inspect, models_auth, orchestrate, output, probe, run, session, workflow,
+    workspace as cli_workspace,
 };
 
 /// Top-level CLI parser for the Boundline executable.
@@ -72,6 +73,7 @@ pub enum CommandName {
     Update,
     Assistant,
     Config,
+    Adapter,
     Cluster,
     Models,
 }
@@ -100,6 +102,7 @@ impl CommandName {
             Self::Update => "update",
             Self::Assistant => "assistant",
             Self::Config => "config",
+            Self::Adapter => "adapter",
             Self::Cluster => "cluster",
             Self::Models => "models",
         }
@@ -362,6 +365,9 @@ pub enum DeveloperCommand {
         /// Assistant package hosts to scaffold locally. Supported values: claude, codex, copilot, antigravity. Provider-backed hosts can also seed default routes.
         #[arg(long = "assistant")]
         assistant: Vec<AssistantHostKind>,
+        /// Optional known framework adapter profile to register during workspace init. Example: speckit.
+        #[arg(long = "adapter")]
+        adapter: Option<String>,
         /// Model route in SLOT=RUNTIME:MODEL form. Supported slots: planning, implementation, verification, review. Example: planning=copilot:gpt-4o. Leave blank in guided mode to let selected assistants seed defaults.
         #[arg(long = "route")]
         route: Vec<String>,
@@ -456,6 +462,10 @@ pub enum DeveloperCommand {
     Config {
         #[command(subcommand)]
         command: ConfigSubcommand,
+    },
+    Adapter {
+        #[command(subcommand)]
+        command: AdapterSubcommand,
     },
     Cluster {
         #[command(subcommand)]
@@ -781,6 +791,35 @@ pub enum ConfigSubcommand {
     },
 }
 
+/// Framework-adapter registration and inspection subcommands.
+#[derive(Debug, Subcommand)]
+pub enum AdapterSubcommand {
+    Add {
+        /// Known profile name (`speckit`) or `custom` for a manual registration.
+        profile: String,
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        #[arg(long)]
+        id: Option<String>,
+        #[arg(long)]
+        command: Option<String>,
+        #[arg(long = "arg", allow_hyphen_values = true)]
+        arg: Vec<String>,
+        #[arg(long = "set")]
+        set: Vec<String>,
+        #[arg(long = "non-interactive")]
+        non_interactive: bool,
+    },
+    Show {
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+    },
+    Remove {
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+    },
+}
+
 /// Model provider authentication and status subcommands.
 #[derive(Debug, Subcommand)]
 pub enum ModelsSubcommand {
@@ -834,6 +873,7 @@ impl DeveloperCommand {
             Self::Init { .. } => CommandName::Init,
             Self::Update { .. } => CommandName::Update,
             Self::Config { .. } => CommandName::Config,
+            Self::Adapter { .. } => CommandName::Adapter,
             Self::Cluster { .. } => CommandName::Cluster,
             Self::Models { .. } => CommandName::Models,
         }
@@ -1248,6 +1288,24 @@ impl DeveloperCommandSession {
                 exit_status: None,
                 trace_location: None,
             },
+            DeveloperCommand::Adapter { command } => Self {
+                command_name: CommandName::Adapter,
+                workspace_ref: match command {
+                    AdapterSubcommand::Add { workspace, .. }
+                    | AdapterSubcommand::Show { workspace }
+                    | AdapterSubcommand::Remove { workspace } => {
+                        workspace.as_ref().map(|path| path.to_string_lossy().into_owned())
+                    }
+                },
+                requires_workspace_ref: false,
+                install_check: false,
+                goal: None,
+                trace_ref: None,
+                started_at: current_timestamp_millis(),
+                completed_at: None,
+                exit_status: None,
+                trace_location: None,
+            },
             DeveloperCommand::Cluster { command } => Self {
                 command_name: CommandName::Cluster,
                 workspace_ref: match command {
@@ -1323,6 +1381,7 @@ impl DeveloperCommandSession {
             | CommandName::Update
             | CommandName::Assistant
             | CommandName::Config
+            | CommandName::Adapter
             | CommandName::Cluster
             | CommandName::Models
             | CommandName::Probe => {}
@@ -1761,6 +1820,7 @@ fn command_environment_workspace(command: &DeveloperCommand) -> Option<PathBuf> 
             resolve_command_workspace(Some(workspace.as_path()))
         }
         DeveloperCommand::Config { command } => command_environment_workspace_for_config(command),
+        DeveloperCommand::Adapter { command } => command_environment_workspace_for_adapter(command),
         DeveloperCommand::Cluster { command } => match command {
             ClusterSubcommand::Init { workspace, .. }
             | ClusterSubcommand::Status { workspace }
@@ -1805,6 +1865,16 @@ fn command_environment_workspace_for_config(command: &ConfigSubcommand) -> Optio
     }
 }
 
+fn command_environment_workspace_for_adapter(command: &AdapterSubcommand) -> Option<PathBuf> {
+    match command {
+        AdapterSubcommand::Add { workspace, .. }
+        | AdapterSubcommand::Show { workspace }
+        | AdapterSubcommand::Remove { workspace } => {
+            resolve_command_workspace(workspace.as_deref())
+        }
+    }
+}
+
 fn resolve_command_workspace(workspace: Option<&Path>) -> Option<PathBuf> {
     cli_workspace::resolve_workspace(workspace).ok()
 }
@@ -1841,6 +1911,7 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
         DeveloperCommand::Init { .. } => dispatch_init_command(command),
         DeveloperCommand::Update { .. } => dispatch_update_command(command),
         DeveloperCommand::Config { command } => dispatch_config_command(command),
+        DeveloperCommand::Adapter { command } => dispatch_adapter_command(command),
         DeveloperCommand::Cluster { command } => dispatch_cluster_command(command),
         DeveloperCommand::Probe { workspace } => dispatch_probe_command(workspace.as_deref()),
         DeveloperCommand::Models { command } => dispatch_models_command(command),
@@ -2328,6 +2399,7 @@ fn dispatch_init_command(command: &DeveloperCommand) -> DispatchOutcome {
         non_interactive,
         template,
         assistant,
+        adapter,
         route,
         domain,
         domain_standard,
@@ -2349,36 +2421,101 @@ fn dispatch_init_command(command: &DeveloperCommand) -> DispatchOutcome {
     else {
         return dispatch_internal_command_mismatch(CommandName::Init);
     };
-    dispatch_prefixed_result(
-        CommandName::Init,
-        init::execute_init(init::InitRequest {
-            workspace,
-            scope: *scope,
-            non_interactive: *non_interactive,
-            interactive_terminal_override: None,
-            interactor: None,
-            template: *template,
-            assistants: assistant,
-            routes: route,
-            domains: domain,
-            domain_standards: domain_standard,
-            context_bindings: context_binding,
-            required_context_bindings: required_context_binding,
-            canon_mode_selection: *canon_mode_selection,
-            risk: risk.as_deref(),
-            zone: zone.as_deref(),
-            owner: owner.as_deref(),
-            ide,
-            auto_approve: *auto_approve,
-            semantic_index_hook_action: *semantic_index_hook_action,
-            export_docs: *export_docs,
-            docs_refresh: *refresh,
-            docs_diff: *diff,
-            docs_output_dir: to.as_deref(),
-            force: *force,
-        }),
-        DispatchOutcome::from_init_report,
-    )
+    if adapter.is_some() && *scope == InitConfigScope::Global {
+        return DispatchOutcome::text(
+            CommandExitStatus::NonSuccess,
+            "init error: invalid init scope argument: `--adapter` requires --scope workspace or --scope both",
+            None,
+        );
+    }
+
+    match init::execute_init(init::InitRequest {
+        workspace,
+        scope: *scope,
+        non_interactive: *non_interactive,
+        interactive_terminal_override: None,
+        interactor: None,
+        template: *template,
+        assistants: assistant,
+        routes: route,
+        domains: domain,
+        domain_standards: domain_standard,
+        context_bindings: context_binding,
+        required_context_bindings: required_context_binding,
+        canon_mode_selection: *canon_mode_selection,
+        risk: risk.as_deref(),
+        zone: zone.as_deref(),
+        owner: owner.as_deref(),
+        ide,
+        auto_approve: *auto_approve,
+        semantic_index_hook_action: *semantic_index_hook_action,
+        export_docs: *export_docs,
+        docs_refresh: *refresh,
+        docs_diff: *diff,
+        docs_output_dir: to.as_deref(),
+        force: *force,
+    }) {
+        Ok(report) => DispatchOutcome::from_init_report(maybe_attach_init_adapter_registration(
+            report,
+            *scope,
+            workspace.as_path(),
+            *non_interactive,
+            adapter.as_deref(),
+        )),
+        Err(error) => DispatchOutcome::text(
+            CommandExitStatus::NonSuccess,
+            format!("{} error: {error}", CommandName::Init.as_str()),
+            None,
+        ),
+    }
+}
+
+fn maybe_attach_init_adapter_registration(
+    init_report: init::InitCommandReport,
+    scope: InitConfigScope,
+    workspace: &Path,
+    non_interactive: bool,
+    adapter_profile: Option<&str>,
+) -> init::InitCommandReport {
+    let Some(adapter_profile) = adapter_profile else {
+        return init_report;
+    };
+    if !matches!(scope, InitConfigScope::Workspace | InitConfigScope::Both) {
+        return init_report;
+    }
+
+    let resolved_workspace = cli_workspace::resolve_workspace(Some(workspace))
+        .unwrap_or_else(|_| workspace.to_path_buf());
+    let adapter_args: Vec<String> = Vec::new();
+    let adapter_values: Vec<String> = Vec::new();
+    let adapter_report = adapter::execute_add_from_init(adapter::AddAdapterRequest {
+        profile: adapter_profile,
+        workspace: Some(resolved_workspace.as_path()),
+        id: None,
+        command: None,
+        arg: &adapter_args,
+        set: &adapter_values,
+        non_interactive,
+        interactive_terminal_override: None,
+        interactor: None,
+    });
+
+    let mut lines = init_report.terminal_output.lines().map(str::to_string).collect::<Vec<_>>();
+    if adapter_report.exit_status != CommandExitStatus::Succeeded
+        && let Some(first_line) = lines.first_mut()
+    {
+        *first_line = "init: workspace initialized but adapter registration failed".to_string();
+    }
+    lines.push("framework_adapter_registration:".to_string());
+    lines.push(format!("- requested_profile: {adapter_profile}"));
+    lines.extend(adapter_report.terminal_output.lines().map(|line| format!("- {line}")));
+
+    let exit_status = if adapter_report.exit_status == CommandExitStatus::Succeeded {
+        init_report.exit_status
+    } else {
+        adapter_report.exit_status
+    };
+    init::InitCommandReport::new(exit_status, lines.join("\n"))
 }
 
 fn dispatch_update_command(command: &DeveloperCommand) -> DispatchOutcome {
@@ -2584,6 +2721,33 @@ fn dispatch_config_command(command: &ConfigSubcommand) -> DispatchOutcome {
     })
 }
 
+fn dispatch_adapter_command(command: &AdapterSubcommand) -> DispatchOutcome {
+    let report = match command {
+        AdapterSubcommand::Add { profile, workspace, id, command, arg, set, non_interactive } => {
+            adapter::execute_add(adapter::AddAdapterRequest {
+                profile,
+                workspace: workspace.as_deref(),
+                id: id.as_deref(),
+                command: command.as_deref(),
+                arg,
+                set,
+                non_interactive: *non_interactive,
+                interactive_terminal_override: None,
+                interactor: None,
+            })
+        }
+        AdapterSubcommand::Show { workspace } => {
+            adapter::execute_show(adapter::ShowAdapterRequest { workspace: workspace.as_deref() })
+        }
+        AdapterSubcommand::Remove { workspace } => {
+            adapter::execute_remove(adapter::RemoveAdapterRequest {
+                workspace: workspace.as_deref(),
+            })
+        }
+    };
+    DispatchOutcome::text(report.exit_status, report.terminal_output, None)
+}
+
 fn dispatch_cluster_command(command: &ClusterSubcommand) -> DispatchOutcome {
     let result = match command {
         ClusterSubcommand::Init { workspace, cluster_id, member } => {
@@ -2721,8 +2885,9 @@ mod tests {
     use uuid::Uuid;
 
     use super::{
-        AssistantSubcommand, CheckpointSubcommand, Cli, ClusterSubcommand, CommandExitStatus,
-        CommandName, ConfigSubcommand, DeveloperCommand, DeveloperCommandSession, IndexSubcommand,
+        AdapterSubcommand, AssistantSubcommand, CheckpointSubcommand, Cli, ClusterSubcommand,
+        CommandExitStatus, CommandName, ConfigSubcommand, DeveloperCommand,
+        DeveloperCommandSession, IndexSubcommand, ModelsAuthSubcommand, ModelsSubcommand,
         SessionSubcommand, WorkflowSubcommand, dispatch, dispatch_serialized_index_report,
     };
     use crate::adapters::config_store::FileConfigStore;
@@ -2846,64 +3011,79 @@ fn red_to_green_addition() {
     fn assert_index_workspace_flag(workspace: Option<PathBuf>, label: &str) -> Result<(), String> { if workspace == Some(PathBuf::from("/tmp/workspace")) { Ok(()) } else { Err(format!("expected {label} workspace flag, got {workspace:?}")) } }
 
     #[test]
-    fn index_status_cli_parses_workspace_flag() -> Result<(), String> {
+    fn index_status_cli_parses_workspace_flag() {
         let cli =
             Cli::try_parse_from(["boundline", "index", "status", "--workspace", "/tmp/workspace"])
-                .map_err(|error| error.to_string())?;
+                .expect("expected index status CLI to parse");
 
-        let Some(DeveloperCommand::Index { command: IndexSubcommand::Status { workspace } }) =
-            cli.command
-        else {
-            return Err("expected index status command".to_string());
-        };
-        assert_index_workspace_flag(workspace, "status")?;
-
-        Ok(())
+        let command = cli.command.expect("expected parsed index status command");
+        assert!(matches!(
+            &command,
+            DeveloperCommand::Index { command: IndexSubcommand::Status { .. } }
+        ));
+        if let DeveloperCommand::Index { command: IndexSubcommand::Status { workspace } } = command
+        {
+            assert_index_workspace_flag(workspace, "status").unwrap();
+        }
     }
 
     #[test]
-    fn index_lifecycle_cli_parses_refresh_rebuild_clean_and_doctor_flags() -> Result<(), String> {
+    fn index_lifecycle_cli_parses_refresh_rebuild_clean_and_doctor_flags() {
         let refresh =
             Cli::try_parse_from(["boundline", "index", "refresh", "--workspace", "/tmp/workspace"])
-                .map_err(|error| error.to_string())?;
-        let Some(DeveloperCommand::Index { command: IndexSubcommand::Refresh { workspace } }) =
-            refresh.command
-        else {
-            return Err("expected index refresh command".to_string());
-        };
-        assert_index_workspace_flag(workspace, "refresh")?;
+                .expect("expected index refresh CLI to parse");
+        let refresh_command = refresh.command.expect("expected parsed index refresh command");
+        assert!(matches!(
+            &refresh_command,
+            DeveloperCommand::Index { command: IndexSubcommand::Refresh { .. } }
+        ));
+        if let DeveloperCommand::Index { command: IndexSubcommand::Refresh { workspace } } =
+            refresh_command
+        {
+            assert_index_workspace_flag(workspace, "refresh").unwrap();
+        }
 
         let rebuild =
             Cli::try_parse_from(["boundline", "index", "rebuild", "--workspace", "/tmp/workspace"])
-                .map_err(|error| error.to_string())?;
-        let Some(DeveloperCommand::Index { command: IndexSubcommand::Rebuild { workspace } }) =
-            rebuild.command
-        else {
-            return Err("expected index rebuild command".to_string());
-        };
-        assert_index_workspace_flag(workspace, "rebuild")?;
+                .expect("expected index rebuild CLI to parse");
+        let rebuild_command = rebuild.command.expect("expected parsed index rebuild command");
+        assert!(matches!(
+            &rebuild_command,
+            DeveloperCommand::Index { command: IndexSubcommand::Rebuild { .. } }
+        ));
+        if let DeveloperCommand::Index { command: IndexSubcommand::Rebuild { workspace } } =
+            rebuild_command
+        {
+            assert_index_workspace_flag(workspace, "rebuild").unwrap();
+        }
 
         let clean =
             Cli::try_parse_from(["boundline", "index", "clean", "--workspace", "/tmp/workspace"])
-                .map_err(|error| error.to_string())?;
-        let Some(DeveloperCommand::Index { command: IndexSubcommand::Clean { workspace } }) =
-            clean.command
-        else {
-            return Err("expected index clean command".to_string());
-        };
-        assert_index_workspace_flag(workspace, "clean")?;
+                .expect("expected index clean CLI to parse");
+        let clean_command = clean.command.expect("expected parsed index clean command");
+        assert!(matches!(
+            &clean_command,
+            DeveloperCommand::Index { command: IndexSubcommand::Clean { .. } }
+        ));
+        if let DeveloperCommand::Index { command: IndexSubcommand::Clean { workspace } } =
+            clean_command
+        {
+            assert_index_workspace_flag(workspace, "clean").unwrap();
+        }
 
         let doctor =
             Cli::try_parse_from(["boundline", "index", "doctor", "--workspace", "/tmp/workspace"])
-                .map_err(|error| error.to_string())?;
-        let Some(DeveloperCommand::Index { command: IndexSubcommand::Doctor { workspace } }) =
-            doctor.command
-        else {
-            return Err("expected index doctor command".to_string());
-        };
-        assert_index_workspace_flag(workspace, "doctor")?;
-
-        Ok(())
+                .expect("expected index doctor CLI to parse");
+        let doctor_command = doctor.command.expect("expected parsed index doctor command");
+        assert!(matches!(
+            &doctor_command,
+            DeveloperCommand::Index { command: IndexSubcommand::Doctor { .. } }
+        ));
+        if let DeveloperCommand::Index { command: IndexSubcommand::Doctor { workspace } } =
+            doctor_command
+        {
+            assert_index_workspace_flag(workspace, "doctor").unwrap();
+        }
     }
 
     #[test]
@@ -2948,94 +3128,79 @@ fn red_to_green_addition() {
     }
 
     #[test]
-    fn session_history_cli_parses_list_and_resume_subcommands() -> Result<(), String> {
+    fn session_history_cli_parses_list_and_resume_subcommands() {
         let list = Cli::try_parse_from(["boundline", "session", "list"])
-            .map_err(|error| error.to_string())?;
-        match list.command {
-            Some(DeveloperCommand::Session { command: SessionSubcommand::List { .. } }) => {}
-            other => return Err(format!("expected session list command, got {other:?}")),
-        }
+            .expect("expected session list CLI to parse");
+        let list_command = list.command.expect("expected parsed session list command");
+        assert!(matches!(
+            &list_command,
+            DeveloperCommand::Session { command: SessionSubcommand::List { .. } }
+        ));
 
         let resume = Cli::try_parse_from(["boundline", "session", "resume", "session-123"])
-            .map_err(|error| error.to_string())?;
-        match resume.command {
-            Some(DeveloperCommand::Session {
-                command: SessionSubcommand::Resume { session_id, .. },
-            }) => {
-                if session_id != "session-123" {
-                    return Err(format!("expected session-123, got {session_id}"));
-                }
-            }
-            other => return Err(format!("expected session resume command, got {other:?}")),
+            .expect("expected session resume CLI to parse");
+        let resume_command = resume.command.expect("expected parsed session resume command");
+        assert!(matches!(
+            &resume_command,
+            DeveloperCommand::Session { command: SessionSubcommand::Resume { .. } }
+        ));
+        if let DeveloperCommand::Session { command: SessionSubcommand::Resume { session_id, .. } } =
+            resume_command
+        {
+            assert_eq!(session_id, "session-123");
         }
-
-        Ok(())
     }
 
     #[test]
-    fn safe_command_cli_parses_session_overrides() -> Result<(), String> {
+    fn safe_command_cli_parses_session_overrides() {
         let status = Cli::try_parse_from(["boundline", "status", "--session", "session-123"])
-            .map_err(|error| error.to_string())?;
-        match status.command {
-            Some(DeveloperCommand::Status { session: Some(session_id), .. }) => {
-                if session_id != "session-123" {
-                    return Err(format!("expected session-123 status override, got {session_id}"));
-                }
-            }
-            other => return Err(format!("expected status session override, got {other:?}")),
+            .expect("expected status CLI to parse");
+        let status_command = status.command.expect("expected parsed status command");
+        assert!(matches!(&status_command, DeveloperCommand::Status { session: Some(_), .. }));
+        if let DeveloperCommand::Status { session: Some(session_id), .. } = status_command {
+            assert_eq!(session_id, "session-123");
         }
 
         let next = Cli::try_parse_from(["boundline", "next", "--session", "session-123"])
-            .map_err(|error| error.to_string())?;
-        match next.command {
-            Some(DeveloperCommand::Next { session: Some(session_id), .. }) => {
-                if session_id != "session-123" {
-                    return Err(format!("expected session-123 next override, got {session_id}"));
-                }
-            }
-            other => return Err(format!("expected next session override, got {other:?}")),
+            .expect("expected next CLI to parse");
+        let next_command = next.command.expect("expected parsed next command");
+        assert!(matches!(&next_command, DeveloperCommand::Next { session: Some(_), .. }));
+        if let DeveloperCommand::Next { session: Some(session_id), .. } = next_command {
+            assert_eq!(session_id, "session-123");
         }
 
         let cont = Cli::try_parse_from(["boundline", "continue", "--session", "session-123"])
-            .map_err(|error| error.to_string())?;
-        match cont.command {
-            Some(DeveloperCommand::Continue { session: Some(session_id), .. }) => {
-                if session_id != "session-123" {
-                    return Err(format!(
-                        "expected session-123 continue override, got {session_id}"
-                    ));
-                }
-            }
-            other => return Err(format!("expected continue session override, got {other:?}")),
+            .expect("expected continue CLI to parse");
+        let cont_command = cont.command.expect("expected parsed continue command");
+        assert!(matches!(&cont_command, DeveloperCommand::Continue { session: Some(_), .. }));
+        if let DeveloperCommand::Continue { session: Some(session_id), .. } = cont_command {
+            assert_eq!(session_id, "session-123");
         }
 
         let inspect = Cli::try_parse_from(["boundline", "inspect", "--session", "session-123"])
-            .map_err(|error| error.to_string())?;
-        match inspect.command {
-            Some(DeveloperCommand::Inspect { session: Some(session_id), .. }) => {
-                if session_id != "session-123" {
-                    return Err(format!("expected session-123 inspect override, got {session_id}"));
-                }
-            }
-            other => return Err(format!("expected inspect session override, got {other:?}")),
+            .expect("expected inspect CLI to parse");
+        let inspect_command = inspect.command.expect("expected parsed inspect command");
+        assert!(matches!(&inspect_command, DeveloperCommand::Inspect { session: Some(_), .. }));
+        if let DeveloperCommand::Inspect { session: Some(session_id), .. } = inspect_command {
+            assert_eq!(session_id, "session-123");
         }
 
         let checkpoint_list =
             Cli::try_parse_from(["boundline", "checkpoint", "list", "--session", "session-123"])
-                .map_err(|error| error.to_string())?;
-        match checkpoint_list.command {
-            Some(DeveloperCommand::Checkpoint {
-                command: CheckpointSubcommand::List { session: Some(session_id), .. },
-            }) => {
-                if session_id != "session-123" {
-                    return Err(format!(
-                        "expected session-123 checkpoint list override, got {session_id}"
-                    ));
-                }
+                .expect("expected checkpoint list CLI to parse");
+        let checkpoint_list_command =
+            checkpoint_list.command.expect("expected parsed checkpoint list command");
+        assert!(matches!(
+            &checkpoint_list_command,
+            DeveloperCommand::Checkpoint {
+                command: CheckpointSubcommand::List { session: Some(_), .. },
             }
-            other => {
-                return Err(format!("expected checkpoint list session override, got {other:?}"));
-            }
+        ));
+        if let DeveloperCommand::Checkpoint {
+            command: CheckpointSubcommand::List { session: Some(session_id), .. },
+        } = checkpoint_list_command
+        {
+            assert_eq!(session_id, "session-123");
         }
 
         let checkpoint_restore = Cli::try_parse_from([
@@ -3046,27 +3211,22 @@ fn red_to_green_addition() {
             "--session",
             "session-123",
         ])
-        .map_err(|error| error.to_string())?;
-        match checkpoint_restore.command {
-            Some(DeveloperCommand::Checkpoint {
-                command:
-                    CheckpointSubcommand::Restore { checkpoint_id, session: Some(session_id), .. },
-            }) => {
-                if checkpoint_id != "checkpoint-1" {
-                    return Err(format!("expected checkpoint-1, got {checkpoint_id}"));
-                }
-                if session_id != "session-123" {
-                    return Err(format!(
-                        "expected session-123 checkpoint restore override, got {session_id}"
-                    ));
-                }
+        .expect("expected checkpoint restore CLI to parse");
+        let checkpoint_restore_command =
+            checkpoint_restore.command.expect("expected parsed checkpoint restore command");
+        assert!(matches!(
+            &checkpoint_restore_command,
+            DeveloperCommand::Checkpoint {
+                command: CheckpointSubcommand::Restore { session: Some(_), .. },
             }
-            other => {
-                return Err(format!("expected checkpoint restore session override, got {other:?}"));
-            }
+        ));
+        if let DeveloperCommand::Checkpoint {
+            command: CheckpointSubcommand::Restore { checkpoint_id, session: Some(session_id), .. },
+        } = checkpoint_restore_command
+        {
+            assert_eq!(checkpoint_id, "checkpoint-1");
+            assert_eq!(session_id, "session-123");
         }
-
-        Ok(())
     }
 
     #[test]
@@ -3155,7 +3315,7 @@ fn red_to_green_addition() {
     }
 
     #[test]
-    fn config_cli_parses_chat_route_targets() -> Result<(), String> {
+    fn config_cli_parses_chat_route_targets() {
         let set_cli = Cli::try_parse_from([
             "boundline",
             "config",
@@ -3168,93 +3328,50 @@ fn red_to_green_addition() {
             "--model",
             "openai/gpt-5.4",
         ])
-        .map_err(|error| error.to_string())?;
-
-        match set_cli.command {
-            Some(DeveloperCommand::Config {
-                command:
-                    ConfigSubcommand::Set {
-                        scope,
-                        slot,
-                        chat,
-                        reviewer,
-                        adjudicator,
-                        runtime,
-                        model,
-                        ..
-                    },
-            }) => {
-                if scope != ConfigWriteScope::Workspace {
-                    return Err(format!("expected workspace scope for config set, got {scope:?}"));
-                }
-                if slot.is_some() {
-                    return Err(format!("expected no slot target for config set, got {slot:?}"));
-                }
-                if !chat {
-                    return Err("expected config set --chat to set chat=true".to_string());
-                }
-                if reviewer.is_some() {
-                    return Err(format!(
-                        "expected no reviewer target for config set, got {reviewer:?}"
-                    ));
-                }
-                if adjudicator {
-                    return Err("expected config set --chat to leave adjudicator unset".to_string());
-                }
-                if runtime != RuntimeKind::Codex {
-                    return Err(format!("expected codex runtime for config set, got {runtime:?}"));
-                }
-                if model != "openai/gpt-5.4" {
-                    return Err(format!("expected chat model openai/gpt-5.4, got {model}"));
-                }
-            }
-            other => {
-                return Err(format!("expected config set command with chat target, got {other:?}"));
-            }
+        .expect("expected config set CLI to parse");
+        let set_command = set_cli.command.expect("expected parsed config set command");
+        assert!(matches!(
+            &set_command,
+            DeveloperCommand::Config { command: ConfigSubcommand::Set { .. } }
+        ));
+        if let DeveloperCommand::Config {
+            command:
+                ConfigSubcommand::Set {
+                    scope, slot, chat, reviewer, adjudicator, runtime, model, ..
+                },
+        } = set_command
+        {
+            assert_eq!(scope, ConfigWriteScope::Workspace);
+            assert_eq!(slot, None);
+            assert!(chat);
+            assert_eq!(reviewer, None);
+            assert!(!adjudicator);
+            assert_eq!(runtime, RuntimeKind::Codex);
+            assert_eq!(model, "openai/gpt-5.4");
         }
 
         let unset_cli =
             Cli::try_parse_from(["boundline", "config", "unset", "--scope", "workspace", "--chat"])
-                .map_err(|error| error.to_string())?;
-
-        match unset_cli.command {
-            Some(DeveloperCommand::Config {
-                command: ConfigSubcommand::Unset { scope, slot, chat, reviewer, adjudicator, .. },
-            }) => {
-                if scope != ConfigWriteScope::Workspace {
-                    return Err(format!(
-                        "expected workspace scope for config unset, got {scope:?}"
-                    ));
-                }
-                if slot.is_some() {
-                    return Err(format!("expected no slot target for config unset, got {slot:?}"));
-                }
-                if !chat {
-                    return Err("expected config unset --chat to set chat=true".to_string());
-                }
-                if reviewer.is_some() {
-                    return Err(format!(
-                        "expected no reviewer target for config unset, got {reviewer:?}"
-                    ));
-                }
-                if adjudicator {
-                    return Err(
-                        "expected config unset --chat to leave adjudicator unset".to_string()
-                    );
-                }
-            }
-            other => {
-                return Err(format!(
-                    "expected config unset command with chat target, got {other:?}"
-                ));
-            }
+                .expect("expected config unset CLI to parse");
+        let unset_command = unset_cli.command.expect("expected parsed config unset command");
+        assert!(matches!(
+            &unset_command,
+            DeveloperCommand::Config { command: ConfigSubcommand::Unset { .. } }
+        ));
+        if let DeveloperCommand::Config {
+            command: ConfigSubcommand::Unset { scope, slot, chat, reviewer, adjudicator, .. },
+        } = unset_command
+        {
+            assert_eq!(scope, ConfigWriteScope::Workspace);
+            assert_eq!(slot, None);
+            assert!(chat);
+            assert_eq!(reviewer, None);
+            assert!(!adjudicator);
         }
-
-        Ok(())
     }
 
     #[test]
-    fn dispatch_config_set_and_unset_chat_route_from_cli() -> Result<(), String> {
+    fn dispatch_config_set_and_unset_chat_route_from_cli() {
         let workspace = temp_workspace("boundline-cli-config-chat-dispatch");
 
         let set_cli = Cli::try_parse_from(vec![
@@ -3271,45 +3388,20 @@ fn red_to_green_addition() {
             "--model".to_string(),
             "openai/gpt-5.4".to_string(),
         ])
-        .map_err(|error| error.to_string())?;
-        let Some(set_command) = set_cli.command else {
-            return Err("expected parsed config set command".to_string());
-        };
+        .expect("expected config set dispatch CLI to parse");
+        let set_command = set_cli.command.expect("expected parsed config set dispatch command");
 
         let set_outcome = dispatch(&set_command);
-        if set_outcome.exit_status != CommandExitStatus::Succeeded {
-            return Err(format!(
-                "expected config set dispatch to succeed, got {:?}: {}",
-                set_outcome.exit_status, set_outcome.output
-            ));
-        }
-        if !set_outcome.output.contains("workspace config") {
-            return Err(format!(
-                "expected config set dispatch output to mention workspace config, got {}",
-                set_outcome.output
-            ));
-        }
+        assert_eq!(set_outcome.exit_status, CommandExitStatus::Succeeded);
+        assert!(set_outcome.output.contains("workspace config"), "{}", set_outcome.output);
 
         let local = FileConfigStore::for_workspace(&workspace)
             .load_local()
-            .map_err(|error| error.to_string())?
-            .ok_or_else(|| "expected workspace config file after config set".to_string())?;
-        let chat_route = local
-            .routing
-            .chat
-            .ok_or_else(|| "expected routing.chat after config set".to_string())?;
-        if chat_route.runtime != RuntimeKind::Codex {
-            return Err(format!(
-                "expected routing.chat runtime codex after config set, got {:?}",
-                chat_route.runtime
-            ));
-        }
-        if chat_route.model != "openai/gpt-5.4" {
-            return Err(format!(
-                "expected routing.chat model openai/gpt-5.4 after config set, got {}",
-                chat_route.model
-            ));
-        }
+            .expect("expected local config to load after config set")
+            .expect("expected workspace config file after config set");
+        let chat_route = local.routing.chat.expect("expected routing.chat after config set");
+        assert_eq!(chat_route.runtime, RuntimeKind::Codex);
+        assert_eq!(chat_route.model, "openai/gpt-5.4");
 
         let unset_cli = Cli::try_parse_from(vec![
             "boundline".to_string(),
@@ -3321,34 +3413,19 @@ fn red_to_green_addition() {
             "workspace".to_string(),
             "--chat".to_string(),
         ])
-        .map_err(|error| error.to_string())?;
-        let Some(unset_command) = unset_cli.command else {
-            return Err("expected parsed config unset command".to_string());
-        };
+        .expect("expected config unset dispatch CLI to parse");
+        let unset_command =
+            unset_cli.command.expect("expected parsed config unset dispatch command");
 
         let unset_outcome = dispatch(&unset_command);
-        if unset_outcome.exit_status != CommandExitStatus::Succeeded {
-            return Err(format!(
-                "expected config unset dispatch to succeed, got {:?}: {}",
-                unset_outcome.exit_status, unset_outcome.output
-            ));
-        }
-        if !unset_outcome.output.contains("workspace config") {
-            return Err(format!(
-                "expected config unset dispatch output to mention workspace config, got {}",
-                unset_outcome.output
-            ));
-        }
+        assert_eq!(unset_outcome.exit_status, CommandExitStatus::Succeeded);
+        assert!(unset_outcome.output.contains("workspace config"), "{}", unset_outcome.output);
 
         let local = FileConfigStore::for_workspace(&workspace)
             .load_local()
-            .map_err(|error| error.to_string())?
-            .ok_or_else(|| "expected workspace config file after config unset".to_string())?;
-        if local.routing.chat.is_some() {
-            return Err("expected routing.chat to be removed after config unset".to_string());
-        }
-
-        Ok(())
+            .expect("expected local config to load after config unset")
+            .expect("expected workspace config file after config unset");
+        assert!(local.routing.chat.is_none());
     }
 
     fn write_execution_workspace(prefix: &str) -> PathBuf {
@@ -3994,6 +4071,7 @@ fn red_to_green_addition() {
                     non_interactive: false,
                     template: None,
                     assistant: Vec::new(),
+                    adapter: None,
                     ide: Vec::new(),
                     auto_approve: None,
                     semantic_index_hook_action: None,
@@ -4220,6 +4298,7 @@ fn red_to_green_addition() {
             non_interactive: false,
             template: None,
             assistant: Vec::new(),
+            adapter: None,
             ide: Vec::new(),
             auto_approve: None,
             semantic_index_hook_action: None,
@@ -4265,6 +4344,7 @@ fn red_to_green_addition() {
             non_interactive: true,
             template: Some(InitTemplate::Change),
             assistant: vec![crate::domain::configuration::AssistantHostKind::Copilot],
+            adapter: None,
             ide: Vec::new(),
             auto_approve: None,
             semantic_index_hook_action: None,
@@ -5424,5 +5504,693 @@ fn red_to_green_addition() {
 
         assert_eq!(outcome.exit_status, CommandExitStatus::NonSuccess);
         assert!(outcome.output.contains("continue: session error"), "{}", outcome.output);
+    }
+
+    #[test]
+    fn cli_helper_functions_cover_remaining_command_metadata_and_workspace_branches() {
+        let workspace = temp_workspace("boundline-cli-helper-workspace");
+        let cluster = temp_workspace("boundline-cli-helper-cluster");
+        let resolved_workspace = super::resolve_command_workspace(Some(workspace.as_path()));
+        let resolved_cluster = super::resolve_command_workspace(Some(cluster.as_path()));
+
+        assert_eq!(CommandName::Adapter.as_str(), "adapter");
+        assert_eq!(CommandName::Cluster.as_str(), "cluster");
+        assert_eq!(CommandName::Models.as_str(), "models");
+
+        let adapter_command = DeveloperCommand::Adapter {
+            command: AdapterSubcommand::Show { workspace: Some(workspace.clone()) },
+        };
+        assert_eq!(adapter_command.name(), CommandName::Adapter);
+
+        let cluster_command = DeveloperCommand::Cluster {
+            command: ClusterSubcommand::Status { workspace: workspace.clone() },
+        };
+        assert_eq!(cluster_command.name(), CommandName::Cluster);
+
+        let models_command = DeveloperCommand::Models {
+            command: ModelsSubcommand::Auth { command: ModelsAuthSubcommand::Status },
+        };
+        assert_eq!(models_command.name(), CommandName::Models);
+        assert_eq!(super::command_environment_workspace(&models_command), None);
+
+        let assistant_command = DeveloperCommand::Assistant {
+            command: AssistantSubcommand::Install {
+                host: AssistantHost::Copilot,
+                scope: AssistantInstallScope::User,
+            },
+        };
+        assert_eq!(super::command_environment_workspace(&assistant_command), None);
+
+        let global_show = ConfigSubcommand::Show {
+            workspace: Some(workspace.clone()),
+            cluster: Some(cluster.clone()),
+            scope: Some(ConfigShowScope::Global),
+        };
+        assert_eq!(super::command_environment_workspace_for_config(&global_show), None);
+
+        let global_semantic = ConfigSubcommand::SetSemanticAcceleration {
+            workspace: Some(workspace.clone()),
+            cluster: Some(cluster.clone()),
+            scope: ConfigWriteScope::Global,
+            policy: SemanticAccelerationPolicyState::Local,
+        };
+        assert_eq!(super::command_environment_workspace_for_config(&global_semantic), None);
+
+        let config_workspace_commands = vec![
+            ConfigSubcommand::SetSemanticAcceleration {
+                workspace: Some(workspace.clone()),
+                cluster: None,
+                scope: ConfigWriteScope::Workspace,
+                policy: SemanticAccelerationPolicyState::Local,
+            },
+            ConfigSubcommand::UnsetCapability {
+                workspace: Some(workspace.clone()),
+                cluster: None,
+                scope: ConfigWriteScope::Workspace,
+                runtime: RuntimeKind::Codex,
+            },
+            ConfigSubcommand::SetEffort {
+                workspace: Some(workspace.clone()),
+                cluster: None,
+                scope: ConfigWriteScope::Workspace,
+                slot: RouteSlot::Planning,
+                level: EffortLevel::High,
+                fallback: EffortFallbackPolicy::AllowLower,
+                rationale: Some("planning is high-effort".to_string()),
+            },
+            ConfigSubcommand::UnsetEffort {
+                workspace: Some(workspace.clone()),
+                cluster: None,
+                scope: ConfigWriteScope::Workspace,
+                slot: RouteSlot::Planning,
+            },
+            ConfigSubcommand::SetDomain {
+                workspace: Some(workspace.clone()),
+                cluster: None,
+                scope: ConfigWriteScope::Workspace,
+                family: DomainFamily::React,
+                enable: true,
+                disable: false,
+                standards: Some("workspace react rules".to_string()),
+            },
+            ConfigSubcommand::UnsetDomain {
+                workspace: Some(workspace.clone()),
+                cluster: None,
+                scope: ConfigWriteScope::Workspace,
+                family: DomainFamily::React,
+            },
+            ConfigSubcommand::BindContext {
+                workspace: Some(workspace.clone()),
+                cluster: None,
+                scope: ConfigWriteScope::Workspace,
+                family: DomainFamily::React,
+                kind: ExternalContextKind::DesignSystem,
+                reference: "mcp:design-system".to_string(),
+                required: true,
+                notes: Some("shared design system".to_string()),
+            },
+            ConfigSubcommand::UnbindContext {
+                workspace: Some(workspace.clone()),
+                cluster: None,
+                scope: ConfigWriteScope::Workspace,
+                family: DomainFamily::React,
+                kind: ExternalContextKind::DesignSystem,
+                reference: "mcp:design-system".to_string(),
+            },
+        ];
+        for command in config_workspace_commands {
+            assert_eq!(
+                super::command_environment_workspace_for_config(&command),
+                resolved_workspace.clone()
+            );
+        }
+
+        let config_cluster_commands = vec![
+            DeveloperCommand::Config {
+                command: ConfigSubcommand::SetSemanticAcceleration {
+                    workspace: None,
+                    cluster: Some(cluster.clone()),
+                    scope: ConfigWriteScope::Workspace,
+                    policy: SemanticAccelerationPolicyState::Local,
+                },
+            },
+            DeveloperCommand::Config {
+                command: ConfigSubcommand::UnsetCapability {
+                    workspace: None,
+                    cluster: Some(cluster.clone()),
+                    scope: ConfigWriteScope::Workspace,
+                    runtime: RuntimeKind::Codex,
+                },
+            },
+            DeveloperCommand::Config {
+                command: ConfigSubcommand::SetEffort {
+                    workspace: None,
+                    cluster: Some(cluster.clone()),
+                    scope: ConfigWriteScope::Workspace,
+                    slot: RouteSlot::Planning,
+                    level: EffortLevel::High,
+                    fallback: EffortFallbackPolicy::AllowLower,
+                    rationale: None,
+                },
+            },
+            DeveloperCommand::Config {
+                command: ConfigSubcommand::UnsetEffort {
+                    workspace: None,
+                    cluster: Some(cluster.clone()),
+                    scope: ConfigWriteScope::Workspace,
+                    slot: RouteSlot::Planning,
+                },
+            },
+            DeveloperCommand::Config {
+                command: ConfigSubcommand::SetDomain {
+                    workspace: None,
+                    cluster: Some(cluster.clone()),
+                    scope: ConfigWriteScope::Workspace,
+                    family: DomainFamily::React,
+                    enable: true,
+                    disable: false,
+                    standards: None,
+                },
+            },
+            DeveloperCommand::Config {
+                command: ConfigSubcommand::UnsetDomain {
+                    workspace: None,
+                    cluster: Some(cluster.clone()),
+                    scope: ConfigWriteScope::Workspace,
+                    family: DomainFamily::React,
+                },
+            },
+            DeveloperCommand::Config {
+                command: ConfigSubcommand::BindContext {
+                    workspace: None,
+                    cluster: Some(cluster.clone()),
+                    scope: ConfigWriteScope::Workspace,
+                    family: DomainFamily::React,
+                    kind: ExternalContextKind::DesignSystem,
+                    reference: "mcp:design-system".to_string(),
+                    required: false,
+                    notes: None,
+                },
+            },
+            DeveloperCommand::Config {
+                command: ConfigSubcommand::UnbindContext {
+                    workspace: None,
+                    cluster: Some(cluster.clone()),
+                    scope: ConfigWriteScope::Workspace,
+                    family: DomainFamily::React,
+                    kind: ExternalContextKind::DesignSystem,
+                    reference: "mcp:design-system".to_string(),
+                },
+            },
+        ];
+        for command in config_cluster_commands {
+            let session = DeveloperCommandSession::from_command(&command);
+            assert_eq!(session.command_name, CommandName::Config);
+            assert_eq!(session.workspace_ref, Some(cluster.to_string_lossy().into_owned()));
+        }
+
+        let session_command = DeveloperCommand::Session {
+            command: SessionSubcommand::Resume {
+                workspace: None,
+                cluster: Some(cluster.clone()),
+                session_id: "session-123".to_string(),
+            },
+        };
+        assert_eq!(
+            super::command_environment_workspace(&session_command),
+            resolved_cluster.clone()
+        );
+
+        let workflow_command = DeveloperCommand::Workflow {
+            command: WorkflowSubcommand::Resume { workspace: Some(workspace.clone()) },
+        };
+        assert_eq!(
+            super::command_environment_workspace(&workflow_command),
+            resolved_workspace.clone()
+        );
+
+        let checkpoint_command = DeveloperCommand::Checkpoint {
+            command: CheckpointSubcommand::Restore {
+                checkpoint_id: "cp-123".to_string(),
+                workspace: Some(workspace.clone()),
+                cluster: None,
+                session: Some("session-123".to_string()),
+                force: false,
+            },
+        };
+        assert_eq!(
+            super::command_environment_workspace(&checkpoint_command),
+            resolved_workspace.clone()
+        );
+
+        let init_global = DeveloperCommand::Init {
+            template: None,
+            assistant: Vec::new(),
+            adapter: None,
+            route: Vec::new(),
+            domain: Vec::new(),
+            domain_standard: Vec::new(),
+            context_binding: Vec::new(),
+            required_context_binding: Vec::new(),
+            canon_mode_selection: None,
+            risk: None,
+            zone: None,
+            owner: None,
+            ide: Vec::new(),
+            auto_approve: None,
+            semantic_index_hook_action: None,
+            workspace: workspace.clone(),
+            non_interactive: true,
+            export_docs: false,
+            refresh: false,
+            diff: false,
+            to: None,
+            force: false,
+            scope: InitConfigScope::Global,
+        };
+        assert_eq!(super::command_environment_workspace(&init_global), None);
+
+        let update_command = DeveloperCommand::Update {
+            workspace: workspace.clone(),
+            target: Vec::new(),
+            ide: Vec::new(),
+            auto_approve: None,
+            template: None,
+            diff: false,
+            apply: false,
+            adopt: false,
+            prune: false,
+            status: false,
+            force: false,
+        };
+        assert_eq!(
+            super::command_environment_workspace(&update_command),
+            resolved_workspace.clone()
+        );
+
+        let adapter_add = AdapterSubcommand::Add {
+            profile: "speckit".to_string(),
+            workspace: Some(workspace.clone()),
+            id: None,
+            command: None,
+            arg: Vec::new(),
+            set: Vec::new(),
+            non_interactive: true,
+        };
+        let adapter_show = AdapterSubcommand::Show { workspace: Some(workspace.clone()) };
+        let adapter_remove = AdapterSubcommand::Remove { workspace: Some(workspace.clone()) };
+        assert_eq!(
+            super::command_environment_workspace_for_adapter(&adapter_add),
+            resolved_workspace.clone()
+        );
+        assert_eq!(
+            super::command_environment_workspace_for_adapter(&adapter_show),
+            resolved_workspace.clone()
+        );
+        assert_eq!(
+            super::command_environment_workspace_for_adapter(&adapter_remove),
+            resolved_workspace.clone()
+        );
+
+        let doctor_install =
+            DeveloperCommand::Doctor { workspace: Some(workspace.clone()), install: true };
+        assert_eq!(super::command_environment_workspace(&doctor_install), None);
+
+        assert!(super::load_command_environment(None).is_ok());
+        assert!(super::load_command_environment(Some(&adapter_command)).is_ok());
+    }
+
+    #[test]
+    fn cli_helper_functions_cover_rendering_and_dispatch_error_paths() {
+        let workspace = write_execution_workspace("boundline-cli-helper-dispatch");
+        let brief = write_context_brief(&workspace);
+
+        assert_eq!(
+            super::render_help_exit_code(),
+            super::output::CommandExitCode::for_status(CommandExitStatus::Succeeded).code()
+        );
+
+        let run_command = DeveloperCommand::Run {
+            workspace: Some(workspace.clone()),
+            cluster: None,
+            goal: Some("Fix the failing add test".to_string()),
+            compatibility: false,
+            brief: Vec::new(),
+            governance: None,
+            risk: None,
+            zone: None,
+            owner: None,
+            mode: None,
+            no_canon: false,
+        };
+
+        let mut validation_session = DeveloperCommandSession::from_command(&run_command);
+        let validation_cli = Cli { json: true, verbose: false, command: None };
+        assert_eq!(
+            super::render_validation_failure(
+                &validation_cli,
+                &run_command,
+                &mut validation_session,
+                &super::CliValidationError::MissingWorkspaceRef(CommandName::Run),
+            ),
+            super::output::CommandExitCode::for_status(CommandExitStatus::InvalidInvocation).code()
+        );
+
+        let mut validation_text_session = DeveloperCommandSession::from_command(&run_command);
+        let validation_text_cli = Cli { json: false, verbose: false, command: None };
+        assert_eq!(
+            super::render_validation_failure(
+                &validation_text_cli,
+                &run_command,
+                &mut validation_text_session,
+                &super::CliValidationError::MissingWorkspaceRef(CommandName::Run),
+            ),
+            super::output::CommandExitCode::for_status(CommandExitStatus::InvalidInvocation).code()
+        );
+
+        let mut environment_session = DeveloperCommandSession::from_command(&run_command);
+        assert_eq!(
+            super::render_environment_failure(
+                &validation_cli,
+                &run_command,
+                &mut environment_session,
+                "missing provider token",
+            ),
+            super::output::CommandExitCode::for_status(CommandExitStatus::NonSuccess).code()
+        );
+
+        let mut environment_text_session = DeveloperCommandSession::from_command(&run_command);
+        assert_eq!(
+            super::render_environment_failure(
+                &validation_text_cli,
+                &run_command,
+                &mut environment_text_session,
+                "missing provider token",
+            ),
+            super::output::CommandExitCode::for_status(CommandExitStatus::NonSuccess).code()
+        );
+
+        let json_stream_outcome = dispatch(&DeveloperCommand::Orchestrate {
+            workspace: Some(workspace.clone()),
+            cluster: None,
+            goal: Some("Prepare architecture brief".to_string()),
+            brief: Vec::new(),
+            flow: None,
+            governance: None,
+            risk: None,
+            zone: None,
+            owner: None,
+            intent: OrchestrateIntent::ContinueUntilPhaseRequest,
+            planning_stage_complete: None,
+            request_id: None,
+            answer: Some("   ".to_string()),
+            assistant_host: Some(AssistantHost::Copilot),
+            json_stream: true,
+            no_canon: false,
+            slug: None,
+        });
+        assert_eq!(json_stream_outcome.exit_status, CommandExitStatus::NonSuccess);
+        let json_stream_text = json_stream_outcome.stream_output.unwrap_or_default();
+        assert!(json_stream_text.contains("\"event_kind\":\"terminal\""));
+        assert!(json_stream_text.contains("orchestrate error:"));
+
+        let text_outcome = dispatch(&DeveloperCommand::Orchestrate {
+            workspace: Some(workspace.clone()),
+            cluster: None,
+            goal: Some("Prepare architecture brief".to_string()),
+            brief: Vec::new(),
+            flow: None,
+            governance: None,
+            risk: None,
+            zone: None,
+            owner: None,
+            intent: OrchestrateIntent::ContinueUntilPhaseRequest,
+            planning_stage_complete: None,
+            request_id: None,
+            answer: Some("   ".to_string()),
+            assistant_host: Some(AssistantHost::Copilot),
+            json_stream: false,
+            no_canon: false,
+            slug: None,
+        });
+        assert_eq!(text_outcome.exit_status, CommandExitStatus::NonSuccess);
+        assert!(text_outcome.output.contains("orchestrate error:"), "{}", text_outcome.output);
+
+        let compatibility_success = super::dispatch_custom_run(
+            Some(workspace.as_path()),
+            Some("Fix the failing add test"),
+            std::slice::from_ref(&brief),
+            true,
+            None,
+            None,
+            None,
+            None,
+            None,
+            false,
+        );
+        assert_eq!(compatibility_success.exit_status, CommandExitStatus::Succeeded);
+        assert!(
+            compatibility_success.output.contains("terminal_status: succeeded"),
+            "{}",
+            compatibility_success.output
+        );
+
+        let compatibility_error = super::dispatch_custom_run(
+            Some(workspace.as_path()),
+            None,
+            &[],
+            true,
+            None,
+            None,
+            None,
+            None,
+            None,
+            false,
+        );
+        assert_eq!(compatibility_error.exit_status, CommandExitStatus::InvalidInvocation);
+        assert!(
+            !compatibility_error.output.trim().is_empty(),
+            "compatibility error output should not be empty"
+        );
+    }
+
+    #[test]
+    fn cli_helper_functions_cover_remaining_dispatch_and_outcome_paths() {
+        let workspace = temp_workspace("boundline-cli-remaining-helper-paths");
+
+        let models_command = DeveloperCommand::Models {
+            command: ModelsSubcommand::Auth { command: ModelsAuthSubcommand::Status },
+        };
+        let models_session = DeveloperCommandSession::from_command(&models_command);
+        assert_eq!(models_session.command_name, CommandName::Models);
+        assert!(models_session.workspace_ref.is_none());
+        assert!(!models_session.requires_workspace_ref);
+        assert!(models_session.validate().is_ok());
+
+        let init_outcome =
+            super::DispatchOutcome::from_init_report(crate::cli::init::InitCommandReport::new(
+                CommandExitStatus::Succeeded,
+                "init: workspace initialized",
+            ));
+        assert_eq!(init_outcome.exit_status, CommandExitStatus::Succeeded);
+        assert_eq!(init_outcome.render_human_output(false), "init: workspace initialized");
+
+        let update_outcome =
+            super::DispatchOutcome::from_update_report(crate::cli::init::UpdateCommandReport {
+                exit_status: CommandExitStatus::Succeeded,
+                terminal_output: "update: synchronized".to_string(),
+            });
+        assert_eq!(update_outcome.exit_status, CommandExitStatus::Succeeded);
+        assert_eq!(update_outcome.render_human_output(false), "update: synchronized");
+
+        let compact_verbose = super::DispatchOutcome {
+            exit_status: CommandExitStatus::Succeeded,
+            output: "verbose output".to_string(),
+            host_output: None,
+            stream_output: None,
+            compact_output: Some("compact verbose output".to_string()),
+            prefer_compact_output_in_verbose: true,
+            inspection_target: None,
+            trace_location: None,
+            session_status: None,
+            guidance_guardian: None,
+            trace_summary: None,
+        };
+        assert_eq!(compact_verbose.render_human_output(true), "compact verbose output");
+
+        let inspect_summary = super::DispatchOutcome {
+            exit_status: CommandExitStatus::NonSuccess,
+            output: "terminal_status: failed".to_string(),
+            host_output: None,
+            stream_output: None,
+            compact_output: None,
+            prefer_compact_output_in_verbose: false,
+            inspection_target: Some("latest-workspace-trace".to_string()),
+            trace_location: Some("/tmp/workspace/.boundline/traces/task.json".to_string()),
+            session_status: None,
+            guidance_guardian: None,
+            trace_summary: Some(crate::domain::trace::TraceSummaryView {
+                trace_ref: "/tmp/workspace/.boundline/traces/task.json".to_string(),
+                goal: "Investigate restore failure".to_string(),
+                terminal_status: crate::domain::task::TaskStatus::Failed,
+                terminal_reason: crate::domain::task::TerminalReason::new(
+                    crate::domain::limits::TerminalCondition::TaskNotCredible,
+                    "restore requires manual confirmation",
+                    None,
+                ),
+                ..crate::domain::trace::TraceSummaryView::default()
+            }),
+        };
+        let inspect_brief = inspect_summary.render_human_output(false);
+        assert!(
+            inspect_brief.contains("inspection_target: latest-workspace-trace"),
+            "{inspect_brief}"
+        );
+        assert!(inspect_brief.contains("next_command:"), "{inspect_brief}");
+
+        let run_summary = super::DispatchOutcome {
+            exit_status: CommandExitStatus::NonSuccess,
+            output: "terminal_status: failed".to_string(),
+            host_output: None,
+            stream_output: None,
+            compact_output: None,
+            prefer_compact_output_in_verbose: false,
+            inspection_target: None,
+            trace_location: Some("/tmp/workspace/.boundline/traces/task.json".to_string()),
+            session_status: None,
+            guidance_guardian: None,
+            trace_summary: Some(crate::domain::trace::TraceSummaryView {
+                trace_ref: "/tmp/workspace/.boundline/traces/task.json".to_string(),
+                goal: "Investigate run failure".to_string(),
+                terminal_status: crate::domain::task::TaskStatus::Failed,
+                terminal_reason: crate::domain::task::TerminalReason::new(
+                    crate::domain::limits::TerminalCondition::TaskNotCredible,
+                    "run requires more context",
+                    None,
+                ),
+                ..crate::domain::trace::TraceSummaryView::default()
+            }),
+        };
+        let run_brief = run_summary.render_human_output(false);
+        assert!(run_brief.contains("goal: Investigate run failure"), "{run_brief}");
+        assert!(run_brief.contains("next_command:"), "{run_brief}");
+
+        let mismatch = super::dispatch_internal_command_mismatch(CommandName::Models);
+        assert_eq!(mismatch.exit_status, CommandExitStatus::NonSuccess);
+        assert!(mismatch.output.contains("internal dispatch mismatch for models"));
+
+        let models_status = super::dispatch_models_command(&ModelsSubcommand::Auth {
+            command: ModelsAuthSubcommand::Status,
+        });
+        assert!(!models_status.output.trim().is_empty());
+
+        let probe = super::dispatch_probe_command(Some(workspace.as_path()));
+        assert_eq!(probe.exit_status, CommandExitStatus::Succeeded);
+        assert!(probe.output.contains('{'));
+
+        let checkpoint_restore =
+            super::dispatch_checkpoint_command(&CheckpointSubcommand::Restore {
+                checkpoint_id: "checkpoint-123".to_string(),
+                workspace: Some(workspace.clone()),
+                cluster: None,
+                session: None,
+                force: false,
+            });
+        assert_ne!(checkpoint_restore.exit_status, CommandExitStatus::Succeeded);
+
+        let session_resume = super::dispatch_session_history_command(&SessionSubcommand::Resume {
+            session_id: "session-123".to_string(),
+            workspace: Some(workspace.clone()),
+            cluster: None,
+        });
+        assert_ne!(session_resume.exit_status, CommandExitStatus::Succeeded);
+
+        let run_command = DeveloperCommand::Run {
+            workspace: Some(workspace.clone()),
+            cluster: None,
+            goal: Some("Repair the restore flow".to_string()),
+            compatibility: false,
+            brief: Vec::new(),
+            governance: None,
+            risk: None,
+            zone: None,
+            owner: None,
+            mode: None,
+            no_canon: false,
+        };
+
+        let session_mismatch = super::dispatch_session_command(&run_command);
+        assert!(session_mismatch.output.contains("internal dispatch mismatch for run"));
+
+        let govern_mismatch = super::dispatch_govern_command(&run_command);
+        assert!(govern_mismatch.output.contains("internal dispatch mismatch for govern"));
+
+        let init_mismatch = super::dispatch_init_command(&run_command);
+        assert!(init_mismatch.output.contains("internal dispatch mismatch for init"));
+
+        let update_mismatch = super::dispatch_update_command(&run_command);
+        assert!(update_mismatch.output.contains("internal dispatch mismatch for update"));
+
+        let init_scope_error = super::dispatch_init_command(&DeveloperCommand::Init {
+            template: None,
+            assistant: Vec::new(),
+            adapter: Some("__missing_profile__".to_string()),
+            route: Vec::new(),
+            domain: Vec::new(),
+            domain_standard: Vec::new(),
+            context_binding: Vec::new(),
+            required_context_binding: Vec::new(),
+            canon_mode_selection: None,
+            risk: None,
+            zone: None,
+            owner: None,
+            ide: Vec::new(),
+            auto_approve: None,
+            semantic_index_hook_action: None,
+            workspace: workspace.clone(),
+            non_interactive: true,
+            export_docs: false,
+            refresh: false,
+            diff: false,
+            to: None,
+            force: false,
+            scope: InitConfigScope::Global,
+        });
+        assert_eq!(init_scope_error.exit_status, CommandExitStatus::NonSuccess);
+        assert!(
+            init_scope_error
+                .output
+                .contains("`--adapter` requires --scope workspace or --scope both")
+        );
+
+        let attach_failure = super::maybe_attach_init_adapter_registration(
+            crate::cli::init::InitCommandReport::new(
+                CommandExitStatus::Succeeded,
+                "init: workspace initialized",
+            ),
+            InitConfigScope::Workspace,
+            &workspace,
+            true,
+            Some("__missing_profile__"),
+        );
+        assert_ne!(attach_failure.exit_status, CommandExitStatus::Succeeded);
+        assert!(
+            attach_failure
+                .terminal_output
+                .starts_with("init: workspace initialized but adapter registration failed"),
+            "{}",
+            attach_failure.terminal_output
+        );
+        assert!(attach_failure.terminal_output.contains("framework_adapter_registration:"));
+
+        let adapter_show = super::dispatch_adapter_command(&AdapterSubcommand::Show {
+            workspace: Some(workspace.clone()),
+        });
+        assert!(!adapter_show.output.trim().is_empty());
+
+        let adapter_remove = super::dispatch_adapter_command(&AdapterSubcommand::Remove {
+            workspace: Some(workspace),
+        });
+        assert_eq!(adapter_remove.exit_status, CommandExitStatus::Succeeded);
     }
 }

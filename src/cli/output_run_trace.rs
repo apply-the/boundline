@@ -9,7 +9,7 @@ use super::runtime::{
     adaptive_attempt_lineage_summary, adaptive_candidate_family_summary,
     adaptive_exhaustion_reason_summary, adaptive_rejected_candidates_summary,
     adaptive_selection_reason_summary, adaptive_workspace_slice_summary,
-    append_reasoning_profile_lines,
+    append_reasoning_profile_lines, framework_adapter_stage_failure_lines,
 };
 use super::support::checkpoint_projection_from_state;
 use std::path::Path;
@@ -20,6 +20,7 @@ use super::{
     ExecutionTrace, KEY_REASON, KEY_STAGE_ID, ProfileActivationRecord, TaskRunResponse,
     TraceEventType, UNKNOWN_STAGE_ID, task_status_text,
 };
+use crate::domain::session::FrameworkAdapterStageFailureDetails;
 
 fn value_as_string_list(value: &Value) -> Option<Vec<String>> {
     value.as_array().map(|items| {
@@ -418,6 +419,35 @@ pub fn render_run_trace(
                         .unwrap_or("unknown-stage");
                     lines.push(format!("stage {from_stage} -> {to_stage}"));
                 }
+                TraceEventType::StageRouted => {
+                    let stage_key = event
+                        .payload
+                        .get("framework_adapter_stage_routing")
+                        .and_then(|value| value.get("stage_key"))
+                        .and_then(Value::as_str)
+                        .unwrap_or("unknown-stage");
+                    let claim_state = event
+                        .payload
+                        .get("framework_adapter_stage_routing")
+                        .and_then(|value| value.get("claim_state"))
+                        .and_then(Value::as_str)
+                        .unwrap_or("unknown");
+                    let execution_source = event
+                        .payload
+                        .get("framework_adapter_stage_routing")
+                        .and_then(|value| value.get("execution_source"))
+                        .and_then(Value::as_str)
+                        .unwrap_or("unknown");
+                    let decision_reason = event
+                        .payload
+                        .get("framework_adapter_stage_routing")
+                        .and_then(|value| value.get("decision_reason"))
+                        .and_then(Value::as_str)
+                        .unwrap_or("unknown");
+                    lines.push(format!(
+                        "framework-adapter routed {stage_key}: {execution_source} / {claim_state} / {decision_reason}"
+                    ));
+                }
                 TraceEventType::StepStarted => {
                     let step_id = event.step_id.as_deref().unwrap_or("unknown-step");
                     let step_kind =
@@ -580,6 +610,11 @@ pub fn render_run_trace(
     if trace.is_none() {
         lines.push(render_run_execution_condition(response));
     }
+
+    lines.extend(framework_adapter_stage_failure_lines(
+        FrameworkAdapterStageFailureDetails::from_terminal_reason(&response.terminal_reason)
+            .as_ref(),
+    ));
 
     if let Some(workspace_slice) = adaptive_workspace_slice_summary(&response.final_context.state) {
         lines.push(format!("workspace_slice: {workspace_slice}"));

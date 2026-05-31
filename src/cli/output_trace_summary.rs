@@ -9,7 +9,10 @@ use super::routing::{
     render_route_config_projection, render_trace_execution_condition,
     route_config_projection_for_trace_summary, trace_route_owner,
 };
-use super::runtime::append_reasoning_profile_lines;
+use super::runtime::{
+    append_reasoning_profile_lines, framework_adapter_hook_dispatch_lines,
+    framework_adapter_stage_failure_lines, framework_adapter_stage_routing_lines,
+};
 use super::support::{push_governance_display_lines, render_guidance_projection_lines};
 use super::{TraceEventType, TraceSummaryView, step_kind_text, step_status_text, task_status_text};
 use crate::domain::follow_through::FollowThroughProjection;
@@ -38,6 +41,16 @@ pub fn render_trace_summary_brief(
     } else {
         lines.push(format!("route_owner: {}", trace_route_owner(summary)));
     }
+
+    lines.extend(framework_adapter_stage_failure_lines(
+        summary.framework_adapter_stage_failure.as_ref(),
+    ));
+    lines.extend(framework_adapter_stage_routing_lines(
+        summary.framework_adapter_stage_routing.as_ref(),
+    ));
+    lines.extend(framework_adapter_hook_dispatch_lines(
+        summary.framework_adapter_hook_dispatch.as_ref(),
+    ));
 
     lines.push(render_trace_execution_condition(summary));
 
@@ -505,6 +518,15 @@ pub fn render_trace_summary(
     }
 
     lines.push(format!("route_owner: {}", trace_route_owner(summary)));
+    lines.extend(framework_adapter_stage_failure_lines(
+        summary.framework_adapter_stage_failure.as_ref(),
+    ));
+    lines.extend(framework_adapter_stage_routing_lines(
+        summary.framework_adapter_stage_routing.as_ref(),
+    ));
+    lines.extend(framework_adapter_hook_dispatch_lines(
+        summary.framework_adapter_hook_dispatch.as_ref(),
+    ));
     if let Some(route_config_projection) =
         render_route_config_projection(route_config_projection_for_trace_summary(summary))
     {

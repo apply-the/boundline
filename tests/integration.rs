@@ -7,6 +7,9 @@ mod runtime_refoundation;
 #[path = "support/assistant_delight_support.rs"]
 mod assistant_delight_support;
 
+#[path = "support/framework_adapter.rs"]
+mod framework_adapter;
+
 #[path = "integration/sequential_task_run.rs"]
 mod sequential_task_run;
 
@@ -123,6 +126,15 @@ mod stack_neutral_workspace_flow;
 
 #[path = "integration/config_workspace_flow.rs"]
 mod config_workspace_flow;
+
+#[path = "integration/framework_adapter_activation.rs"]
+mod framework_adapter_activation;
+
+#[path = "integration/framework_adapter_config_flow.rs"]
+mod framework_adapter_config_flow;
+
+#[path = "integration/framework_adapter_override_flow.rs"]
+mod framework_adapter_override_flow;
 
 #[path = "integration/cluster_bootstrap_flow.rs"]
 mod cluster_bootstrap_flow;

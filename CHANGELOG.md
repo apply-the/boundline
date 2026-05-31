@@ -36,6 +36,47 @@ Highlights:
 - Realigned the active Canon compatibility boundary and related reasoning
   contracts to Canon `0.62.0`.
 
+## [0.66.0] - 2026-05-31
+
+Delivered specs:
+
+- `066` - Agentic Framework Integration
+
+Highlights:
+
+- Added one explicit framework-adapter slot per workspace with operator-facing
+  `boundline adapter add|show|remove` commands, known-profile activation for
+  `speckit`, and custom-adapter registration with guided required-field setup.
+- Formalized the V1 framework-adapter subprocess contract around one-shot JSON
+  over stdin/stdout, standard stdout success or error envelopes, declared
+  supported transports, and structured stderr that remains trace-only
+  enrichment instead of changing ownership or result classification.
+- Extended runtime routing, status, inspect, host JSON, and config output so
+  adapter execution source, claimed-stage ownership, hook delivery, transport
+  compatibility, config completeness, and guided-setup recovery stay explicit.
+- Bootstrapped the sibling `boundline-framework-template` and
+  `boundline-adapter-speckit` repositories with contract-tested setup,
+  preflight, partial override, and failure-example scaffolds aligned to the
+  released compatibility line.
+
+Validation notes:
+
+- Focused host contract and integration suites passed for the released
+  compatibility line, including `framework_adapter_protocol_contract`,
+  `runtime_routing_contract`, `framework_adapter_activation`,
+  `framework_adapter_override_flow`, and `framework_adapter_config_flow`.
+- Cross-repo sibling validation passed for the template and Speckit repos with
+  `cargo test --manifest-path ../boundline-framework-template/Cargo.toml --test contract`,
+  `cargo test --manifest-path ../boundline-adapter-speckit/Cargo.toml --test contract`,
+  and `cargo test --manifest-path ../boundline-adapter-speckit/Cargo.toml --test config_flow`.
+- The release evidence confirms V1 stdio transport declarations, standard
+  stdout-envelope handling, unsupported-transport blocking before stage claim,
+  stderr remaining trace-only even when present, and the explicit no-graceful-
+  shutdown scope of the one-shot command surface.
+- The provider-catalog refresh remained a no-change result for `0.66.0`; the
+  catalog update from 2026-05-30 already covered the current supported model
+  families.
+
 ## [0.65.0] - 2026-05-30
 
 Delivered specs:

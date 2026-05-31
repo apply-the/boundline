@@ -27,7 +27,7 @@ feature under `specs/`.
 
 | Priority | Feature Seed | Boundline Position |
 |---|---|---|
-| **02** | [agentic-framework-integration.md](features/02-agentic-framework-integration.md) | Architecture for external harness adapters |
+| **02** | [agentic-framework-integration.md](features/02-agentic-framework-integration.md) | Delivered in 0.66.0: external framework-adapter runtime |
 | **03** | [plan-quality-contract.md](features/03-plan-quality-contract.md) | Planning UX - plan readiness gate |
 | **04** | [backlog-contract.md](features/04-backlog-contract.md) | Planning UX - backlog execution gate |
 | **05** | [plan-analysis-contract.md](features/05-plan-analysis-contract.md) | Planning UX - cross-artifact analysis |

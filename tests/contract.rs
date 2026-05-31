@@ -7,6 +7,9 @@ mod runtime_refoundation;
 #[path = "support/assistant_delight_support.rs"]
 mod assistant_delight_support;
 
+#[path = "support/framework_adapter.rs"]
+mod framework_adapter;
+
 #[path = "contract/orchestrator_run.rs"]
 mod orchestrator_run;
 
@@ -174,6 +177,12 @@ mod flow_policy_contract;
 
 #[path = "contract/runtime_routing_contract.rs"]
 mod runtime_routing_contract;
+
+#[path = "contract/framework_adapter_protocol_contract.rs"]
+mod framework_adapter_protocol_contract;
+
+#[path = "contract/adapter_management_contract.rs"]
+mod adapter_management_contract;
 
 #[path = "contract/compatibility_continuity_contract.rs"]
 mod compatibility_continuity_contract;
