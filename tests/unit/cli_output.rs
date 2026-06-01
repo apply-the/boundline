@@ -1,3 +1,5 @@
+use std::fs;
+use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 
 use boundline::FileConfigStore;
@@ -17,9 +19,9 @@ use boundline::cli::inspect::{
 use boundline::cli::output::{
     CommandExitCode, command_name, next_command_after_inspect, next_command_after_run,
     render_cluster_init, render_cluster_inspect, render_cluster_status, render_diagnostics,
-    render_goal_plan_flow_state, render_inspect_failure, render_route_outcome, render_run_trace,
-    render_session_status, render_session_status_brief, render_trace_summary,
-    validation_error_message,
+    render_goal_plan_flow_state, render_host_command_json, render_inspect_failure,
+    render_route_outcome, render_run_trace, render_session_status, render_session_status_brief,
+    render_trace_summary, validation_error_message,
 };
 use boundline::cli::session::{
     SessionCommandError, execute_next, execute_status, render_error as render_session_error,
@@ -37,7 +39,8 @@ use boundline::domain::cluster::{
     WorkspaceParticipationKind, WorkspaceParticipationRecord,
 };
 use boundline::domain::configuration::{
-    AssistantHostKind, ConfigFile, InitConfigScope, ModelRoute, RoutingConfig, RuntimeKind,
+    AdapterConfigValueRecord, AdapterSelectionRecord, AssistantHostKind, ConfigFile,
+    InitConfigScope, ModelRoute, PersistedAdapterConfiguration, RoutingConfig, RuntimeKind,
 };
 use boundline::domain::context_intelligence::{
     AdvancedContextProjection, AuthorityRank, CandidateSelectionState, HybridOutcome,
@@ -47,6 +50,11 @@ use boundline::domain::context_intelligence::{
     RetrievalMatchOrigin, RetrievalMode, RetrievalScore, RetrievalSourceKind,
     RetrievalStalenessState, RetrievalState, RetrievedEvidenceCandidate, SemanticCapabilityState,
     SemanticPolicyState,
+};
+use boundline::domain::framework_adapter::{
+    AdapterConfigCompletenessState, AdapterDiscoveryState, AdapterRegistrationSource,
+    AdapterSelectionMode, AdapterValueKind, AdapterValueSource, FRAMEWORK_ADAPTER_PROTOCOL_LINE_V1,
+    StoredAdapterConfigValueState,
 };
 use boundline::domain::goal_plan::{
     GoalPlanFlowMode, GoalPlanFlowState, PlanningAnalysisCoverage, PlanningAnalysisFinding,
@@ -71,9 +79,18 @@ use boundline::domain::trace::{
     ExecutionTrace, TraceEvent, TraceEventType, TraceRecoveryEvent, TraceStepSummary,
     TraceSummaryView,
 };
+use boundline::fixture::{
+    sample_framework_adapter_describe_response, sample_framework_adapter_success_envelope,
+};
 use serde_json::Map;
 use serde_json::json;
 use uuid::Uuid;
+
+const OUTPUT_TEST_ADAPTER_COMMAND: &str = "/bin/sh";
+const OUTPUT_TEST_ADAPTER_ID: &str = "speckit";
+const OUTPUT_TEST_TRANSPORTS: &str = "stdio/json/stdin->stdout";
+const OUTPUT_TEST_UNSUPPORTED_TRANSPORTS: &str = "stdio/json/stdout->stdout";
+const OUTPUT_TEST_COMPATIBILITY_GATE: &str = "v1_json_over_stdin_stdout_only";
 
 /// Builds one stable advanced-context projection for renderer and inspect tests.
 fn sample_advanced_context() -> AdvancedContextProjection {
@@ -127,6 +144,68 @@ fn sample_advanced_context() -> AdvancedContextProjection {
     }
 }
 
+fn configured_adapter_workspace(
+    prefix: &str,
+    describe_document: serde_json::Value,
+) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
+    fs::create_dir_all(&workspace)?;
+    let script_path = write_describe_only_adapter_script(&workspace, describe_document)?;
+    FileConfigStore::for_workspace(&workspace).save_local(&ConfigFile {
+        adapter: Some(PersistedAdapterConfiguration {
+            selection: AdapterSelectionRecord {
+                selection_mode: AdapterSelectionMode::KnownProfile,
+                adapter_id: OUTPUT_TEST_ADAPTER_ID.to_string(),
+                display_name: "Speckit".to_string(),
+                command: OUTPUT_TEST_ADAPTER_COMMAND.to_string(),
+                args: vec![script_path.to_string_lossy().into_owned()],
+                registration_source: AdapterRegistrationSource::AdapterAdd,
+                discovery_state: AdapterDiscoveryState::ExplicitCommand,
+                compatibility_line: FRAMEWORK_ADAPTER_PROTOCOL_LINE_V1.to_string(),
+                updated_at: 42,
+            },
+            schema_fingerprint: format!(
+                "{}:{}:template_repo",
+                FRAMEWORK_ADAPTER_PROTOCOL_LINE_V1, OUTPUT_TEST_ADAPTER_ID
+            ),
+            completeness_state: AdapterConfigCompletenessState::Complete,
+            interactive_resolution: false,
+            last_validated_at: Some(42),
+            value_count: 1,
+            values: vec![AdapterConfigValueRecord {
+                field_key: "template_repo".to_string(),
+                value_kind: AdapterValueKind::Path,
+                secret: false,
+                string_value: None,
+                path_value: Some("../boundline-framework-template".to_string()),
+                bool_value: None,
+                int_value: None,
+                value_source: AdapterValueSource::KnownProfileDefault,
+                resolution_state: StoredAdapterConfigValueState::Present,
+            }],
+        }),
+        ..ConfigFile::default()
+    })?;
+    Ok(workspace)
+}
+
+fn write_describe_only_adapter_script(
+    workspace: &std::path::Path,
+    describe_document: serde_json::Value,
+) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let describe_json =
+        serde_json::to_string(&sample_framework_adapter_success_envelope(describe_document))?;
+    let script_path = workspace.join("adapter-describe-only.sh");
+    let script = format!(
+        "#!/bin/sh\nset -eu\ncase \"$1\" in\n  describe)\n    cat <<'BOUNDLINE_JSON'\n{describe_json}\nBOUNDLINE_JSON\n    ;;\n  *)\n    echo \"unsupported command: $1\" >&2\n    exit 64\n    ;;\nesac\n"
+    );
+    fs::write(&script_path, script)?;
+    let mut permissions = fs::metadata(&script_path)?.permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&script_path, permissions)?;
+    Ok(script_path)
+}
+
 #[test]
 fn exit_codes_match_the_command_contract() {
     assert_eq!(CommandExitCode::for_status(CommandExitStatus::Succeeded).code(), 0);
@@ -160,6 +239,83 @@ fn command_names_render_from_subcommands() {
     };
     assert_eq!(command_name(&command), "run");
     assert_eq!(command.name(), CommandName::Run);
+}
+
+#[test]
+fn render_host_command_json_surfaces_framework_adapter_built_in_default_projection() {
+    let workspace =
+        std::env::temp_dir().join(format!("boundline-host-adapter-json-{}", Uuid::new_v4()));
+    std::fs::create_dir_all(&workspace).unwrap();
+
+    let view = SessionStatusView {
+        session_id: "session-host-adapter".to_string(),
+        workspace_ref: workspace.to_string_lossy().into_owned(),
+        latest_status: SessionStatus::Initialized,
+        explanation: "host envelope should disclose built-in adapter execution".to_string(),
+        ..SessionStatusView::default()
+    };
+
+    let rendered = render_host_command_json(
+        "status",
+        CommandExitStatus::Succeeded,
+        "rendered",
+        None,
+        Some(&view),
+        None,
+    );
+
+    assert!(rendered.contains("\"framework_adapter_status\": \"built_in_default\""), "{rendered}");
+    assert!(
+        rendered.contains("\"framework_adapter_execution_source\": \"built_in\""),
+        "{rendered}"
+    );
+}
+
+#[test]
+fn render_host_command_json_surfaces_configured_adapter_supported_transports()
+-> Result<(), Box<dyn std::error::Error>> {
+    let workspace = configured_adapter_workspace(
+        "boundline-host-adapter-configured",
+        serde_json::to_value(sample_framework_adapter_describe_response())?,
+    )?;
+
+    let view = SessionStatusView {
+        session_id: "session-host-adapter-configured".to_string(),
+        workspace_ref: workspace.to_string_lossy().into_owned(),
+        latest_status: SessionStatus::Initialized,
+        explanation: "host envelope should disclose validated adapter transport support"
+            .to_string(),
+        ..SessionStatusView::default()
+    };
+
+    let rendered = render_host_command_json(
+        "status",
+        CommandExitStatus::Succeeded,
+        "rendered",
+        None,
+        Some(&view),
+        None,
+    );
+
+    assert!(rendered.contains("\"framework_adapter_status\": \"configured\""), "{rendered}");
+    assert!(rendered.contains("\"framework_adapter_execution_source\": \"adapter\""), "{rendered}");
+    assert!(rendered.contains("\"framework_adapter_config_state\": \"complete\""), "{rendered}");
+    assert!(rendered.contains("\"framework_adapter_interactive_resolution\": false"), "{rendered}");
+    assert!(rendered.contains("\"framework_adapter_value_count\": 1"), "{rendered}");
+    assert!(
+        rendered.contains(&format!(
+            "\"framework_adapter_supported_transports\": \"{OUTPUT_TEST_TRANSPORTS}\""
+        )),
+        "{rendered}"
+    );
+    assert!(
+        rendered.contains(&format!(
+            "\"framework_adapter_compatibility_gate\": \"{OUTPUT_TEST_COMPATIBILITY_GATE}\""
+        )),
+        "{rendered}"
+    );
+
+    Ok(())
 }
 
 #[test]
@@ -1132,6 +1288,72 @@ fn render_session_status_includes_goal_trace_and_next_command() {
         "{rendered}"
     );
     assert!(rendered.contains("next_command: boundline next"), "{rendered}");
+}
+
+#[test]
+fn render_session_status_surfaces_framework_adapter_built_in_default() {
+    let workspace =
+        std::env::temp_dir().join(format!("boundline-framework-adapter-status-{}", Uuid::new_v4()));
+    std::fs::create_dir_all(&workspace).unwrap();
+
+    let rendered = render_session_status(&SessionStatusView {
+        session_id: "session-status-adapter".to_string(),
+        workspace_ref: workspace.to_string_lossy().into_owned(),
+        latest_status: SessionStatus::GoalCaptured,
+        explanation: "captured the goal and preserved built-in execution".to_string(),
+        ..Default::default()
+    });
+
+    assert!(rendered.contains("framework_adapter_status: built_in_default"), "{rendered}");
+    assert!(rendered.contains("framework_adapter_execution_source: built_in"), "{rendered}");
+}
+
+#[test]
+fn render_session_status_surfaces_blocked_unsupported_transport_adapter()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut describe = serde_json::to_value(sample_framework_adapter_describe_response())?;
+    describe["supported_transports"] = json!([
+        {
+            "transport": "stdio",
+            "encoding": "json",
+            "request_channel": "stdout",
+            "response_channel": "stdout"
+        }
+    ]);
+    let workspace =
+        configured_adapter_workspace("boundline-framework-adapter-unsupported-status", describe)?;
+
+    let rendered = render_session_status(&SessionStatusView {
+        session_id: "session-status-adapter-unsupported".to_string(),
+        workspace_ref: workspace.to_string_lossy().into_owned(),
+        latest_status: SessionStatus::GoalCaptured,
+        explanation: "session status should disclose unsupported adapter transports".to_string(),
+        ..Default::default()
+    });
+
+    assert!(rendered.contains("framework_adapter_status: blocked"), "{rendered}");
+    assert!(rendered.contains("framework_adapter_execution_source: built_in"), "{rendered}");
+    assert!(rendered.contains("framework_adapter_config_state: complete"), "{rendered}");
+    assert!(rendered.contains("framework_adapter_interactive_resolution: false"), "{rendered}");
+    assert!(rendered.contains("framework_adapter_value_count: 1"), "{rendered}");
+    assert!(
+        rendered.contains(&format!(
+            "framework_adapter_supported_transports: {OUTPUT_TEST_UNSUPPORTED_TRANSPORTS}"
+        )),
+        "{rendered}"
+    );
+    assert!(
+        rendered.contains(&format!(
+            "framework_adapter_compatibility_gate: {OUTPUT_TEST_COMPATIBILITY_GATE}"
+        )),
+        "{rendered}"
+    );
+    assert!(
+        rendered.contains("framework_adapter_blocked_reason: unsupported_transport"),
+        "{rendered}"
+    );
+
+    Ok(())
 }
 
 #[test]
@@ -2929,6 +3151,7 @@ fn command_names_render_for_all_remaining_subcommands() {
                 non_interactive: false,
                 template: None,
                 assistant: Vec::new(),
+                adapter: None,
                 route: Vec::new(),
                 domain: Vec::new(),
                 domain_standard: Vec::new(),

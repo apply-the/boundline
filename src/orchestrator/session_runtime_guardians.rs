@@ -1,4 +1,19 @@
-use super::*;
+use std::collections::BTreeSet;
+
+use serde_json::Value;
+
+use crate::domain::decision::{Decision, DecisionType};
+use crate::domain::goal_plan::GoalPlan;
+use crate::domain::guidance::{CapabilityPhase, GuidanceGuardianProjection};
+use crate::domain::session::ActiveSessionRecord;
+use crate::domain::step::{Step, StepExecutionResult};
+use crate::domain::task::Task;
+use crate::orchestrator::goal_planner::collect_workspace_signals;
+use crate::orchestrator::guidance_runtime::GuardianExecutionRequest;
+
+use super::{LATEST_CHANGED_FILES_KEY, SessionRuntime};
+
+const CHANGED_FILES_EVIDENCE_KEY: &str = "changed_files";
 
 impl SessionRuntime {
     // Builds the guardian request from a fixture-style step result, preferring
@@ -159,7 +174,7 @@ impl SessionRuntime {
     ) -> Vec<String> {
         // Successful bounded work normalizes changed files under
         // latest_changed_files; fall back only when that normalized view is absent.
-        for state_key in ["latest_changed_files", "changed_files"] {
+        for state_key in [LATEST_CHANGED_FILES_KEY, CHANGED_FILES_EVIDENCE_KEY] {
             if let Some(changed_files) = task.context.state.get(state_key).and_then(Value::as_array)
             {
                 let files = changed_files
@@ -176,7 +191,7 @@ impl SessionRuntime {
         if let Some(changed_files) = result
             .evidence
             .as_ref()
-            .and_then(|value| value.get("changed_files"))
+            .and_then(|value| value.get(CHANGED_FILES_EVIDENCE_KEY))
             .and_then(Value::as_array)
         {
             let files = changed_files

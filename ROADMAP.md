@@ -7,14 +7,31 @@ persists structured artifacts that Boundline can reuse for reasoning.
 Delivered release history belongs in [CHANGELOG.md](CHANGELOG.md). This file is
 for current direction, future feature sequencing, and product boundaries.
 
-## Current Status: v0.65.0
+## Current Status: v0.66.0
 
-Boundline currently ships the session-native CLI/runtime plus the sqlite-vec
-derived-index lifecycle surface: bounded local semantic retrieval, explicit
-manifest-backed `index` maintenance commands, hook-aware stale detection, and
-diagnostic recovery guidance all remain owned by the CLI and persisted
-workspace state. There is still no separate terminal UI product line on the
-forward roadmap.
+Boundline currently ships the session-native CLI/runtime plus the explicit
+framework-adapter lifecycle: Canon-aware built-in behavior stays the default,
+adapter activation remains operator-controlled, claimed-stage ownership and
+hook delivery stay visible through the CLI and traces, and the sqlite-vec
+derived-index lifecycle remains owned by persisted workspace state. There is
+still no separate terminal UI product line on the forward roadmap.
+
+### Delivered in 0.66.0
+
+- one explicit framework-adapter slot per workspace now supports
+  `boundline adapter add|show|remove`, the shipped `speckit` known profile,
+  and custom trusted local adapter registration with guided required-field
+  setup
+- the V1 framework-adapter contract now formalizes one-shot JSON over
+  stdin/stdout, declared transport support, standard success or error
+  envelopes, and stderr that remains trace-only enrichment rather than a second
+  control plane
+- status, inspect, config, and runtime trace surfaces now disclose adapter
+  selection, ownership claims, transport compatibility, hook delivery, and
+  guided recovery when config or execution blocks adapter use
+- the sibling `boundline-framework-template` and
+  `boundline-adapter-speckit` repositories now ship the released compatibility
+  scaffold for external adapter development and validation
 
 ### Delivered in 0.65.0
 
@@ -31,8 +48,9 @@ forward roadmap.
 ### Delivered in 0.64.0
 
 - session-native orchestration remains the primary delivery surface
-- assistant command packs stay aligned with the CLI and trace-backed status model
-- governed delivery, inspection, and distribution workflows ship on the current workspace version
+- assistant command packs stay aligned with the CLI and trace-backed status mode
+- governed delivery, inspection, and distribution workflows ship on the current
+  workspace version
 
 ## Objective
 
@@ -77,7 +95,7 @@ The repo-local `roadmap/` folder carries the active forward-looking drafts:
 1. Boundline must deliver visible runtime trust before more platform abstraction
    work.
 2. Operator surfaces must remain thin shells over the existing CLI/runtime, not
-  second products or parallel orchestration engines.
+   second products or parallel orchestration engines.
 3. Large-codebase handling, provider permissions, and evals must precede
    stronger autonomy.
 4. Canon must prove value inside the real delivery loop, not beside it.

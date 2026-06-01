@@ -26,6 +26,8 @@ pub mod flow;
 pub mod flow_policy;
 #[path = "../../../src/domain/follow_through.rs"]
 pub mod follow_through;
+#[path = "../../../src/domain/framework_adapter.rs"]
+pub mod framework_adapter;
 #[path = "../../../src/domain/goal_plan.rs"]
 pub mod goal_plan;
 #[path = "../../../src/domain/governance.rs"]

@@ -151,6 +151,29 @@ When the workspace uses local semantic acceleration, `probe` also surfaces
 derived-index capability signals so assistants can tell the difference between
 missing bootstrap, degraded vector capability, and a healthy local index.
 
+## 5a. Optional Framework Adapter Setup
+
+If the workspace should use one explicit framework adapter, register it after
+init instead of editing `.boundline/config.toml` by hand:
+
+```bash
+boundline adapter add speckit --workspace <workspace>
+boundline adapter show --workspace <workspace> --json
+```
+
+Read the adapter JSON report literally:
+
+- `compatibility_line` is the host-owned protocol line the adapter claims
+- `supported_transports` must include V1 JSON over stdin/stdout
+- `declared_stage_overrides` and `declared_hook_subscriptions` tell you which
+  lifecycle surfaces the adapter may own or observe
+- `config_state`, `interactive_resolution`, and `value_count` tell you whether
+  setup is complete and how it was resolved
+
+The V1 adapter boundary is deliberately small: one-shot subprocess commands,
+standard success or error envelopes on stdout, optional structured stderr for
+trace enrichment only, and no graceful shutdown or resident daemon lifecycle.
+
 ## 6. Start One Bounded Session
 
 The primary product story is explicit:
@@ -191,6 +214,12 @@ boundline run --goal "Fix the failing add test"
 ```
 
 That is a convenience path, not the primary product story.
+
+If a selected adapter is active, `status` and `inspect` also surface the stage
+execution source, adapter ID, routing reason, and hook-delivery outcomes. When
+an adapter blocks before claim because config is incomplete or transport
+compatibility is wrong, the runtime keeps that pre-claim stop or fallback
+reason explicit instead of silently converting the run into adapter ownership.
 
 ## When Canon Matters
 

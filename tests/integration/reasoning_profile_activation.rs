@@ -278,6 +278,7 @@ fn save_distinct_review_routing(workspace: &Path) {
                 ..RoutingConfig::default()
             },
             canon: None,
+            adapter: None,
         })
         .unwrap();
 }

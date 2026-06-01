@@ -1,4 +1,4 @@
-# Configuration in Boundline 0.65.0
+# Configuration in Boundline 0.66.0
 
 This page covers the operator-facing configuration surface. Keep one rule in
 mind: configuration declares defaults and policy; the runtime still owns
@@ -132,6 +132,37 @@ Assistant package setup and slot routing are related but different:
 Use `config show --scope effective` when a route behaves differently from what
 you expected.
 
+## Framework Adapter Selection
+
+Framework adapter selection is workspace-local configuration backed by
+`.boundline/config.toml`, but operators should manage it through the dedicated
+adapter commands instead of raw key edits:
+
+```bash
+boundline adapter add speckit --workspace <workspace>
+boundline adapter show --workspace <workspace> --json
+boundline adapter remove --workspace <workspace>
+```
+
+Use `adapter add` to activate one explicit adapter profile for a workspace.
+Use `adapter show --json` to inspect the persisted selection, config
+completeness, declared supported transports, stage override claims, hook
+subscriptions, and compatibility metadata before running `plan` or `run`.
+
+`config show` surfaces the same selection at the config layer, including the
+adapter config state, whether guided setup was used, and the stored adapter
+value count. Secret adapter values remain redacted in operator-visible output.
+
+When required adapter fields are missing, `adapter add --non-interactive`
+blocks before activation and reports the missing field keys plus the recovery
+command. If an already-selected adapter later returns a blocked preflight,
+Boundline keeps that pre-claim boundary explicit through the recorded fallback
+reason instead of letting the adapter silently claim the stage.
+
+Transport compatibility is explicit in V1. `adapter show --json` exposes the
+declared `supported_transports`, and the current release accepts only JSON over
+stdin/stdout.
+
 ## Canon Workspace Preferences
 
 Canon defaults are workspace-local when governed delivery is expected.
@@ -222,3 +253,5 @@ Use these defaults unless there is a clear reason not to:
 - prefer workspace overrides for local engineering rules
 - prefer Canon only when governed standards or governed project memory are
   intentionally part of the delivery path
+- keep framework adapters opt-in and inspect `supported_transports` plus config
+  completeness before treating an adapter as runnable

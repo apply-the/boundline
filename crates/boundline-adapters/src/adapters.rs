@@ -25,6 +25,24 @@ pub mod tool;
 #[path = "../../../src/adapters/trace_store.rs"]
 pub mod trace_store;
 
+pub mod framework_protocol;
+
+pub use framework_protocol::{
+    FrameworkAdapterCommand, FrameworkAdapterConfigFieldDefinition, FrameworkAdapterConfigValue,
+    FrameworkAdapterDescribeResponse, FrameworkAdapterEnvelopeError, FrameworkAdapterErrorEnvelope,
+    FrameworkAdapterExecuteStageRequest, FrameworkAdapterExecuteStageResponse,
+    FrameworkAdapterFailureClass, FrameworkAdapterFieldValueKind,
+    FrameworkAdapterHookDeliveryStatus, FrameworkAdapterPreflightBlockReason,
+    FrameworkAdapterPreflightRequest, FrameworkAdapterPreflightResponse,
+    FrameworkAdapterPreflightStatus, FrameworkAdapterRequiredFieldPolicy,
+    FrameworkAdapterResponseEnvelope, FrameworkAdapterResponseEnvelopeError,
+    FrameworkAdapterStageExecutionStatus, FrameworkAdapterSuccessEnvelope,
+    FrameworkAdapterTransportChannel, FrameworkAdapterTransportDescriptor,
+    FrameworkAdapterTransportEncoding, FrameworkAdapterTransportKind, HookEmissionRequest,
+    HookEmissionResponse, format_framework_adapter_transports,
+    framework_adapter_supports_v1_transport,
+};
+
 /// Single process-wide mutex serialising all tests that mutate environment
 /// variables. Shared across `env_layer` and `provider_runtime` test modules so
 /// they cannot race on `OPENAI_API_KEY`, `XDG_CONFIG_HOME`, etc.

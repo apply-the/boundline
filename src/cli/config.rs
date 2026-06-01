@@ -5,18 +5,24 @@ use thiserror::Error;
 use crate::adapters::cluster_store::{ClusterStoreError, FileClusterStore};
 use crate::adapters::config_store::{ConfigStoreError, FileConfigStore};
 use crate::cli::CommandExitStatus;
+use crate::cli::adapter::discovery_state_label;
 use crate::domain::configuration::{
-    CanonPreferences, CapabilityState, ConfigFile, ConfigShowScope, ConfigWriteScope,
-    EffortFallbackPolicy, EffortLevel, ModelRoute, RouteSlot, RoutingOverrides,
-    RuntimeCapabilityProfile, RuntimeKind, SemanticAccelerationPolicy,
+    AdapterConfigValueRecord, CanonPreferences, CapabilityState, ConfigFile, ConfigShowScope,
+    ConfigWriteScope, EffortFallbackPolicy, EffortLevel, ModelRoute, PersistedAdapterConfiguration,
+    RouteSlot, RoutingOverrides, RuntimeCapabilityProfile, RuntimeKind, SemanticAccelerationPolicy,
     SemanticAccelerationPolicyState, SlotEffortPolicy, ValueSource,
     resolve_effective_advanced_context_config, resolve_effective_domain_templates,
     resolve_effective_routing, resolve_effective_runtime_capabilities,
     resolve_effective_semantic_acceleration_config, resolve_effective_slot_effort_policies,
 };
 use crate::domain::domain_templates::{DomainFamily, ExternalContextBinding, ExternalContextKind};
+use crate::domain::framework_adapter::{
+    AdapterConfigCompletenessState, AdapterSelectionMode, AdapterValueKind, AdapterValueSource,
+};
 use crate::domain::governance::CanonModeSelectionPreference;
 use crate::domain::routing_decision::RoutingDecisionProjection;
+
+const REDACTED_ADAPTER_VALUE: &str = "<redacted>";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConfigCommandReport {
@@ -116,14 +122,19 @@ pub fn execute_show(
             let config = store.load()?.ok_or_else(|| {
                 ConfigCommandError::MissingClusterConfig(store.cluster_config_path())
             })?;
-            let scope_view =
-                ConfigFile { version: config.version, routing: config.routing, canon: None };
+            let scope_view = ConfigFile {
+                version: config.version,
+                routing: config.routing,
+                canon: None,
+                adapter: None,
+            };
             render_scope("cluster", &scope_view)
         }
         ConfigShowScope::Effective => {
             let workspace = workspace.ok_or(ConfigCommandError::WorkspaceRequired)?;
             let store = FileConfigStore::for_workspace(workspace);
             let local = store.local_routing()?;
+            let local_adapter = store.local_adapter()?;
             let cluster_routing = if let Some(cluster) = cluster {
                 let store = FileClusterStore::for_workspace(cluster);
                 Some(
@@ -262,6 +273,7 @@ pub fn execute_show(
             ));
 
             push_effective_domain_template_lines(&mut lines, &effective_domain_templates);
+            push_effective_adapter_lines(&mut lines, local_adapter.as_ref());
 
             lines.join("\n")
         }
@@ -981,7 +993,147 @@ fn render_scope(scope: &str, config: &ConfigFile) -> String {
         lines.push("canon: none".to_string());
     }
 
+    push_configured_adapter_lines(&mut lines, config.adapter.as_ref());
+
     lines.join("\n")
+}
+
+fn push_configured_adapter_lines(
+    lines: &mut Vec<String>,
+    adapter: Option<&PersistedAdapterConfiguration>,
+) {
+    let Some(adapter) = adapter else {
+        lines.push("framework_adapter: none".to_string());
+        return;
+    };
+
+    lines.push("framework_adapter:".to_string());
+    lines.push("  status: configured".to_string());
+    lines.push(format!("  adapter_id: {}", adapter.selection.adapter_id));
+    lines.push(format!(
+        "  selection_mode: {}",
+        adapter_selection_mode_text(adapter.selection.selection_mode)
+    ));
+    lines.push(format!("  command: {}", adapter.selection.command));
+    lines.push(format!(
+        "  discovery_state: {}",
+        discovery_state_label(adapter.selection.discovery_state)
+    ));
+    lines
+        .push(format!("  config_state: {}", adapter_completeness_text(adapter.completeness_state)));
+    lines.push(format!("  interactive_resolution: {}", adapter.interactive_resolution));
+    lines.push(format!("  value_count: {}", adapter.value_count));
+    push_workspace_adapter_value_lines(lines, adapter);
+}
+
+fn push_effective_adapter_lines(
+    lines: &mut Vec<String>,
+    adapter: Option<&PersistedAdapterConfiguration>,
+) {
+    let Some(adapter) = adapter else {
+        lines.push("framework_adapter_status: built_in_default [built-in]".to_string());
+        return;
+    };
+
+    lines.push("framework_adapter_status: configured [workspace]".to_string());
+    lines.push(format!("framework_adapter_id: {}", adapter.selection.adapter_id));
+    lines.push(format!("framework_adapter_command: {}", adapter.selection.command));
+    lines.push(format!(
+        "framework_adapter_discovery_state: {}",
+        discovery_state_label(adapter.selection.discovery_state)
+    ));
+    lines.push(format!(
+        "framework_adapter_config_state: {}",
+        adapter_completeness_text(adapter.completeness_state)
+    ));
+    lines.push(format!(
+        "framework_adapter_interactive_resolution: {}",
+        adapter.interactive_resolution
+    ));
+    lines.push(format!("framework_adapter_value_count: {}", adapter.value_count));
+    push_effective_adapter_value_lines(lines, adapter);
+}
+
+fn push_workspace_adapter_value_lines(
+    lines: &mut Vec<String>,
+    adapter: &PersistedAdapterConfiguration,
+) {
+    if adapter.values.is_empty() {
+        return;
+    }
+
+    lines.push("  config_values:".to_string());
+    for value in &adapter.values {
+        lines.push(format!(
+            "  - {}: {} [{}]",
+            value.field_key,
+            render_adapter_value(value),
+            adapter_value_source_text(value.value_source)
+        ));
+    }
+}
+
+fn push_effective_adapter_value_lines(
+    lines: &mut Vec<String>,
+    adapter: &PersistedAdapterConfiguration,
+) {
+    if adapter.values.is_empty() {
+        return;
+    }
+
+    lines.push("framework_adapter_config_values:".to_string());
+    for value in &adapter.values {
+        lines.push(format!(
+            "- {}: {} [{}]",
+            value.field_key,
+            render_adapter_value(value),
+            adapter_value_source_text(value.value_source)
+        ));
+    }
+}
+
+fn render_adapter_value(value: &AdapterConfigValueRecord) -> String {
+    if value.secret {
+        return REDACTED_ADAPTER_VALUE.to_string();
+    }
+
+    match value.value_kind {
+        AdapterValueKind::String | AdapterValueKind::Enum => {
+            value.string_value.clone().unwrap_or_else(|| "<unset>".to_string())
+        }
+        AdapterValueKind::Path => value.path_value.clone().unwrap_or_else(|| "<unset>".to_string()),
+        AdapterValueKind::Boolean => {
+            value.bool_value.map(|value| value.to_string()).unwrap_or_else(|| "<unset>".to_string())
+        }
+        AdapterValueKind::Integer => {
+            value.int_value.map(|value| value.to_string()).unwrap_or_else(|| "<unset>".to_string())
+        }
+    }
+}
+
+fn adapter_value_source_text(source: AdapterValueSource) -> &'static str {
+    match source {
+        AdapterValueSource::CliFlag => "cli_flag",
+        AdapterValueSource::KnownProfileDefault => "known_profile_default",
+        AdapterValueSource::OperatorPrompt => "operator_prompt",
+        AdapterValueSource::MigratedConfig => "migrated_config",
+    }
+}
+
+fn adapter_selection_mode_text(selection_mode: AdapterSelectionMode) -> &'static str {
+    match selection_mode {
+        AdapterSelectionMode::None => "none",
+        AdapterSelectionMode::KnownProfile => "known_profile",
+        AdapterSelectionMode::Custom => "custom",
+    }
+}
+
+fn adapter_completeness_text(completeness_state: AdapterConfigCompletenessState) -> &'static str {
+    match completeness_state {
+        AdapterConfigCompletenessState::Complete => "complete",
+        AdapterConfigCompletenessState::MissingRequired => "missing_required",
+        AdapterConfigCompletenessState::Invalid => "invalid",
+    }
 }
 
 fn route_text(route: &ModelRoute) -> String {
@@ -1210,8 +1362,14 @@ mod tests {
     use crate::domain::cluster::{
         ClusterConfigFile, ClusterMemberRegistration, ClusterMemberRole, WorkspaceCluster,
     };
-    use crate::domain::configuration::RoutingConfig;
+    use crate::domain::configuration::{
+        AdapterSelectionRecord, PersistedAdapterConfiguration, RoutingConfig,
+    };
     use crate::domain::domain_templates::{DomainFamily, ExternalContextKind};
+    use crate::domain::framework_adapter::{
+        AdapterConfigCompletenessState, AdapterDiscoveryState, AdapterRegistrationSource,
+        AdapterSelectionMode, FRAMEWORK_ADAPTER_PROTOCOL_LINE_V1,
+    };
 
     fn temp_workspace(prefix: &str) -> PathBuf {
         let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
@@ -1256,6 +1414,28 @@ mod tests {
         }
     }
 
+    fn sample_persisted_adapter() -> PersistedAdapterConfiguration {
+        PersistedAdapterConfiguration {
+            selection: AdapterSelectionRecord {
+                selection_mode: AdapterSelectionMode::KnownProfile,
+                adapter_id: "speckit".to_string(),
+                display_name: "Speckit".to_string(),
+                command: "boundline-adapter-speckit".to_string(),
+                args: Vec::new(),
+                registration_source: AdapterRegistrationSource::AdapterAdd,
+                discovery_state: AdapterDiscoveryState::DiscoveredOnPath,
+                compatibility_line: FRAMEWORK_ADAPTER_PROTOCOL_LINE_V1.to_string(),
+                updated_at: 1,
+            },
+            schema_fingerprint: "schema-v1".to_string(),
+            completeness_state: AdapterConfigCompletenessState::Complete,
+            interactive_resolution: false,
+            last_validated_at: Some(1),
+            value_count: 0,
+            values: Vec::new(),
+        }
+    }
+
     fn slot_policy(
         level: EffortLevel,
         fallback: EffortFallbackPolicy,
@@ -1276,6 +1456,7 @@ mod tests {
         assert!(empty.contains("slot_effort_policies: none"));
         assert!(empty.contains("advanced_context: none"));
         assert!(empty.contains("semantic_acceleration: none"));
+        assert!(empty.contains("framework_adapter: none"));
 
         assert_eq!(slot_label(RouteSlot::Planning), "planning");
         assert_eq!(slot_label(RouteSlot::Implementation), "implementation");
@@ -1329,6 +1510,7 @@ mod tests {
                 policy: crate::domain::configuration::SemanticAccelerationPolicyState::Local,
                 ..crate::domain::configuration::SemanticAccelerationPolicy::default()
             });
+        config.adapter = Some(sample_persisted_adapter());
 
         assert_eq!(route_text(config.routing.review.as_ref().unwrap()), "gemini:gemini-2.5-pro");
         assert!(
@@ -1362,6 +1544,10 @@ mod tests {
         ));
         assert!(rendered.contains("advanced_context: mode=local, remote_policy=local_only"));
         assert!(rendered.contains("semantic_acceleration: policy=local"));
+        assert!(rendered.contains("framework_adapter:"));
+        assert!(rendered.contains("  adapter_id: speckit"));
+        assert!(rendered.contains("  command: boundline-adapter-speckit"));
+        assert!(rendered.contains("  discovery_state: discovered_on_path"));
     }
 
     #[test]
@@ -1377,6 +1563,7 @@ mod tests {
                 ..RoutingConfig::default()
             },
             canon: None,
+            adapter: None,
         };
 
         let saved_path =
@@ -1464,6 +1651,7 @@ mod tests {
                 ..RoutingConfig::default()
             },
             canon: None,
+            adapter: Some(sample_persisted_adapter()),
         };
         FileConfigStore::for_workspace(&workspace).save_local(&local_config).unwrap();
 
@@ -1499,6 +1687,8 @@ mod tests {
         assert!(workspace_view.terminal_output.contains("chat: codex:openai/gpt-5.4"));
         assert!(workspace_view.terminal_output.contains("reviewer_roles:"));
         assert!(workspace_view.terminal_output.contains("assistant_runtimes: codex, copilot"));
+        assert!(workspace_view.terminal_output.contains("framework_adapter:"));
+        assert!(workspace_view.terminal_output.contains("  adapter_id: speckit"));
 
         let cluster_view = execute_show(
             Some(workspace.as_path()),
@@ -1527,6 +1717,12 @@ mod tests {
         assert!(effective_view.terminal_output.contains(
             "semantic_acceleration: policy=disabled, index_hook_action=disabled [built-in]"
         ));
+        assert!(
+            effective_view
+                .terminal_output
+                .contains("framework_adapter_status: configured [workspace]")
+        );
+        assert!(effective_view.terminal_output.contains("framework_adapter_id: speckit"));
         assert!(effective_view
             .terminal_output
             .contains("- verification: level=high, fallback=preserve, rationale=cluster validation bar [cluster]"));
@@ -2161,7 +2357,12 @@ mod tests {
 
         let rendered = render_scope(
             "cluster",
-            &ConfigFile { version: cluster.version, routing: cluster.routing.clone(), canon: None },
+            &ConfigFile {
+                version: cluster.version,
+                routing: cluster.routing.clone(),
+                canon: None,
+                adapter: None,
+            },
         );
         assert!(rendered.contains("- react: enabled=false"));
         assert!(rendered.contains("standards: cluster react rules"));
@@ -2183,6 +2384,7 @@ mod tests {
                     ..RoutingConfig::default()
                 },
                 canon: None,
+                adapter: None,
             },
         );
         assert!(helper_rendered.contains("- vue: enabled=inherit"));

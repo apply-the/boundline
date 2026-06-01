@@ -1,4 +1,44 @@
-use super::*;
+use std::fs;
+
+use serde_json::json;
+use uuid::Uuid;
+
+use crate::adapters::governance_runtime::{
+    CanonCliRuntime, GovernanceRequestKind, GovernanceRuntime, GovernanceRuntimeRequest,
+    GovernanceRuntimeResponse,
+};
+use crate::domain::decision::Decision;
+use crate::domain::flow::FlowStepMetadata;
+use crate::domain::goal_plan::GoalPlan;
+use crate::domain::governance::{
+    CanonAuthorityZone, CanonIntendedPersona, CanonMode, CanonRiskClass, GovernanceLifecycleState,
+    GovernanceRuntimeKind, GovernedStageRecord, PacketReadiness, execution_stage_key_for_mode,
+};
+use crate::domain::limits::TerminalCondition;
+use crate::domain::project_memory::{
+    GovernedEvidencePromotionRequest,
+    promote_governed_evidence_bundle as promote_project_evidence_bundle,
+};
+use crate::domain::session::ActiveSessionRecord;
+use crate::domain::task::{Task, TaskRunResponse, TaskStatus, TerminalReason};
+use crate::domain::task_context::TaskContext;
+use crate::domain::trace::{ExecutionTrace, TraceEventType};
+use crate::fixture::{FixtureRuntime, build_fixture_plan_for_goal, build_task_request};
+use crate::orchestrator::decision_loop::LoopTerminal;
+use crate::orchestrator::governance::{
+    append_governed_document_to_lifecycle, compacted_canon_memory_from_response,
+    governance_projection_snapshot, governance_state_patch, governed_document_ref_from_response,
+    overlay_stage_policy_with_intent, planning_governance_input_documents,
+    requested_governance_intent, runtime_command_available, selected_stage_policy,
+};
+use crate::orchestrator::terminal::build_terminal_reason;
+
+use super::{
+    EXECUTION_GOVERNANCE_ROOT, EXECUTION_STAGE_BRIEF_FILE_NAME, GovernanceStepDecision,
+    NativeGovernanceProjection, SessionRuntime, SessionRuntimeError,
+    canon_workspace_scope_mismatch_reason, execution_governance_read_targets,
+    is_governance_trace_event, reasoning_profile_block_message, render_execution_stage_brief,
+};
 
 impl SessionRuntime {
     /// Invokes Canon governance with execution-time modes after the decision

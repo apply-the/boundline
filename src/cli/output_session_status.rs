@@ -11,7 +11,11 @@ use super::routing::{
     route_config_projection_for_status_view, session_execution_condition_parts,
     session_route_owner,
 };
-use super::runtime::append_reasoning_profile_lines;
+use super::runtime::{
+    append_reasoning_profile_lines, framework_adapter_hook_dispatch_lines,
+    framework_adapter_stage_failure_lines, framework_adapter_stage_routing_lines,
+    framework_adapter_status_lines,
+};
 use super::support::push_governance_display_lines;
 use super::{SessionStatusView, session_status_text};
 use crate::domain::follow_through::FollowThroughProjection;
@@ -63,6 +67,16 @@ pub fn render_session_status_brief(view: &SessionStatusView) -> String {
     push_advanced_context_lines(&mut lines, view.advanced_context.as_ref());
 
     lines.extend(render_session_projection_prefix(view).lines().map(str::to_string));
+    lines.extend(framework_adapter_status_lines(&view.workspace_ref));
+    lines.extend(framework_adapter_stage_routing_lines(
+        view.latest_framework_adapter_stage_routing.as_ref(),
+    ));
+    lines.extend(framework_adapter_hook_dispatch_lines(
+        view.latest_framework_adapter_hook_dispatch.as_ref(),
+    ));
+    lines.extend(framework_adapter_stage_failure_lines(
+        view.latest_framework_adapter_stage_failure.as_ref(),
+    ));
 
     if let Some(continuity_authority) = view.continuity_authority {
         lines.push(format!("continuity_authority: {}", continuity_authority.as_str()));
@@ -625,6 +639,16 @@ pub fn render_session_status(view: &SessionStatusView) -> String {
 
     lines.extend(render_session_projection_prefix(view).lines().map(str::to_string));
     lines.push(format!("route_owner: {}", session_route_owner(view)));
+    lines.extend(framework_adapter_status_lines(&view.workspace_ref));
+    lines.extend(framework_adapter_stage_routing_lines(
+        view.latest_framework_adapter_stage_routing.as_ref(),
+    ));
+    lines.extend(framework_adapter_hook_dispatch_lines(
+        view.latest_framework_adapter_hook_dispatch.as_ref(),
+    ));
+    lines.extend(framework_adapter_stage_failure_lines(
+        view.latest_framework_adapter_stage_failure.as_ref(),
+    ));
 
     if let Some(route_config_projection) =
         render_route_config_projection(route_config_projection_for_status_view(view))

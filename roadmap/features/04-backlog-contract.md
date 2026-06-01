@@ -4,7 +4,7 @@
 
 Define the Speckit tasks analogue as a Boundline validation contract over Canon backlog output. Boundline should not add a `/boundline-tasks` command in this slice. Instead, Canon `backlog` mode remains the governed backlog producer for delivery workflows, and Boundline validates the backlog packet before considering planning complete.
 
-If implementation requires any Canon output or schema change, stop Boundline work and create a Canon Speckit feature in `/Users/rt/workspace/apply-the/canon`: branch, spec, plan, tasks, then implement Canon changes.
+If implementation requires any Canon output or schema change, stop Boundline work and create a Canon Speckit feature in the sibling `canon` repo: branch, spec, plan, tasks, then implement Canon changes.
 
 ## Speckit Seed Notes
 
@@ -75,7 +75,7 @@ Run:
 
 No Canon files are changed as part of this Boundline planning document.
 
-Future Canon-impacting work must use Speckit in `/Users/rt/workspace/apply-the/canon`:
+Future Canon-impacting work must use Speckit in the sibling `canon` repo:
 
 1. create or switch a feature branch with Speckit
 2. write the feature spec

@@ -1,3 +1,6 @@
+#[path = "execution/framework_adapter.rs"]
+pub mod framework_adapter;
+
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
@@ -7,6 +10,9 @@ use crate::domain::governance::{GovernanceProfile, GovernanceProfileError};
 use crate::domain::limits::RunLimits;
 use crate::domain::review::{ReviewProfile, ReviewProfileError};
 use crate::domain::step::Recoverability;
+pub use framework_adapter::{
+    AdapterCapabilitySnapshot, ProtocolCompatibilityRecord, StageRoutingDecisionRecord,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExecutionCommand {

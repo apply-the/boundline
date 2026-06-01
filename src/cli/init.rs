@@ -183,7 +183,7 @@ pub struct InitCommandReport {
 }
 
 impl InitCommandReport {
-    fn new(exit_status: CommandExitStatus, terminal_output: impl Into<String>) -> Self {
+    pub(crate) fn new(exit_status: CommandExitStatus, terminal_output: impl Into<String>) -> Self {
         let terminal_output = terminal_output.into();
         let compact_output = render_init_brief(exit_status, &terminal_output);
         Self { exit_status, terminal_output, compact_output }

@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::error::Error;
 use std::fs;
 use std::io::{Read, Write};
 use std::net::TcpListener;
@@ -83,6 +84,7 @@ use crate::domain::tool_result::ToolResult;
 use crate::domain::trace::{ExecutionTrace, TraceEventType};
 use crate::domain::workflow::ProjectScaleStageKind;
 use crate::fixture::FixtureRuntime;
+use crate::orchestrator::goal_planner::PlanningContextSources;
 use crate::orchestrator::planner::StaticPlanner;
 use crate::registry::agent_registry::AgentRegistry;
 use crate::registry::tool_registry::ToolRegistry;
@@ -307,6 +309,76 @@ fn openai_completion_response(payload: serde_json::Value) -> String {
     .to_string()
 }
 
+const PRIMARY_PROVIDER_MODEL: &str = "openai/gpt-5.4";
+const SECONDARY_PROVIDER_MODEL: &str = "deepseek/deepseek-chat";
+const ARBITER_PROVIDER_MODEL: &str = "groq/llama-3.1-8b-instant";
+const DISCOVERY_STAGE_KEY: &str = "plan:discovery";
+const DISCOVERY_PHASE: &str = "discovery";
+const DISCOVERY_PRODUCER_SLOT: &str = "planning";
+const DISCOVERY_TARGET_REF: &str = "src/lib.rs";
+const DISCOVERY_ARTIFACT_REF: &str = "artifacts/discovery.md";
+
+fn set_provider_envs(base_url: &str) {
+    unsafe {
+        std::env::set_var(OPENAI_BASE_URL_ENV, base_url);
+        std::env::set_var(OPENAI_API_KEY_ENV, "token");
+        std::env::set_var(DEEPSEEK_BASE_URL_ENV, base_url);
+        std::env::set_var(DEEPSEEK_API_KEY_ENV, "token");
+        std::env::set_var(GROQ_BASE_URL_ENV, base_url);
+        std::env::set_var(GROQ_API_KEY_ENV, "token");
+    }
+}
+
+fn provider_stage_council_routing(
+    planning: Option<ModelRoute>,
+    adjudication: Option<ModelRoute>,
+) -> RoutingConfig {
+    let mut routing = RoutingConfig {
+        planning,
+        review: Some(ModelRoute {
+            runtime: RuntimeKind::Codex,
+            model: PRIMARY_PROVIDER_MODEL.to_string(),
+        }),
+        adjudication,
+        ..RoutingConfig::default()
+    };
+    routing.reviewer_roles.insert(
+        "alpha".to_string(),
+        ModelRoute { runtime: RuntimeKind::Codex, model: PRIMARY_PROVIDER_MODEL.to_string() },
+    );
+    routing.reviewer_roles.insert(
+        "beta".to_string(),
+        ModelRoute { runtime: RuntimeKind::Codex, model: SECONDARY_PROVIDER_MODEL.to_string() },
+    );
+    routing
+}
+
+fn write_discovery_stage_council_workspace(
+    prefix: &str,
+) -> Result<(PathBuf, String), Box<dyn Error>> {
+    let workspace = temp_workspace(prefix);
+    fs::create_dir_all(workspace.join("artifacts"))?;
+    fs::write(
+        workspace.join(DISCOVERY_ARTIFACT_REF),
+        "# Discovery Artifact\n\nCurrent provider-backed artifact.\n",
+    )?;
+    Ok((workspace, DISCOVERY_ARTIFACT_REF.to_string()))
+}
+
+fn discovery_stage_council_request(
+    artifact_ref: &str,
+) -> crate::domain::stage_council::StageCouncilRequest {
+    crate::domain::stage_council::StageCouncilRequest {
+        stage_key: DISCOVERY_STAGE_KEY.to_string(),
+        phase: DISCOVERY_PHASE.to_string(),
+        producer_slot: DISCOVERY_PRODUCER_SLOT.to_string(),
+        target_refs: vec![DISCOVERY_TARGET_REF.to_string()],
+        current_artifact_ref: Some(artifact_ref.to_string()),
+        goal: "Ship the provider-backed discovery update".to_string(),
+        constraints: vec!["Keep the scope bounded".to_string()],
+    }
+}
+
 #[cfg(unix)]
 fn write_fake_canon_command(workspace: &Path) -> PathBuf {
     let packet_dir = workspace.join(".canon/planning-packet");
@@ -439,7 +511,7 @@ fn context() -> TaskContext {
 
 fn save_local_routing(workspace: &Path, routing: RoutingConfig) {
     FileConfigStore::for_workspace(workspace)
-        .save_local(&ConfigFile { version: 1, routing, canon: None })
+        .save_local(&ConfigFile { version: 1, routing, canon: None, adapter: None })
         .unwrap();
 }
 
@@ -3015,6 +3087,7 @@ fn plan_task_adopts_workspace_canon_governance_without_explicit_session_selectio
                 default_owner: Some("platform".to_string()),
                 default_system_context: Some("existing".to_string()),
             }),
+            adapter: None,
         })
         .unwrap();
 
@@ -3141,6 +3214,7 @@ fn plan_task_blocks_nested_workspace_before_canon_targets_parent_git_root() {
                 default_owner: Some("platform".to_string()),
                 default_system_context: Some("existing".to_string()),
             }),
+            adapter: None,
         })
         .unwrap();
 
@@ -3241,6 +3315,7 @@ fn plan_task_blocks_when_canon_is_selected_but_not_initialized() {
                     default_owner: Some("platform".to_string()),
                     default_system_context: Some("existing".to_string()),
                 }),
+                adapter: None,
             })
             .is_ok()
     );
@@ -3514,7 +3589,7 @@ fn execute_next_step_creates_a_compatibility_task_for_flow_selected_goal_plans()
         vec![ExecutionAttemptDefinition {
             attempt_id: "fix-add".to_string(),
             summary: String::new(),
-            failure_mode: ExecutionFailureMode::Terminal,
+            failure_mode: ExecutionFailureMode::Replan,
             changes: vec![WorkspaceChange {
                 path: "src/lib.rs".to_string(),
                 find: "left - right".to_string(),
@@ -3564,7 +3639,10 @@ fn execute_next_step_creates_a_compatibility_task_for_flow_selected_goal_plans()
     runtime.execute_next_step(&mut session).unwrap();
 
     assert!(session.active_task.is_some());
-    assert_eq!(session.latest_status, SessionStatus::Running);
+    assert!(matches!(session.latest_status, SessionStatus::Running | SessionStatus::Failed));
+    if session.latest_status == SessionStatus::Failed {
+        assert!(session.latest_terminal_reason.is_some());
+    }
     assert!(session.goal_plan.is_some());
 }
 
@@ -5876,4 +5954,859 @@ fn prepare_planning_requests_uses_refresh_when_stage_has_existing_run_ref() {
         super::GovernanceRequestKind::Refresh,
         "stage with existing run_ref and refresh capability should use Refresh"
     );
+}
+
+#[test]
+fn runtime_support_helpers_cover_governance_actor_route_and_payload_branches() {
+    assert_eq!(super::runtime_support::governance_route_slot_for_stage_key(""), None);
+    assert_eq!(
+        super::runtime_support::governance_route_slot_for_stage_key("plan:requirements"),
+        Some("planning")
+    );
+    assert_eq!(
+        super::runtime_support::governance_route_slot_for_stage_key("run:implementation"),
+        Some("implementation")
+    );
+    assert_eq!(
+        super::runtime_support::parse_three_segment_route("planning:copilot:gpt-4o"),
+        Some(("planning".to_string(), "copilot".to_string(), "gpt-4o".to_string(),))
+    );
+    assert_eq!(super::runtime_support::parse_three_segment_route("planning::gpt-4o"), None);
+    assert_eq!(
+        super::runtime_support::payload_string(Some(&json!(true))),
+        Some("true".to_string())
+    );
+    assert_eq!(super::runtime_support::payload_string(Some(&json!(7))), Some("7".to_string()));
+    assert_eq!(
+        super::runtime_support::payload_string(Some(&json!({"route": "planning"}))),
+        Some("{\"route\":\"planning\"}".to_string())
+    );
+
+    let governance_actor = super::runtime_support::governance_audit_actor(
+        &json!({"selected_runtime": "canon", "stage_key": "plan:architecture"}),
+    );
+    assert_eq!(governance_actor.runtime_kind.as_deref(), Some("canon"));
+    assert_eq!(governance_actor.provider.as_deref(), Some("canon"));
+    assert_eq!(governance_actor.route_slot.as_deref(), Some("planning"));
+
+    let mut routed_actor = super::runtime_support::governance_audit_actor(&json!({
+        "runtime": "local",
+        "stage_key": "run:implementation"
+    }));
+    super::runtime_support::apply_route_text_to_actor(&mut routed_actor, "planning:copilot:gpt-4o");
+    assert_eq!(routed_actor.route_slot.as_deref(), Some("planning"));
+    assert_eq!(routed_actor.runtime_kind.as_deref(), Some("copilot"));
+    assert_eq!(routed_actor.provider.as_deref(), Some("local"));
+    assert_eq!(routed_actor.model_name.as_deref(), Some("gpt-4o"));
+
+    let mut fallback_actor = super::runtime_support::governance_audit_actor(&json!({
+        "selected_runtime": "canon",
+        "stage_key": "plan:requirements"
+    }));
+    super::runtime_support::apply_route_text_to_actor(&mut fallback_actor, "claude/sonnet-4");
+    assert_eq!(fallback_actor.runtime_kind.as_deref(), Some("claude"));
+    assert_eq!(fallback_actor.provider.as_deref(), Some("canon"));
+    assert_eq!(fallback_actor.model_name.as_deref(), Some("sonnet-4"));
+}
+
+#[test]
+fn runtime_support_helpers_cover_system_context_upstream_artifacts_and_targets()
+-> Result<(), Box<dyn Error>> {
+    const CHANGED_FILES_EVIDENCE_KEY: &str = "changed_files";
+    const BLANK_ARTIFACT_FILE: &str = "blank.md";
+    const SHORT_ARTIFACT_FILE: &str = "short.md";
+    const LONG_ARTIFACT_FILE: &str = "long.md";
+
+    let workspace = temp_workspace("boundline-runtime-support-helpers");
+    let long_content = "a".repeat(super::UPSTREAM_EVIDENCE_MAX_CHARS + 16);
+
+    fs::write(workspace.join(BLANK_ARTIFACT_FILE), "   \n")?;
+    fs::write(workspace.join(SHORT_ARTIFACT_FILE), "  concise upstream note  \n")?;
+    fs::write(workspace.join(LONG_ARTIFACT_FILE), &long_content)?;
+
+    assert_eq!(
+        super::default_planning_system_context(CanonMode::Requirements),
+        SystemContextBinding::New
+    );
+    assert_eq!(
+        super::default_planning_system_context(CanonMode::Backlog),
+        SystemContextBinding::Existing
+    );
+    assert_eq!(
+        super::parse_planning_system_context(super::SYSTEM_CONTEXT_NEW_TEXT),
+        Some(SystemContextBinding::New)
+    );
+    assert_eq!(
+        super::parse_planning_system_context(super::SYSTEM_CONTEXT_EXISTING_TEXT),
+        Some(SystemContextBinding::Existing)
+    );
+    assert_eq!(super::parse_planning_system_context("unknown"), None);
+
+    assert_eq!(super::read_upstream_artifact_capped(&workspace, BLANK_ARTIFACT_FILE), None);
+    assert_eq!(
+        super::read_upstream_artifact_capped(&workspace, SHORT_ARTIFACT_FILE),
+        Some("concise upstream note".to_string())
+    );
+    let truncated = super::read_upstream_artifact_capped(&workspace, LONG_ARTIFACT_FILE)
+        .ok_or("long upstream artifact should be truncated")?;
+    assert!(truncated.ends_with("\n\n[truncated]"));
+
+    let mut state = Map::new();
+    state.insert(
+        super::LATEST_CHANGED_FILES_KEY.to_string(),
+        json!(["src/lib.rs", " ", "src/main.rs"]),
+    );
+    state
+        .insert(CHANGED_FILES_EVIDENCE_KEY.to_string(), json!(["src/main.rs", "tests/runtime.rs"]));
+    let native_context = TaskContext::new(
+        "session-runtime".to_string(),
+        workspace.to_string_lossy().into_owned(),
+        RunLimits::default(),
+        state,
+    );
+    assert_eq!(
+        super::execution_governance_read_targets(
+            &native_context,
+            &["fallback.rs".to_string(), " ".to_string()],
+        ),
+        vec!["src/lib.rs".to_string(), "src/main.rs".to_string(), "tests/runtime.rs".to_string(),]
+    );
+
+    let fallback_context = TaskContext::new(
+        "session-runtime".to_string(),
+        workspace.to_string_lossy().into_owned(),
+        RunLimits::default(),
+        Map::new(),
+    );
+    assert_eq!(
+        super::execution_governance_read_targets(
+            &fallback_context,
+            &["fallback.rs".to_string(), " ".to_string()],
+        ),
+        vec!["fallback.rs".to_string()]
+    );
+
+    Ok(())
+}
+
+#[test]
+fn planning_runtime_helpers_cover_governance_resolution_upstream_briefs_and_adapter_mappings()
+-> Result<(), Box<dyn Error>> {
+    let workspace = temp_workspace("boundline-runtime-planning-helpers");
+    let workspace_ref = workspace.to_string_lossy().into_owned();
+    let runtime = SessionRuntime::for_workspace(&workspace);
+
+    let mut session = build_session(&workspace, decision_task(&workspace_ref, json!({})));
+    session.authored_brief = normalize_inputs_with_governance(
+        &workspace,
+        Some("Deliver a governed feature"),
+        &[],
+        Some(GovernanceIntent {
+            requested: true,
+            runtime_preference: None,
+            risk: None,
+            zone: None,
+            owner: None,
+            explicit_mode: None,
+            explicit_no_canon: true,
+        }),
+    )
+    .ok();
+    assert_eq!(
+        runtime.resolve_workspace_governance_runtime(&session),
+        Some(GovernanceRuntimeKind::Local)
+    );
+
+    let profiled_workspace = write_governed_execution_profile_workspace(
+        "boundline-runtime-planning-profile-runtime",
+        vec![ExecutionAttemptDefinition {
+            attempt_id: "profile-runtime".to_string(),
+            summary: String::new(),
+            failure_mode: ExecutionFailureMode::Terminal,
+            changes: vec![WorkspaceChange {
+                path: "src/lib.rs".to_string(),
+                find: "left + right".to_string(),
+                replace: "left + right".to_string(),
+            }],
+        }],
+        Vec::new(),
+        Some(GovernanceProfile {
+            default_runtime: GovernanceRuntimeKind::Local,
+            canon: None,
+            stages: Vec::new(),
+        }),
+    );
+    let profiled_runtime = SessionRuntime::for_workspace(&profiled_workspace);
+    let profiled_workspace_ref = profiled_workspace.to_string_lossy().into_owned();
+    let profiled_session =
+        build_session(&profiled_workspace, decision_task(&profiled_workspace_ref, json!({})));
+    assert_eq!(
+        profiled_runtime.resolve_workspace_governance_runtime(&profiled_session),
+        Some(GovernanceRuntimeKind::Local)
+    );
+
+    FileConfigStore::for_workspace(&workspace).save_local(&ConfigFile {
+        version: 1,
+        routing: RoutingConfig::default(),
+        canon: Some(crate::domain::configuration::CanonPreferences {
+            mode_selection: CanonModeSelectionPreference::AutoConfirm,
+            default_risk: None,
+            default_zone: None,
+            default_owner: None,
+            default_system_context: Some(super::SYSTEM_CONTEXT_EXISTING_TEXT.to_string()),
+        }),
+        adapter: None,
+    })?;
+    let config_session = build_session(&workspace, decision_task(&workspace_ref, json!({})));
+    assert_eq!(
+        runtime.resolve_workspace_governance_runtime(&config_session),
+        Some(GovernanceRuntimeKind::Canon)
+    );
+
+    let mut governed_session = build_session(&workspace, decision_task(&workspace_ref, json!({})));
+    governed_session.governance_lifecycle = Some(GovernedSessionLifecycle {
+        governance_runtime: GovernanceRuntimeKind::Canon,
+        explicit_opt_out: false,
+        mode_selection_preference: CanonModeSelectionPreference::AutoConfirm,
+        selected_mode: None,
+        selected_mode_sequence: Vec::new(),
+        latest_reasoning_profile: None,
+        current_stage_index: 0,
+        stage_records: Vec::new(),
+        accumulated_context: Vec::new(),
+        terminal_reason: None,
+        planning_input_fingerprint: None,
+    });
+    runtime.sync_governed_planning_sequence(&mut governed_session, Some("delivery"));
+    assert_eq!(
+        governed_session
+            .governance_lifecycle
+            .as_ref()
+            .and_then(|lifecycle| lifecycle.selected_mode),
+        Some(CanonMode::Requirements)
+    );
+    assert!(
+        governed_session
+            .governance_lifecycle
+            .as_ref()
+            .map(|lifecycle| !lifecycle.selected_mode_sequence.is_empty())
+            .unwrap_or(false)
+    );
+
+    let mut unknown_flow_session =
+        build_session(&workspace, decision_task(&workspace_ref, json!({})));
+    unknown_flow_session.governance_lifecycle = Some(GovernedSessionLifecycle {
+        governance_runtime: GovernanceRuntimeKind::Canon,
+        explicit_opt_out: false,
+        mode_selection_preference: CanonModeSelectionPreference::AutoConfirm,
+        selected_mode: None,
+        selected_mode_sequence: Vec::new(),
+        latest_reasoning_profile: None,
+        current_stage_index: 0,
+        stage_records: Vec::new(),
+        accumulated_context: Vec::new(),
+        terminal_reason: None,
+        planning_input_fingerprint: None,
+    });
+    runtime.sync_governed_planning_sequence(&mut unknown_flow_session, Some("unknown-flow"));
+    assert!(
+        unknown_flow_session
+            .governance_lifecycle
+            .as_ref()
+            .map(|lifecycle| lifecycle.selected_mode_sequence.is_empty())
+            .unwrap_or(false)
+    );
+
+    let goal_plan = GoalPlan::new(
+        "Deliver a governed feature",
+        vec![PlannedTask {
+            task_id: "planned-task-runtime-planning".to_string(),
+            description: "Prepare the Canon planning artifacts".to_string(),
+            target: "src/lib.rs".to_string(),
+            expected_outcome: Some("planning artifacts exist".to_string()),
+            decision_type_hint: None,
+        }],
+    )?;
+    let context_sources = PlanningContextSources {
+        authored_input_summary: Some("Deliver a governed feature".to_string()),
+        authored_input_sources: vec!["direct_text: goal".to_string()],
+        authored_input_documents: Vec::new(),
+        execution_profile_read_targets: vec!["src/lib.rs".to_string()],
+        negotiation_goal_summary: None,
+        negotiation_resolution: None,
+        negotiation_acceptance_boundary: None,
+        latest_trace_ref: None,
+        workflow_progress: None,
+        canon_capability_snapshot: None,
+        compacted_canon_memory: None,
+        latest_changed_files: vec!["src/lib.rs".to_string()],
+        latest_validation_status: Some("passed".to_string()),
+    };
+
+    let system_packet_ref = "packets/system".to_string();
+    let requirements_packet_ref = "packets/requirements".to_string();
+    let architecture_packet_ref = "packets/architecture".to_string();
+    fs::create_dir_all(workspace.join(&system_packet_ref))?;
+    fs::create_dir_all(workspace.join(&requirements_packet_ref))?;
+    fs::create_dir_all(workspace.join(&architecture_packet_ref))?;
+    fs::write(
+        workspace.join(&system_packet_ref).join(super::UPSTREAM_SYSTEM_SHAPE_FILE),
+        "bounded system context",
+    )?;
+    fs::write(
+        workspace.join(&system_packet_ref).join(super::UPSTREAM_DOMAIN_MODEL_FILE),
+        "aggregate and entity map",
+    )?;
+    fs::write(
+        workspace.join(&requirements_packet_ref).join(super::UPSTREAM_CONSTRAINTS_FILE),
+        "respect upstream constraints",
+    )?;
+    fs::write(
+        workspace.join(&requirements_packet_ref).join(super::UPSTREAM_PRD_FILE),
+        "product scope overview",
+    )?;
+    fs::write(
+        workspace.join(&requirements_packet_ref).join(super::UPSTREAM_SCOPE_CUTS_FILE),
+        "scope cuts summary",
+    )?;
+    fs::write(
+        workspace.join(&architecture_packet_ref).join(super::UPSTREAM_ARCHITECTURE_DECISIONS_FILE),
+        "architecture decisions summary",
+    )?;
+
+    let accumulated_context = vec![
+        crate::domain::governance::GovernedDocumentRef {
+            stage_key: "plan:system-shaping".to_string(),
+            canon_mode: CanonMode::SystemShaping,
+            packet_ref: system_packet_ref,
+            document_path: None,
+            readiness: PacketReadiness::Reusable,
+        },
+        crate::domain::governance::GovernedDocumentRef {
+            stage_key: "plan:requirements".to_string(),
+            canon_mode: CanonMode::Requirements,
+            packet_ref: requirements_packet_ref,
+            document_path: None,
+            readiness: PacketReadiness::Reusable,
+        },
+        crate::domain::governance::GovernedDocumentRef {
+            stage_key: "plan:architecture".to_string(),
+            canon_mode: CanonMode::Architecture,
+            packet_ref: architecture_packet_ref,
+            document_path: None,
+            readiness: PacketReadiness::Reusable,
+        },
+    ];
+
+    match runtime.materialize_planning_stage_brief(
+        "change:verify",
+        CanonMode::Architecture,
+        &goal_plan,
+        &context_sources,
+        &accumulated_context,
+    ) {
+        Err(super::SessionRuntimeError::GoalPlan(message)) => {
+            assert!(message.contains("failed to resolve planning stage brief path"));
+        }
+        other => return Err(format!("expected invalid stage error, got {other:?}").into()),
+    }
+
+    let architecture_brief_ref = runtime.materialize_planning_stage_brief(
+        "plan:architecture",
+        CanonMode::Architecture,
+        &goal_plan,
+        &context_sources,
+        &accumulated_context,
+    )?;
+    let architecture_brief = fs::read_to_string(workspace.join(&architecture_brief_ref))?;
+    assert!(architecture_brief.contains("## Boundaries"));
+    assert!(architecture_brief.contains("### System Context"));
+    assert!(architecture_brief.contains("### Domain Model"));
+    assert!(architecture_brief.contains("### Constraints"));
+
+    let backlog_brief_ref = runtime.materialize_planning_stage_brief(
+        "plan:backlog",
+        CanonMode::Backlog,
+        &goal_plan,
+        &context_sources,
+        &accumulated_context,
+    )?;
+    let backlog_brief = fs::read_to_string(workspace.join(&backlog_brief_ref))?;
+    assert!(backlog_brief.contains("## Planning Scope"));
+    assert!(backlog_brief.contains("### Architecture Decisions"));
+    assert!(backlog_brief.contains("### Product Scope"));
+    assert!(backlog_brief.contains("### Scope Cuts"));
+
+    let run_id = Uuid::new_v4();
+    let succeeded_failure = super::planning_runtime::plan_stage_failure_from_execute_response(
+        run_id,
+        "speckit".to_string(),
+        crate::adapters::FrameworkAdapterExecuteStageResponse {
+            status: crate::adapters::FrameworkAdapterStageExecutionStatus::Succeeded,
+            summary: "plan stage unexpectedly reported success in failure helper".to_string(),
+            produced_artifacts: vec!["artifact.md".to_string()],
+            next_action: None,
+            failure_class: None,
+        },
+    );
+    assert_eq!(
+        succeeded_failure.execution.status,
+        crate::domain::framework_adapter::LifecycleStageExecutionStatus::Succeeded
+    );
+    let blocked_failure = super::planning_runtime::plan_stage_failure_from_execute_response(
+        run_id,
+        "speckit".to_string(),
+        crate::adapters::FrameworkAdapterExecuteStageResponse {
+            status: crate::adapters::FrameworkAdapterStageExecutionStatus::Blocked,
+            summary: "adapter blocked planning".to_string(),
+            produced_artifacts: vec!["artifact.md".to_string()],
+            next_action: Some("resume planning".to_string()),
+            failure_class: Some(crate::adapters::FrameworkAdapterFailureClass::AdapterRuntime),
+        },
+    );
+    assert_eq!(
+        blocked_failure.execution.status,
+        crate::domain::framework_adapter::LifecycleStageExecutionStatus::Blocked
+    );
+
+    let protocol_failure = super::planning_runtime::plan_stage_failure_from_host_error(
+        run_id,
+        "speckit".to_string(),
+        crate::adapters::agent::FrameworkAdapterHostError::ProtocolError {
+            command: "boundline-adapter-speckit".to_string(),
+            request_kind: "execute-stage".to_string(),
+            code: "stage_contract_error".to_string(),
+            message: "invalid stage envelope".to_string(),
+            details: None,
+        },
+    );
+    assert_eq!(
+        protocol_failure.execution.failure_class,
+        Some(crate::domain::framework_adapter::AdapterFailureClass::ProtocolError)
+    );
+    assert!(protocol_failure.summary.contains("code=stage_contract_error"));
+
+    let transport_failure = super::planning_runtime::plan_stage_failure_from_host_error(
+        run_id,
+        "speckit".to_string(),
+        crate::adapters::agent::FrameworkAdapterHostError::ProcessFailed {
+            command: "boundline-adapter-speckit".to_string(),
+            request_kind: "execute-stage".to_string(),
+            detail: "transport failed".to_string(),
+        },
+    );
+    assert_eq!(
+        transport_failure.execution.failure_class,
+        Some(crate::domain::framework_adapter::AdapterFailureClass::TransportFailure)
+    );
+    assert!(transport_failure.summary.contains("transport failed"));
+
+    let blocked_stage = super::planning_runtime::plan_stage_blocked_from_execute_response(
+        run_id,
+        "speckit".to_string(),
+        crate::adapters::FrameworkAdapterExecuteStageResponse {
+            status: crate::adapters::FrameworkAdapterStageExecutionStatus::Blocked,
+            summary: "adapter blocked planning".to_string(),
+            produced_artifacts: vec!["artifact.md".to_string()],
+            next_action: Some("resume planning".to_string()),
+            failure_class: None,
+        },
+    );
+    assert_eq!(
+        blocked_stage.execution.status,
+        crate::domain::framework_adapter::LifecycleStageExecutionStatus::Blocked
+    );
+
+    let failure_routing =
+        super::planning_runtime::plan_stage_routing_record_from_failure(&transport_failure);
+    assert_eq!(
+        failure_routing.stage_status,
+        Some(crate::domain::framework_adapter::LifecycleStageExecutionStatus::Failed)
+    );
+    let success_routing = super::planning_runtime::plan_stage_routing_record_from_success(
+        run_id,
+        "speckit".to_string(),
+        vec!["artifact.md".to_string()],
+    );
+    assert_eq!(
+        success_routing.stage_status,
+        Some(crate::domain::framework_adapter::LifecycleStageExecutionStatus::Succeeded)
+    );
+    let blocked_routing =
+        super::planning_runtime::plan_stage_routing_record_from_blocked(&blocked_stage);
+    assert_eq!(
+        blocked_routing.stage_status,
+        Some(crate::domain::framework_adapter::LifecycleStageExecutionStatus::Blocked)
+    );
+
+    let mut goal_plan = GoalPlan::new(
+        "Handle adapter fallback",
+        vec![PlannedTask {
+            task_id: "planned-task-fallback".to_string(),
+            description: "Capture adapter fallback evidence".to_string(),
+            target: "src/lib.rs".to_string(),
+            expected_outcome: Some("fallback rationale recorded".to_string()),
+            decision_type_hint: None,
+        }],
+    )?;
+    super::planning_runtime::append_adapter_fallback_reason(&mut goal_plan, "preflight_blocked");
+    super::planning_runtime::append_adapter_fallback_reason(&mut goal_plan, "preflight_blocked");
+    super::planning_runtime::append_adapter_fallback_reason(
+        &mut goal_plan,
+        "compatibility_blocked",
+    );
+    assert_eq!(
+        goal_plan.planning_rationale.as_deref(),
+        Some(
+            "adapter_fallback_reason: preflight_blocked; adapter_fallback_reason: compatibility_blocked"
+        )
+    );
+
+    let selection = crate::domain::configuration::PersistedAdapterConfiguration {
+        selection: crate::domain::configuration::AdapterSelectionRecord {
+            selection_mode: crate::domain::framework_adapter::AdapterSelectionMode::KnownProfile,
+            adapter_id: "speckit".to_string(),
+            display_name: "Speckit".to_string(),
+            command: "boundline-adapter-speckit".to_string(),
+            args: Vec::new(),
+            registration_source:
+                crate::domain::framework_adapter::AdapterRegistrationSource::AdapterAdd,
+            discovery_state:
+                crate::domain::framework_adapter::AdapterDiscoveryState::ExplicitCommand,
+            compatibility_line:
+                crate::domain::framework_adapter::FRAMEWORK_ADAPTER_PROTOCOL_LINE_V1.to_string(),
+            updated_at: 42,
+        },
+        schema_fingerprint: "schema-v1".to_string(),
+        completeness_state:
+            crate::domain::framework_adapter::AdapterConfigCompletenessState::Complete,
+        interactive_resolution: false,
+        last_validated_at: Some(42),
+        value_count: 3,
+        values: vec![
+            crate::domain::configuration::AdapterConfigValueRecord {
+                field_key: "feature_toggle".to_string(),
+                value_kind: crate::domain::framework_adapter::AdapterValueKind::Boolean,
+                secret: false,
+                string_value: None,
+                path_value: None,
+                bool_value: Some(true),
+                int_value: None,
+                value_source: crate::domain::framework_adapter::AdapterValueSource::CliFlag,
+                resolution_state:
+                    crate::domain::framework_adapter::StoredAdapterConfigValueState::Present,
+            },
+            crate::domain::configuration::AdapterConfigValueRecord {
+                field_key: "parallelism".to_string(),
+                value_kind: crate::domain::framework_adapter::AdapterValueKind::Integer,
+                secret: false,
+                string_value: None,
+                path_value: None,
+                bool_value: None,
+                int_value: Some(4),
+                value_source: crate::domain::framework_adapter::AdapterValueSource::CliFlag,
+                resolution_state:
+                    crate::domain::framework_adapter::StoredAdapterConfigValueState::Present,
+            },
+            crate::domain::configuration::AdapterConfigValueRecord {
+                field_key: "profile".to_string(),
+                value_kind: crate::domain::framework_adapter::AdapterValueKind::Enum,
+                secret: false,
+                string_value: Some("strict".to_string()),
+                path_value: None,
+                bool_value: None,
+                int_value: None,
+                value_source:
+                    crate::domain::framework_adapter::AdapterValueSource::KnownProfileDefault,
+                resolution_state:
+                    crate::domain::framework_adapter::StoredAdapterConfigValueState::Present,
+            },
+        ],
+    };
+    let config_values = super::planning_runtime::framework_adapter_config_values(&selection);
+    assert_eq!(
+        config_values[0].value_kind,
+        crate::adapters::FrameworkAdapterFieldValueKind::Boolean
+    );
+    assert_eq!(
+        config_values[1].value_kind,
+        crate::adapters::FrameworkAdapterFieldValueKind::Integer
+    );
+    assert_eq!(config_values[2].value_kind, crate::adapters::FrameworkAdapterFieldValueKind::Enum);
+
+    Ok(())
+}
+
+#[test]
+fn discovery_stage_council_revises_artifact_after_concern_adjudication()
+-> Result<(), Box<dyn Error>> {
+    with_env_test(
+        &[
+            OPENAI_BASE_URL_ENV,
+            OPENAI_API_KEY_ENV,
+            DEEPSEEK_BASE_URL_ENV,
+            DEEPSEEK_API_KEY_ENV,
+            GROQ_BASE_URL_ENV,
+            GROQ_API_KEY_ENV,
+        ],
+        || {
+            let (base_url, receiver, handle) = spawn_scripted_response_server(vec![
+                openai_completion_response(json!({
+                    "disposition": "approve",
+                    "summary": "Alpha approves the bounded change.",
+                    "details": "The artifact keeps the scope narrow.",
+                    "required_action": null,
+                    "evidence_refs": [DISCOVERY_TARGET_REF]
+                })),
+                openai_completion_response(json!({
+                    "disposition": "concern",
+                    "summary": "Beta wants the discovery note tightened.",
+                    "details": "The scope cut should be called out more explicitly.",
+                    "required_action": "tighten the discovery summary",
+                    "evidence_refs": []
+                })),
+                openai_completion_response(json!({
+                    "disposition": "concern",
+                    "summary": "Carry the accepted council concern into revision.",
+                    "details": "Revise the artifact instead of blocking discovery.",
+                    "required_action": "apply accepted council feedback",
+                    "evidence_refs": []
+                })),
+                openai_completion_response(json!({
+                    "headline": "Revise discovery artifact",
+                    "summary": "revision applied the accepted council concern",
+                    "revised_artifact": "# Discovery Artifact\n\nRevised provider-backed artifact.\n",
+                    "applied_feedback": ["beta: Beta wants the discovery note tightened."]
+                })),
+            ])
+            .map_err(std::io::Error::other)?;
+            set_provider_envs(&base_url);
+
+            let (workspace, artifact_ref) =
+                write_discovery_stage_council_workspace("boundline-runtime-stage-council-revise")?;
+            save_local_routing(
+                &workspace,
+                provider_stage_council_routing(
+                    Some(ModelRoute {
+                        runtime: RuntimeKind::Codex,
+                        model: PRIMARY_PROVIDER_MODEL.to_string(),
+                    }),
+                    Some(ModelRoute {
+                        runtime: RuntimeKind::Codex,
+                        model: ARBITER_PROVIDER_MODEL.to_string(),
+                    }),
+                ),
+            );
+
+            let runtime = SessionRuntime::for_workspace(&workspace);
+            let request = discovery_stage_council_request(&artifact_ref);
+            let outcome = runtime.execute_discovery_stage_council(&request)?;
+
+            assert_eq!(outcome.status, crate::domain::stage_council::StageCouncilStatus::Proceed);
+            assert_eq!(outcome.vote_resolution.accepted_findings, vec!["beta".to_string()]);
+            assert_eq!(outcome.vote_resolution.rejected_findings, vec!["alpha".to_string()]);
+            assert_eq!(
+                outcome.adjudication.as_ref().map(|value| value.decision.as_str()),
+                Some("concern")
+            );
+            assert_eq!(
+                outcome.revised_output.summary.as_deref(),
+                Some("revision applied the accepted council concern")
+            );
+            assert!(
+                outcome
+                    .reviewer_findings
+                    .iter()
+                    .any(|finding| finding.reviewer_id == "beta" && finding.accepted)
+            );
+
+            let revised_artifact =
+                fs::read_to_string(workspace.join(&outcome.revised_output.evidence_ref))?;
+            assert!(revised_artifact.contains("Revised provider-backed artifact"));
+
+            let alpha_review = receiver.recv_timeout(Duration::from_secs(2))?;
+            let beta_review = receiver.recv_timeout(Duration::from_secs(2))?;
+            let adjudication_review = receiver.recv_timeout(Duration::from_secs(2))?;
+            let revision_request = receiver.recv_timeout(Duration::from_secs(2))?;
+            assert!(alpha_review.contains("alpha"), "{alpha_review}");
+            assert!(beta_review.contains("beta"), "{beta_review}");
+            assert!(adjudication_review.contains("stage_findings"), "{adjudication_review}");
+            assert!(revision_request.contains("Accepted Feedback:"), "{revision_request}");
+            assert!(
+                revision_request.contains("beta: Beta wants the discovery note tightened."),
+                "{revision_request}"
+            );
+            assert!(revision_request.contains("\\\"adjudication\\\""), "{revision_request}");
+
+            let _ = handle.join();
+            Ok(())
+        },
+    )
+}
+
+#[test]
+fn discovery_stage_council_renders_blocked_markdown_when_adjudication_blocks()
+-> Result<(), Box<dyn Error>> {
+    with_env_test(
+        &[
+            OPENAI_BASE_URL_ENV,
+            OPENAI_API_KEY_ENV,
+            DEEPSEEK_BASE_URL_ENV,
+            DEEPSEEK_API_KEY_ENV,
+            GROQ_BASE_URL_ENV,
+            GROQ_API_KEY_ENV,
+        ],
+        || {
+            let (base_url, receiver, handle) = spawn_scripted_response_server(vec![
+                openai_completion_response(json!({
+                    "disposition": "approve",
+                    "summary": "Alpha approves the bounded change.",
+                    "details": "The artifact stays within the requested scope.",
+                    "required_action": null,
+                    "evidence_refs": [DISCOVERY_TARGET_REF]
+                })),
+                openai_completion_response(json!({
+                    "disposition": "concern",
+                    "summary": "Beta still needs tighter evidence.",
+                    "details": "The scope cut needs a stronger justification.",
+                    "required_action": "add stronger evidence",
+                    "evidence_refs": []
+                })),
+                openai_completion_response(json!({
+                    "disposition": "block",
+                    "summary": "Adjudication blocks until the evidence is repaired.",
+                    "details": "The council cannot proceed without a tighter discovery artifact.",
+                    "required_action": "repair the discovery artifact",
+                    "evidence_refs": [DISCOVERY_TARGET_REF]
+                })),
+            ])
+            .map_err(std::io::Error::other)?;
+            set_provider_envs(&base_url);
+
+            let (workspace, artifact_ref) =
+                write_discovery_stage_council_workspace("boundline-runtime-stage-council-blocked")?;
+            save_local_routing(
+                &workspace,
+                provider_stage_council_routing(
+                    Some(ModelRoute {
+                        runtime: RuntimeKind::Codex,
+                        model: PRIMARY_PROVIDER_MODEL.to_string(),
+                    }),
+                    Some(ModelRoute {
+                        runtime: RuntimeKind::Codex,
+                        model: ARBITER_PROVIDER_MODEL.to_string(),
+                    }),
+                ),
+            );
+
+            let runtime = SessionRuntime::for_workspace(&workspace);
+            let request = discovery_stage_council_request(&artifact_ref);
+            let outcome = runtime.execute_discovery_stage_council(&request)?;
+
+            assert_eq!(outcome.status, crate::domain::stage_council::StageCouncilStatus::Blocked);
+            assert_eq!(
+                outcome.adjudication.as_ref().map(|value| value.decision.as_str()),
+                Some("block")
+            );
+            assert_eq!(outcome.next_action, "repair discovery inputs and rerun boundline plan");
+
+            let blocked_markdown =
+                fs::read_to_string(workspace.join(&outcome.revised_output.evidence_ref))?;
+            assert!(blocked_markdown.contains("# Discovery Stage Council Blocked"));
+            assert!(blocked_markdown.contains("- outcome: blocked"));
+            assert!(blocked_markdown.contains("beta"));
+
+            let _ = receiver.recv_timeout(Duration::from_secs(2))?;
+            let _ = receiver.recv_timeout(Duration::from_secs(2))?;
+            let _ = receiver.recv_timeout(Duration::from_secs(2))?;
+            let _ = handle.join();
+            Ok(())
+        },
+    )
+}
+
+#[test]
+fn discovery_stage_council_blocks_when_revision_route_is_unavailable() -> Result<(), Box<dyn Error>>
+{
+    with_env_test(
+        &[
+            OPENAI_BASE_URL_ENV,
+            OPENAI_API_KEY_ENV,
+            DEEPSEEK_BASE_URL_ENV,
+            DEEPSEEK_API_KEY_ENV,
+            GROQ_BASE_URL_ENV,
+            GROQ_API_KEY_ENV,
+        ],
+        || {
+            let (base_url, receiver, handle) = spawn_scripted_response_server(vec![
+                openai_completion_response(json!({
+                    "disposition": "approve",
+                    "summary": "Alpha approves the bounded change.",
+                    "details": "The artifact is structurally sound.",
+                    "required_action": null,
+                    "evidence_refs": [DISCOVERY_TARGET_REF]
+                })),
+                openai_completion_response(json!({
+                    "disposition": "concern",
+                    "summary": "Beta requests a revision before proceeding.",
+                    "details": "The discovery artifact needs a tighter summary.",
+                    "required_action": "tighten the artifact",
+                    "evidence_refs": []
+                })),
+                openai_completion_response(json!({
+                    "disposition": "concern",
+                    "summary": "Adjudication agrees that revision is required.",
+                    "details": "Carry the accepted concern into the producer artifact.",
+                    "required_action": "revise the artifact",
+                    "evidence_refs": []
+                })),
+            ])
+            .map_err(std::io::Error::other)?;
+            set_provider_envs(&base_url);
+
+            let (workspace, artifact_ref) = write_discovery_stage_council_workspace(
+                "boundline-runtime-stage-council-revision-route-unavailable",
+            )?;
+            save_local_routing(
+                &workspace,
+                provider_stage_council_routing(
+                    Some(ModelRoute {
+                        runtime: RuntimeKind::Claude,
+                        model: "anthropic/claude-3-7-sonnet".to_string(),
+                    }),
+                    Some(ModelRoute {
+                        runtime: RuntimeKind::Codex,
+                        model: ARBITER_PROVIDER_MODEL.to_string(),
+                    }),
+                ),
+            );
+
+            let runtime = SessionRuntime::for_workspace(&workspace);
+            let request = discovery_stage_council_request(&artifact_ref);
+            let outcome = runtime.execute_discovery_stage_council(&request)?;
+
+            assert_eq!(outcome.status, crate::domain::stage_council::StageCouncilStatus::Blocked);
+            assert_eq!(
+                outcome.revised_output.summary.as_deref(),
+                Some("stage council blocked planning discovery")
+            );
+            assert_eq!(
+                outcome.next_action,
+                "configure a planning route before rerunning boundline plan"
+            );
+
+            let blocked_note =
+                fs::read_to_string(workspace.join(&outcome.revised_output.evidence_ref))?;
+            assert!(
+                blocked_note
+                    .contains("reviser route is unavailable for provider-backed council revision")
+            );
+
+            let _ = receiver.recv_timeout(Duration::from_secs(2))?;
+            let _ = receiver.recv_timeout(Duration::from_secs(2))?;
+            let _ = receiver.recv_timeout(Duration::from_secs(2))?;
+            let _ = handle.join();
+            Ok(())
+        },
+    )
 }

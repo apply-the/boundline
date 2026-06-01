@@ -2,6 +2,8 @@ use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
+const PWD_ENV_VAR: &str = "PWD";
+
 #[derive(Debug, Error)]
 pub enum WorkspaceResolutionError {
     #[error("failed to determine current directory: {0}")]
@@ -23,11 +25,8 @@ pub fn resolve_workspace(workspace: Option<&Path>) -> Result<PathBuf, WorkspaceR
     if let Some(path) = workspace
         && path != Path::new(".")
     {
-        let abs = if path.is_absolute() {
-            path.to_path_buf()
-        } else {
-            std::env::current_dir()?.join(path)
-        };
+        let abs =
+            if path.is_absolute() { path.to_path_buf() } else { current_dir_or_pwd()?.join(path) };
         let resolved = abs.canonicalize().unwrap_or_else(|_| abs.clone());
         if !resolved.is_dir() {
             return Err(WorkspaceResolutionError::NotFound(resolved));
@@ -35,9 +34,21 @@ pub fn resolve_workspace(workspace: Option<&Path>) -> Result<PathBuf, WorkspaceR
         return Ok(resolved);
     }
 
-    let cwd = std::env::current_dir()?;
+    let cwd = current_dir_or_pwd()?;
 
     discover_workspace_root(&cwd)
+}
+
+fn current_dir_or_pwd() -> Result<PathBuf, WorkspaceResolutionError> {
+    match std::env::current_dir() {
+        Ok(current_dir) => Ok(current_dir),
+        Err(source) => resolve_pwd_directory().ok_or(WorkspaceResolutionError::CurrentDir(source)),
+    }
+}
+
+fn resolve_pwd_directory() -> Option<PathBuf> {
+    let pwd = std::env::var_os(PWD_ENV_VAR).map(PathBuf::from)?;
+    if pwd.is_absolute() && pwd.is_dir() { Some(pwd) } else { None }
 }
 
 pub fn discover_workspace_root(start: &Path) -> Result<PathBuf, WorkspaceResolutionError> {
@@ -92,11 +103,13 @@ fn search_upward_all_dirs(start: &Path, target: &str) -> Vec<PathBuf> {
 
 #[cfg(test)]
 mod tests {
+    use std::ffi::OsString;
     use std::fs;
+    use std::path::Path;
 
     use tempfile::tempdir;
 
-    use super::{discover_workspace_root, resolve_workspace};
+    use super::{PWD_ENV_VAR, current_dir_or_pwd, discover_workspace_root, resolve_workspace};
 
     struct CurrentDirGuard {
         original: std::path::PathBuf,
@@ -104,7 +117,7 @@ mod tests {
 
     impl CurrentDirGuard {
         fn change_to(path: &std::path::Path) -> Self {
-            let original = std::env::current_dir().unwrap();
+            let original = current_dir_or_pwd().unwrap();
             std::env::set_current_dir(path).unwrap();
             Self { original }
         }
@@ -113,6 +126,36 @@ mod tests {
     impl Drop for CurrentDirGuard {
         fn drop(&mut self) {
             std::env::set_current_dir(&self.original).unwrap();
+        }
+    }
+
+    struct PwdEnvGuard {
+        original: Option<OsString>,
+    }
+
+    impl PwdEnvGuard {
+        fn set(path: Option<&Path>) -> Self {
+            let original = std::env::var_os(PWD_ENV_VAR);
+            unsafe {
+                match path {
+                    Some(path) => std::env::set_var(PWD_ENV_VAR, path),
+                    None => std::env::remove_var(PWD_ENV_VAR),
+                };
+            }
+            Self { original }
+        }
+    }
+
+    impl Drop for PwdEnvGuard {
+        fn drop(&mut self) {
+            match self.original.as_ref() {
+                Some(value) => unsafe {
+                    std::env::set_var(PWD_ENV_VAR, value);
+                },
+                None => unsafe {
+                    std::env::remove_var(PWD_ENV_VAR);
+                },
+            }
         }
     }
 
@@ -154,6 +197,24 @@ mod tests {
         let _current_dir_guard = CurrentDirGuard::change_to(&child);
 
         let resolved = resolve_workspace(Some(std::path::Path::new("."))).unwrap();
+
+        assert_eq!(resolved, git_root.canonicalize().unwrap());
+    }
+
+    #[test]
+    fn resolve_workspace_uses_pwd_when_current_directory_is_unavailable() {
+        let temp = tempdir().unwrap();
+        let git_root = temp.path().join("repo");
+        let child = git_root.join("src/subdir");
+        let broken_workspace = temp.path().join("broken-cwd");
+        fs::create_dir_all(&child).unwrap();
+        fs::create_dir_all(git_root.join(".git")).unwrap();
+        fs::create_dir_all(&broken_workspace).unwrap();
+        let _current_dir_guard = CurrentDirGuard::change_to(&broken_workspace);
+        fs::remove_dir_all(&broken_workspace).unwrap();
+        let _pwd_guard = PwdEnvGuard::set(Some(&child));
+
+        let resolved = resolve_workspace(None).unwrap();
 
         assert_eq!(resolved, git_root.canonicalize().unwrap());
     }

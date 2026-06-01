@@ -98,7 +98,56 @@ impl SessionRuntime {
         let checkpoint_projection =
             self.prepare_checkpoint_for_mutation(session, SessionCommand::Run)?;
         if session.goal_plan.is_some() {
-            let response = self.run_native_goal_plan(session, checkpoint_projection.clone())?;
+            let claimed_stage_outcome = self.maybe_execute_framework_adapter_run_stage(
+                session,
+                checkpoint_projection.clone(),
+            )?;
+            let (response, claimed_stage_runtime, not_claimed_routing) = match claimed_stage_outcome
+            {
+                super::FrameworkAdapterRunStageOutcome::NotClaimed { routing_record } => (
+                    self.run_native_goal_plan(session, checkpoint_projection.clone())?,
+                    None,
+                    routing_record,
+                ),
+                super::FrameworkAdapterRunStageOutcome::Completed { stage_runtime, response } => (
+                    self.persist_framework_adapter_run_stage_success(
+                        session,
+                        checkpoint_projection.clone(),
+                        &stage_runtime,
+                        response,
+                    )?,
+                    Some(stage_runtime),
+                    None,
+                ),
+                super::FrameworkAdapterRunStageOutcome::Blocked(blocked) => (
+                    self.persist_framework_adapter_run_stage_blocked(
+                        session,
+                        checkpoint_projection.clone(),
+                        blocked,
+                    )?,
+                    None,
+                    None,
+                ),
+                super::FrameworkAdapterRunStageOutcome::Terminal { stage_runtime, response } => {
+                    (*response, Some(stage_runtime), None)
+                }
+            };
+            if let Some(routing_record) = not_claimed_routing {
+                self.record_framework_adapter_run_stage_not_claimed_routing(
+                    session,
+                    &response.trace_location,
+                    response.plan_revision,
+                    routing_record,
+                )?;
+            }
+            if let Some(stage_runtime) = claimed_stage_runtime.as_ref() {
+                self.emit_framework_adapter_run_stage_hook(
+                    session,
+                    stage_runtime,
+                    response.terminal_status,
+                    &response.trace_location,
+                )?;
+            }
             if let Some(projection) = checkpoint_projection.as_ref() {
                 self.refresh_checkpoint_projection(session, projection)?;
             }

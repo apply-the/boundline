@@ -20,7 +20,10 @@ use boundline::cli::{
 use boundline::domain::brief::{
     GovernanceIntent, normalize_inputs, normalize_inputs_with_governance,
 };
-use boundline::domain::configuration::{ConfigFile, ModelRoute, RoutingConfig, RuntimeKind};
+use boundline::domain::configuration::{
+    AdapterConfigValueRecord, AdapterSelectionRecord, ConfigFile, ModelRoute,
+    PersistedAdapterConfiguration, RoutingConfig, RuntimeKind,
+};
 use boundline::domain::context_intelligence::{
     AdvancedContextProjection, AuthorityRank, CandidateSelectionState, HybridOutcome,
     ImpactAnalysisFinding, ImpactFindingKind, ImpactFindingSeverity, ImpactFindingStatus,
@@ -37,6 +40,11 @@ use boundline::domain::execution::{
 use boundline::domain::flow::{
     FlowStepMetadata, FlowValidationError, SessionFlowState, attach_stage_metadata, built_in_flow,
     supported_flow_names_csv,
+};
+use boundline::domain::framework_adapter::{
+    AdapterConfigCompletenessState, AdapterDiscoveryState, AdapterRegistrationSource,
+    AdapterSelectionMode, AdapterValueKind, AdapterValueSource, FRAMEWORK_ADAPTER_PROTOCOL_LINE_V1,
+    StoredAdapterConfigValueState,
 };
 use boundline::domain::goal_plan::{
     GoalPlan, PlannedTask, PlanningAnalysisCoverage, PlanningAnalysisFinding,
@@ -61,7 +69,10 @@ use boundline::domain::task::{
 };
 use boundline::domain::task_context::TaskContextError;
 use boundline::domain::trace::{ExecutionTrace, TraceEventType};
-use boundline::fixture::{build_fixture_plan_for_goal, build_task_request};
+use boundline::fixture::{
+    build_fixture_plan_for_goal, build_task_request, sample_framework_adapter_describe_response,
+    sample_framework_adapter_success_envelope,
+};
 use boundline::orchestrator::session_runtime::{SessionRuntime, SessionRuntimeError};
 use boundline::{
     CanonMode, CanonRuntimeConfig, GovernanceProfile, StageGovernancePolicy, SystemContextBinding,
@@ -88,6 +99,22 @@ fn temp_workspace(prefix: &str) -> PathBuf {
     let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
     fs::create_dir_all(&workspace).unwrap();
     workspace
+}
+
+fn write_describe_only_adapter_script(workspace: &Path) -> PathBuf {
+    let describe_json = serde_json::to_string(&sample_framework_adapter_success_envelope(
+        serde_json::to_value(sample_framework_adapter_describe_response()).unwrap(),
+    ))
+    .unwrap();
+    let script_path = workspace.join(format!("status-adapter-{}.sh", Uuid::new_v4()));
+    let script = format!(
+        "#!/bin/sh\nset -eu\ncase \"$1\" in\n  describe)\n    cat <<'BOUNDLINE_JSON'\n{describe_json}\nBOUNDLINE_JSON\n    ;;\n  *)\n    echo \"unsupported command: $1\" >&2\n    exit 64\n    ;;\nesac\n"
+    );
+    fs::write(&script_path, script).unwrap();
+    let mut permissions = fs::metadata(&script_path).unwrap().permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(&script_path, permissions).unwrap();
+    script_path
 }
 
 // Serializes all tests that mutate or observe environment variables so that
@@ -368,7 +395,7 @@ fn build_goal_captured_session(workspace: &Path) -> ActiveSessionRecord {
 
 fn save_local_routing(workspace: &Path, routing: RoutingConfig) {
     FileConfigStore::for_workspace(workspace)
-        .save_local(&ConfigFile { version: 1, routing, canon: None })
+        .save_local(&ConfigFile { version: 1, routing, canon: None, adapter: None })
         .unwrap();
 }
 
@@ -943,6 +970,118 @@ fn execute_status_surfaces_blocked_goal_capture_routing_for_goal_captured_sessio
     );
     assert!(
         report.terminal_output.contains("latest_status: goal_captured"),
+        "{}",
+        report.terminal_output
+    );
+}
+
+#[test]
+fn execute_status_surfaces_adapter_config_projection_details() {
+    let workspace = temp_workspace("boundline-status-adapter-config-projection");
+    let canonical_workspace = workspace.canonicalize().unwrap();
+    let adapter_script = write_describe_only_adapter_script(&canonical_workspace);
+    FileConfigStore::for_workspace(&canonical_workspace)
+        .save_local(&ConfigFile {
+            adapter: Some(PersistedAdapterConfiguration {
+                selection: AdapterSelectionRecord {
+                    selection_mode: AdapterSelectionMode::Custom,
+                    adapter_id: "custom-guided".to_string(),
+                    display_name: "Custom Guided".to_string(),
+                    command: "/bin/sh".to_string(),
+                    args: vec![adapter_script.to_string_lossy().into_owned()],
+                    registration_source: AdapterRegistrationSource::AdapterAdd,
+                    discovery_state: AdapterDiscoveryState::ExplicitCommand,
+                    compatibility_line: FRAMEWORK_ADAPTER_PROTOCOL_LINE_V1.to_string(),
+                    updated_at: 42,
+                },
+                schema_fingerprint: format!(
+                    "{}:{}:template_repo",
+                    FRAMEWORK_ADAPTER_PROTOCOL_LINE_V1, "speckit"
+                ),
+                completeness_state: AdapterConfigCompletenessState::Complete,
+                interactive_resolution: true,
+                last_validated_at: Some(42),
+                value_count: 1,
+                values: vec![AdapterConfigValueRecord {
+                    field_key: "template_repo".to_string(),
+                    value_kind: AdapterValueKind::Path,
+                    secret: false,
+                    string_value: None,
+                    path_value: Some("../boundline-framework-template".to_string()),
+                    bool_value: None,
+                    int_value: None,
+                    value_source: AdapterValueSource::OperatorPrompt,
+                    resolution_state: StoredAdapterConfigValueState::Present,
+                }],
+            }),
+            ..ConfigFile::default()
+        })
+        .unwrap();
+    FileSessionStore::for_workspace(&canonical_workspace)
+        .persist(&build_goal_captured_session(&canonical_workspace))
+        .unwrap();
+
+    let report = execute_status(Some(&canonical_workspace)).unwrap();
+
+    assert_eq!(report.exit_status, CommandExitStatus::Succeeded);
+    assert!(
+        report.terminal_output.contains("framework_adapter_config_state: complete"),
+        "{}",
+        report.terminal_output
+    );
+    assert!(
+        report.terminal_output.contains("framework_adapter_interactive_resolution: true"),
+        "{}",
+        report.terminal_output
+    );
+    assert!(
+        report.terminal_output.contains("framework_adapter_value_count: 1"),
+        "{}",
+        report.terminal_output
+    );
+}
+
+#[test]
+fn execute_status_revalidates_adapter_config_state_when_required_value_is_missing() {
+    let workspace = temp_workspace("boundline-status-adapter-config-revalidation");
+    let canonical_workspace = workspace.canonicalize().unwrap();
+    let adapter_script = write_describe_only_adapter_script(&canonical_workspace);
+    FileConfigStore::for_workspace(&canonical_workspace)
+        .save_local(&ConfigFile {
+            adapter: Some(PersistedAdapterConfiguration {
+                selection: AdapterSelectionRecord {
+                    selection_mode: AdapterSelectionMode::Custom,
+                    adapter_id: "custom-guided".to_string(),
+                    display_name: "Custom Guided".to_string(),
+                    command: "/bin/sh".to_string(),
+                    args: vec![adapter_script.to_string_lossy().into_owned()],
+                    registration_source: AdapterRegistrationSource::AdapterAdd,
+                    discovery_state: AdapterDiscoveryState::ExplicitCommand,
+                    compatibility_line: FRAMEWORK_ADAPTER_PROTOCOL_LINE_V1.to_string(),
+                    updated_at: 42,
+                },
+                schema_fingerprint: format!(
+                    "{}:{}:template_repo",
+                    FRAMEWORK_ADAPTER_PROTOCOL_LINE_V1, "speckit"
+                ),
+                completeness_state: AdapterConfigCompletenessState::Complete,
+                interactive_resolution: false,
+                last_validated_at: Some(42),
+                value_count: 0,
+                values: Vec::new(),
+            }),
+            ..ConfigFile::default()
+        })
+        .unwrap();
+    FileSessionStore::for_workspace(&canonical_workspace)
+        .persist(&build_goal_captured_session(&canonical_workspace))
+        .unwrap();
+
+    let report = execute_status(Some(&canonical_workspace)).unwrap();
+
+    assert_eq!(report.exit_status, CommandExitStatus::Succeeded);
+    assert!(
+        report.terminal_output.contains("framework_adapter_config_state: missing_required"),
         "{}",
         report.terminal_output
     );

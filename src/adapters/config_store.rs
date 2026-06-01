@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
-use crate::domain::configuration::{ConfigFile, RoutingConfig};
+use crate::domain::configuration::{ConfigFile, PersistedAdapterConfiguration, RoutingConfig};
 
 const GLOBAL_CONFIG_DIR_NAME: &str = "boundline";
 const GLOBAL_CONFIG_FILE_NAME: &str = "config.toml";
@@ -82,8 +82,16 @@ impl FileConfigStore {
         Ok(self.load_local()?.map(|cfg| cfg.routing))
     }
 
+    pub fn local_adapter(&self) -> Result<Option<PersistedAdapterConfiguration>, ConfigStoreError> {
+        Ok(self.load_local()?.and_then(|cfg| cfg.adapter))
+    }
+
     pub fn global_routing() -> Result<Option<RoutingConfig>, ConfigStoreError> {
         Ok(Self::load_global()?.map(|cfg| cfg.routing))
+    }
+
+    pub fn global_adapter() -> Result<Option<PersistedAdapterConfiguration>, ConfigStoreError> {
+        Ok(Self::load_global()?.and_then(|cfg| cfg.adapter))
     }
 }
 
@@ -250,6 +258,7 @@ mod tests {
                 ..RoutingConfig::default()
             },
             canon: None,
+            adapter: None,
         };
 
         let error = store.save_local(&cfg).unwrap_err();
@@ -318,6 +327,7 @@ mod tests {
                 ..RoutingConfig::default()
             },
             canon: None,
+            adapter: None,
         };
         fs::write(&path, toml::to_string_pretty(&cfg).unwrap()).unwrap();
 

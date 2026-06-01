@@ -2335,7 +2335,7 @@ mod tests {
 
     fn save_local_routing(workspace: &std::path::Path, routing: RoutingConfig) {
         FileConfigStore::for_workspace(workspace)
-            .save_local(&ConfigFile { version: 1, routing, canon: None })
+            .save_local(&ConfigFile { version: 1, routing, canon: None, adapter: None })
             .unwrap();
     }
 

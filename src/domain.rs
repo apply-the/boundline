@@ -17,6 +17,7 @@
 //! | [`trace`] | `ExecutionTrace`, `TraceEvent`, event types |
 //! | [`audit`] | Audit entries, actors, algorithms, outcomes |
 //! | [`flow`] | Built-in flow definitions and step metadata |
+//! | [`framework_adapter`] | External adapter selection, capability, and trace vocabulary |
 //! | [`review`] | Council profiles, vote rules, stop semantics |
 //! | [`reasoning`] | Reasoning profiles, debate, confidence levels |
 //! | [`cluster`] | Multi-workspace clusters and delivery stories |
@@ -40,6 +41,7 @@ pub mod execution;
 pub mod flow;
 pub mod flow_policy;
 pub mod follow_through;
+pub mod framework_adapter;
 pub mod goal_plan;
 pub mod governance;
 pub mod guidance;

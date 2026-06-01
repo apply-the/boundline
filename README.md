@@ -64,6 +64,25 @@ explicitly with `boundline index status`, `boundline index refresh`,
 `.boundline/context-intelligence/` remain disposable workspace-local runtime
 state rather than Git-merge artifacts.
 
+Boundline also supports one explicit framework adapter per workspace when you
+need framework-owned stage execution without giving up the built-in default
+path. Register the shipped Speckit profile with
+`boundline adapter add speckit --workspace <workspace>`, inspect the active
+selection with `boundline adapter show --workspace <workspace>` or
+`boundline adapter show --workspace <workspace> --json`, and remove it again
+with `boundline adapter remove --workspace <workspace>`.
+
+The adapter inspection report is the operator-facing compatibility surface. It
+shows the adapter ID, compatibility line, supported Boundline version range,
+declared supported transports, stage overrides, hook subscriptions, and the
+current config-completeness state before `plan` or `run` tries to hand off a
+stage.
+
+Adapter execution in V1 stays intentionally bounded: one trusted local
+subprocess, one-shot JSON over stdin/stdout, the same standard success or error
+envelope on stdout for every command, optional structured stderr captured only
+as trace enrichment, and no graceful-shutdown or long-lived daemon lifecycle.
+
 ## How chat commands map to CLI/runtime state
 
 Chat command packs are thin wrappers over the Rust runtime. `/boundline:goal`,

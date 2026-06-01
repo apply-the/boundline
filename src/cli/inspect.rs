@@ -20,12 +20,17 @@ use crate::cli::CommandExitStatus;
 use crate::cli::output;
 use crate::domain::cluster::ClusterDeliveryStory;
 use crate::domain::context_intelligence::AdvancedContextProjection;
+use crate::domain::execution::StageRoutingDecisionRecord;
+use crate::domain::framework_adapter::AdapterExecutionSource;
 use crate::domain::goal_plan::GoalPlanFlowState;
 use crate::domain::guidance::GuidanceGuardianProjection;
 use crate::domain::reasoning::ProfileActivationRecord;
 use crate::domain::routing_decision::RoutingDecisionProjection;
 use crate::domain::session::governance_next_action_for_state;
-use crate::domain::session::{DelightFeedbackSignal, RoutingMode, RoutingOutcome, RoutingSource};
+use crate::domain::session::{
+    DelightFeedbackSignal, FrameworkAdapterStageFailureDetails, RoutingMode, RoutingOutcome,
+    RoutingSource,
+};
 use crate::domain::step::{StepKind, StepStatus};
 use crate::domain::task::{TaskStatus, TerminalReason};
 use crate::domain::trace::{
@@ -53,6 +58,39 @@ const KEY_FAILURE_REASON: &str = "failure_reason";
 fn advanced_context_from_payload(payload: &Value) -> Option<AdvancedContextProjection> {
     payload.get("advanced_context").cloned().and_then(|value| serde_json::from_value(value).ok())
 }
+
+fn framework_adapter_stage_failure_evidence(payload: &Value) -> Option<String> {
+    let failure = payload
+        .get("framework_adapter_stage_failure")
+        .and_then(FrameworkAdapterStageFailureDetails::from_value)?;
+    let failure_class = failure
+        .execution
+        .failure_class
+        .map(|failure_class| failure_class.as_str().to_string())
+        .unwrap_or_else(|| "unknown".to_string());
+    Some(format!(
+        "framework_adapter stage={} claim={} failure_class={} summary={}{}",
+        failure.execution.stage_key.as_str(),
+        failure.claim_state.as_str(),
+        failure_class,
+        failure.summary,
+        failure
+            .protocol_error_code
+            .as_deref()
+            .map(|code| format!(" protocol_error_code={code}"))
+            .unwrap_or_default()
+    ))
+}
+
+fn framework_adapter_stage_routing_from_payload(
+    payload: &Value,
+) -> Option<StageRoutingDecisionRecord> {
+    payload
+        .get("framework_adapter_stage_routing")
+        .cloned()
+        .and_then(|value| serde_json::from_value(value).ok())
+}
+
 const KEY_FINDING: &str = "finding";
 const KEY_DELIGHT_FEEDBACK: &str = "delight_feedback";
 const KEY_REVIEW_OUTCOME: &str = "review_outcome";
@@ -223,6 +261,7 @@ struct TraceSummaryFold {
     review_timeline: Vec<String>,
     reasoning_profile: Option<ProfileActivationRecord>,
     delight_feedback: Option<DelightFeedbackSignal>,
+    framework_adapter_stage_routing: Option<StageRoutingDecisionRecord>,
 }
 
 impl TraceSummaryFold {
@@ -248,6 +287,18 @@ impl TraceSummaryFold {
             .and_then(|value| serde_json::from_value(value).ok())
         {
             self.reasoning_profile = Some(record);
+        }
+
+        if let Some(stage_routing) = framework_adapter_stage_routing_from_payload(&event.payload) {
+            if stage_routing.execution_source == AdapterExecutionSource::Adapter {
+                self.routing_summary = event
+                    .payload
+                    .get(KEY_SUMMARY)
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+                    .or_else(|| self.routing_summary.take());
+            }
+            self.framework_adapter_stage_routing = Some(stage_routing);
         }
 
         // Guidance and guardian projection is persisted incrementally across
@@ -325,6 +376,7 @@ impl TraceSummaryFold {
                     related_step_id: None,
                 });
             }
+            TraceEventType::StageRouted => {}
             TraceEventType::StageTransitioned => {
                 self.recovery_events.push(TraceRecoveryEvent {
                     event_type: event.event_type,
@@ -422,6 +474,11 @@ impl TraceSummaryFold {
                         .to_string(),
                     related_step_id: event.step_id.clone(),
                 });
+                if event.event_type == TraceEventType::StageFailed
+                    && let Some(evidence) = framework_adapter_stage_failure_evidence(&event.payload)
+                {
+                    self.failure_evidence.push(evidence);
+                }
             }
             TraceEventType::GovernanceSelected
             | TraceEventType::GovernanceStarted
@@ -598,6 +655,7 @@ pub fn summarize_trace(
         review_timeline,
         reasoning_profile,
         delight_feedback,
+        framework_adapter_stage_routing,
         ..
     } = fold_trace_events(trace)?;
 
@@ -654,6 +712,7 @@ pub fn summarize_trace(
         session_plan_brief_ref,
         run_brief_ref,
         session_audit,
+        latest_framework_adapter_hook_dispatch,
     } = resolve_trace_artifacts(trace_ref.as_ref(), &trace.session_id)?;
 
     Ok(TraceSummaryView {
@@ -709,6 +768,11 @@ pub fn summarize_trace(
         review_timeline,
         session_audit,
         delight_feedback,
+        framework_adapter_stage_routing,
+        framework_adapter_hook_dispatch: latest_framework_adapter_hook_dispatch,
+        framework_adapter_stage_failure: FrameworkAdapterStageFailureDetails::from_terminal_reason(
+            &terminal_reason,
+        ),
         terminal_status,
         terminal_reason,
         duration: trace.duration_millis(),

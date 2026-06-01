@@ -1,4 +1,29 @@
-use super::*;
+use serde_json::{Value, json};
+
+use crate::adapters::provider_runtime::route_is_available;
+use crate::domain::governance::GovernanceLifecycleState;
+use crate::domain::limits::TerminalCondition;
+use crate::domain::session::{ActiveSessionRecord, SessionStatus};
+use crate::domain::step::{ExecutionStatus, StepAttempt, StepResultSummary, StepStatus};
+use crate::domain::task::{Task, TaskRunResponse, TaskStatus};
+use crate::domain::trace::{ExecutionTrace, TraceEventType, current_timestamp_millis};
+use crate::fixture::{
+    FixtureRuntime, FixtureRuntimeError, build_fixture_runtime_for_flow,
+    build_fixture_runtime_for_goal_plan,
+};
+use crate::orchestrator::guidance_runtime::execute_guardians_for_phase;
+use crate::orchestrator::recovery::{RecoveryDecision, decide_recovery};
+use crate::orchestrator::review_trace::{record_review_step_completed, record_review_step_started};
+use crate::orchestrator::terminal::build_terminal_reason;
+
+use super::{
+    GovernanceStepDecision, SessionRuntime, SessionRuntimeError, checkpoint_event_payload,
+    checkpoint_projection_from_context, planning_canon_mode_for_stage_key,
+    session_status_for_task_status,
+};
+
+const CHECKPOINT_ID_PAYLOAD_KEY: &str = "checkpoint_id";
+const GOAL_SATISFIED_STATE_KEY: &str = "goal_satisfied";
 
 impl SessionRuntime {
     pub(super) fn build_runtime(
@@ -74,7 +99,7 @@ impl SessionRuntime {
         if let Some(checkpoint_projection) = checkpoint_projection_from_context(&task.context)
             && !trace.events.iter().any(|event| {
                 event.event_type == TraceEventType::CheckpointCreated
-                    && event.payload.get("checkpoint_id").and_then(Value::as_str)
+                    && event.payload.get(CHECKPOINT_ID_PAYLOAD_KEY).and_then(Value::as_str)
                         == Some(checkpoint_projection.checkpoint_id.as_str())
             })
         {
@@ -227,7 +252,7 @@ impl SessionRuntime {
                 let goal_satisfied = task
                     .context
                     .state
-                    .get("goal_satisfied")
+                    .get(GOAL_SATISFIED_STATE_KEY)
                     .and_then(Value::as_bool)
                     .unwrap_or(false)
                     || task.plan.current_step_index + 1 >= task.plan.steps.len();
@@ -431,7 +456,6 @@ impl SessionRuntime {
                 || lowered.contains("token")
                 || lowered.contains("credential")
                 || lowered.contains("request failed")
-                || lowered.contains("unavailable")
         };
 
         let blocked_stage_key = {

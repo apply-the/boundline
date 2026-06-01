@@ -1,44 +1,34 @@
 //! Workspace-scoped session orchestration for planning, execution, governance,
 //! checkpoints, and persisted trace updates.
 
-use std::collections::{BTreeMap, BTreeSet};
-use std::fs;
 use std::hash::{DefaultHasher, Hash, Hasher};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use crate::adapters::audit_store::{FileSessionAuditStore, SessionAuditStoreError};
 use crate::adapters::checkpoint_store::{CheckpointStoreError, FileCheckpointStore};
 use crate::adapters::governance_runtime::{
-    CanonCliRuntime, GovernanceRequestKind, GovernanceRuntime, GovernanceRuntimeRequest,
-    GovernanceRuntimeResponse, LocalGovernanceRuntime,
+    CanonCliRuntime, GovernanceRequestKind, GovernanceRuntimeRequest, LocalGovernanceRuntime,
 };
 use crate::adapters::provider_runtime::{
     ProviderReviewDisposition, ProviderReviewRequest, ProviderRevisionRequest,
     ProviderWorkspaceFile, review_workspace, revise_artifact, route_is_available,
 };
 use serde::Serialize;
-use serde_json::{Map, Value, json};
+use serde_json::Value;
 use thiserror::Error;
-use uuid::Uuid;
 
-use crate::adapters::cluster_store::FileClusterStore;
 use crate::adapters::config_store::FileConfigStore;
 use crate::adapters::session_store::{FileSessionStore, SessionStoreError};
-use crate::adapters::trace_store::{FileTraceStore, TraceStore, TraceStoreError};
+use crate::adapters::trace_store::{FileTraceStore, TraceStoreError};
 use crate::domain::audit::{
     SessionAuditActor, SessionAuditActorKind, SessionAuditAlgorithm, SessionAuditEntry,
     SessionAuditEntryKind, SessionAuditIdentity, SessionAuditOutcome, SessionAuditOutcomeStatus,
     SessionAuditPhase, SessionAuditSource, SessionAuditSourceKind,
 };
 use crate::domain::brief::AuthoredBriefBundle;
-use crate::domain::cluster::{
-    ClusterDeliveryStory, ClusterRouteOwner, ClusterSessionProjection, ClusteredExecutionCondition,
-    ClusteredExecutionKind, WorkspaceParticipationKind, WorkspaceParticipationRecord,
-};
+use crate::domain::cluster::ClusterSessionProjection;
 use crate::domain::configuration::{
-    EffectiveRouting, EffortFallbackPolicy, ModelRoute, RouteSlot, RoutingConfig, RoutingOverrides,
-    RuntimeKind, resolve_effective_routing, resolve_effective_runtime_capabilities,
-    resolve_effective_slot_effort_policies,
+    EffectiveRouting, ModelRoute, RouteSlot, RoutingConfig, RuntimeKind,
 };
 use crate::domain::context_intelligence::AdvancedContextProjection;
 use crate::domain::decision::{Decision, DecisionType};
@@ -55,40 +45,31 @@ use crate::domain::governance::{
     CanonPossibleActionSummary, CanonRecommendedActionSummary, CanonRiskClass,
     CompactedCanonMemory, CouncilProfile, GovernanceLifecycleState, GovernanceRuntimeKind,
     GovernedSessionLifecycle, GovernedStageRecord, MemoryCredibilityState, PacketReadiness,
-    SystemContextBinding, backlog_quality_snapshot_for_lifecycle, execution_stage_key_for_mode,
+    SystemContextBinding, backlog_quality_snapshot_for_lifecycle,
     planned_canon_mode_sequence_for_flow, planning_canon_mode_for_stage_key,
     planning_canon_mode_sequence, planning_stage_brief_ref, resolved_canon_mode,
 };
-use crate::domain::guidance::{CapabilityPhase, GuidanceGuardianProjection};
 use crate::domain::limits::{RunLimits, TerminalCondition};
 use crate::domain::negotiation::{NegotiatedDeliveryPacket, NegotiationResolutionState};
 use crate::domain::project_memory::{
-    GovernedEvidencePromotionRequest, ProjectMemoryCondition, ProjectMemoryContext,
-    ProjectMemoryStatus, promote_governed_evidence_bundle as promote_project_evidence_bundle,
-    read_project_memory,
+    ProjectMemoryCondition, ProjectMemoryContext, ProjectMemoryStatus, read_project_memory,
 };
 use crate::domain::reasoning::ProfileActivationRecord;
-use crate::domain::review::{ReviewOutcome, ReviewProfile, ReviewTrigger};
 use crate::domain::review::{
     ReviewerDefinition, ReviewerDisposition, ReviewerFinding, ReviewerParticipation,
     ReviewerParticipationStatus, VoteDecision, VoteRuleDefinition, resolve_council_assembly,
 };
 use crate::domain::routing_decision::RoutingDecisionProjection;
 use crate::domain::session::{
-    ActiveSessionRecord, ContinuityAuthority, DelegationContinuityMode, DelegationContinuityState,
-    DelegationPacket, DelegationPacketKind, DelegationPacketState, DelegationStatusView,
-    ProjectScaleSessionState, SessionCommand, SessionStatus, VotingSessionState,
-    governance_next_action_for_state,
+    ActiveSessionRecord, DelegationStatusView, ProjectScaleSessionState, SessionCommand,
+    SessionStatus, VotingSessionState, governance_next_action_for_state,
 };
 use crate::domain::stage_council::{
     StageCouncilAdjudication, StageCouncilArtifact, StageCouncilFinding,
     StageCouncilFindingDisposition, StageCouncilOutcome, StageCouncilRequest, StageCouncilStatus,
     StageCouncilVoteResolution,
 };
-use crate::domain::step::{
-    ErrorInfo, ExecutionStatus, Recoverability, Step, StepAttempt, StepExecutionRequest,
-    StepExecutionResult, StepKind, StepResultSummary, StepStatus,
-};
+use crate::domain::step::Step;
 use crate::domain::task::{Task, TaskRequestError, TaskRunResponse, TaskStatus, TerminalReason};
 use crate::domain::task_context::TaskContext;
 use crate::domain::trace::{ExecutionTrace, TraceEvent, TraceEventType, current_timestamp_millis};
@@ -96,14 +77,11 @@ use crate::domain::workflow::{
     ProjectScaleInput, ProjectScaleStageKind, propose_project_scale_path,
 };
 use crate::fixture::{
-    FixtureRuntime, FixtureRuntimeError, build_fixture_plan_for_goal,
-    build_fixture_runtime_for_flow, build_fixture_runtime_for_goal_plan, build_task_request,
+    FixtureRuntime, FixtureRuntimeError, build_fixture_plan_for_goal, build_task_request,
     load_workspace_execution_profile,
 };
-use crate::orchestrator::decision_loop::{DecisionLoop, LoopTerminal};
 use crate::orchestrator::goal_planner::{
     AuthoredInputDocument, GoalPlannerError, PlanningContextSources, build_goal_plan_with_sources,
-    collect_workspace_signals,
 };
 use crate::orchestrator::governance::{
     GovernanceStepDecision, append_governed_document_to_lifecycle, bounded_governance_context,
@@ -114,13 +92,6 @@ use crate::orchestrator::governance::{
     governed_document_ref_from_response, overlay_stage_policy_with_intent,
     planning_governance_input_documents, requested_governance_intent, runtime_command_available,
     selected_stage_policy,
-};
-use crate::orchestrator::guidance_runtime::{
-    GuardianExecutionRequest, execute_guardians_for_phase,
-};
-use crate::orchestrator::recovery::{RecoveryDecision, decide_recovery};
-use crate::orchestrator::review_trace::{
-    record_reasoning_profile_events, record_review_step_completed, record_review_step_started,
 };
 use crate::orchestrator::terminal::{build_terminal_reason, task_status_for_condition};
 
@@ -216,7 +187,20 @@ use reasoning::{
     GovernanceBlockContext, ReasoningGateContext, ReasoningTraceContext, is_governance_trace_event,
     reasoning_profile_block_message, store_latest_reasoning_profile,
 };
-use runtime_support::*;
+use runtime_support::{
+    FrameworkAdapterRunStageOutcome, FrameworkAdapterStageFailedTracePayload,
+    canon_workspace_scope_mismatch_reason, cluster_task_status_text, cluster_workspace_is_blocked,
+    configured_framework_adapter_binding, default_planning_system_context,
+    effective_assistant_runtimes, execution_governance_read_targets,
+    framework_adapter_stage_failure_terminal_condition,
+    framework_adapter_stage_routing_trace_payload, framework_adapter_stage_routing_value,
+    git_config_value, map_framework_adapter_failure_class, missing_planning_governance_field,
+    parse_planning_system_context, protocol_error_code_from_host_error,
+    read_upstream_artifact_capped, session_audit_outcome_for_status,
+    session_status_for_task_status, session_status_text, trace_event_audit_actor,
+    trace_event_audit_algorithm, trace_event_audit_message, trace_event_audit_outcome,
+    trace_event_type_text,
+};
 
 #[cfg(test)]
 use reasoning::{

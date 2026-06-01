@@ -65,7 +65,12 @@ fn explicit_canon_request_blocks_without_local_fallback() {
         Some(0)
     );
     assert_eq!(run_boundline_in(&workspace, &["flow", "bug-fix"]).status.code(), Some(0));
-    assert_eq!(run_boundline_in(&workspace, &["plan"]).status.code(), Some(0));
+    let plan = run_boundline_in(&workspace, &["plan"]);
+    let plan_text = terminal_text(&plan);
+    assert_eq!(plan.status.code(), Some(1), "{plan_text}");
+    assert!(plan_text.contains("requested_governance_runtime: canon"), "{plan_text}");
+    assert!(plan_text.contains("latest_governance_stage: plan:discovery"), "{plan_text}");
+    assert!(plan_text.contains("latest_governance_state: blocked"), "{plan_text}");
 
     let run = run_boundline_in(&workspace, &["run"]);
     let run_text = terminal_text(&run);

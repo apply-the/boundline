@@ -25,5 +25,11 @@ pub mod session_runtime;
 #[path = "../../../src/orchestrator/terminal.rs"]
 pub mod terminal;
 
+pub mod framework_catalog;
+
 pub use engine::{Orchestrator, OrchestratorError};
+pub use framework_catalog::{
+    FRAMEWORK_ADAPTER_PROTOCOL_LINE_V1, FRAMEWORK_HOOK_CATALOG, FRAMEWORK_STAGE_CATALOG,
+    FrameworkHookKey, FrameworkStageKey,
+};
 pub use session_runtime::{SessionRuntime, SessionRuntimeError};

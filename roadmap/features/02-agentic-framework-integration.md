@@ -1,72 +1,81 @@
 # Boundline as Generic Agentic Framework: Integration Report
 
-> Analysis of how Boundline can evolve from an orchestrator strettamente accoppiato a Canon a un
-> **motore di orchestrazione agnostico (Agentic Framework Engine)**, capace di supportare
-> framework proprietari (harness) tramite un sistema di adapter e override.
+> Analysis of how Boundline can evolve from an orchestrator tightly coupled to Canon into an
+> **agnostic orchestration engine (Agentic Framework Engine)**, capable of supporting
+> proprietary frameworks (harnesses) through an adapter and override system.
 >
 > **Constraints**:
-> - Boundline è **open source**.
-> - L'integrazione di framework specifici o proprietari avviene tramite **binary adapters esterni** (repository separati).
-> - È presente un template di riferimento locale in `/Users/rt/workspace/apply-the/boundline-framework-template`.
-> - **Niente dipendenza da MCP come strato architetturale core**: l'astrazione sulle capabilities usa il nostro Provider Protocol nativo.
+> - Boundline is **open source**.
+> - Integration with specific or proprietary frameworks happens through **external binary adapters** (separate repositories).
+> - A local reference template exists in the sibling `boundline-framework-template` repo.
+> - **No MCP dependency as a core architectural layer**: capability abstraction uses our native Provider Protocol.
+
+## Delivery Status
+
+- Status: Delivered in Boundline `0.66.0`
+- Primary implementation: `specs/066-agentic-framework-integration/`
+- Outcome: Boundline now ships one explicit framework-adapter slot per
+  workspace, the `speckit` known profile, custom-adapter registration,
+  operator-visible routing and compatibility inspection, and the sibling
+  template plus Speckit scaffolds aligned to the released V1 stdio contract.
 
 ---
 
-## 1. Visione Architetturale: Canon come Default, Adapters come Override
+## 1. Architectural Vision: Canon as Default, Adapters as Overrides
 
-Boundline non deve perdere il suo valore "out-of-the-box". 
+Boundline must not lose its out-of-the-box value.
 
-**La regola d'oro:**
-Boundline viene distribuito sempre con **Canon come default**. Se nessun adapter è configurato, le fasi del ciclo di vita (`goal`, `plan`, `run`, `review`) vengono processate dalla logica nativa legata a Canon.
+**The golden rule:**
+Boundline always ships with **Canon as the default**. If no adapter is configured, the lifecycle phases (`goal`, `plan`, `run`, `review`) are handled by the native Canon-backed logic.
 
-**L'astrazione ad Override Parziale:**
-Un adapter esterno (es. un binario Rust compilato custom) non deve necessariamente riscrivere l'intero universo. Può "registrasi" per fare l'override di un singolo step.
-Ad esempio: un adapter aziendale potrebbe dichiarare: *"Uso Canon per `goal` e `plan`, ma intercetto la fase di `run` per applicare i miei hook distruttivi e le mie policy".*
+**The partial-override abstraction:**
+An external adapter (for example, a custom compiled Rust binary) does not need to replace the whole system. It can register to override a single step.
+For example, a company adapter might declare: *"Use Canon for `goal` and `plan`, but intercept the `run` phase to apply my own destructive hooks and policies."*
 
 ---
 
-## 2. Il Sistema di Injection e Registrazione
+## 2. Injection and Registration System
 
-Come fa un binario Rust esterno a farsi riconoscere da Boundline e a farsi passare la configurazione?
+How does an external Rust binary get recognized by Boundline and receive its configuration?
 
-### A. Discovery e Registrazione
-Boundline adotterà un modello ispirato ai plugin di Git o Terraform:
-1. **Config-based**: Nel `.boundline/config.toml` l'operatore dichiara l'adapter:
+### A. Discovery and Registration
+Boundline should adopt a model inspired by Git or Terraform plugins:
+1. **Config-based**: In `.boundline/config.toml`, the operator declares the adapter:
    ```toml
    [framework.adapter]
-   command = "boundline-harness-gridspertise" # o path assoluto
+   command = "boundline-harness-gridspertise" # or an absolute path
    ```
-2. **Naming Convention (Opzionale)**: Boundline può cercare automaticamente nel PATH binari che iniziano per `boundline-plugin-*`.
+2. **Naming Convention (Optional)**: Boundline can also automatically search `PATH` for binaries whose names start with `boundline-plugin-*`.
 
-### B. L'Handshake (Capabilities & Config Injection)
-Quando Boundline fa boot di una sessione, invoca il binario adapter con un comando di handshake (es. tramite stdin JSON-RPC inviando `{"method": "capabilities"}`).
+### B. Handshake (Capabilities and Config Injection)
+When Boundline boots a session, it invokes the adapter binary with a handshake command (for example, via JSON-RPC over stdin by sending `{"method": "capabilities"}`).
 
-L'adapter risponde con il suo "manifesto":
+The adapter responds with its manifest:
 ```json
 {
   "name": "system-harness-template",
-  "overrides": ["plan", "run"],          // Dichiara quali stage vuole intercettare
-  "hooks": ["on_error", "on_step_pre"],  // Quali hook globali vuole ascoltare
-  "config_schema": {                     // Chiede a Boundline di fornirgli delle configurazioni
+  "overrides": ["plan", "run"],          // Declares which stages it wants to intercept
+  "hooks": ["on_error", "on_step_pre"],  // Declares which global hooks it listens to
+  "config_schema": {                        // Requests configuration that Boundline must supply
     "harness_repo": "string",
     "strict_mode": "boolean"
   }
 }
 ```
 
-### C. Autoconfigurazione
-Sulla base del `config_schema` restituito, Boundline si occupa di:
-- Verificare se il `.boundline/config.toml` contiene già quei campi.
-- In caso contrario, durante `boundline init` o all'avvio, chiedere interattivamente all'utente i valori mancanti o scriverli con dei default.
-- Passare l'intero blocco di configurazione popolato ad ogni successiva invocazione dell'adapter.
+### C. Auto-configuration
+Based on the returned `config_schema`, Boundline is responsible for:
+- Checking whether `.boundline/config.toml` already contains those fields.
+- If not, prompting the user for missing values during `boundline init` or at startup, or writing defaults.
+- Passing the fully populated configuration block to the adapter on every subsequent invocation.
 
 ---
 
-## 3. Il Protocollo JSON su Stdin/Stdout
+## 3. JSON Protocol over Stdin/Stdout
 
-La comunicazione non avviene linkando librerie dinamiche (troppo fragile, problemi di ABI), ma tramite **Subprocess Protocol (stdin/stdout JSON)**, esattamente lo stesso approccio di design robusto che si usa tra LSP (Language Servers) e IDE.
+Communication should not happen through linked dynamic libraries (too fragile, ABI issues), but through a **Subprocess Protocol (JSON over stdin/stdout)**, following the same robust design approach used between LSPs (Language Servers) and IDEs.
 
-**Richiesta di Boundline all'Adapter (Override della fase `plan`):**
+**Boundline request to the adapter (override of the `plan` phase):**
 ```json
 {
   "method": "execute_stage",
@@ -78,57 +87,61 @@ La comunicazione non avviene linkando librerie dinamiche (troppo fragile, proble
       "harness_repo": "https://github.com/org/repo",
       "strict_mode": true
     },
-    "context": { ... } // Informazioni di stato raccolte finora da Canon o da Boundline
+    "context": { ... } // State gathered so far from Canon or Boundline
   }
 }
 ```
 
-**Risposta dell'Adapter:**
+**Adapter response:**
 ```json
 {
   "result": {
     "status": "success",
     "artifacts_produced": ["/path/to/plan.md"],
-    "phase_request": null // se l'adapter avesse bisogno di chiedere all'utente, lo restituirebbe qui
+    "phase_request": null // If the adapter needs user input, it returns that here
   }
 }
 ```
 
 ---
 
-## 4. Architettura dei Repository (Il Modello a 3 Repo)
+## 4. Repository Architecture (The 3-Repo Model)
 
-Questo design conferma l'utilità del template che hai creato localmente:
+This design confirms the usefulness of the local template you created:
 
-1. **`boundline` (Open Source)**: 
-   Contiene l'orchestratore, l'engine JSON-RPC, l'implementazione **di default** di Canon. Nessuna logica proprietaria di framework terzi.
-2. **`boundline-framework-template` (Open Source Template)**: 
-   Lo scaffolding (il repo che hai appena creato). Contiene un server JSON-RPC pronto all'uso, i tipi Rust corretti e i metodi vuoti (`fn execute_stage()`, `fn on_error()`). Chiunque voglia crearsi un agentic framework aziendale custom fa un fork di questo repo.
-3. **`my-company-harness-adapter` (Proprietario / Custom)**: 
-   Il binario finale compilato dal cliente a partire dal template. Conterrà le regole custom, la lettura di `.github/hooks/`, o l'integrazione con pipeline chiuse aziendali.
+1. **`boundline` (Open Source)**:
+   Contains the orchestrator, the JSON-RPC engine, and the **default** Canon implementation. No proprietary third-party framework logic lives here.
+2. **`boundline-framework-template` (Open Source Template)**:
+   The scaffolding repository you already created. It contains a ready-to-use JSON-RPC server, the correct Rust types, and empty methods (`fn execute_stage()`, `fn on_error()`). Anyone who wants to build a custom company-specific agentic framework can fork this repo.
+3. **`my-company-harness-adapter` (Proprietary / Custom)**:
+   The final binary compiled by the customer from the template. It would contain custom rules, `.github/hooks/` handling, or integrations with closed internal pipelines.
 
 ---
 
-## 5. Mappatura tra Harness Proprietario e Boundline
+## 5. Mapping a Proprietary Harness to Boundline
 
-Un framework adapter può coprire facilmente le logiche di un *system-harness-template* aziendale mappando le funzionalità di Boundline:
+A framework adapter can cover the logic of a company-specific `system-harness-template` by mapping its needs onto Boundline capabilities:
 
-| Necessità Framework Esterno | Soluzione via Adapter in Boundline |
+| External Framework Need | Boundline Adapter Solution |
 |---|---|
-| Fasi Custom del ciclo di vita | L'adapter dichiara `overrides: ["goal", "plan", "run"]` e inietta la propria logica. |
-| Audit Log personalizzati | L'adapter si registra agli hook `on_step_post` e `on_session_end` e scrive i propri log. |
-| Sensori / Qualità / Linting | L'adapter mappa i propri script distruttivi dentro le risposte di `evaluate_gate` o `on_step_pre`. |
-| Gestione Errori (Triage) | L'adapter si registra a `on_error`, legge la telemetria e decide se riprovare, bloccare o correggere. |
-| Integrazioni Piattaforma (Jira/CI) | **Niente MCP**. L'adapter usa l'External Capability Provider Protocol nativo di Boundline o esegue binari/script diretti. |
+| Custom lifecycle phases | The adapter declares `overrides: ["goal", "plan", "run"]` and injects its own logic. |
+| Custom audit logs | The adapter registers for `on_step_post` and `on_session_end` hooks and writes its own logs. |
+| Sensors / Quality / Linting | The adapter maps its own destructive scripts into `evaluate_gate` responses or `on_step_pre`. |
+| Error handling (triage) | The adapter registers for `on_error`, reads telemetry, and decides whether to retry, block, or repair. |
+| Platform integrations (Jira/CI) | No MCP. The adapter uses Boundline's native External Capability Provider Protocol or executes direct binaries/scripts. |
 
 ---
 
-## 6. Prossimi Passi (Action Items per implementare questa Spec)
+## 6. Next Steps (Action Items To Extend This Delivered Spec)
 
-Per concretizzare questa visione servirà:
-1. **Definire il trait in Boundline**: Isolare la logica attuale in un trait `FrameworkAdapter` (che ha come implementazione concreta e di default il codice esistente legato a Canon).
-2. **Sviluppare il Subprocess Host**: Il modulo che spawna il binario indicato nella configurazione e orchestra il json-rpc.
-3. **Implementare l'Handshake**: Aggiungere in `boundline init` la logica di discovery `capabilities()` e la generazione del file di configurazione automatico.
-4. **Allineare il Template Locale**: Adattare `/Users/rt/workspace/apply-the/boundline-framework-template` per consumare correttamente questi contratti JSON.
+The baseline feature is now shipped. Follow-up work belongs in new feature
+seeds or specs when one of these expansions becomes a bounded delivery slice:
 
-Questo design garantisce che Boundline rimanga **completamente riutilizzabile**, agnostico se lo si desidera, mantenendo la UX impeccabile e sicura (Canon) qualora l'utente non configuri nulla.
+1. broaden the adapter stage or hook catalog beyond the initial bounded set
+2. replace duplicated sibling-repo protocol scaffolds with a released shared
+  dependency line when the packaging policy is ready
+3. add additional known profiles beyond `speckit`
+4. introduce future transports or graceful-shutdown semantics beyond the
+  current one-shot stdio contract
+
+This design keeps Boundline fully reusable and optionally framework-agnostic, while preserving a safe and polished default UX through Canon when no adapter is configured.

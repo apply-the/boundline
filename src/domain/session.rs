@@ -1,6 +1,9 @@
 //! Session-native persistence models, routing projections, and operator-facing
 //! view helpers.
 
+#[path = "session/framework_adapter.rs"]
+pub mod framework_adapter;
+
 use std::path::Path;
 
 use serde::de::DeserializeOwned;
@@ -12,6 +15,7 @@ use crate::domain::brief::AuthoredBriefBundle;
 use crate::domain::cluster::ClusterDeliveryStory;
 use crate::domain::context_intelligence::AdvancedContextProjection;
 use crate::domain::decision::{Decision, DecisionStatus};
+use crate::domain::execution::StageRoutingDecisionRecord;
 use crate::domain::flow::SessionFlowState;
 use crate::domain::flow_policy::FlowPolicy;
 use crate::domain::goal_plan::{GoalPlan, PlanningAnalysisCoverage, PlanningAnalysisFinding};
@@ -30,8 +34,9 @@ use crate::domain::task_context::{
     LATEST_GOVERNANCE_ROLLOUT_PROFILE_KEY, LATEST_GOVERNANCE_RUNTIME_STATE_KEY,
     LATEST_GOVERNANCE_STAGE_KEY,
 };
-use crate::domain::trace::current_timestamp_millis;
+use crate::domain::trace::{HookEventDispatchRecord, current_timestamp_millis};
 use crate::domain::workflow::{ProjectScalePath, WorkflowProgressState};
+pub use framework_adapter::{FrameworkAdapterStageFailureDetails, LifecycleStageExecutionRecord};
 
 const BOUNDLINE_STATE_ROOT: &str = ".boundline";
 const LEGACY_SESSION_RECORD_FILE_NAME: &str = "session.json";
@@ -1204,6 +1209,12 @@ pub struct SessionStatusView {
     pub run_brief_ref: Option<String>,
     pub latest_trace_ref: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_framework_adapter_stage_routing: Option<StageRoutingDecisionRecord>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_framework_adapter_hook_dispatch: Option<HookEventDispatchRecord>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_framework_adapter_stage_failure: Option<FrameworkAdapterStageFailureDetails>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub latest_decision_status: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub latest_decision_target: Option<String>,
@@ -1393,6 +1404,9 @@ impl Default for SessionStatusView {
             session_plan_brief_ref: None,
             run_brief_ref: None,
             latest_trace_ref: None,
+            latest_framework_adapter_stage_routing: None,
+            latest_framework_adapter_hook_dispatch: None,
+            latest_framework_adapter_stage_failure: None,
             latest_decision_status: None,
             latest_decision_target: None,
             latest_changed_files: None,
@@ -3043,11 +3057,11 @@ mod tests {
 
     use super::{
         ActiveSessionRecord, CompatibilityFollowUpMode, DelegationStatusView,
-        ProjectScaleSessionState, RoutingMode, RoutingSource, SessionStatus, SessionStatusView,
-        SessionValidationError, VotingSessionState, delegation_next_command, execution_path_text,
-        routing_outcome, task_state_attempt_lineage_summary, task_state_review_headline,
-        task_state_string, task_state_strings, task_state_workspace_slice_summary,
-        trace_within_workspace,
+        FrameworkAdapterStageFailureDetails, ProjectScaleSessionState, RoutingMode, RoutingSource,
+        SessionStatus, SessionStatusView, SessionValidationError, VotingSessionState,
+        delegation_next_command, execution_path_text, routing_outcome,
+        task_state_attempt_lineage_summary, task_state_review_headline, task_state_string,
+        task_state_strings, task_state_workspace_slice_summary, trace_within_workspace,
     };
     use crate::domain::goal_plan::{
         ContextInput, ContextInputKind, ContextPack, ContextPackCredibility, GoalPlan,
@@ -3196,6 +3210,10 @@ mod tests {
             session_plan_brief_ref: None,
             run_brief_ref: None,
             latest_trace_ref: record.latest_trace_ref.clone(),
+            latest_framework_adapter_stage_failure: record
+                .latest_terminal_reason
+                .as_ref()
+                .and_then(FrameworkAdapterStageFailureDetails::from_terminal_reason),
             latest_decision_status: record
                 .decisions
                 .last()

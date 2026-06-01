@@ -22,6 +22,7 @@ jobs:
           toolchain: 1.96.0
           components: clippy
       - uses: Swatinem/rust-cache@v2
+      - run: sh scripts/check-no-local-paths.sh --tracked
       - run: sh scripts/check-rust-no-panic.sh
 
   clippy:

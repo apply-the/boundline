@@ -1,4 +1,24 @@
-use super::*;
+use serde_json::{Map, json};
+
+use crate::domain::cluster::ClusteredExecutionKind;
+use crate::domain::decision::Decision;
+use crate::domain::goal_plan::GoalPlan;
+use crate::domain::limits::TerminalCondition;
+use crate::domain::session::{ActiveSessionRecord, SessionStatus};
+use crate::domain::task::{TaskRunResponse, TaskStatus};
+use crate::domain::task_context::TaskContext;
+use crate::domain::trace::{ExecutionTrace, TraceEvent, TraceEventType, current_timestamp_millis};
+use crate::fixture::FixtureRuntime;
+use crate::orchestrator::guidance_runtime::execute_guardians_for_phase;
+use crate::orchestrator::review_trace::record_reasoning_profile_events;
+use crate::orchestrator::terminal::{build_terminal_reason, task_status_for_condition};
+
+use super::{
+    LATEST_CHANGED_FILES_KEY, LATEST_VALIDATION_STATUS_KEY, NativePersistenceInput, SessionRuntime,
+    SessionRuntimeError, VALIDATION_STATUS_FAILED, VALIDATION_STATUS_PASSED,
+    apply_checkpoint_projection_to_context, checkpoint_event_payload,
+    session_status_for_task_status,
+};
 
 impl SessionRuntime {
     pub(super) fn persist_native_result(

@@ -1,4 +1,45 @@
-use super::*;
+use std::collections::BTreeSet;
+use std::path::Path;
+
+use serde_json::{Map, Value};
+use uuid::Uuid;
+
+use crate::adapters::cluster_store::FileClusterStore;
+use crate::adapters::config_store::FileConfigStore;
+use crate::domain::cluster::{
+    ClusterDeliveryStory, ClusterRouteOwner, ClusterSessionProjection, ClusteredExecutionCondition,
+    ClusteredExecutionKind, WorkspaceParticipationKind, WorkspaceParticipationRecord,
+};
+use crate::domain::configuration::{
+    EffortFallbackPolicy, RouteSlot, RoutingOverrides, resolve_effective_routing,
+    resolve_effective_runtime_capabilities, resolve_effective_slot_effort_policies,
+};
+use crate::domain::goal_plan::GoalPlan;
+use crate::domain::limits::{RunLimits, TerminalCondition};
+use crate::domain::routing_decision::RoutingDecisionProjection;
+use crate::domain::session::{
+    ActiveSessionRecord, ContinuityAuthority, DelegationContinuityMode, DelegationContinuityState,
+    DelegationPacket, DelegationPacketKind, DelegationPacketState, DelegationStatusView,
+};
+use crate::domain::task::{TaskRunResponse, TaskStatus};
+use crate::domain::task_context::TaskContext;
+use crate::domain::trace::{ExecutionTrace, TraceEventType, current_timestamp_millis};
+use crate::fixture::{FixtureRuntime, FixtureRuntimeError};
+use crate::orchestrator::decision_loop::DecisionLoop;
+use crate::orchestrator::terminal::{build_terminal_reason, task_status_for_condition};
+
+use super::{
+    CheckpointProjectionState, GoalPlanTracePayload, NativeGovernanceProjection,
+    NativePersistenceInput, NativeReviewExecution, SessionRuntime, SessionRuntimeError,
+    cluster_task_status_text, cluster_workspace_is_blocked, delegation_trace_details,
+    effective_assistant_runtimes, serialize_trace_payload,
+};
+
+const NATIVE_GOAL_PLAN_SYNTHESIZED_LEGACY_SOURCE: &str = "native_goal_plan_synthesized";
+const OPERATOR_TARGET_OWNER: &str = "operator";
+const BOUNDLINE_INSPECT_COMMAND: &str = "boundline inspect";
+const BOUNDLINE_STATUS_COMMAND: &str = "boundline status";
+const IMPLEMENTATION_ROUTE_CONTINUITY_REASON: &str = "implementation route cannot continue";
 
 impl SessionRuntime {
     pub(super) fn run_native_goal_plan(
@@ -114,7 +155,8 @@ impl SessionRuntime {
             };
         let enable_flow_retry_probe = session.active_flow.is_some()
             && runtime.profile.governance.is_none()
-            && runtime.profile.legacy_source.as_deref() != Some("native_goal_plan_synthesized");
+            && runtime.profile.legacy_source.as_deref()
+                != Some(NATIVE_GOAL_PLAN_SYNTHESIZED_LEGACY_SOURCE);
         let decision_loop = DecisionLoop::new(
             runtime.agents.clone(),
             runtime.tools.clone(),
@@ -330,9 +372,9 @@ impl SessionRuntime {
                     created_at: current_timestamp_millis(),
                     resolved_at: None,
                     source_route_owner: implementation_runtime.as_str().to_string(),
-                    target_owner: "operator".to_string(),
+                    target_owner: OPERATOR_TARGET_OWNER.to_string(),
                     continuity_reason: evidence_summary.clone(),
-                    recommended_next_action: "boundline inspect".to_string(),
+                    recommended_next_action: BOUNDLINE_INSPECT_COMMAND.to_string(),
                     evidence_refs: Vec::new(),
                     capability_summary: Some(evidence_summary.clone()),
                     stuck_marker: None,
@@ -342,7 +384,7 @@ impl SessionRuntime {
                     active_packet_id: Some(packet.packet_id.clone()),
                     mode: DelegationContinuityMode::EscalationRequired,
                     authority_source: ContinuityAuthority::NativeSession,
-                    next_command: "boundline inspect".to_string(),
+                    next_command: BOUNDLINE_INSPECT_COMMAND.to_string(),
                     headline: packet.headline(),
                     evidence_summary: packet.evidence_summary(),
                 };
@@ -372,8 +414,8 @@ impl SessionRuntime {
                 resolved_at: None,
                 source_route_owner: implementation_runtime.as_str().to_string(),
                 target_owner: target_runtime.as_str().to_string(),
-                continuity_reason: "implementation route cannot continue".to_string(),
-                recommended_next_action: "boundline status".to_string(),
+                continuity_reason: IMPLEMENTATION_ROUTE_CONTINUITY_REASON.to_string(),
+                recommended_next_action: BOUNDLINE_STATUS_COMMAND.to_string(),
                 evidence_refs: Vec::new(),
                 capability_summary: Some(evidence_summary.clone()),
                 stuck_marker: None,
@@ -383,7 +425,7 @@ impl SessionRuntime {
                 active_packet_id: Some(packet.packet_id.clone()),
                 mode: DelegationContinuityMode::HandoffRequired,
                 authority_source: ContinuityAuthority::NativeSession,
-                next_command: "boundline status".to_string(),
+                next_command: BOUNDLINE_STATUS_COMMAND.to_string(),
                 headline: packet.headline(),
                 evidence_summary: packet.evidence_summary(),
             };
@@ -398,9 +440,9 @@ impl SessionRuntime {
                 created_at: current_timestamp_millis(),
                 resolved_at: None,
                 source_route_owner: implementation_runtime.as_str().to_string(),
-                target_owner: "operator".to_string(),
-                continuity_reason: "implementation route cannot continue".to_string(),
-                recommended_next_action: "boundline inspect".to_string(),
+                target_owner: OPERATOR_TARGET_OWNER.to_string(),
+                continuity_reason: IMPLEMENTATION_ROUTE_CONTINUITY_REASON.to_string(),
+                recommended_next_action: BOUNDLINE_INSPECT_COMMAND.to_string(),
                 evidence_refs: Vec::new(),
                 capability_summary: Some(evidence_summary),
                 stuck_marker: None,
@@ -410,7 +452,7 @@ impl SessionRuntime {
                 active_packet_id: Some(packet.packet_id.clone()),
                 mode: DelegationContinuityMode::EscalationRequired,
                 authority_source: ContinuityAuthority::NativeSession,
-                next_command: "boundline inspect".to_string(),
+                next_command: BOUNDLINE_INSPECT_COMMAND.to_string(),
                 headline: packet.headline(),
                 evidence_summary: packet.evidence_summary(),
             };
