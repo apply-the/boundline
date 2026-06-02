@@ -193,6 +193,7 @@ use runtime_support::{
     configured_framework_adapter_binding, default_planning_system_context,
     effective_assistant_runtimes, execution_governance_read_targets,
     framework_adapter_stage_failure_terminal_condition,
+    framework_adapter_stage_outcome_details_from_response,
     framework_adapter_stage_routing_trace_payload, framework_adapter_stage_routing_value,
     git_config_value, map_framework_adapter_failure_class, missing_planning_governance_field,
     parse_planning_system_context, protocol_error_code_from_host_error,

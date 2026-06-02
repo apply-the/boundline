@@ -104,7 +104,7 @@
 
 **Purpose**: Finalize docs, versioning, coverage, and full validation for the review slice.
 
-- [X] T028 [P] Add dedicated voting documentation in docs/review-voting.md covering majority voting, weighted voting, reject-on-blocking behavior, adjudication, malformed reviewer output, and accepted/rejected/escalated/failed outcomes with worked examples
+- [X] T028 [P] Add dedicated voting documentation in tech-docs/review-voting.md covering majority voting, weighted voting, reject-on-blocking behavior, adjudication, malformed reviewer output, and accepted/rejected/escalated/failed outcomes with worked examples
 - [ ] T029 [P] Update feature documentation in README.md, ROADMAP.md, AGENTS.md, assistant/README.md, and specs/007-multi-agent-review/quickstart.md
 - [ ] T030 [P] Keep crate version at 0.7.0 in Cargo.toml and Cargo.lock
 - [ ] T031 [P] Raise source coverage for new review paths in tests/unit/coverage_additional.rs, tests/unit/review_profile.rs, tests/unit/review_voting.rs, and review integration tests

@@ -113,7 +113,7 @@ for the branch
 
 **Purpose**: Finish docs, formatting, lint, tests, and coverage
 
-- [x] T023 [P] Update operator-facing docs in `docs/configuration.md`, `docs/architecture.md`, `docs/getting-started.md`, `README.md`, and `ROADMAP.md`
+- [x] T023 [P] Update operator-facing docs in `tech-docs/configuration.md`, `tech-docs/architecture.md`, `tech-docs/getting-started.md`, `README.md`, and `ROADMAP.md`
 - [x] T024 Run `cargo fmt --all` in `repo root`
 - [x] T025 Run `cargo clippy --workspace --all-targets --all-features -- -D warnings` in `repo root`
 - [x] T026 Run `cargo test --no-run --all-targets` and `cargo nextest run --workspace --all-features` in `repo root`

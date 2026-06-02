@@ -98,7 +98,7 @@ CHANGELOG.md
 Cargo.toml
 Cargo.lock
 assistant/
-docs/
+tech-docs/
 AGENTS.md
 ```
 

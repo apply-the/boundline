@@ -97,7 +97,7 @@ tests/
 ├── integration/
 └── unit/
 
-docs/
+tech-docs/
 ├── authority-zones-and-stop-semantics.md
 ├── council-adoption-guide.md
 └── review-council-algorithms.md

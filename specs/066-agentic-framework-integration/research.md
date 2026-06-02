@@ -57,6 +57,51 @@ Focused cross-repo validation was rerun on 2026-05-31 against the released
   the 2026-05-31 provider recheck still required no update beyond the catalog
   already refreshed on 2026-05-30.
 
+## Post-Correction Validation Evidence
+
+Focused corrected-stage validation was rerun on 2026-06-01 after the Speckit
+stage-map remediation, split workflow-entrypoint clarification, and retirement
+of the legacy combined workflow surface.
+
+- Host contract validation passed with `cargo test --test contract
+  framework_adapter_protocol_contract::` and `cargo test --test contract
+  runtime_routing_contract::`; the green cases still cover the declared V1
+  stdio JSON transport, standard stdout envelopes, explicit transport failure
+  handling, claimed-stage ownership, and stderr remaining trace-only even when
+  the adapter emits protocol or claimed-stage failures.
+- Host cross-repo activation validation passed with `cargo test --test
+  integration
+  framework_adapter_activation::cross_repo_speckit_binary_smoke_bridges_real_specify_plan_and_completes_run`;
+  the green case now proves the corrected split workflow IDs, real planning
+  entrypoint launch, implementation-only run behavior, and Boundline-owned
+  status or inspect visibility over produced artifacts and validation refs.
+- Host quality gates passed with `cargo fmt --check` and `cargo clippy
+  --workspace --all-targets --all-features -- -D warnings` after the corrected
+  workflow-entrypoint and documentation closure work.
+- Template validation passed with `cargo test --manifest-path
+  ../boundline-framework-template/Cargo.toml --test contract`, `cargo fmt
+  --manifest-path ../boundline-framework-template/Cargo.toml --all --check`,
+  and `cargo clippy --manifest-path
+  ../boundline-framework-template/Cargo.toml --all-targets -- -D warnings`;
+  the scaffold remains aligned to the released `0.66.0` protocol line while
+  documenting compatibility with downstream split workflow entrypoints.
+- Speckit validation passed with `cargo test --manifest-path
+  ../boundline-adapter-speckit/Cargo.toml --test contract`, `cargo test
+  --manifest-path ../boundline-adapter-speckit/Cargo.toml --test override_flow`,
+  `cargo test --manifest-path ../boundline-adapter-speckit/Cargo.toml --test
+  config_flow`, `cargo fmt --manifest-path
+  ../boundline-adapter-speckit/Cargo.toml --all --check`, and `cargo clippy
+  --manifest-path ../boundline-adapter-speckit/Cargo.toml --all-targets -- -D warnings`;
+  the known profile now proves `speckit-planning`, `speckit-implementation`,
+  the mandatory analyze-readiness gate, bounded remediation accounting, and the
+  retirement of the legacy combined workflow fallback.
+- A read-only `/speckit.analyze` rerun passed for the corrected 066 packet
+  slice. The packet now consistently treats `.specify/workflows/speckit/`
+  assets as bridge-launched entrypoints, keeps `goal`, `status`, and `inspect`
+  Boundline-owned, and records the mandatory analyze gate plus bounded
+  remediation loop as adapter-bridge behavior rather than hidden workflow
+  control flow.
+
 ## Decision 1: Keep Canon-aware behavior as the built-in default and make external adapters opt-in only
 
 **Decision**: Preserve the existing Canon-aware path as the built-in default

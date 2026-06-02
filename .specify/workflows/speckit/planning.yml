@@ -1,0 +1,54 @@
+schema_version: "1.0"
+workflow:
+  id: "speckit-planning"
+  name: "Speckit Planning"
+  version: "1.0.0"
+  author: "GitHub"
+  description: "Runs the Speckit planning entrypoint for a Boundline-claimed plan stage; the adapter bridge enforces clarify and analyze readiness around this workflow"
+
+requires:
+  speckit_version: ">=0.8.5"
+  integrations:
+    any:
+      - "claude"
+      - "copilot"
+      - "gemini"
+      - "opencode"
+
+inputs:
+  spec:
+    type: string
+    required: true
+    prompt: "Describe what you want to build"
+  integration:
+    type: string
+    default: "auto"
+    prompt: "Integration to use (e.g. claude, copilot, gemini; 'auto' uses the project's initialized integration)"
+  scope:
+    type: string
+    default: "full"
+    enum: ["full", "backend-only", "frontend-only"]
+
+steps:
+  # This workflow defines the linear planning entrypoint launched through
+  # `specify workflow run`. The adapter bridge owns the conditional clarify
+  # step, the mandatory analyze gate, and the bounded remediation or re-check
+  # loop around this entrypoint because those controls depend on host-visible
+  # planning findings rather than static YAML branching.
+  - id: specify
+    command: speckit.specify
+    integration: "{{ inputs.integration }}"
+    input:
+      args: "{{ inputs.spec }}"
+
+  - id: plan
+    command: speckit.plan
+    integration: "{{ inputs.integration }}"
+    input:
+      args: "{{ inputs.spec }}"
+
+  - id: tasks
+    command: speckit.tasks
+    integration: "{{ inputs.integration }}"
+    input:
+      args: "{{ inputs.spec }}"

@@ -96,7 +96,7 @@
 
 **Purpose**: Final validation and documentation alignment
 
-- [x] T023 [P] Update operator-facing documentation in `README.md` and `docs/session-native-orchestrator-review.md` to reflect native routing and explicit compatibility behavior
+- [x] T023 [P] Update operator-facing documentation in `README.md` and `tech-docs/session-native-orchestrator-review.md` to reflect native routing and explicit compatibility behavior
 - [x] T024 Run `cargo fmt --all`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test --no-run --all-targets`, and `cargo nextest run --workspace --all-features`
 
 ---

@@ -6,7 +6,11 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use boundline::adapters::FrameworkAdapterStageExecutionStatus;
+use boundline::adapters::{
+    FrameworkAdapterImplementationStatus, FrameworkAdapterPlanningFinding,
+    FrameworkAdapterPlanningFindingSeverity, FrameworkAdapterPlanningReadinessStatus,
+    FrameworkAdapterStageExecutionStatus,
+};
 use boundline::domain::framework_adapter::AdapterRegistrationSource;
 use boundline::domain::session::SessionStatus;
 use boundline::fixture::{
@@ -133,6 +137,15 @@ fn explicit_speckit_add_activates_declared_plan_stage_in_lifecycle_flow()
     assert!(plan_text.contains("framework_adapter_stage: plan"), "{plan_text}");
     assert!(plan_text.contains("framework_adapter_stage_claim: completed"), "{plan_text}");
     assert!(plan_text.contains("framework_adapter_stage_status: succeeded"), "{plan_text}");
+    assert!(plan_text.contains("framework_adapter_workflow_id: speckit-planning"), "{plan_text}");
+    assert!(plan_text.contains("framework_adapter_planning_readiness: ready"), "{plan_text}");
+    assert!(plan_text.contains("framework_adapter_analyze_pass_count: 1"), "{plan_text}");
+    assert!(
+        plan_text.contains(
+            "framework_adapter_executed_commands: speckit.specify, speckit.plan, speckit.tasks, speckit.analyze"
+        ),
+        "{plan_text}"
+    );
 
     let status = run_boundline_in_with_env(&workspace, &["status"], &[("PATH", path_env.as_str())]);
     let status_text = terminal_text(&status);
@@ -140,6 +153,11 @@ fn explicit_speckit_add_activates_declared_plan_stage_in_lifecycle_flow()
     assert!(status_text.contains("framework_adapter_stage: plan"), "{status_text}");
     assert!(status_text.contains("framework_adapter_stage_claim: completed"), "{status_text}");
     assert!(status_text.contains("framework_adapter_stage_status: succeeded"), "{status_text}");
+    assert!(
+        status_text.contains("framework_adapter_workflow_id: speckit-planning"),
+        "{status_text}"
+    );
+    assert!(status_text.contains("framework_adapter_planning_readiness: ready"), "{status_text}");
 
     let run = run_boundline_in_with_env(&workspace, &["run"], &[("PATH", path_env.as_str())]);
     let run_text = terminal_text(&run);
@@ -182,6 +200,9 @@ fn blocked_plan_stage_leaves_session_blocked_and_incomplete() -> Result<(), Box<
     assert!(plan_text.contains("framework_adapter_stage: plan"), "{plan_text}");
     assert!(plan_text.contains("framework_adapter_stage_claim: claimed"), "{plan_text}");
     assert!(plan_text.contains("framework_adapter_stage_status: blocked"), "{plan_text}");
+    assert!(plan_text.contains("framework_adapter_workflow_id: speckit-planning"), "{plan_text}");
+    assert!(plan_text.contains("framework_adapter_planning_readiness: blocked"), "{plan_text}");
+    assert!(plan_text.contains("framework_adapter_remediation_cycles_used: 2"), "{plan_text}");
 
     let session = FileSessionStore::for_workspace(&workspace)
         .load()?
@@ -229,12 +250,57 @@ fn explicit_speckit_add_activates_declared_run_stage_in_lifecycle_flow()
     let run_text = terminal_text(&run);
     assert_eq!(run.status.code(), Some(0), "{run_text}");
     assert!(stage_marker.exists(), "{run_text}");
+    assert!(
+        run_text.contains("framework_adapter_workflow_id: speckit-implementation"),
+        "{run_text}"
+    );
+    assert!(run_text.contains("framework_adapter_implementation_status: completed"), "{run_text}");
+    assert!(
+        run_text.contains("framework_adapter_validation_refs: validation/run.md"),
+        "{run_text}"
+    );
+    assert!(
+        run_text.contains("framework_adapter_executed_commands: speckit.implement"),
+        "{run_text}"
+    );
+    assert!(!run_text.contains("speckit.analyze"), "{run_text}");
+
+    let status = run_boundline_in_with_env(&workspace, &["status"], &[("PATH", path_env.as_str())]);
+    let status_text = terminal_text(&status);
+    assert!(
+        status_text.contains("framework_adapter_workflow_id: speckit-implementation"),
+        "{status_text}"
+    );
+    assert!(
+        status_text.contains("framework_adapter_implementation_status: completed"),
+        "{status_text}"
+    );
+    assert!(
+        status_text.contains("framework_adapter_validation_refs: validation/run.md"),
+        "{status_text}"
+    );
+
+    let inspect = run_boundline_in_with_env(
+        &workspace,
+        &["inspect", "--workspace", "."],
+        &[("PATH", path_env.as_str())],
+    );
+    let inspect_text = terminal_text(&inspect);
+    assert_eq!(inspect.status.code(), Some(0), "{inspect_text}");
+    assert!(
+        inspect_text.contains("framework_adapter_workflow_id: speckit-implementation"),
+        "{inspect_text}"
+    );
+    assert!(
+        inspect_text.contains("framework_adapter_implementation_status: completed"),
+        "{inspect_text}"
+    );
 
     Ok(())
 }
 
 #[test]
-fn cross_repo_speckit_binary_smoke_bridges_real_specify_plan_and_blocks_run_for_resume()
+fn cross_repo_speckit_binary_smoke_bridges_real_specify_plan_and_completes_run()
 -> Result<(), Box<dyn Error>> {
     let workspace = temp_specify_workspace_fixture("framework-adapter-cross-repo-smoke")?;
     let Some(speckit_binary_dir) = optional_built_speckit_binary_dir()? else {
@@ -265,23 +331,32 @@ fn cross_repo_speckit_binary_smoke_bridges_real_specify_plan_and_blocks_run_for_
     assert_eq!(plan.status.code(), Some(0), "{plan_text}");
     assert!(plan_text.contains("framework_adapter_stage: plan"), "{plan_text}");
     assert!(plan_text.contains("framework_adapter_stage_status: succeeded"), "{plan_text}");
+    assert!(plan_text.contains("framework_adapter_workflow_id: speckit-planning"), "{plan_text}");
     assert!(
         plan_text.contains(
-            "framework_adapter_produced_artifacts: specs/066-agentic-framework-integration/plan.md, specs/066-agentic-framework-integration/tasks.md"
+            "framework_adapter_produced_artifacts: specs/066-agentic-framework-integration/spec.md, specs/066-agentic-framework-integration/plan.md, specs/066-agentic-framework-integration/tasks.md, .specify/workflows/speckit/planning.yml"
         ),
         "{plan_text}"
     );
+    assert!(plan_text.contains("framework_adapter_planning_readiness: ready"), "{plan_text}");
     assert!(!workspace.join("speckit-plan-claimed.txt").exists(), "{plan_text}");
 
     let run = run_boundline_in_with_env(&workspace, &["run"], &[("PATH", path_env.as_str())]);
     let run_text = terminal_text(&run);
-    assert_eq!(run.status.code(), Some(1), "{run_text}");
-    assert!(run_text.contains("latest_status: blocked"), "{run_text}");
+    assert_eq!(run.status.code(), Some(0), "{run_text}");
+    assert!(run_text.contains("latest_status: succeeded"), "{run_text}");
     assert!(run_text.contains("framework_adapter_stage: run"), "{run_text}");
-    assert!(run_text.contains("framework_adapter_stage_claim: claimed"), "{run_text}");
-    assert!(run_text.contains("framework_adapter_stage_status: blocked"), "{run_text}");
+    assert!(run_text.contains("framework_adapter_stage_claim: completed"), "{run_text}");
+    assert!(run_text.contains("framework_adapter_stage_status: succeeded"), "{run_text}");
     assert!(
-        run_text.contains("framework_adapter_failure_detail: specify workflow resume"),
+        run_text.contains("framework_adapter_workflow_id: speckit-implementation"),
+        "{run_text}"
+    );
+    assert!(run_text.contains("framework_adapter_implementation_status: completed"), "{run_text}");
+    assert!(
+        run_text.contains(
+            "framework_adapter_executed_commands: sh .specify/scripts/bash/check-prerequisites.sh --json --require-tasks --include-tasks, specify workflow run .specify/workflows/speckit/implementation.yml"
+        ),
         "{run_text}"
     );
     assert!(!workspace.join("speckit-run-claimed.txt").exists(), "{run_text}");
@@ -550,12 +625,15 @@ fn write_ready_plan_only_adapter(
     adapter_dir: &Path,
     stage_marker: &Path,
 ) -> Result<PathBuf, Box<dyn Error>> {
-    write_fixture_adapter(
+    write_fixture_adapter_with_execute_json(
         adapter_dir,
         stage_marker,
         ready_stage_only_describe_json("plan")?,
         serde_json::to_string(&sample_framework_adapter_success_envelope(
             sample_framework_adapter_preflight_ready_response(),
+        ))?,
+        serde_json::to_string(&sample_framework_adapter_success_envelope(
+            ready_plan_stage_execute_response(),
         ))?,
     )
 }
@@ -582,6 +660,24 @@ fn write_blocked_plan_only_adapter(
     execute_stage_response.status = FrameworkAdapterStageExecutionStatus::Blocked;
     execute_stage_response.summary =
         "framework-adapter blocked the claimed stage pending operator action".to_string();
+    execute_stage_response.workflow_id = Some("speckit-planning".to_string());
+    execute_stage_response.executed_commands = vec![
+        "speckit.specify".to_string(),
+        "speckit.plan".to_string(),
+        "speckit.tasks".to_string(),
+        "speckit.analyze".to_string(),
+    ];
+    execute_stage_response.planning_findings = vec![FrameworkAdapterPlanningFinding {
+        finding_id: "F-001".to_string(),
+        summary: "Blocking planning finding".to_string(),
+        severity: FrameworkAdapterPlanningFindingSeverity::Blocking,
+    }];
+    execute_stage_response.remaining_blocking_findings =
+        execute_stage_response.planning_findings.clone();
+    execute_stage_response.final_planning_readiness_status =
+        Some(FrameworkAdapterPlanningReadinessStatus::Blocked);
+    execute_stage_response.analyze_pass_count = Some(3);
+    execute_stage_response.remediation_cycles_used = Some(2);
 
     write_fixture_adapter_with_execute_json(
         adapter_dir,
@@ -612,14 +708,47 @@ fn write_ready_run_only_adapter(
     adapter_dir: &Path,
     stage_marker: &Path,
 ) -> Result<PathBuf, Box<dyn Error>> {
-    write_fixture_adapter(
+    write_fixture_adapter_with_execute_json(
         adapter_dir,
         stage_marker,
         ready_stage_only_describe_json("run")?,
         serde_json::to_string(&sample_framework_adapter_success_envelope(
             sample_framework_adapter_preflight_ready_response(),
         ))?,
+        serde_json::to_string(&sample_framework_adapter_success_envelope(
+            ready_run_stage_execute_response(),
+        ))?,
     )
+}
+
+fn ready_plan_stage_execute_response() -> boundline::adapters::FrameworkAdapterExecuteStageResponse
+{
+    let mut response = sample_framework_adapter_execute_stage_success_response();
+    response.workflow_id = Some("speckit-planning".to_string());
+    response.executed_commands = vec![
+        "speckit.specify".to_string(),
+        "speckit.plan".to_string(),
+        "speckit.tasks".to_string(),
+        "speckit.analyze".to_string(),
+    ];
+    response.planning_findings = vec![FrameworkAdapterPlanningFinding {
+        finding_id: "NB-001".to_string(),
+        summary: "Informational planning note".to_string(),
+        severity: FrameworkAdapterPlanningFindingSeverity::NonBlocking,
+    }];
+    response.final_planning_readiness_status = Some(FrameworkAdapterPlanningReadinessStatus::Ready);
+    response.analyze_pass_count = Some(1);
+    response.remediation_cycles_used = Some(0);
+    response
+}
+
+fn ready_run_stage_execute_response() -> boundline::adapters::FrameworkAdapterExecuteStageResponse {
+    let mut response = sample_framework_adapter_execute_stage_success_response();
+    response.workflow_id = Some("speckit-implementation".to_string());
+    response.executed_commands = vec!["speckit.implement".to_string()];
+    response.implementation_status = Some(FrameworkAdapterImplementationStatus::Completed);
+    response.validation_refs = vec!["validation/run.md".to_string()];
+    response
 }
 
 fn write_blocked_preflight_run_only_adapter(
@@ -704,7 +833,7 @@ fn write_fixture_adapter_with_execute_json(
     let binary_path = adapter_dir.join(SPECKIT_BINARY_NAME);
     let stage_marker_path = stage_marker.to_string_lossy();
     let script = format!(
-        "#!/bin/sh\nset -eu\ncase \"$1\" in\n  describe)\n    cat <<'BOUNDLINE_JSON'\n{describe_json}\nBOUNDLINE_JSON\n    ;;\n  preflight)\n    cat <<'BOUNDLINE_JSON'\n{preflight_json}\nBOUNDLINE_JSON\n    ;;\n  execute-stage)\n    : > \"{stage_marker_path}\"\n    cat <<'BOUNDLINE_JSON'\n{execute_stage_json}\nBOUNDLINE_JSON\n    ;;\n  emit-hook)\n    cat <<'BOUNDLINE_JSON'\n{emit_hook_json}\nBOUNDLINE_JSON\n    ;;\n  *)\n    echo \"unsupported command: $1\" >&2\n    exit 64\n    ;;\nesac\n"
+        "#!/bin/sh\nset -eu\nconsume_stdin() {{\n  stdin_line=''\n  while IFS= read -r stdin_line || [ -n \"$stdin_line\" ]; do\n    stdin_line=''\n  done\n}}\nprint_json() {{\n  while IFS= read -r line; do\n    printf '%s\\n' \"$line\"\n  done\n}}\ncase \"$1\" in\n  describe)\n    print_json <<'BOUNDLINE_JSON'\n{describe_json}\nBOUNDLINE_JSON\n    ;;\n  preflight)\n    consume_stdin\n    print_json <<'BOUNDLINE_JSON'\n{preflight_json}\nBOUNDLINE_JSON\n    ;;\n  execute-stage)\n    consume_stdin\n    : > \"{stage_marker_path}\"\n    print_json <<'BOUNDLINE_JSON'\n{execute_stage_json}\nBOUNDLINE_JSON\n    ;;\n  emit-hook)\n    consume_stdin\n    print_json <<'BOUNDLINE_JSON'\n{emit_hook_json}\nBOUNDLINE_JSON\n    ;;\n  *)\n    echo \"unsupported command: $1\" >&2\n    exit 64\n    ;;\nesac\n"
     );
     fs::write(&binary_path, script)?;
     let mut permissions = fs::metadata(&binary_path)?.permissions();

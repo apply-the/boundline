@@ -91,7 +91,7 @@
 
 ### Implementation for User Story 3
 
-- [X] T018 [US3] Update the guided follow-through operator story and release notes in `README.md`, `docs/configuration.md`, `docs/getting-started.md`, `CONTRIBUTING.md`, `ROADMAP.md`, and `CHANGELOG.md`
+- [X] T018 [US3] Update the guided follow-through operator story and release notes in `README.md`, `tech-docs/configuration.md`, `tech-docs/getting-started.md`, `CONTRIBUTING.md`, `ROADMAP.md`, and `CHANGELOG.md`
 - [X] T019 [US3] Update assistant guidance and generated agent context for the follow-through surface in `assistant/README.md`, `assistant/claude/commands/boundline-status.md`, `assistant/claude/commands/boundline-next.md`, `assistant/claude/commands/boundline-inspect.md`, `assistant/codex/commands/boundline-status.md`, `assistant/codex/commands/boundline-next.md`, `assistant/codex/commands/boundline-inspect.md`, `assistant/copilot/prompts/boundline-status.prompt.md`, `assistant/copilot/prompts/boundline-next.prompt.md`, `assistant/copilot/prompts/boundline-inspect.prompt.md`, and `AGENTS.md`
 
 **Checkpoint**: Maintainers and assistants have one coherent `0.28.0` story for guided follow-through, continuity authority, and release behavior.

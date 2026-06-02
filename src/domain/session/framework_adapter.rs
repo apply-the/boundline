@@ -5,7 +5,7 @@ use serde_json::Value;
 
 use crate::domain::framework_adapter::{
     AdapterExecutionSource, AdapterFailureClass, AdapterLifecycleStageKey,
-    LifecycleStageExecutionStatus, StageClaimState,
+    FrameworkAdapterStageOutcomeDetails, LifecycleStageExecutionStatus, StageClaimState,
 };
 use crate::domain::task::TerminalReason;
 
@@ -32,6 +32,9 @@ pub struct LifecycleStageExecutionRecord {
     /// Artifacts or refs produced by the stage.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub produced_artifacts: Vec<String>,
+    /// Optional adapter-owned detail payload preserved with the stage outcome.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub details: Option<FrameworkAdapterStageOutcomeDetails>,
     /// Stage start timestamp.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub started_at: Option<u64>,

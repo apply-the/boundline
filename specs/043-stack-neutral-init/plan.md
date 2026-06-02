@@ -93,7 +93,7 @@ tests/
 ├── contract/
 └── unit/
 
-docs/
+tech-docs/
 ├── configuration.md
 ├── getting-started.md
 └── architecture.md

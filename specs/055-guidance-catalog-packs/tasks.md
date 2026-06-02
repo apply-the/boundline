@@ -128,7 +128,7 @@ description: "Task list for guidance catalog and guardian rule packs implementat
 
 **Purpose**: Finish docs, code comments, lint, tests, and coverage
 
-- [x] T026 [P] Update operator-facing docs and roadmap in `docs/architecture.md`, `docs/configuration.md`, `docs/getting-started.md`, `README.md`, and `ROADMAP.md`
+- [x] T026 [P] Update operator-facing docs and roadmap in `tech-docs/architecture.md`, `tech-docs/configuration.md`, `tech-docs/getting-started.md`, `README.md`, and `ROADMAP.md`
 - [x] T027 [P] Add concise code documentation in `src/domain/guidance_catalog.rs`, `src/orchestrator/guidance_catalog_runtime.rs`, and any other modified runtime files where catalog precedence or validation behavior is non-obvious
 - [x] T028 Run `cargo fmt --all` in `repo root`
 - [x] T029 Fix all clippy warnings in modified code and run `cargo clippy --workspace --all-targets --all-features -- -D warnings` in `repo root`

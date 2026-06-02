@@ -126,7 +126,7 @@ release slice.
 ### Implementation for User Story 4
 
 - [ ] T032 [US4] Bump the release version to `0.41.0` in `Cargo.toml`, generated workspace member manifests, and `Cargo.lock`
-- [ ] T033 [US4] Update README, architecture docs, getting-started, contributor guidance, and assistant guidance in `README.md`, `docs/`, `CONTRIBUTING.md`, `assistant/`, and `AGENTS.md` to keep a brutal quick path separate from advanced architecture
+- [ ] T033 [US4] Update README, architecture docs, getting-started, contributor guidance, and assistant guidance in `README.md`, `tech-docs/`, `CONTRIBUTING.md`, `assistant/`, and `AGENTS.md` to keep a brutal quick path separate from advanced architecture
 - [ ] T034 [US4] Update release metadata and workspace-root validation surfaces in `distribution/`, `CHANGELOG.md`, and `ROADMAP.md` so `0.41.0` is recorded as delivered and the future roadmap no longer includes 041 as upcoming
 
 **Checkpoint**: The `0.41.0` product, docs, and release surface describe the same checkpoint-and-workspace story.

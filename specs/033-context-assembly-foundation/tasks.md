@@ -115,7 +115,7 @@
 ### Implementation for User Story 4
 
 - [x] T025 [US4] Bump crate version to `0.33.0` in `Cargo.toml` and `Cargo.lock`
-- [x] T026 [US4] Update impacted docs and release narrative in `README.md`, `docs/getting-started.md`, `docs/configuration.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, and `AGENTS.md`
+- [x] T026 [US4] Update impacted docs and release narrative in `README.md`, `tech-docs/getting-started.md`, `tech-docs/configuration.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, and `AGENTS.md`
 - [x] T027 [US4] Update `ROADMAP.md` to mark Spec 033 as delivered and remove it from the remaining future macrofeature line
 - [x] T028 [US4] Update assistant or quickstart guidance impacted by the new context-pack story in `assistant/README.md` and `specs/033-context-assembly-foundation/quickstart.md`
 

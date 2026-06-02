@@ -235,6 +235,80 @@ pub enum FrameworkAdapterStageExecutionStatus {
     Failed,
 }
 
+/// Final planning-readiness posture surfaced by an adapter-owned `plan` stage.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FrameworkAdapterPlanningReadinessStatus {
+    /// Planning is ready to continue.
+    Ready,
+    /// Planning remains blocked.
+    Blocked,
+}
+
+/// Severity attached to one planning finding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FrameworkAdapterPlanningFindingSeverity {
+    /// The finding blocks planning completion.
+    Blocking,
+    /// The finding is informational or advisory only.
+    NonBlocking,
+}
+
+/// One planning finding surfaced by an adapter-owned planning stage.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FrameworkAdapterPlanningFinding {
+    /// Stable finding identifier.
+    pub finding_id: String,
+    /// Operator-facing finding summary.
+    pub summary: String,
+    /// Finding severity used by the planning gate.
+    pub severity: FrameworkAdapterPlanningFindingSeverity,
+}
+
+/// Skip reasons recorded for one skipped remediation task.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FrameworkAdapterPlanningRemediationSkipReason {
+    /// The remediation is outside the active feature scope.
+    OutOfScope,
+    /// The remediation would be unsafe to execute automatically.
+    Unsafe,
+    /// The remediation requires operator input.
+    RequiresOperatorInput,
+    /// The remediation is not deterministic enough for automatic execution.
+    NonDeterministic,
+    /// The remediation had no executable command.
+    MissingCommand,
+}
+
+/// Outcome record for one remediation task attempted or skipped by the adapter.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FrameworkAdapterPlanningRemediationTaskOutcome {
+    /// Stable remediation task identifier.
+    pub task_id: String,
+    /// Operator-facing task summary.
+    pub summary: String,
+    /// Findings addressed by the remediation task.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub finding_ids: Vec<String>,
+    /// Skip reason when the remediation did not run.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skip_reason: Option<FrameworkAdapterPlanningRemediationSkipReason>,
+}
+
+/// Final implementation posture surfaced by an adapter-owned `run` stage.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FrameworkAdapterImplementationStatus {
+    /// The implementation workflow completed.
+    Completed,
+    /// The implementation workflow blocked.
+    Blocked,
+    /// The implementation workflow failed.
+    Failed,
+}
+
 /// Status values returned by hook delivery.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -469,10 +543,49 @@ pub struct FrameworkAdapterExecuteStageResponse {
     /// Operator-readable summary for the claimed stage.
     pub summary: String,
     /// Artifact references produced by the adapter.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub produced_artifacts: Vec<String>,
+    /// Workflow identifier selected for the claimed stage.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_id: Option<String>,
+    /// Commands or bridge steps executed during the claimed stage.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub executed_commands: Vec<String>,
+    /// Planning findings surfaced by adapter-owned analysis.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub planning_findings: Vec<FrameworkAdapterPlanningFinding>,
+    /// Remediation tasks attempted during planning.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub remediation_tasks_attempted: Vec<FrameworkAdapterPlanningRemediationTaskOutcome>,
+    /// Remediation tasks completed successfully.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub remediation_tasks_completed: Vec<FrameworkAdapterPlanningRemediationTaskOutcome>,
+    /// Remediation tasks skipped with explicit reasons.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub remediation_tasks_skipped: Vec<FrameworkAdapterPlanningRemediationTaskOutcome>,
+    /// Blocking planning findings that remain unresolved.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub remaining_blocking_findings: Vec<FrameworkAdapterPlanningFinding>,
+    /// Final planning-readiness posture.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub final_planning_readiness_status: Option<FrameworkAdapterPlanningReadinessStatus>,
+    /// Number of analyze passes observed by the adapter.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub analyze_pass_count: Option<usize>,
+    /// Number of remediation cycles used by the adapter.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remediation_cycles_used: Option<usize>,
+    /// Final implementation-stage status when the adapter owns `run`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub implementation_status: Option<FrameworkAdapterImplementationStatus>,
+    /// Validation or evidence refs produced during stage execution.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub validation_refs: Vec<String>,
     /// Optional next-action guidance when the stage blocks or fails.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub next_action: Option<String>,
     /// Failure classification when the stage does not succeed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub failure_class: Option<FrameworkAdapterFailureClass>,
 }
 

@@ -29,7 +29,7 @@ body:
     attributes:
       label: Documentation Location
       description: Point to the file, URL, or section that needs attention.
-      placeholder: e.g. README.md, docs/getting-started.md, or a workflow guide section
+      placeholder: e.g. README.md, tech-docs/getting-started.md, or a workflow guide section
     validations:
       required: true
   - type: textarea

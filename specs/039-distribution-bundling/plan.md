@@ -106,7 +106,7 @@ scripts/
 └── sync-distribution-metadata.sh
 
 README.md
-docs/
+tech-docs/
 assistant/
 ROADMAP.md
 CHANGELOG.md

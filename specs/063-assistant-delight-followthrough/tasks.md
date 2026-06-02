@@ -110,8 +110,8 @@
 
 **Purpose**: Release-facing docs, wiki alignment, coverage enforcement, and code-quality hardening across all stories.
 
-- [ ] T028 [P] Update release-facing docs in `README.md`, `CHANGELOG.md`, `ROADMAP.md`, `docs/getting-started.md`, `docs/architecture.md`, and `docs/release-checklist.md`
-- [ ] T029 [P] Update additional operator docs in `docs/reasoning-profile-algorithms.md`, `docs/runtime-confidence-and-calibration.md`, `docs/session-native-orchestrator-review.md`, `docs/degradation-and-escalation.md`, and `assistant/README.md`
+- [ ] T028 [P] Update release-facing docs in `README.md`, `CHANGELOG.md`, `ROADMAP.md`, `tech-docs/getting-started.md`, `tech-docs/architecture.md`, and `tech-docs/release-checklist.md`
+- [ ] T029 [P] Update additional operator docs in `tech-docs/reasoning-profile-algorithms.md`, `tech-docs/runtime-confidence-and-calibration.md`, `tech-docs/session-native-orchestrator-review.md`, `tech-docs/degradation-and-escalation.md`, and `assistant/README.md`
 - [ ] T030 [P] Update affected wiki pages in `../boundline.wiki/Home.md`, `../boundline.wiki/Assistant-Integrations.md`, `../boundline.wiki/Getting-Started.md`, `../boundline.wiki/Quick-Start.md`, `../boundline.wiki/Daily-Operating-Guide.md`, `../boundline.wiki/Troubleshooting.md`, `../boundline.wiki/Architecture-And-Decisions.md`, `../boundline.wiki/Canon-Integration.md`, `../boundline.wiki/Core-Concepts.md`, and `../boundline.wiki/Ubiquitous-Language.md`
 - [ ] T031 Refactor touched Rust modules in `src/cli/output.rs`, `src/cli/inspect.rs`, `src/domain/session.rs`, `src/domain/trace.rs`, and `src/domain/reasoning.rs` to keep files and functions bounded and to remove duplication plus magic strings
 - [ ] T032 Refresh focused coverage artifacts in `lcov.info` and `results.txt` using `tests/contract/*.rs`, `tests/integration/*.rs`, and `scripts/common/coverage/intersect_patch_coverage.py` so created or modified Rust files stay at or above 95% coverage

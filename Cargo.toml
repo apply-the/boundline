@@ -8,6 +8,8 @@ members = [
 resolver = "3"
 
 [workspace.package]
+# Published release metadata remains on 0.66.0 until the next public tag is
+# cut; corrected Spec 066 semantics are tracked under CHANGELOG Unreleased.
 version = "0.66.0"
 edition = "2024"
 license = "MIT"

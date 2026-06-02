@@ -69,9 +69,9 @@
 
 **Purpose**: Make host installation and chat-to-CLI state mapping discoverable.
 
-- [x] T016 [P] Add host installation and limitation docs in `docs/guides/assistant-plugin-packages.md`
+- [x] T016 [P] Add host installation and limitation docs in `tech-docs/guides/assistant-plugin-packages.md`
 - [x] T017 [P] Add README sections "Use Boundline from chat", "Use Boundline from CLI", and "How chat commands map to CLI/runtime state" in `README.md`
-- [x] T018 Update `assistant/README.md`, `docs/guides/assistant-plugin-packages.md`, and `README.md` so the Boundline/Cannon boundary stays explicit and Canon is only visible for conditional governance
+- [x] T018 Update `assistant/README.md`, `tech-docs/guides/assistant-plugin-packages.md`, and `README.md` so the Boundline/Cannon boundary stays explicit and Canon is only visible for conditional governance
 - [x] T019 Run quickstart checks from `specs/048-assistant-plugin-packages/quickstart.md` and fix documentation gaps
 
 ---
@@ -80,7 +80,7 @@
 
 **Purpose**: Confirm release metadata, package metadata, docs, and tests remain aligned.
 
-- [x] T020 Run `rg -n '0\.49\.0|/boundline:(start|capture|plan|run|status|inspect|recover|govern)|session.json|next_command' Cargo.toml CHANGELOG.md ROADMAP.md distribution assistant .claude-plugin .codex-plugin .cursor-plugin .copilot-prompts docs/guides/assistant-plugin-packages.md README.md tests` from `repo root` and fix missing release or command references
+- [x] T020 Run `rg -n '0\.49\.0|/boundline:(start|capture|plan|run|status|inspect|recover|govern)|session.json|next_command' Cargo.toml CHANGELOG.md ROADMAP.md distribution assistant .claude-plugin .codex-plugin .cursor-plugin .copilot-prompts tech-docs/guides/assistant-plugin-packages.md README.md tests` from `repo root` and fix missing release or command references
 - [x] T021 Run `cargo test --test assistant_plugin_packages` from `repo root` and fix focused package validation failures
 - [x] T022 Run `cargo test --test contract distribution_metadata_contract` and `cargo test --test contract distribution_release_surface_contract` from `repo root` and fix release-surface regressions
 - [x] T023 Update `specs/048-assistant-plugin-packages/validation-report.md` with validation commands as they are run and the current status

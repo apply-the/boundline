@@ -63,7 +63,7 @@ Read the output literally:
   ready, already satisfied, blocked, or repair-needed.
 - `actions` tells you the next repair or follow-up step.
 
-The current release documents Canon `0.62.0` support for the machine-facing
+The current release documents Canon `0.63.0` support for the machine-facing
 `canon governance start|refresh|capabilities --json` `v1` surface.
 
 ## 3. Initialize The Workspace
@@ -174,6 +174,14 @@ The V1 adapter boundary is deliberately small: one-shot subprocess commands,
 standard success or error envelopes on stdout, optional structured stderr for
 trace enrichment only, and no graceful shutdown or resident daemon lifecycle.
 
+For the shipped Speckit profile, the corrected ownership map is explicit from
+the start: `goal` stays native to Boundline, `plan` maps to workflow ID
+`speckit-planning`, `run` maps to workflow ID `speckit-implementation`, and
+`status` plus `inspect` remain Boundline-owned visibility surfaces. The adapter
+executes the split workflow assets `.specify/workflows/speckit/planning.yml`
+and `.specify/workflows/speckit/implementation.yml`, but the runtime and
+operator surfaces continue to report the semantic workflow IDs.
+
 ## 6. Start One Bounded Session
 
 The primary product story is explicit:
@@ -220,6 +228,15 @@ execution source, adapter ID, routing reason, and hook-delivery outcomes. When
 an adapter blocks before claim because config is incomplete or transport
 compatibility is wrong, the runtime keeps that pre-claim stop or fallback
 reason explicit instead of silently converting the run into adapter ownership.
+
+When the active adapter is Speckit, read the stage output literally. A claimed
+`plan` stage must finish with a mandatory `speckit.analyze` readiness gate and
+may use one initial analyze pass plus at most two remediation or analyze
+re-check cycles before it returns `blocked`. A claimed `run` stage is
+implementation-only and must not rerun planning commands. `status` and
+`inspect` remain the host-owned way to see workflow ID, produced artifacts,
+planning findings, remediation counters, implementation validation refs, and
+hook-delivery outcomes.
 
 ## When Canon Matters
 

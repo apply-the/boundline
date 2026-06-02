@@ -104,7 +104,7 @@ tests/
 assistant/
 └── README.md
 
-docs/
+tech-docs/
 ├── configuration.md
 ├── getting-started.md
 └── adaptive-execution.md

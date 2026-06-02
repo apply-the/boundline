@@ -94,7 +94,7 @@
 
 ### Implementation for User Story 3
 
-- [ ] T021 [US3] Ship bounded governance profile examples and route-boundary guidance in `README.md`, `docs/getting-started.md`, `docs/configuration.md`, and `assistant/README.md`
+- [ ] T021 [US3] Ship bounded governance profile examples and route-boundary guidance in `README.md`, `tech-docs/getting-started.md`, `tech-docs/configuration.md`, and `assistant/README.md`
 - [ ] T022 [US3] Update contributor and roadmap guidance for the governed-stage-depth slice in `CONTRIBUTING.md` and `ROADMAP.md`
 
 **Checkpoint**: Maintainers have one coherent authored example for the deeper governed bug-fix slice, and route ownership stays explicit.

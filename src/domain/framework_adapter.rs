@@ -309,6 +309,183 @@ impl LifecycleStageExecutionStatus {
     }
 }
 
+/// Final readiness posture recorded for adapter-owned planning.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlanningReadinessStatus {
+    /// Planning is ready to continue.
+    Ready,
+    /// Planning remains blocked.
+    Blocked,
+}
+
+impl PlanningReadinessStatus {
+    /// Returns the stable serialized identifier for the readiness posture.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Ready => "ready",
+            Self::Blocked => "blocked",
+        }
+    }
+}
+
+/// Severity attached to one planning finding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlanningFindingSeverity {
+    /// The finding blocks plan completion.
+    Blocking,
+    /// The finding is advisory only.
+    NonBlocking,
+}
+
+impl PlanningFindingSeverity {
+    /// Returns the stable serialized identifier for the finding severity.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Blocking => "blocking",
+            Self::NonBlocking => "non_blocking",
+        }
+    }
+}
+
+/// One typed planning finding preserved in session state.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlanningFinding {
+    /// Stable finding identifier.
+    pub finding_id: String,
+    /// Operator-facing summary.
+    pub summary: String,
+    /// Severity used by the planning gate.
+    pub severity: PlanningFindingSeverity,
+}
+
+/// Skip reason recorded for one remediation task that did not execute.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PlanningRemediationSkipReason {
+    /// The remediation is outside the active feature scope.
+    OutOfScope,
+    /// The remediation would be unsafe to execute automatically.
+    Unsafe,
+    /// The remediation requires operator input.
+    RequiresOperatorInput,
+    /// The remediation is not deterministic enough for automatic execution.
+    NonDeterministic,
+    /// The remediation did not include an executable command.
+    MissingCommand,
+}
+
+impl PlanningRemediationSkipReason {
+    /// Returns the stable serialized identifier for the skip reason.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::OutOfScope => "out_of_scope",
+            Self::Unsafe => "unsafe",
+            Self::RequiresOperatorInput => "requires_operator_input",
+            Self::NonDeterministic => "non_deterministic",
+            Self::MissingCommand => "missing_command",
+        }
+    }
+}
+
+/// Outcome record for one attempted or skipped remediation task.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlanningRemediationTaskOutcome {
+    /// Stable remediation task identifier.
+    pub task_id: String,
+    /// Operator-facing task summary.
+    pub summary: String,
+    /// Findings addressed by the task.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub finding_ids: Vec<String>,
+    /// Skip reason when the remediation did not run.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skip_reason: Option<PlanningRemediationSkipReason>,
+}
+
+/// Final implementation posture recorded for adapter-owned run stages.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ImplementationStatus {
+    /// The implementation workflow completed.
+    Completed,
+    /// The implementation workflow blocked.
+    Blocked,
+    /// The implementation workflow failed.
+    Failed,
+}
+
+impl ImplementationStatus {
+    /// Returns the stable serialized identifier for the implementation posture.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Completed => "completed",
+            Self::Blocked => "blocked",
+            Self::Failed => "failed",
+        }
+    }
+}
+
+/// Optional adapter-owned stage detail payload persisted for status and inspect output.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct FrameworkAdapterStageOutcomeDetails {
+    /// Workflow identifier executed for the stage.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workflow_id: Option<String>,
+    /// Commands or bridge steps executed during the stage.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub executed_commands: Vec<String>,
+    /// Planning findings surfaced by the adapter.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub planning_findings: Vec<PlanningFinding>,
+    /// Remediation tasks attempted during planning.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub remediation_tasks_attempted: Vec<PlanningRemediationTaskOutcome>,
+    /// Remediation tasks completed successfully.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub remediation_tasks_completed: Vec<PlanningRemediationTaskOutcome>,
+    /// Remediation tasks skipped with explicit reasons.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub remediation_tasks_skipped: Vec<PlanningRemediationTaskOutcome>,
+    /// Blocking planning findings that remain unresolved.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub remaining_blocking_findings: Vec<PlanningFinding>,
+    /// Final planning-readiness posture.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub final_planning_readiness_status: Option<PlanningReadinessStatus>,
+    /// Number of analyze passes observed during planning.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub analyze_pass_count: Option<usize>,
+    /// Number of remediation cycles used during planning.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remediation_cycles_used: Option<usize>,
+    /// Final implementation-stage posture for adapter-owned `run`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub implementation_status: Option<ImplementationStatus>,
+    /// Validation or evidence refs reported by the adapter.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub validation_refs: Vec<String>,
+}
+
+impl FrameworkAdapterStageOutcomeDetails {
+    /// Returns whether the detail payload contains any persisted adapter-owned data.
+    pub fn is_empty(&self) -> bool {
+        self.workflow_id.is_none()
+            && self.executed_commands.is_empty()
+            && self.planning_findings.is_empty()
+            && self.remediation_tasks_attempted.is_empty()
+            && self.remediation_tasks_completed.is_empty()
+            && self.remediation_tasks_skipped.is_empty()
+            && self.remaining_blocking_findings.is_empty()
+            && self.final_planning_readiness_status.is_none()
+            && self.analyze_pass_count.is_none()
+            && self.remediation_cycles_used.is_none()
+            && self.implementation_status.is_none()
+            && self.validation_refs.is_empty()
+    }
+}
+
 /// Result of one hook dispatch attempt.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

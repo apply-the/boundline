@@ -88,7 +88,7 @@
 
 - [X] T021 [US3] Implement semantically grouped init output with plain-text-safe rich formatting hooks in src/cli/output.rs and src/cli/init.rs
 - [X] T022 [US3] Implement semantically grouped install/workspace diagnostic output in src/cli/output.rs and src/cli/diagnostics.rs
-- [X] T023 [US3] Align operator and assistant guidance with the new init/doctor UX in README.md, docs/getting-started.md, docs/configuration.md, and assistant/README.md
+- [X] T023 [US3] Align operator and assistant guidance with the new init/doctor UX in README.md, tech-docs/getting-started.md, tech-docs/configuration.md, and assistant/README.md
 
 **Checkpoint**: First-run init and doctor output are easier to scan without breaking scripting behavior.
 
@@ -98,7 +98,7 @@
 
 **Purpose**: Final cleanup, formatting, linting, and feature-level validation.
 
-- [X] T024 [P] Refresh release-aligned docs and assistant examples in docs/getting-started.md, docs/configuration.md, README.md, assistant/README.md, and specs/044-cli-init-ux/quickstart.md
+- [X] T024 [P] Refresh release-aligned docs and assistant examples in tech-docs/getting-started.md, tech-docs/configuration.md, README.md, assistant/README.md, and specs/044-cli-init-ux/quickstart.md
 - [X] T025 [P] Add extra regression coverage for touched init and diagnostics behavior in tests/integration/init_bootstrap_flow.rs, tests/integration/cli_diagnostics.rs, and tests/unit/cli_output.rs
 - [X] T026 Resolve all lint and formatting issues across touched files with `cargo fmt` and targeted cleanup in src/cli/init.rs, src/cli/output.rs, src/cli/diagnostics.rs, src/cli/assistant_assets.rs, and tests/
 - [X] T027 Run final validation with `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, focused `cargo test` commands for touched init/diagnostics slices, and `cargo test --no-run --all-targets --all-features`

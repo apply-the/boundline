@@ -317,3 +317,187 @@ impl SessionRuntime {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use serde_json::{Map, Value, json};
+
+    use crate::domain::limits::TerminalCondition;
+    use crate::domain::review::{
+        AdjudicationDefinition, ReviewOutcome, ReviewProfile, ReviewTrigger, VoteRuleDefinition,
+    };
+    use crate::domain::task::TerminalReason;
+    use crate::domain::task_context::TaskContext;
+
+    use super::SessionRuntime;
+
+    const SESSION_ID: &str = "session-1";
+    const WORKSPACE_REF: &str = "workspace-1";
+    const LATEST_REVIEW_TRIGGER_STATE_KEY: &str = "latest_review_trigger";
+    const LATEST_REVIEW_FINDINGS_STATE_KEY: &str = "latest_review_findings";
+    const LATEST_REVIEW_PARTICIPANTS_STATE_KEY: &str = "latest_review_participants";
+    const LATEST_REVIEW_VOTE_RESOLUTION_STATE_KEY: &str = "latest_review_vote_resolution";
+    const LATEST_REVIEW_VOTE_STATE_KEY: &str = "latest_review_vote";
+    const REJECTED_MESSAGE: &str = "native review rejected the delivery result";
+    const ESCALATED_MESSAGE: &str = "native review escalated and requires follow-up";
+    const FAILED_MESSAGE: &str = "native review failed";
+    const OVERRIDE_MESSAGE: &str = "explicit override";
+
+    #[test]
+    fn native_review_helpers_cover_trigger_selection_paths() {
+        let preferred_profile = review_profile(vec![
+            ReviewTrigger::ValidationFailed,
+            ReviewTrigger::HighRiskChange,
+            ReviewTrigger::PrReady,
+        ]);
+        assert_eq!(
+            SessionRuntime::native_review_trigger(&preferred_profile),
+            Some(ReviewTrigger::HighRiskChange)
+        );
+
+        let fallback_profile = review_profile(vec![ReviewTrigger::ValidationFailed]);
+        assert_eq!(
+            SessionRuntime::native_review_trigger(&fallback_profile),
+            Some(ReviewTrigger::ValidationFailed)
+        );
+
+        let empty_profile = review_profile(Vec::new());
+        assert_eq!(SessionRuntime::native_review_trigger(&empty_profile), None);
+    }
+
+    #[test]
+    fn native_review_helpers_cover_terminal_reason_paths() {
+        let accepted_context = review_context(Some(ReviewOutcome::Accepted));
+        assert_eq!(SessionRuntime::native_review_terminal_reason(&accepted_context, None), None);
+
+        let rejected_context = review_context(Some(ReviewOutcome::Rejected));
+        assert_eq!(
+            SessionRuntime::native_review_terminal_reason(&rejected_context, None),
+            Some(TerminalReason::new(
+                TerminalCondition::TaskNotCredible,
+                REJECTED_MESSAGE,
+                Some(expected_details()),
+            ))
+        );
+
+        let escalated_context = review_context(Some(ReviewOutcome::Escalated));
+        assert_eq!(
+            SessionRuntime::native_review_terminal_reason(
+                &escalated_context,
+                Some(OVERRIDE_MESSAGE)
+            ),
+            Some(TerminalReason::new(
+                TerminalCondition::NoCredibleNextStep,
+                OVERRIDE_MESSAGE,
+                Some(expected_details()),
+            ))
+        );
+
+        let failed_context = review_context(Some(ReviewOutcome::Failed));
+        assert_eq!(
+            SessionRuntime::native_review_terminal_reason(&failed_context, None),
+            Some(TerminalReason::new(
+                TerminalCondition::UnrecoverableError,
+                FAILED_MESSAGE,
+                Some(expected_details()),
+            ))
+        );
+
+        let missing_outcome_context = review_context(None);
+        assert_eq!(
+            SessionRuntime::native_review_terminal_reason(
+                &missing_outcome_context,
+                Some(OVERRIDE_MESSAGE)
+            ),
+            Some(TerminalReason::new(
+                TerminalCondition::UnrecoverableError,
+                OVERRIDE_MESSAGE,
+                Some(expected_details()),
+            ))
+        );
+
+        let invalid_outcome_context = invalid_outcome_context();
+        assert_eq!(
+            SessionRuntime::native_review_terminal_reason(&invalid_outcome_context, None),
+            Some(TerminalReason::new(
+                TerminalCondition::UnrecoverableError,
+                FAILED_MESSAGE,
+                Some(expected_details()),
+            ))
+        );
+
+        let escalated_default_context = review_context(Some(ReviewOutcome::Escalated));
+        assert_eq!(
+            SessionRuntime::native_review_terminal_reason(&escalated_default_context, None),
+            Some(TerminalReason::new(
+                TerminalCondition::NoCredibleNextStep,
+                ESCALATED_MESSAGE,
+                Some(expected_details()),
+            ))
+        );
+    }
+
+    fn review_profile(triggers: Vec<ReviewTrigger>) -> ReviewProfile {
+        ReviewProfile {
+            triggers,
+            reviewers: Vec::new(),
+            vote_rule: VoteRuleDefinition::default(),
+            adjudication: AdjudicationDefinition::default(),
+            scenarios: Vec::new(),
+        }
+    }
+
+    fn review_context(outcome: Option<ReviewOutcome>) -> TaskContext {
+        let mut state = review_state();
+        if let Some(review_outcome) = outcome {
+            state.insert(super::LATEST_REVIEW_OUTCOME_KEY.to_string(), json!(review_outcome));
+        }
+        TaskContext::new(
+            SESSION_ID,
+            WORKSPACE_REF,
+            crate::domain::limits::RunLimits::default(),
+            state,
+        )
+    }
+
+    fn invalid_outcome_context() -> TaskContext {
+        let mut state = review_state();
+        state.insert(
+            super::LATEST_REVIEW_OUTCOME_KEY.to_string(),
+            Value::String("not-an-outcome".to_string()),
+        );
+        TaskContext::new(
+            SESSION_ID,
+            WORKSPACE_REF,
+            crate::domain::limits::RunLimits::default(),
+            state,
+        )
+    }
+
+    fn review_state() -> Map<String, Value> {
+        Map::from_iter([
+            (
+                LATEST_REVIEW_TRIGGER_STATE_KEY.to_string(),
+                Value::String("high_risk_change".to_string()),
+            ),
+            (LATEST_REVIEW_FINDINGS_STATE_KEY.to_string(), json!(["scope needs tightening"])),
+            (LATEST_REVIEW_PARTICIPANTS_STATE_KEY.to_string(), json!(["reviewer-a", "reviewer-b"])),
+            (
+                LATEST_REVIEW_VOTE_RESOLUTION_STATE_KEY.to_string(),
+                Value::String("blocked".to_string()),
+            ),
+            (LATEST_REVIEW_VOTE_STATE_KEY.to_string(), Value::String("rejected".to_string())),
+            ("ignored_key".to_string(), Value::String("ignored".to_string())),
+        ])
+    }
+
+    fn expected_details() -> Value {
+        json!({
+            "latest_review_trigger": "high_risk_change",
+            "latest_review_findings": ["scope needs tightening"],
+            "latest_review_participants": ["reviewer-a", "reviewer-b"],
+            "latest_review_vote_resolution": "blocked",
+            "latest_review_vote": "rejected",
+        })
+    }
+}

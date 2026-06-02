@@ -123,7 +123,7 @@ is producer-side or consumer-side.
 
 **Purpose**: Validate consumer behavior, docs, and coverage end to end.
 
-- [ ] T026 [P] Update `docs/architecture.md`, `docs/getting-started.md`, and `docs/configuration.md` for project index, workflow reuse, and tiered stop rules
+- [ ] T026 [P] Update `tech-docs/architecture.md`, `tech-docs/getting-started.md`, and `tech-docs/configuration.md` for project index, workflow reuse, and tiered stop rules
 - [ ] T027 [P] Update `CHANGELOG.md` and `ROADMAP.md`
 - [ ] T028 Run targeted Boundline tests for `src/domain/project_memory.rs`, `src/domain/project_index.rs`, `src/orchestrator/session_runtime.rs`, `src/orchestrator/goal_planner.rs`, and `src/cli/session.rs`
 - [ ] T029 Run `cargo test --no-run --all-targets`

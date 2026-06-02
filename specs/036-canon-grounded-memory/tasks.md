@@ -116,7 +116,7 @@
 ### Implementation for User Story 4
 
 - [x] T026 [US4] Bump crate version to `0.36.0` in `Cargo.toml` and `Cargo.lock`
-- [x] T027 [US4] Update impacted docs and release narrative in `README.md`, `docs/`, `CONTRIBUTING.md`, `CHANGELOG.md`, and `AGENTS.md`
+- [x] T027 [US4] Update impacted docs and release narrative in `README.md`, `tech-docs/`, `CONTRIBUTING.md`, `CHANGELOG.md`, and `AGENTS.md`
 - [x] T028 [US4] Update `ROADMAP.md` to mark Spec 036 as delivered and remove it from the remaining future macrofeature line
 - [x] T029 [US4] Update assistant guidance impacted by Canon-grounded reasoning in `assistant/README.md`, `assistant/claude/commands/`, `assistant/codex/commands/`, `assistant/copilot/prompts/`, and `assistant/gemini/README.md`
 

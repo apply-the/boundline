@@ -86,7 +86,7 @@ tests/
 ├── integration/
 └── unit/
 
-docs/
+tech-docs/
 ├── architecture.md
 ├── configuration.md
 └── getting-started.md

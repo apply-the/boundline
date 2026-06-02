@@ -116,7 +116,7 @@
 ### Implementation for User Story 4
 
 - [x] T026 [US4] Bump crate version to `0.37.0` in `Cargo.toml` and `Cargo.lock`
-- [x] T027 [US4] Update impacted docs and release narrative in `README.md`, `docs/`, `CONTRIBUTING.md`, `CHANGELOG.md`, and `AGENTS.md`
+- [x] T027 [US4] Update impacted docs and release narrative in `README.md`, `tech-docs/`, `CONTRIBUTING.md`, `CHANGELOG.md`, and `AGENTS.md`
 - [x] T028 [US4] Update `ROADMAP.md` to activate and then mark Spec 037 as delivered on the next macrofeature line
 - [x] T029 [US4] Update assistant guidance impacted by delegated execution in `assistant/README.md`, `assistant/claude/commands/`, `assistant/codex/commands/`, and `assistant/copilot/prompts/`
 

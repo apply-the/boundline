@@ -739,3 +739,125 @@ fn push_governance_projection_fields(
         projection.push(format!("requested_governance_owner={owner}"));
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        RoutingMode, RoutingOutcome, RoutingSource, SessionStatusView,
+        framework_adapter_routing_outcome, render_session_projection_prefix,
+        routing_outcome_for_status_view, session_route_owner,
+    };
+    use crate::domain::execution::StageRoutingDecisionRecord;
+    use crate::domain::framework_adapter::{
+        AdapterExecutionSource, AdapterLifecycleStageKey, LifecycleStageExecutionStatus,
+        StageClaimState, StageRoutingDecisionReason,
+    };
+
+    fn sample_adapter_stage_routing(
+        stage_key: AdapterLifecycleStageKey,
+        stage_status: Option<LifecycleStageExecutionStatus>,
+    ) -> StageRoutingDecisionRecord {
+        StageRoutingDecisionRecord {
+            run_id: format!("run-{}", stage_key.as_str()),
+            stage_key,
+            execution_source: AdapterExecutionSource::Adapter,
+            decision_reason: StageRoutingDecisionReason::DeclaredOverride,
+            claim_state: StageClaimState::Claimed,
+            adapter_id: Some("speckit".to_string()),
+            stage_status,
+            produced_artifacts: vec![format!("artifacts/{}.md", stage_key.as_str())],
+            details: None,
+            recorded_at: 1,
+        }
+    }
+
+    #[test]
+    fn framework_adapter_routing_outcome_covers_stage_specific_messages() {
+        let plan_blocked = framework_adapter_routing_outcome(
+            AdapterLifecycleStageKey::Plan,
+            Some(LifecycleStageExecutionStatus::Blocked),
+        );
+        assert_eq!(
+            plan_blocked,
+            RoutingOutcome {
+                mode: RoutingMode::Blocked,
+                source: RoutingSource::SessionState,
+                reason:
+                    "framework-adapter blocked the claimed plan stage and left planning incomplete"
+                        .to_string(),
+            }
+        );
+
+        let run_blocked = framework_adapter_routing_outcome(
+            AdapterLifecycleStageKey::Run,
+            Some(LifecycleStageExecutionStatus::Blocked),
+        );
+        assert_eq!(
+            run_blocked,
+            RoutingOutcome {
+                mode: RoutingMode::Blocked,
+                source: RoutingSource::SessionState,
+                reason:
+                    "framework-adapter blocked the claimed run stage and left execution incomplete"
+                        .to_string(),
+            }
+        );
+
+        let plan_owned = framework_adapter_routing_outcome(
+            AdapterLifecycleStageKey::Plan,
+            Some(LifecycleStageExecutionStatus::Succeeded),
+        );
+        assert_eq!(plan_owned.mode, RoutingMode::Native);
+        assert_eq!(plan_owned.source, RoutingSource::SessionState);
+        assert_eq!(plan_owned.reason, "framework-adapter owns the persisted plan-stage outcome");
+
+        let run_owned = framework_adapter_routing_outcome(
+            AdapterLifecycleStageKey::Run,
+            Some(LifecycleStageExecutionStatus::Succeeded),
+        );
+        assert_eq!(run_owned.mode, RoutingMode::Native);
+        assert_eq!(run_owned.source, RoutingSource::SessionState);
+        assert_eq!(run_owned.reason, "framework-adapter owns the persisted run-stage outcome");
+
+        let review_blocked = framework_adapter_routing_outcome(
+            AdapterLifecycleStageKey::Review,
+            Some(LifecycleStageExecutionStatus::Blocked),
+        );
+        assert_eq!(review_blocked.mode, RoutingMode::Blocked);
+        assert_eq!(review_blocked.source, RoutingSource::SessionState);
+        assert_eq!(
+            review_blocked.reason,
+            "framework-adapter blocked the claimed stage and left the session incomplete"
+        );
+
+        let review_owned =
+            framework_adapter_routing_outcome(AdapterLifecycleStageKey::Review, None);
+        assert_eq!(review_owned.mode, RoutingMode::Native);
+        assert_eq!(review_owned.source, RoutingSource::SessionState);
+        assert_eq!(review_owned.reason, "framework-adapter owns the persisted stage outcome");
+    }
+
+    #[test]
+    fn session_projection_prefers_adapter_owned_stage_routing() {
+        let view = SessionStatusView {
+            latest_framework_adapter_stage_routing: Some(sample_adapter_stage_routing(
+                AdapterLifecycleStageKey::Run,
+                Some(LifecycleStageExecutionStatus::Blocked),
+            )),
+            ..SessionStatusView::default()
+        };
+
+        let outcome = routing_outcome_for_status_view(&view);
+
+        assert_eq!(outcome.mode, RoutingMode::Blocked);
+        assert_eq!(outcome.source, RoutingSource::SessionState);
+        assert_eq!(
+            outcome.reason,
+            "framework-adapter blocked the claimed run stage and left execution incomplete"
+        );
+        assert_eq!(session_route_owner(&view), "adapter");
+        assert!(render_session_projection_prefix(&view).contains(
+            "framework-adapter blocked the claimed run stage and left execution incomplete"
+        ));
+    }
+}

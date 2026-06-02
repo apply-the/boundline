@@ -106,26 +106,30 @@ mod tests {
     use std::ffi::OsString;
     use std::fs;
     use std::path::Path;
+    use std::sync::MutexGuard;
 
     use tempfile::tempdir;
 
     use super::{PWD_ENV_VAR, current_dir_or_pwd, discover_workspace_root, resolve_workspace};
+    use crate::test_support::acquire_process_state_lock;
 
     struct CurrentDirGuard {
         original: std::path::PathBuf,
+        _lock: MutexGuard<'static, ()>,
     }
 
     impl CurrentDirGuard {
         fn change_to(path: &std::path::Path) -> Self {
-            let original = current_dir_or_pwd().unwrap();
+            let lock = acquire_process_state_lock();
+            let original = current_dir_or_pwd().unwrap_or_else(|_| std::env::temp_dir());
             std::env::set_current_dir(path).unwrap();
-            Self { original }
+            Self { original, _lock: lock }
         }
     }
 
     impl Drop for CurrentDirGuard {
         fn drop(&mut self) {
-            std::env::set_current_dir(&self.original).unwrap();
+            let _ = std::env::set_current_dir(&self.original);
         }
     }
 
@@ -217,5 +221,20 @@ mod tests {
         let resolved = resolve_workspace(None).unwrap();
 
         assert_eq!(resolved, git_root.canonicalize().unwrap());
+    }
+
+    #[test]
+    fn resolve_workspace_reports_unavailable_current_directory_without_valid_pwd() {
+        let temp = tempdir().unwrap();
+        let broken_workspace = temp.path().join("broken-cwd");
+        fs::create_dir_all(&broken_workspace).unwrap();
+        let _current_dir_guard = CurrentDirGuard::change_to(&broken_workspace);
+        fs::remove_dir_all(&broken_workspace).unwrap();
+        let invalid_pwd = Path::new("relative-pwd");
+        let _pwd_guard = PwdEnvGuard::set(Some(invalid_pwd));
+
+        let error = resolve_workspace(None).unwrap_err();
+
+        assert!(matches!(error, super::WorkspaceResolutionError::CurrentDir(_)));
     }
 }

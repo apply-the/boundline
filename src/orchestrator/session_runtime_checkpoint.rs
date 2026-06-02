@@ -285,3 +285,63 @@ impl SessionRuntime {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use crate::domain::limits::RunLimits;
+    use crate::domain::task_context::TaskContext;
+
+    use super::{
+        CheckpointProjectionState, LATEST_CHECKPOINT_ID_KEY, LATEST_CHECKPOINT_RESTORE_COMMAND_KEY,
+        LATEST_CHECKPOINT_SCOPE_KEY, LATEST_CHECKPOINT_WORKSPACES_KEY,
+        apply_checkpoint_projection_to_context, checkpoint_event_payload,
+        checkpoint_projection_from_context,
+    };
+
+    const CHECKPOINT_ID: &str = "checkpoint-123";
+    const RESTORE_COMMAND: &str = "boundline checkpoint restore checkpoint-123 --workspace .";
+    const SESSION_ID: &str = "session-1";
+    const WORKSPACE_REF: &str = "/tmp/workspace";
+
+    #[test]
+    fn checkpoint_helpers_cover_payload_and_context_round_trip() {
+        let projection = CheckpointProjectionState {
+            checkpoint_id: CHECKPOINT_ID.to_string(),
+            scope: "workspace".to_string(),
+            restore_command: RESTORE_COMMAND.to_string(),
+            workspace_refs: vec![WORKSPACE_REF.to_string(), "/tmp/other".to_string()],
+        };
+
+        let payload = checkpoint_event_payload(&projection);
+        assert_eq!(payload["checkpoint_id"], json!(CHECKPOINT_ID));
+        assert_eq!(payload["checkpoint_scope"], json!("workspace"));
+        assert_eq!(payload["checkpoint_restore_command"], json!(RESTORE_COMMAND));
+        assert_eq!(payload["checkpoint_workspace_refs"], json!([WORKSPACE_REF, "/tmp/other"]));
+
+        let mut context = TaskContext::new(
+            SESSION_ID,
+            WORKSPACE_REF,
+            RunLimits::default(),
+            serde_json::Map::new(),
+        );
+        apply_checkpoint_projection_to_context(&mut context, &projection);
+
+        assert_eq!(context.state.get(LATEST_CHECKPOINT_ID_KEY), Some(&json!(CHECKPOINT_ID)));
+        assert_eq!(context.state.get(LATEST_CHECKPOINT_SCOPE_KEY), Some(&json!("workspace")));
+        assert_eq!(
+            context.state.get(LATEST_CHECKPOINT_RESTORE_COMMAND_KEY),
+            Some(&json!(RESTORE_COMMAND))
+        );
+        assert_eq!(
+            context.state.get(LATEST_CHECKPOINT_WORKSPACES_KEY),
+            Some(&json!([WORKSPACE_REF, "/tmp/other"]))
+        );
+
+        assert_eq!(checkpoint_projection_from_context(&context), Some(projection.clone()));
+
+        context.state.remove(LATEST_CHECKPOINT_ID_KEY);
+        assert_eq!(checkpoint_projection_from_context(&context), None);
+    }
+}

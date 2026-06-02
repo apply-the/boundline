@@ -845,7 +845,7 @@ fn write_runtime_routing_stage_adapter(
 
     let binary_path = workspace.join(format!("adapter-{}.sh", behavior.label()));
     let script = format!(
-        "#!/bin/sh\nset -eu\ncase \"$1\" in\n  describe)\n    cat <<'BOUNDLINE_JSON'\n{describe_json}\nBOUNDLINE_JSON\n    ;;\n  preflight)\n    cat <<'BOUNDLINE_JSON'\n{preflight_json}\nBOUNDLINE_JSON\n    ;;\n  execute-stage)\n{execute_stage_script}\n    ;;\n  emit-hook)\n    cat <<'BOUNDLINE_JSON'\n{}\nBOUNDLINE_JSON\n    ;;\n  *)\n    echo \"unsupported command: $1\" >&2\n    exit 64\n    ;;\nesac\n",
+        "#!/bin/sh\nset -eu\nconsume_stdin() {{\n  stdin_line=''\n  while IFS= read -r stdin_line || [ -n \"$stdin_line\" ]; do\n    stdin_line=''\n  done\n}}\nprint_json() {{\n  while IFS= read -r line; do\n    printf '%s\\n' \"$line\"\n  done\n}}\ncase \"$1\" in\n  describe)\n    print_json <<'BOUNDLINE_JSON'\n{describe_json}\nBOUNDLINE_JSON\n    ;;\n  preflight)\n    consume_stdin\n    print_json <<'BOUNDLINE_JSON'\n{preflight_json}\nBOUNDLINE_JSON\n    ;;\n  execute-stage)\n    consume_stdin\n{execute_stage_script}\n    ;;\n  emit-hook)\n    consume_stdin\n    print_json <<'BOUNDLINE_JSON'\n{}\nBOUNDLINE_JSON\n    ;;\n  *)\n    echo \"unsupported command: $1\" >&2\n    exit 64\n    ;;\nesac\n",
         serde_json::to_string(&sample_framework_adapter_success_envelope(json!({
             "status": "ignored",
             "summary": "hook ignored in runtime routing contract"
@@ -885,18 +885,19 @@ fn write_runtime_routing_manifest_adapter(
     let run_marker_line = run_marker
         .map(|path| {
             format!(
-                "    if printf '%s' \"$request\" | grep -q '\"stage_key\":\"run\"'; then : > \"{}\"; fi\n",
+                "    case \"$request\" in\n      *'\"stage_key\":\"run\"'*) : > \"{}\" ;;
+    esac\n",
                 path.display()
             )
         })
         .unwrap_or_default();
     let hook_marker_line = hook_marker
-        .map(|path| format!("    cat > \"{}\"\n", path.display()))
-        .unwrap_or_else(|| "    cat >/dev/null\n".to_string());
+        .map(|path| format!("    consume_stdin_to_file \"{}\"\n", path.display()))
+        .unwrap_or_else(|| "    consume_stdin\n".to_string());
 
     let binary_path = workspace.join(format!("adapter-manifest-{}.sh", Uuid::new_v4()));
     let script = format!(
-        "#!/bin/sh\nset -eu\ncase \"$1\" in\n  describe)\n    cat <<'BOUNDLINE_JSON'\n{describe_json}\nBOUNDLINE_JSON\n    ;;\n  preflight)\n    cat <<'BOUNDLINE_JSON'\n{preflight_json}\nBOUNDLINE_JSON\n    ;;\n  execute-stage)\n    request=\"$(cat)\"\n{run_marker_line}    cat <<'BOUNDLINE_JSON'\n{execute_stage_json}\nBOUNDLINE_JSON\n    ;;\n  emit-hook)\n{hook_marker_line}    cat <<'BOUNDLINE_JSON'\n{}\nBOUNDLINE_JSON\n    ;;\n  *)\n    echo \"unsupported command: $1\" >&2\n    exit 64\n    ;;\nesac\n",
+        "#!/bin/sh\nset -eu\nconsume_stdin() {{\n  stdin_line=''\n  while IFS= read -r stdin_line || [ -n \"$stdin_line\" ]; do\n    stdin_line=''\n  done\n}}\nconsume_stdin_to_file() {{\n  target_path=$1\n  : > \"$target_path\"\n  stdin_line=''\n  while IFS= read -r stdin_line || [ -n \"$stdin_line\" ]; do\n    printf '%s\\n' \"$stdin_line\" >> \"$target_path\"\n    stdin_line=''\n  done\n}}\nprint_json() {{\n  while IFS= read -r line; do\n    printf '%s\\n' \"$line\"\n  done\n}}\ncase \"$1\" in\n  describe)\n    print_json <<'BOUNDLINE_JSON'\n{describe_json}\nBOUNDLINE_JSON\n    ;;\n  preflight)\n    consume_stdin\n    print_json <<'BOUNDLINE_JSON'\n{preflight_json}\nBOUNDLINE_JSON\n    ;;\n  execute-stage)\n    request=''\n    request_line=''\n    while IFS= read -r request_line || [ -n \"$request_line\" ]; do\n      request=\"${{request}}${{request_line}}\"\n      request_line=''\n    done\n{run_marker_line}    print_json <<'BOUNDLINE_JSON'\n{execute_stage_json}\nBOUNDLINE_JSON\n    ;;\n  emit-hook)\n{hook_marker_line}    print_json <<'BOUNDLINE_JSON'\n{}\nBOUNDLINE_JSON\n    ;;\n  *)\n    echo \"unsupported command: $1\" >&2\n    exit 64\n    ;;\nesac\n",
         serde_json::to_string(&sample_framework_adapter_success_envelope(json!({
             "status": "delivered",
             "summary": "hook delivered"
@@ -927,7 +928,7 @@ fn runtime_routing_execute_stage_script(
                 serde_json::to_string(&sample_framework_adapter_success_envelope(response))
                     .map_err(|error| error.to_string())?;
             Ok(format!(
-                "    printf '%s\\n' 'adapter stderr: blocked claimed outcome' >&2\n    cat <<'BOUNDLINE_JSON'\n{response_json}\nBOUNDLINE_JSON"
+                "    printf '%s\\n' 'adapter stderr: blocked claimed outcome' >&2\n    print_json <<'BOUNDLINE_JSON'\n{response_json}\nBOUNDLINE_JSON"
             ))
         }
         RuntimeRoutingExecuteStageBehavior::InBandFailed => {
@@ -939,7 +940,7 @@ fn runtime_routing_execute_stage_script(
                 serde_json::to_string(&sample_framework_adapter_success_envelope(response))
                     .map_err(|error| error.to_string())?;
             Ok(format!(
-                "    printf '%s\\n' 'adapter stderr: in-band failed outcome' >&2\n    cat <<'BOUNDLINE_JSON'\n{response_json}\nBOUNDLINE_JSON"
+                "    printf '%s\\n' 'adapter stderr: in-band failed outcome' >&2\n    print_json <<'BOUNDLINE_JSON'\n{response_json}\nBOUNDLINE_JSON"
             ))
         }
         RuntimeRoutingExecuteStageBehavior::ProtocolError => {
@@ -957,7 +958,7 @@ fn runtime_routing_execute_stage_script(
             ))
             .map_err(|error| error.to_string())?;
             Ok(format!(
-                "    printf '%s\\n' 'adapter stderr: protocol error envelope' >&2\n    cat <<'BOUNDLINE_JSON'\n{response_json}\nBOUNDLINE_JSON"
+                "    printf '%s\\n' 'adapter stderr: protocol error envelope' >&2\n    print_json <<'BOUNDLINE_JSON'\n{response_json}\nBOUNDLINE_JSON"
             ))
         }
         RuntimeRoutingExecuteStageBehavior::TransportFailure => {

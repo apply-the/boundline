@@ -51,7 +51,7 @@
 - [X] T017 [US1] Add global assistant package metadata and command assets for Claude, Codex, Cursor, Copilot-style prompt packs, and Gemini-style fallbacks under `assistant/global/`.
 - [X] T018 [US1] Extend diagnostics for Boundline install state, Canon pairing state, workspace readiness, and next repair/init command in `src/cli/diagnostics.rs`.
 - [X] T019 [US1] Update repo-local assistant package generation to distinguish global and repo-local packages in `src/cli/init.rs` and `src/cli/assistant_assets.rs`.
-- [X] T020 [US1] Document global package support, unsupported-host fallbacks, and bootstrap commands in `docs/guides/assistant-plugin-packages.md`, `docs/getting-started.md`, and `assistant/README.md`.
+- [X] T020 [US1] Document global package support, unsupported-host fallbacks, and bootstrap commands in `tech-docs/guides/assistant-plugin-packages.md`, `tech-docs/getting-started.md`, and `assistant/README.md`.
 
 **Checkpoint**: User Story 1 is independently testable in an uninitialized workspace.
 
@@ -98,7 +98,7 @@
 - [X] T032 [US3] Extend Canon capability command integration and mode validation in `src/adapters/governance_runtime.rs`.
 - [X] T033 [US3] Implement the `boundline govern` CLI surface and mode inference in `src/cli.rs` and `src/cli/govern.rs`.
 - [X] T034 [US3] Route governed stages through Boundline-owned stage boundaries and persist packet refs, provenance refs, approval state, readiness, and missing input in `src/orchestrator/governance.rs` and `src/orchestrator/session_runtime.rs`.
-- [X] T035 [US3] Update `/boundline:govern` assistant command bindings and docs without promoting per-mode primary aliases in `assistant/codex/commands/boundline-govern.md`, `assistant/commands/session-workflow.json`, and `docs/guides/assistant-plugin-packages.md`.
+- [X] T035 [US3] Update `/boundline:govern` assistant command bindings and docs without promoting per-mode primary aliases in `assistant/codex/commands/boundline-govern.md`, `assistant/commands/session-workflow.json`, and `tech-docs/guides/assistant-plugin-packages.md`.
 - [X] T036 [US3] Surface governed stage refs and repair guidance in `status`, `next`, and `inspect` output in `src/cli/session.rs`, `src/cli/inspect.rs`, and `src/cli/output.rs`.
 
 **Checkpoint**: User Story 3 can run or reject every requested Canon mode explicitly.
@@ -123,7 +123,7 @@
 - [X] T041 [US4] Apply majority, weighted, reject-on-blocking, adjudication, override, and escalation outcomes in `src/orchestrator/review_trace.rs`.
 - [X] T042 [US4] Persist latest voting state, reviewer findings, vote result, adjudication result, reviewed evidence packet, blocking status, and next action in `src/domain/session.rs` and `src/orchestrator/session_runtime.rs`.
 - [X] T043 [US4] Render voting state and required next action in `status`, `next`, and `inspect` output in `src/cli/session.rs`, `src/cli/inspect.rs`, and `src/cli/output.rs`.
-- [X] T044 [US4] Document voting triggers, skip rules, blocking behavior, and adjudication flow in `docs/review-voting.md` and `docs/architecture.md`.
+- [X] T044 [US4] Document voting triggers, skip rules, blocking behavior, and adjudication flow in `tech-docs/review-voting.md` and `tech-docs/architecture.md`.
 
 **Checkpoint**: User Story 4 projects voting state consistently and keeps low-risk delivery unburdened.
 
@@ -142,9 +142,9 @@
 
 ### Implementation for User Story 5
 
-- [X] T047 [US5] Add `docs/delivery-model.md` with the Delivery Pilot Model, decomposition principle, observe-decide-act-verify-update-context loop, stop rules, and customer onboarding example.
+- [X] T047 [US5] Add `tech-docs/delivery-model.md` with the Delivery Pilot Model, decomposition principle, observe-decide-act-verify-update-context loop, stop rules, and customer onboarding example.
 - [X] T048 [US5] Update `README.md` with "Use Boundline from chat", "Use Boundline from CLI", and "How chat commands map to CLI/runtime state" sections.
-- [X] T049 [US5] Cross-link the Delivery Pilot Model from `docs/architecture.md`, `docs/getting-started.md`, and `docs/guides/assistant-plugin-packages.md`.
+- [X] T049 [US5] Cross-link the Delivery Pilot Model from `tech-docs/architecture.md`, `tech-docs/getting-started.md`, and `tech-docs/guides/assistant-plugin-packages.md`.
 - [X] T050 [US5] Update `assistant/README.md` and `assistant/prompts/starter-prompts.md` with project-scale starter prompts and explicit non-authoritative chat-state wording.
 
 **Checkpoint**: User Story 5 is verifiable through documentation and assistant asset tests.

@@ -517,3 +517,210 @@ impl SessionRuntime {
         Ok(crate::domain::session::routing_outcome(session))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::error::Error;
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
+    use serde_json::json;
+    use uuid::Uuid;
+
+    use crate::adapters::audit_store::{FileSessionAuditStore, SessionAuditStore};
+    use crate::domain::audit::SessionAuditEntryKind;
+    use crate::domain::decision::{Decision, DecisionType};
+    use crate::domain::goal_plan::{GoalPlan, PlannedTask};
+    use crate::domain::limits::TerminalCondition;
+    use crate::domain::session::{ActiveSessionRecord, SessionStatus};
+    use crate::domain::task::TerminalReason;
+    use crate::domain::trace::{ExecutionTrace, TraceEventType};
+
+    use super::SessionRuntime;
+
+    const SESSION_ID: &str = "session-surface";
+    const GOAL_TEXT: &str = "Stabilize session audit coverage";
+    const TRACE_REF: &str = ".boundline/traces/trace-surface.json";
+    const CREATED_AT: u64 = 1_717_200_000_000;
+    const UPDATED_AT: u64 = CREATED_AT + 1_000;
+    const EXPLICIT_TERMINAL_MESSAGE: &str = "explicit terminal message";
+    const FALLBACK_TERMINAL_MESSAGE: &str = "session ended with status aborted";
+
+    #[test]
+    fn surface_helpers_cover_session_audit_lifecycle_projection() -> Result<(), Box<dyn Error>> {
+        let workspace = TestWorkspace::new("boundline-surface-audit")?;
+        let runtime = SessionRuntime::for_workspace(workspace.as_path());
+        let audit_store = FileSessionAuditStore::for_session(workspace.as_path(), SESSION_ID);
+        let mut session = sample_session(workspace.as_path());
+
+        runtime.persist_session(&session)?;
+
+        let initial_entries = audit_store.load_all()?;
+        assert_eq!(initial_entries.len(), 2);
+        assert_eq!(initial_entries[0].entry_kind, SessionAuditEntryKind::SessionStart);
+        assert_eq!(initial_entries[1].entry_kind, SessionAuditEntryKind::SessionStatusChanged);
+
+        session.decisions.push(sample_decision());
+        session.updated_at = UPDATED_AT + 1;
+        runtime.persist_session(&session)?;
+
+        let follow_through_entries = audit_store.load_all()?;
+        assert!(
+            follow_through_entries
+                .iter()
+                .any(|entry| { entry.entry_kind == SessionAuditEntryKind::FollowThroughProjected })
+        );
+
+        session.goal_plan = Some(sample_goal_plan()?);
+        session.latest_status = SessionStatus::Failed;
+        session.latest_terminal_reason = Some(TerminalReason::new(
+            TerminalCondition::TaskNotCredible,
+            EXPLICIT_TERMINAL_MESSAGE,
+            None,
+        ));
+        session.updated_at += 1;
+        runtime.persist_session(&session)?;
+
+        let failed_entries = audit_store.load_all()?;
+        assert!(failed_entries.iter().any(|entry| {
+            entry.entry_kind == SessionAuditEntryKind::SessionEnd
+                && entry.message == EXPLICIT_TERMINAL_MESSAGE
+        }));
+        assert!(audit_store.load_cursor()?.session_end_recorded);
+
+        session.latest_status = SessionStatus::GoalCaptured;
+        session.latest_terminal_reason = None;
+        session.updated_at += 1;
+        runtime.persist_session(&session)?;
+        assert!(!audit_store.load_cursor()?.session_end_recorded);
+
+        session.latest_status = SessionStatus::Aborted;
+        session.latest_terminal_reason =
+            Some(TerminalReason::new(TerminalCondition::UnrecoverableError, "   ", None));
+        session.updated_at += 1;
+        runtime.persist_session(&session)?;
+
+        let terminal_entries = audit_store.load_all()?;
+        assert!(terminal_entries.iter().any(|entry| {
+            entry.entry_kind == SessionAuditEntryKind::SessionEnd
+                && entry.message == FALLBACK_TERMINAL_MESSAGE
+        }));
+        assert!(audit_store.load_cursor()?.session_end_recorded);
+        Ok(())
+    }
+
+    #[test]
+    fn surface_helpers_cover_trace_event_audit_projection_deduplication()
+    -> Result<(), Box<dyn Error>> {
+        let workspace = TestWorkspace::new("boundline-surface-trace-audit")?;
+        let runtime = SessionRuntime::for_workspace(workspace.as_path());
+        let audit_store = FileSessionAuditStore::for_session(workspace.as_path(), SESSION_ID);
+        let trace = sample_trace();
+
+        runtime.project_trace_events_to_session_audit(SESSION_ID, TRACE_REF, &trace)?;
+
+        let projected_entries = audit_store.load_all()?;
+        assert_eq!(projected_entries.len(), 2);
+        assert!(projected_entries.iter().all(|entry| {
+            entry.entry_kind == SessionAuditEntryKind::TraceEventProjected
+                && entry.source.trace_ref.as_deref() == Some(TRACE_REF)
+        }));
+
+        let cursor = audit_store.load_cursor()?;
+        assert!(
+            trace
+                .events
+                .iter()
+                .all(|event| cursor.already_projected(&trace.task_id, &event.event_id))
+        );
+
+        runtime.project_trace_events_to_session_audit(SESSION_ID, TRACE_REF, &trace)?;
+
+        let replayed_entries = audit_store.load_all()?;
+        assert_eq!(replayed_entries.len(), 2);
+        Ok(())
+    }
+
+    fn sample_session(workspace: &Path) -> ActiveSessionRecord {
+        ActiveSessionRecord {
+            session_id: SESSION_ID.to_string(),
+            workspace_ref: workspace.to_string_lossy().into_owned(),
+            goal: Some(GOAL_TEXT.to_string()),
+            authored_brief: None,
+            negotiation_packet: None,
+            active_flow: None,
+            active_task: None,
+            goal_plan: None,
+            workflow_progress: None,
+            decisions: Vec::new(),
+            active_flow_policy: None,
+            latest_status: SessionStatus::GoalCaptured,
+            latest_terminal_reason: None,
+            latest_trace_ref: None,
+            created_at: CREATED_AT,
+            updated_at: UPDATED_AT,
+            governance_lifecycle: None,
+            project_scale: None,
+            latest_voting: None,
+            delight_feedback: None,
+        }
+    }
+
+    fn sample_decision() -> Decision {
+        Decision::new(
+            DecisionType::Analyze,
+            "roadmap/features/14-ai-gateway-and-inference-economics.md",
+            "capture the next bounded review action",
+            "surface a non-empty follow-through projection",
+            Vec::new(),
+        )
+    }
+
+    fn sample_goal_plan() -> Result<GoalPlan, Box<dyn Error>> {
+        GoalPlan::new(
+            GOAL_TEXT,
+            vec![PlannedTask {
+                task_id: "planned-surface-task".to_string(),
+                description: "Stabilize audit lifecycle coverage".to_string(),
+                target: "src/orchestrator/session_runtime_surface.rs".to_string(),
+                expected_outcome: Some("surface coverage increases".to_string()),
+                decision_type_hint: None,
+            }],
+        )
+        .map_err(Into::into)
+    }
+
+    fn sample_trace() -> ExecutionTrace {
+        let mut trace = ExecutionTrace::new("task-surface", SESSION_ID, GOAL_TEXT);
+        trace.record_event(
+            TraceEventType::StepStarted,
+            Some("step-surface".to_string()),
+            1,
+            json!({"phase": "review"}),
+        );
+        trace.record_event(TraceEventType::TerminalRecorded, None, 1, json!({"terminal": true}));
+        trace
+    }
+
+    struct TestWorkspace {
+        path: PathBuf,
+    }
+
+    impl TestWorkspace {
+        fn new(prefix: &str) -> Result<Self, Box<dyn Error>> {
+            let path = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
+            fs::create_dir_all(&path)?;
+            Ok(Self { path })
+        }
+
+        fn as_path(&self) -> &Path {
+            &self.path
+        }
+    }
+
+    impl Drop for TestWorkspace {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.path);
+        }
+    }
+}

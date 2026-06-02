@@ -117,7 +117,7 @@ implemented and validated independently.
 
 **Purpose**: Finish docs, formatting, lint, tests, and coverage
 
-- [ ] T024 [P] Update operator-facing docs in `README.md`, `ROADMAP.md`, `docs/authority-zones-and-stop-semantics.md`, `docs/council-adoption-guide.md`, and `docs/review-council-algorithms.md`
+- [ ] T024 [P] Update operator-facing docs in `README.md`, `ROADMAP.md`, `tech-docs/authority-zones-and-stop-semantics.md`, `tech-docs/council-adoption-guide.md`, and `tech-docs/review-council-algorithms.md`
 - [ ] T025 Run `cargo fmt --all` in `repo root`
 - [ ] T026 Run `cargo clippy --workspace --all-targets --all-features -- -D warnings` in `repo root`
 - [ ] T027 Run `cargo test --no-run --all-targets` and `cargo nextest run --workspace --all-features` in `repo root`

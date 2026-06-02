@@ -16,7 +16,7 @@ High-priority architecture feature
 - Depends on: event/trace schema from evals and observability, or a deliberately
   minimal trace projection if this seed lands first.
 - De-duplication: permission envelope lives here; sandbox enforcement lives in
-  seed 12; browser behavior lives in seed 14; route economics lives in seed 13.
+  seed 13; browser behavior lives in seed 15; route economics lives in seed 14.
 
 ## Strategic Role
 

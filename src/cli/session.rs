@@ -2845,6 +2845,7 @@ mod tests {
         requested_governance_runtime_text, resolve_workspace, review_headline_from_task,
         suggested_next_command,
     };
+    use crate::adapters::audit_store::{FileSessionAuditStore, FrameworkAdapterHookAuditStore};
     use crate::adapters::checkpoint_store::FileCheckpointStore;
     use crate::adapters::config_store::FileConfigStore;
     use crate::adapters::session_store::{FileSessionStore, SessionStore, SessionStoreError};
@@ -2862,6 +2863,12 @@ mod tests {
         RetrievalState, RetrievedEvidenceCandidate, SemanticCapabilityState, SemanticPolicyState,
     };
     use crate::domain::decision::{Decision, DecisionType, EvidenceRef};
+    use crate::domain::execution::StageRoutingDecisionRecord;
+    use crate::domain::framework_adapter::{
+        AdapterExecutionSource, AdapterFailureClass, AdapterHookKey, AdapterLifecycleStageKey,
+        HookDispatchStatus, LifecycleStageExecutionStatus, StageClaimState,
+        StageRoutingDecisionReason,
+    };
     use crate::domain::goal_plan::{
         ContextInput, ContextInputKind, ContextPack, ContextPackCredibility, GoalPlan,
         InferredFlow, PlannedTask,
@@ -2873,19 +2880,20 @@ mod tests {
     };
     use crate::domain::limits::TerminalCondition;
     use crate::domain::session::{
-        ActiveSessionRecord, ProjectScaleSessionState, SessionStatus, VotingSessionState,
-        active_session_pointer_ref, legacy_session_record_ref, session_branch_ref,
-        session_checkpoints_root_ref, session_goal_brief_ref, session_plan_brief_ref,
-        session_record_ref, session_run_brief_ref, session_traces_root_ref,
+        ActiveSessionRecord, FrameworkAdapterStageFailureDetails, LifecycleStageExecutionRecord,
+        ProjectScaleSessionState, SessionStatus, VotingSessionState, active_session_pointer_ref,
+        legacy_session_record_ref, session_branch_ref, session_checkpoints_root_ref,
+        session_goal_brief_ref, session_plan_brief_ref, session_record_ref, session_run_brief_ref,
+        session_traces_root_ref,
     };
     use crate::domain::task::{Task, TaskStatus, TerminalReason};
-    use crate::domain::trace::ExecutionTrace;
+    use crate::domain::trace::{ExecutionTrace, HookEventDispatchRecord, TraceEventType};
     use crate::domain::workflow::{
         ProjectScalePath, ProjectScalePathKind, ProjectScaleStage, ProjectScaleStageKind,
     };
     use crate::fixture::{build_fixture_plan_for_goal, build_task_request};
     use crate::orchestrator::session_runtime::{SessionRuntime, SessionRuntimeError};
-    use crate::test_support::CurrentDirGuard;
+    use crate::test_support::{CurrentDirGuard, acquire_process_state_lock};
 
     const FIXTURE_CARGO_TOML: &str = r#"[package]
 name = "session_cli_fixture"
@@ -2943,6 +2951,78 @@ fn red_to_green_addition() {
         )
         .unwrap();
         workspace
+    }
+
+    fn sample_framework_adapter_stage_routing(run_id: &str) -> StageRoutingDecisionRecord {
+        const ROUTING_RECORDED_AT: u64 = 101;
+
+        StageRoutingDecisionRecord {
+            run_id: run_id.to_string(),
+            stage_key: AdapterLifecycleStageKey::Run,
+            execution_source: AdapterExecutionSource::Adapter,
+            decision_reason: StageRoutingDecisionReason::DeclaredOverride,
+            claim_state: StageClaimState::Claimed,
+            adapter_id: Some("speckit".to_string()),
+            stage_status: Some(LifecycleStageExecutionStatus::Blocked),
+            produced_artifacts: vec!["artifacts/run-brief.md".to_string()],
+            details: None,
+            recorded_at: ROUTING_RECORDED_AT,
+        }
+    }
+
+    fn sample_framework_adapter_stage_failure(run_id: &str) -> FrameworkAdapterStageFailureDetails {
+        const EXECUTION_STARTED_AT: u64 = 102;
+        const EXECUTION_FINISHED_AT: u64 = 103;
+
+        FrameworkAdapterStageFailureDetails {
+            execution: LifecycleStageExecutionRecord {
+                run_id: run_id.to_string(),
+                stage_key: AdapterLifecycleStageKey::Run,
+                execution_source: AdapterExecutionSource::Adapter,
+                adapter_id: Some("speckit".to_string()),
+                status: LifecycleStageExecutionStatus::Blocked,
+                intervention_required: true,
+                failure_class: Some(AdapterFailureClass::AdapterRuntime),
+                produced_artifacts: vec!["artifacts/run-brief.md".to_string()],
+                details: None,
+                started_at: Some(EXECUTION_STARTED_AT),
+                finished_at: Some(EXECUTION_FINISHED_AT),
+            },
+            claim_state: StageClaimState::Claimed,
+            summary: "adapter blocked the run stage".to_string(),
+            detail: Some("operator confirmation is required before retrying".to_string()),
+            protocol_error_code: None,
+        }
+    }
+
+    fn sample_framework_adapter_hook_dispatch(run_id: &str) -> HookEventDispatchRecord {
+        const DISPATCH_RECORDED_AT: u64 = 104;
+
+        HookEventDispatchRecord {
+            run_id: run_id.to_string(),
+            hook_key: AdapterHookKey::StageFailed,
+            stage_key: AdapterLifecycleStageKey::Run,
+            adapter_id: "speckit".to_string(),
+            stage_claimed: true,
+            payload_ref: "artifacts/hooks/stage-failed.json".to_string(),
+            dispatch_status: HookDispatchStatus::Delivered,
+            summary: "hook delivered to the selected adapter".to_string(),
+            recorded_at: DISPATCH_RECORDED_AT,
+        }
+    }
+
+    fn sample_goal_plan(goal: &str) -> GoalPlan {
+        GoalPlan::new(
+            goal,
+            vec![PlannedTask {
+                task_id: "planned-task-framework-adapter".to_string(),
+                description: "Capture framework-adapter routing evidence".to_string(),
+                target: "src/lib.rs".to_string(),
+                expected_outcome: Some("status surfaces adapter routing details".to_string()),
+                decision_type_hint: None,
+            }],
+        )
+        .unwrap()
     }
 
     /// Builds one stable advanced-context projection for status-view tests.
@@ -3299,6 +3379,7 @@ fn red_to_green_addition() {
 
     #[test]
     fn execute_run_status_and_next_cover_success_paths() {
+        let _process_state_lock = acquire_process_state_lock();
         let workspace = write_execution_workspace("boundline-cli-session-success");
         let brief = write_context_brief(&workspace);
 
@@ -4416,6 +4497,127 @@ fn red_to_green_addition() {
             "{}",
             next.terminal_output
         );
+    }
+
+    #[test]
+    fn execute_status_surfaces_framework_adapter_trace_summary_and_hook_dispatch() {
+        let workspace = write_execution_workspace("boundline-cli-session-status-adapter-summary");
+        let mut record = persist_initialized_session_with_goal_hint(
+            &workspace,
+            Some("Handle adapter block"),
+            None,
+        )
+        .unwrap();
+        let run_id = format!("run-{}", record.session_id);
+        let routing = sample_framework_adapter_stage_routing(&run_id);
+        let failure = sample_framework_adapter_stage_failure(&run_id);
+        let hook_dispatch = sample_framework_adapter_hook_dispatch(&run_id);
+        let terminal_reason = TerminalReason::new(
+            TerminalCondition::NoCredibleNextStep,
+            "adapter blocked run",
+            Some(serde_json::to_value(&failure).unwrap()),
+        );
+        let mut trace = ExecutionTrace::new(
+            "task-status-adapter-summary",
+            &record.session_id,
+            "Handle adapter block",
+        );
+        trace.record_event(
+            TraceEventType::StageRouted,
+            None,
+            0,
+            json!({"framework_adapter_stage_routing": routing}),
+        );
+        trace.finalize(TaskStatus::Failed, terminal_reason.clone());
+        let trace_ref = FileTraceStore::for_workspace(&workspace).persist(&trace).unwrap();
+
+        record.goal = Some("Handle adapter block".to_string());
+        record.goal_plan = Some(sample_goal_plan("Handle adapter block"));
+        record.latest_status = SessionStatus::Blocked;
+        record.latest_terminal_reason = Some(terminal_reason);
+        record.latest_trace_ref = Some(trace_ref.to_string_lossy().into_owned());
+        FileSessionStore::for_workspace(&workspace).persist(&record).unwrap();
+        FileSessionAuditStore::for_session(&workspace, &record.session_id)
+            .append_hook_dispatch(&hook_dispatch)
+            .unwrap();
+
+        let status = execute_status(Some(&workspace)).unwrap();
+        let view = status.session_status.expect("status should expose session status");
+
+        assert_eq!(
+            view.latest_framework_adapter_stage_routing,
+            Some(sample_framework_adapter_stage_routing(&run_id))
+        );
+        assert_eq!(
+            view.latest_framework_adapter_hook_dispatch,
+            Some(sample_framework_adapter_hook_dispatch(&run_id))
+        );
+        assert_eq!(
+            view.latest_framework_adapter_stage_failure,
+            Some(sample_framework_adapter_stage_failure(&run_id))
+        );
+    }
+
+    #[test]
+    fn execute_status_falls_back_to_framework_adapter_stage_routing_from_trace_payload() {
+        let workspace = write_execution_workspace("boundline-cli-session-status-adapter-fallback");
+        let mut record = persist_initialized_session_with_goal_hint(
+            &workspace,
+            Some("Recover adapter routing"),
+            None,
+        )
+        .unwrap();
+        let run_id = format!("run-{}", record.session_id);
+        let routing = sample_framework_adapter_stage_routing(&run_id);
+        let mut trace = ExecutionTrace::new(
+            "task-status-adapter-fallback",
+            &record.session_id,
+            "Recover adapter routing",
+        );
+        trace.record_event(
+            TraceEventType::StageRouted,
+            None,
+            0,
+            json!({"framework_adapter_stage_routing": routing}),
+        );
+        let trace_ref = FileTraceStore::for_workspace(&workspace).persist(&trace).unwrap();
+        let mut latest_trace = ExecutionTrace::new(
+            "task-status-adapter-fallback-latest",
+            &record.session_id,
+            "Recover adapter routing",
+        );
+        latest_trace.record_event(
+            TraceEventType::GoalPlanCreated,
+            None,
+            0,
+            json!({"goal_plan_summary": "native plan persisted"}),
+        );
+        latest_trace.finalize(
+            TaskStatus::Succeeded,
+            TerminalReason::new(
+                TerminalCondition::GoalSatisfied,
+                "native planning completed",
+                None,
+            ),
+        );
+        latest_trace.started_at = trace.started_at.saturating_add(1);
+        latest_trace.ended_at = Some(trace.started_at.saturating_add(2));
+        FileTraceStore::for_workspace(&workspace).persist(&latest_trace).unwrap();
+
+        record.goal = Some("Recover adapter routing".to_string());
+        record.goal_plan = Some(sample_goal_plan("Recover adapter routing"));
+        record.latest_status = SessionStatus::Blocked;
+        record.latest_trace_ref = Some(trace_ref.to_string_lossy().into_owned());
+        FileSessionStore::for_workspace(&workspace).persist(&record).unwrap();
+
+        let status = execute_status(Some(&workspace)).unwrap();
+        let view = status.session_status.expect("status should expose session status");
+
+        assert_eq!(
+            view.latest_framework_adapter_stage_routing,
+            Some(sample_framework_adapter_stage_routing(&run_id))
+        );
+        assert!(view.latest_framework_adapter_hook_dispatch.is_none());
     }
 
     #[test]

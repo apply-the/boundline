@@ -93,7 +93,7 @@
 
 ### Implementation for User Story 3
 
-- [ ] T020 [US3] Update the negotiated delivery operator story, impacted docs, and release notes in `README.md`, `docs/getting-started.md`, `docs/configuration.md`, `assistant/README.md`, `CONTRIBUTING.md`, `ROADMAP.md`, and `CHANGELOG.md`
+- [ ] T020 [US3] Update the negotiated delivery operator story, impacted docs, and release notes in `README.md`, `tech-docs/getting-started.md`, `tech-docs/configuration.md`, `assistant/README.md`, `CONTRIBUTING.md`, `ROADMAP.md`, and `CHANGELOG.md`
 - [ ] T021 [US3] Refresh generated agent context for the negotiation surface in `AGENTS.md`
 
 **Checkpoint**: Maintainers and assistants have one coherent `0.26.0` story for negotiated capture, planning, and follow-up.

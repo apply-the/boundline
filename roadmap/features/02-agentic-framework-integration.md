@@ -18,6 +18,11 @@
   workspace, the `speckit` known profile, custom-adapter registration,
   operator-visible routing and compatibility inspection, and the sibling
   template plus Speckit scaffolds aligned to the released V1 stdio contract.
+- Post-correction validation: the 2026-06-01 rerun confirmed the corrected
+  split-stage mapping (`speckit-planning` for `plan`,
+  `speckit-implementation` for `run`), the bridge-owned analyze readiness loop,
+  implementation-only run behavior, and retirement of the legacy combined
+  workflow surface.
 
 ---
 

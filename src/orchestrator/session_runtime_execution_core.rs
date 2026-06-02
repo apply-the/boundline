@@ -514,3 +514,249 @@ impl SessionRuntime {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::error::Error;
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
+    use uuid::Uuid;
+
+    use crate::adapters::config_store::FileConfigStore;
+    use crate::domain::configuration::{ConfigFile, ModelRoute, RuntimeKind};
+    use crate::domain::governance::{
+        ApprovalState, CanonMode, CanonModeSelectionPreference, GovernanceLifecycleState,
+        GovernanceRuntimeKind, GovernedSessionLifecycle, GovernedStageRecord,
+    };
+    use crate::domain::limits::TerminalCondition;
+    use crate::domain::session::{ActiveSessionRecord, SessionStatus};
+    use crate::domain::task::TerminalReason;
+
+    use super::SessionRuntime;
+
+    const AVAILABLE_PLANNING_MODEL: &str = "ollama/test-model";
+    const BLOCKED_TERMINAL_REASON: &str = "governance blocked";
+    const GENERIC_UNAVAILABLE_REASON: &str =
+        "planning governance requires Canon, but command 'canon' is unavailable";
+    const NON_PLANNING_STAGE_KEY: &str = "run:implementation";
+    const OTHER_PLANNING_STAGE_KEY: &str = "plan:architecture";
+    const PLANNING_STAGE_KEY: &str = "plan:requirements";
+    const PROVIDER_BLOCKED_REASON: &str =
+        "provider request failed because token credentials are missing";
+    const STAGE_ATTEMPT_ID: &str = "attempt-1";
+    const UNAVAILABLE_PLANNING_MODEL: &str = "unsupported/test-model";
+    const UPDATED_AT: u64 = 17;
+
+    #[test]
+    fn auto_clear_provider_block_clears_provider_dominated_planning_stage_when_route_available()
+    -> Result<(), Box<dyn Error>> {
+        let workspace = temp_workspace("boundline-execution-core-auto-clear")?;
+        save_planning_route(workspace.as_path(), AVAILABLE_PLANNING_MODEL)?;
+
+        let runtime = SessionRuntime::for_workspace(workspace.as_path());
+        let mut session = sample_session(
+            workspace.as_path(),
+            vec![
+                sample_stage_record(
+                    OTHER_PLANNING_STAGE_KEY,
+                    GovernanceLifecycleState::Completed,
+                    None,
+                ),
+                sample_stage_record(
+                    PLANNING_STAGE_KEY,
+                    GovernanceLifecycleState::Blocked,
+                    Some(PROVIDER_BLOCKED_REASON.to_string()),
+                ),
+            ],
+        );
+
+        assert!(runtime.attempt_auto_clear_provider_block(&mut session));
+
+        let lifecycle = session.governance_lifecycle.as_ref().ok_or("missing lifecycle")?;
+        assert_eq!(lifecycle.terminal_reason, None);
+        assert_eq!(lifecycle.stage_records.len(), 1);
+        assert_eq!(lifecycle.stage_records[0].stage_key, OTHER_PLANNING_STAGE_KEY);
+
+        Ok(())
+    }
+
+    #[test]
+    fn auto_clear_provider_block_preserves_unmatched_or_unavailable_cases()
+    -> Result<(), Box<dyn Error>> {
+        let available_workspace = temp_workspace("boundline-execution-core-generic-block")?;
+        save_planning_route(available_workspace.as_path(), AVAILABLE_PLANNING_MODEL)?;
+        let available_runtime = SessionRuntime::for_workspace(available_workspace.as_path());
+
+        let mut generic_unavailable_session = sample_session(
+            available_workspace.as_path(),
+            vec![sample_stage_record(
+                PLANNING_STAGE_KEY,
+                GovernanceLifecycleState::Blocked,
+                Some(GENERIC_UNAVAILABLE_REASON.to_string()),
+            )],
+        );
+        assert!(
+            !available_runtime.attempt_auto_clear_provider_block(&mut generic_unavailable_session)
+        );
+        assert_eq!(
+            generic_unavailable_session
+                .governance_lifecycle
+                .as_ref()
+                .and_then(|lifecycle| lifecycle.terminal_reason.as_deref()),
+            Some(BLOCKED_TERMINAL_REASON)
+        );
+
+        let unavailable_route_workspace =
+            temp_workspace("boundline-execution-core-unavailable-route")?;
+        save_planning_route(unavailable_route_workspace.as_path(), UNAVAILABLE_PLANNING_MODEL)?;
+        let unavailable_runtime =
+            SessionRuntime::for_workspace(unavailable_route_workspace.as_path());
+
+        let mut unavailable_route_session = sample_session(
+            unavailable_route_workspace.as_path(),
+            vec![sample_stage_record(
+                PLANNING_STAGE_KEY,
+                GovernanceLifecycleState::Failed,
+                Some(PROVIDER_BLOCKED_REASON.to_string()),
+            )],
+        );
+        assert!(
+            !unavailable_runtime.attempt_auto_clear_provider_block(&mut unavailable_route_session)
+        );
+        assert_eq!(
+            unavailable_route_session
+                .governance_lifecycle
+                .as_ref()
+                .map(|lifecycle| lifecycle.stage_records.len()),
+            Some(1)
+        );
+
+        let mut non_planning_stage_session = sample_session(
+            available_workspace.as_path(),
+            vec![sample_stage_record(
+                NON_PLANNING_STAGE_KEY,
+                GovernanceLifecycleState::Blocked,
+                Some(PROVIDER_BLOCKED_REASON.to_string()),
+            )],
+        );
+        assert!(
+            !available_runtime.attempt_auto_clear_provider_block(&mut non_planning_stage_session)
+        );
+        assert_eq!(
+            non_planning_stage_session
+                .governance_lifecycle
+                .as_ref()
+                .map(|lifecycle| lifecycle.stage_records.len()),
+            Some(1)
+        );
+
+        Ok(())
+    }
+
+    fn sample_session(
+        workspace: &Path,
+        stage_records: Vec<GovernedStageRecord>,
+    ) -> ActiveSessionRecord {
+        ActiveSessionRecord {
+            session_id: format!("session-{}", Uuid::new_v4()),
+            workspace_ref: workspace.to_string_lossy().into_owned(),
+            goal: Some("Clear provider-dominated blocks".to_string()),
+            authored_brief: None,
+            negotiation_packet: None,
+            active_flow: None,
+            active_task: None,
+            goal_plan: None,
+            workflow_progress: None,
+            decisions: Vec::new(),
+            active_flow_policy: None,
+            latest_status: SessionStatus::Blocked,
+            latest_terminal_reason: Some(TerminalReason::new(
+                TerminalCondition::NoCredibleNextStep,
+                BLOCKED_TERMINAL_REASON,
+                None,
+            )),
+            latest_trace_ref: None,
+            created_at: UPDATED_AT,
+            updated_at: UPDATED_AT,
+            governance_lifecycle: Some(GovernedSessionLifecycle {
+                governance_runtime: GovernanceRuntimeKind::Canon,
+                explicit_opt_out: false,
+                mode_selection_preference: CanonModeSelectionPreference::AutoConfirm,
+                selected_mode: Some(CanonMode::Requirements),
+                selected_mode_sequence: vec![CanonMode::Requirements],
+                latest_reasoning_profile: None,
+                current_stage_index: 0,
+                stage_records,
+                accumulated_context: Vec::new(),
+                terminal_reason: Some(BLOCKED_TERMINAL_REASON.to_string()),
+                planning_input_fingerprint: None,
+            }),
+            project_scale: None,
+            latest_voting: None,
+            delight_feedback: None,
+        }
+    }
+
+    fn sample_stage_record(
+        stage_key: &str,
+        lifecycle_state: GovernanceLifecycleState,
+        blocked_reason: Option<String>,
+    ) -> GovernedStageRecord {
+        GovernedStageRecord {
+            stage_key: stage_key.to_string(),
+            runtime: GovernanceRuntimeKind::Canon,
+            lifecycle_state,
+            required: true,
+            autopilot_enabled: false,
+            approval_state: ApprovalState::NotNeeded,
+            canon_run_ref: None,
+            governance_attempt_id: STAGE_ATTEMPT_ID.to_string(),
+            previous_governance_attempt_id: None,
+            packet_ref: None,
+            decision_ref: None,
+            stage_council: None,
+            blocked_reason,
+        }
+    }
+
+    fn save_planning_route(workspace: &Path, model: &str) -> Result<(), Box<dyn Error>> {
+        FileConfigStore::for_workspace(workspace).save_local(&ConfigFile {
+            routing: crate::domain::configuration::RoutingConfig {
+                planning: Some(ModelRoute {
+                    runtime: RuntimeKind::Copilot,
+                    model: model.to_string(),
+                }),
+                ..crate::domain::configuration::RoutingConfig::default()
+            },
+            ..ConfigFile::default()
+        })?;
+        Ok(())
+    }
+
+    fn temp_workspace(prefix: &str) -> Result<TestWorkspace, Box<dyn Error>> {
+        TestWorkspace::new(prefix)
+    }
+
+    struct TestWorkspace {
+        path: PathBuf,
+    }
+
+    impl TestWorkspace {
+        fn new(prefix: &str) -> Result<Self, Box<dyn Error>> {
+            let path = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
+            fs::create_dir_all(&path)?;
+            Ok(Self { path })
+        }
+
+        fn as_path(&self) -> &Path {
+            &self.path
+        }
+    }
+
+    impl Drop for TestWorkspace {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.path);
+        }
+    }
+}

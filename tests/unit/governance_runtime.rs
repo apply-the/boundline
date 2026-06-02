@@ -12,6 +12,8 @@ use boundline::{
 };
 use uuid::Uuid;
 
+const DRAIN_STDIN_SCRIPT: &str = "while IFS= read -r _line || [ -n \"$_line\" ]; do _line=''; done";
+
 fn sample_request() -> GovernanceRuntimeRequest {
     GovernanceRuntimeRequest {
         request_kind: GovernanceRequestKind::Start,
@@ -64,8 +66,11 @@ fn write_workspace_file(workspace: &Path, relative_path: &str, contents: &str) {
 fn write_canon_stub(prefix: &str, stdout_json: &str) -> PathBuf {
     let dir = temp_workspace(prefix);
     let script_path = dir.join("canon-stub.sh");
-    fs::write(&script_path, format!("#!/bin/sh\ncat >/dev/null\nprintf '%s' '{stdout_json}'\n"))
-        .unwrap();
+    fs::write(
+        &script_path,
+        format!("#!/bin/sh\n{DRAIN_STDIN_SCRIPT}\nprintf '%s' '{stdout_json}'\n"),
+    )
+    .unwrap();
     let mut permissions = fs::metadata(&script_path).unwrap().permissions();
     permissions.set_mode(0o755);
     fs::set_permissions(&script_path, permissions).unwrap();
@@ -423,7 +428,7 @@ fn canon_cli_runtime_handles_startup_and_output_failures() {
 
     let malformed_script = write_shell_script(
         "boundline-canon-malformed-command",
-        "#!/bin/sh\ncat >/dev/null\nprintf '%s' '{not-json}'\n",
+        &format!("#!/bin/sh\n{DRAIN_STDIN_SCRIPT}\nprintf '%s' '{{not-json}}'\n"),
     );
     let malformed_runtime = CanonCliRuntime::new(malformed_script.to_string_lossy().into_owned())
         .with_working_directory(&workspace);
@@ -433,7 +438,7 @@ fn canon_cli_runtime_handles_startup_and_output_failures() {
 
     let failing_script = write_shell_script(
         "boundline-canon-failing-command",
-        "#!/bin/sh\ncat >/dev/null\necho boom >&2\nexit 2\n",
+        &format!("#!/bin/sh\n{DRAIN_STDIN_SCRIPT}\necho boom >&2\nexit 2\n"),
     );
     let failing_runtime = CanonCliRuntime::new(failing_script.to_string_lossy().into_owned())
         .with_working_directory(&workspace);

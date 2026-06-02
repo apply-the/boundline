@@ -26,6 +26,12 @@
 - Q: What does a declared stage override mean after adapter preflight succeeds? → A: A declared override is authoritative stage ownership. Boundline may assemble host-owned context before invoking the adapter, but it must not complete the built-in implementation for that stage first. If the adapter succeeds, the adapter response becomes the stage outcome; if it blocks, the host records the stage as blocked and incomplete; if it fails after claim, the stage fails and the lifecycle stops pending operator intervention.
 - Q: What level of behavior must the known Speckit adapter provide in the initial release? → A: The Speckit adapter must act as a real bridge to Speckit workflows rather than a placeholder claimed-stage marker. It must consume host-provided context for declared stages, invoke the appropriate Speckit workflow, return real produced artifacts or actionable blocked and failure outcomes, and remain distinct from the generic template scaffold.
 
+### Session 2026-06-01
+
+- Q: What is the authoritative Boundline-to-Speckit stage map for the corrected feature slice? → A: `goal` remains native Boundline only; a Speckit-claimed `plan` stage owns the full Speckit planning lifecycle (`speckit.specify`, `speckit.clarify` when required, `speckit.plan`, `speckit.tasks`, mandatory `speckit.analyze`, bounded remediation work, and analyze re-checks); a Speckit-claimed `run` stage owns implementation only through `speckit.implement` plus implementation validation or status capture; and `status` and `inspect` remain Boundline-owned visibility surfaces over adapter outputs.
+- Q: What workflow identifiers and response fields must the corrected Speckit bridge use? → A: `execute-stage(plan)` must identify workflow ID `speckit-planning`, `execute-stage(run)` must identify workflow ID `speckit-implementation`, and both responses must include explicit command lists, produced artifact refs, and stage-specific findings or validation fields rather than generic summaries alone.
+- Q: What execution limits govern analyze and remediation inside a claimed `plan` stage? → A: Adapter-owned stages inherit Boundline host retry and stop controls, and within one claimed `plan` attempt the Speckit bridge may perform at most one initial analyze pass plus two remediation or analyze re-check cycles before it must return a blocked outcome with remaining findings and recovery guidance.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Run With Safe Default and Optional Framework Adapter (Priority: P1)
@@ -54,9 +60,11 @@ As a framework author, I can declare only the lifecycle stages and hooks my adap
 **Acceptance Scenarios**:
 
 1. **Given** an adapter declares overrides for a subset of stages, **When** a lifecycle run reaches those stages, **Then** the adapter handles those stages and built-in behavior handles all other stages.
-1. **Given** an adapter declares overrides for a subset of stages and preflight succeeds, **When** a lifecycle run reaches one of those stages, **Then** the adapter owns that stage as the authoritative execution path, Boundline may prepare context before invocation, and built-in behavior must not complete that same stage first.
-2. **Given** an adapter declares specific lifecycle hooks, **When** matching lifecycle events occur, **Then** the adapter receives those events and unregistered hook events are ignored.
-3. **Given** an adapter has taken control of a declared stage, **When** the adapter fails after that stage has started, **Then** the stage is marked failed, the lifecycle run stops, and the operator is required to intervene before execution continues.
+2. **Given** an adapter declares overrides for a subset of stages and preflight succeeds, **When** a lifecycle run reaches one of those stages, **Then** the adapter owns that stage as the authoritative execution path, Boundline may prepare context before invocation, and built-in behavior must not complete that same stage first.
+3. **Given** the known Speckit profile declares `plan` and `run`, **When** Boundline reaches `goal`, `plan`, `run`, `status`, or `inspect`, **Then** `goal` remains native, `plan` executes the Speckit planning lifecycle, `run` executes Speckit implementation only, and `status` plus `inspect` remain Boundline-owned visibility surfaces.
+4. **Given** Speckit owns the `plan` stage, **When** `speckit.analyze` reports blocking findings, **Then** Boundline must not record the `plan` stage as complete until remediation work has been executed and analyze passes again, or the adapter returns a blocked outcome after the bounded remediation limit is reached.
+5. **Given** an adapter declares specific lifecycle hooks, **When** matching lifecycle events occur, **Then** the adapter receives those events and unregistered hook events are ignored.
+6. **Given** an adapter has taken control of a declared stage, **When** the adapter fails after that stage has started, **Then** the stage is marked failed, the lifecycle run stops, and the operator is required to intervene before execution continues.
 
 ---
 
@@ -87,11 +95,22 @@ As a repository operator, I can complete adapter setup with guided prompts for r
 - Adapter advertises a long-running transport that would require explicit shutdown semantics; the initial release must leave that transport unsupported rather than partially activating it.
 - Boundline assembles context for an adapter-owned `plan` or `run` stage, but must not finish the built-in stage result first and then treat the adapter as a post-processing side effect.
 - The known Speckit adapter returns only placeholder markers or generic scaffold success payloads instead of invoking Speckit and returning real produced artifacts.
+- Speckit reaches `speckit.analyze` with blocking findings, and those findings still remain after two remediation or analyze re-check cycles within the same claimed `plan` attempt.
+- Speckit tries to execute planning commands from a claimed `run` stage or tries to treat `goal`, `status`, or `inspect` as adapter-owned surfaces.
 - Operator supplies partial configuration and exits setup before completion; the system must leave persisted adapter state unchanged and report setup as incomplete.
 - A non-interactive run starts with adapter-required configuration missing; the run must fail deterministically without implicit prompts or built-in fallback.
 - A locally discoverable adapter executable exists but was never explicitly selected; the system must not auto-enable it.
 
 ## Requirements *(mandatory)*
+
+### Normative Boundline-To-Speckit Stage Mapping
+
+| Boundline surface | Owner | Workflow ID | Required command sequence | Minimum artifact classes | Completion rule |
+|-------------------|-------|-------------|---------------------------|--------------------------|-----------------|
+| `goal` | Boundline built-in only | `boundline-native-goal` | Native Boundline goal capture only | Goal or session context artifacts | The adapter must not claim `goal`. |
+| `plan` | Speckit when `plan` is declared and preflight succeeds; otherwise Boundline built-in | `speckit-planning` | `speckit.specify`; `speckit.clarify` when required; `speckit.plan`; `speckit.tasks`; mandatory `speckit.analyze`; remediation work when blocking findings exist; analyze re-check after each remediation cycle | Specification artifact, plan artifact, tasks artifact, planning-readiness artifact | The stage is complete only when analyze has no blocking findings. It stays blocked or fails otherwise. |
+| `run` | Speckit when `run` is declared and preflight succeeds; otherwise Boundline built-in | `speckit-implementation` | `speckit.implement` plus implementation validation or status capture only | Implementation artifact and validation or status artifact | The stage must not rerun planning commands or planning-readiness analysis. |
+| `status` / `inspect` | Boundline built-in only | `boundline-native-visibility` | Native Boundline status and inspect surfaces over adapter evidence | Audit, trace, ownership, findings, and validation visibility artifacts | The adapter may contribute artifacts, but it does not own the visibility surface. |
 
 ### Functional Requirements
 
@@ -123,6 +142,14 @@ As a repository operator, I can complete adapter setup with guided prompts for r
 - **FR-026**: Once a configured adapter has claimed a declared stage, Boundline MAY assemble host-owned context before invocation but MUST NOT complete the built-in implementation for that stage before the adapter returns.
 - **FR-027**: When a claimed-stage adapter invocation succeeds, the adapter response, including `produced_artifacts`, MUST become the authoritative stage outcome recorded by the host; when a claimed-stage adapter invocation returns a blocked outcome, the host MUST record the stage as blocked and incomplete rather than marking it completed through built-in behavior.
 - **FR-028**: The known Speckit adapter profile in this feature MUST act as a real bridge to Speckit workflows for its declared stages and MUST NOT satisfy acceptance only by returning placeholder marker files or generic scaffold success payloads.
+- **FR-029**: The known Speckit adapter profile MUST follow the normative stage mapping in this feature: `goal` remains native Boundline only, a claimed `plan` stage owns the full Speckit planning lifecycle, a claimed `run` stage owns implementation only, and `status` plus `inspect` remain Boundline-owned visibility surfaces.
+- **FR-030**: When Speckit claims `plan`, `execute-stage(plan)` MUST identify workflow ID `speckit-planning` and MUST execute these command surfaces in order: `speckit.specify`, `speckit.clarify` when missing-context or readiness checks require clarification, `speckit.plan`, `speckit.tasks`, mandatory `speckit.analyze`, remediation task execution when analyze reports blocking findings, and an analyze re-check after each remediation cycle until the stage passes, blocks, or fails.
+- **FR-031**: `speckit.analyze` MUST be a mandatory planning-readiness gate for a Speckit-owned `plan` stage. Boundline MUST NOT consider `plan` complete while analyze has unresolved blocking findings, and the adapter MUST either execute bounded remediation work and re-run analyze or return a blocked outcome with remaining findings and recovery guidance.
+- **FR-032**: `execute-stage(plan)` MUST return a success-envelope payload containing at least `status`, `summary`, `workflow_id`, `executed_commands`, `produced_artifacts`, `planning_findings`, `remediation_status`, `analyze_pass_count`, `remediation_cycles_used`, and `next_action`. When `status = succeeded`, `produced_artifacts` MUST include at least one specification artifact reference, one plan artifact reference, one task breakdown artifact reference, and one planning-readiness artifact reference.
+- **FR-033**: When Speckit claims `run`, `execute-stage(run)` MUST identify workflow ID `speckit-implementation`, MUST invoke `speckit.implement` plus implementation validation or status capture only, and MUST NOT invoke `speckit.specify`, `speckit.clarify`, `speckit.plan`, `speckit.tasks`, or `speckit.analyze` from the claimed `run` stage.
+- **FR-034**: `execute-stage(run)` MUST return a success-envelope payload containing at least `status`, `summary`, `workflow_id`, `executed_commands`, `produced_artifacts`, `implementation_status`, `validation_refs`, and `next_action`. When `status = succeeded`, `produced_artifacts` MUST include at least one implementation artifact reference and one validation or status artifact reference.
+- **FR-035**: Adapter-owned stages MUST inherit Boundline's existing host retry and stop controls. Within one claimed `plan` stage attempt, the Speckit bridge MUST perform at most one initial analyze pass and no more than two remediation or analyze re-check cycles; if blocking findings still remain after the second re-check, the adapter MUST return `status = blocked` with the remaining findings and recovery guidance rather than completing the stage.
+- **FR-036**: Boundline-owned `status` and `inspect` surfaces MUST expose adapter stage ownership, workflow IDs, produced artifact refs, planning findings summaries, remediation loop counts, validation refs, and the reason a claimed stage is succeeded, blocked, or failed without delegating those visibility responsibilities to the adapter.
 
 ### Key Entities *(include if feature involves data)*
 
@@ -135,6 +162,10 @@ As a repository operator, I can complete adapter setup with guided prompts for r
 - **Known Adapter Profile**: A named external adapter setup path, such as Speckit, that simplifies registration compared with fully custom adapter configuration.
 - **Speckit Adapter Repository**: The dedicated external repository `boundline-adapter-speckit` that hosts the Speckit adapter implementation separately from Boundline core.
 - **Adapter Template Repository**: The dedicated reusable template repository, `boundline-framework-template`, where starter adapter scaffolding is maintained separately from this repository.
+- **Speckit Planning Workflow**: The corrected workflow surface with workflow ID `speckit-planning` that is bound to the claimed Boundline `plan` stage and runs the full Speckit planning lifecycle plus the mandatory planning-readiness gate.
+- **Planning Readiness Finding**: A normalized Speckit analyze result item classified as blocking or non-blocking for the claimed `plan` stage outcome.
+- **Remediation Cycle Record**: A bounded record of one remediation attempt plus the corresponding analyze re-check executed during the claimed `plan` stage.
+- **Speckit Implementation Workflow**: The corrected workflow surface with workflow ID `speckit-implementation` that is bound to the claimed Boundline `run` stage and runs implementation-only behavior through `speckit.implement` plus validation or status capture.
 - **Lifecycle Stage Execution Record**: Per-stage run record indicating whether built-in or adapter behavior was used and the resulting status.
 - **Hook Event Record**: Structured record of declared hook events delivered to the adapter and their outcomes.
 - **Claimed Stage Outcome Record**: The authoritative persisted outcome for one adapter-owned stage, including adapter status, produced artifacts, blocked or failure state, and any host-owned context references used before invocation.
@@ -153,6 +184,10 @@ As a repository operator, I can complete adapter setup with guided prompts for r
 - **SC-008**: In contract validation, 100% of supported V1 adapter commands expose outcomes through the same host-visible success/error response structure, so operators receive consistent success and failure reporting across capability discovery, preflight, stage execution, and hook delivery.
 - **SC-009**: In authoritative-routing validation, 100% of successful claimed `plan` and `run` stages are recorded from adapter outcomes, and 0 claimed stages are first completed by built-in behavior before adapter invocation.
 - **SC-010**: In cross-repo Speckit validation, 100% of successful Speckit-claimed stages return at least one real Speckit-produced artifact or Speckit-authored artifact reference rather than only placeholder marker files.
+- **SC-011**: In stage-mapping validation, 100% of successful Speckit-owned `plan` stages report workflow ID `speckit-planning`, execute the planning command sequence required by this feature, and never complete while blocking analyze findings remain unresolved.
+- **SC-012**: In stage-mapping validation, 100% of successful Speckit-owned `run` stages report workflow ID `speckit-implementation`, invoke `speckit.implement` plus implementation validation or status capture only, and invoke none of `speckit.specify`, `speckit.clarify`, `speckit.plan`, `speckit.tasks`, or `speckit.analyze`.
+- **SC-013**: In bounded-remediation validation, 100% of claimed `plan` stage runs with persistent blocking findings stop with a blocked outcome after no more than two remediation or analyze re-check cycles and surface the remaining findings plus `next_action` feedback.
+- **SC-014**: In status and inspect validation, 100% of adapter-owned `plan` and `run` stages surface workflow ID, ownership, produced artifact refs, findings or validation summaries, and blocked or failed reasons through Boundline-owned visibility surfaces.
 
 ## Assumptions
 
@@ -168,6 +203,7 @@ As a repository operator, I can complete adapter setup with guided prompts for r
 - Workspace configuration is the authoritative source of active adapter selection; local discovery is only a setup aid.
 - External adapters are distributed and versioned outside this repository.
 - Existing built-in lifecycle behavior remains the baseline contract for stages not overridden.
+- Boundline-owned workflow-definition assets for the corrected Speckit bridge may live under `.specify/workflows/speckit/`, but those assets remain Boundline-controlled integration surfaces rather than adapter-owned source of truth.
 - Interactive runs may collect missing adapter-required values through guided prompts, but non-interactive runs must fail deterministically instead of prompting.
 - The V1 adapter contract uses a standard host-visible success/error envelope while preserving command-specific domain outcomes inside successful response data.
 - Adapter capability declarations list supported transports explicitly, and the initial release accepts only JSON over stdin/stdout.

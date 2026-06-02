@@ -1345,6 +1345,76 @@ fn native_delegation_for_goal_plan_covers_mismatch_handoff_and_escalation_paths(
 }
 
 #[test]
+fn native_delegation_for_goal_plan_covers_none_paths() {
+    let workspace = temp_workspace("boundline-runtime-native-delegation-none-paths");
+    let runtime = SessionRuntime::for_workspace(&workspace);
+    let goal_plan = GoalPlan::new(
+        "Drive a session runtime branch",
+        vec![PlannedTask {
+            task_id: "task-1".to_string(),
+            description: "Repair arithmetic".to_string(),
+            target: "src/lib.rs".to_string(),
+            expected_outcome: Some("tests pass".to_string()),
+            decision_type_hint: Some(DecisionType::Code),
+        }],
+    )
+    .unwrap()
+    .with_flow(InferredFlow {
+        flow_name: "bug-fix".to_string(),
+        confidence_reason: "flow confirmed for native routing".to_string(),
+        confirmed: true,
+    });
+
+    let mut local_only = RoutingConfig::default();
+    local_only.set_slot(
+        RouteSlot::Implementation,
+        ModelRoute { runtime: RuntimeKind::Codex, model: "gpt-4o".to_string() },
+    );
+    local_only.assistant_runtimes = vec![RuntimeKind::Codex];
+    local_only.set_runtime_capability(
+        RuntimeKind::Codex,
+        RuntimeCapabilityProfile {
+            continuation: CapabilityState::Supported,
+            resume: CapabilityState::Supported,
+            validation: CapabilityState::Supported,
+            handoff_target: CapabilityState::Supported,
+            escalation_context: CapabilityState::Supported,
+            notes: None,
+        },
+    );
+    save_local_routing(&workspace, local_only);
+    assert!(runtime.native_delegation_for_goal_plan(&goal_plan).is_none());
+
+    let mut preserve_without_exit = RoutingConfig::default();
+    preserve_without_exit.set_slot(
+        RouteSlot::Implementation,
+        ModelRoute { runtime: RuntimeKind::Codex, model: "gpt-4o".to_string() },
+    );
+    preserve_without_exit.assistant_runtimes = vec![RuntimeKind::Codex];
+    preserve_without_exit.set_runtime_capability(
+        RuntimeKind::Codex,
+        RuntimeCapabilityProfile {
+            continuation: CapabilityState::Unsupported,
+            resume: CapabilityState::Supported,
+            validation: CapabilityState::Supported,
+            handoff_target: CapabilityState::Unsupported,
+            escalation_context: CapabilityState::Unsupported,
+            notes: Some("native runtime cannot continue and cannot escalate".to_string()),
+        },
+    );
+    preserve_without_exit.set_slot_effort_policy(
+        RouteSlot::Implementation,
+        SlotEffortPolicy {
+            level: EffortLevel::High,
+            fallback: EffortFallbackPolicy::Preserve,
+            rationale: None,
+        },
+    );
+    save_local_routing(&workspace, preserve_without_exit);
+    assert!(runtime.native_delegation_for_goal_plan(&goal_plan).is_none());
+}
+
+#[test]
 fn runtime_store_helpers_and_compatibility_planning_cover_private_accessors() {
     let workspace = write_execution_profile_workspace(
         "boundline-runtime-store-helpers",
@@ -4413,6 +4483,261 @@ fn native_goal_plan_short_circuits_for_existing_delegation_continuity() {
 }
 
 #[test]
+fn native_goal_plan_confirms_and_short_circuits_for_existing_delegation_view() {
+    let workspace = temp_workspace("boundline-runtime-native-delegation-confirm");
+    let runtime = SessionRuntime::for_workspace(&workspace);
+    let goal_plan = GoalPlan::new(
+        "Drive a delegated continuation boundary",
+        vec![PlannedTask {
+            task_id: "planned-task-1".to_string(),
+            description: "Inspect the delegated boundary".to_string(),
+            target: "src/lib.rs".to_string(),
+            expected_outcome: Some("status explains the continuity boundary".to_string()),
+            decision_type_hint: None,
+        }],
+    )
+    .unwrap()
+    .with_delegation_state(
+        Vec::new(),
+        DelegationContinuityState {
+            active_packet_id: None,
+            mode: DelegationContinuityMode::InspectOnly,
+            authority_source: ContinuityAuthority::NativeSession,
+            next_command: "boundline inspect".to_string(),
+            headline: "delegated continuity requires operator inspection".to_string(),
+            evidence_summary: "bounded continuation stopped at an inspect-only boundary"
+                .to_string(),
+        },
+    )
+    .unwrap();
+
+    let mut session = ActiveSessionRecord {
+        session_id: "session-runtime".to_string(),
+        workspace_ref: workspace.to_string_lossy().into_owned(),
+        goal: Some("Drive a delegated continuation boundary".to_string()),
+        authored_brief: None,
+        negotiation_packet: None,
+        active_flow: None,
+        active_task: None,
+        goal_plan: Some(goal_plan),
+        workflow_progress: None,
+        decisions: Vec::new(),
+        active_flow_policy: None,
+        latest_status: SessionStatus::Planned,
+        latest_terminal_reason: None,
+        latest_trace_ref: None,
+        created_at: 10,
+        updated_at: 10,
+        governance_lifecycle: None,
+        project_scale: None,
+        delight_feedback: None,
+        latest_voting: None,
+    };
+
+    let response = runtime.run_native_goal_plan(&mut session, None).unwrap();
+
+    assert_eq!(response.terminal_status, TaskStatus::Failed);
+    assert_eq!(response.terminal_reason.condition, TerminalCondition::NoCredibleNextStep);
+    assert!(!session.goal_plan.as_ref().unwrap().requires_confirmation());
+    assert!(session.goal_plan.as_ref().unwrap().delegation_continuity().is_some());
+    assert!(session.active_task.is_none());
+}
+
+#[test]
+fn native_goal_plan_short_circuits_for_new_delegation_packet_and_error_edges() {
+    let workspace = temp_workspace("boundline-runtime-native-goal-plan-short-circuit");
+    let runtime = SessionRuntime::for_workspace(&workspace);
+
+    let mut missing_goal_plan_session = ActiveSessionRecord {
+        session_id: "session-runtime".to_string(),
+        workspace_ref: workspace.to_string_lossy().into_owned(),
+        goal: Some("Drive a delegated continuation boundary".to_string()),
+        authored_brief: None,
+        negotiation_packet: None,
+        active_flow: None,
+        active_task: None,
+        goal_plan: None,
+        workflow_progress: None,
+        decisions: Vec::new(),
+        active_flow_policy: None,
+        latest_status: SessionStatus::Planned,
+        latest_terminal_reason: None,
+        latest_trace_ref: None,
+        created_at: 10,
+        updated_at: 10,
+        governance_lifecycle: None,
+        project_scale: None,
+        delight_feedback: None,
+        latest_voting: None,
+    };
+    assert!(matches!(
+        runtime.run_native_goal_plan(&mut missing_goal_plan_session, None),
+        Err(super::SessionRuntimeError::MissingGoalPlan)
+    ));
+
+    let mut gated_session = ActiveSessionRecord {
+        session_id: "session-runtime".to_string(),
+        workspace_ref: workspace.to_string_lossy().into_owned(),
+        goal: Some("Drive a delegated continuation boundary".to_string()),
+        authored_brief: None,
+        negotiation_packet: None,
+        active_flow: None,
+        active_task: None,
+        goal_plan: Some(
+            GoalPlan::new(
+                "Drive a delegated continuation boundary",
+                vec![PlannedTask {
+                    task_id: "planned-task-gated".to_string(),
+                    description: "Inspect the delegated boundary".to_string(),
+                    target: "src/lib.rs".to_string(),
+                    expected_outcome: Some("status explains the continuity boundary".to_string()),
+                    decision_type_hint: None,
+                }],
+            )
+            .unwrap(),
+        ),
+        workflow_progress: None,
+        decisions: Vec::new(),
+        active_flow_policy: None,
+        latest_status: SessionStatus::Planned,
+        latest_terminal_reason: None,
+        latest_trace_ref: None,
+        created_at: 10,
+        updated_at: 10,
+        governance_lifecycle: Some(GovernedSessionLifecycle {
+            governance_runtime: GovernanceRuntimeKind::Canon,
+            explicit_opt_out: false,
+            mode_selection_preference: CanonModeSelectionPreference::AutoConfirm,
+            selected_mode: Some(CanonMode::Requirements),
+            selected_mode_sequence: vec![CanonMode::Requirements],
+            latest_reasoning_profile: None,
+            current_stage_index: 0,
+            stage_records: vec![GovernedStageRecord {
+                stage_key: "plan:requirements".to_string(),
+                runtime: GovernanceRuntimeKind::Canon,
+                lifecycle_state: GovernanceLifecycleState::AwaitingApproval,
+                required: true,
+                autopilot_enabled: false,
+                approval_state: ApprovalState::Requested,
+                canon_run_ref: Some("canon-run-plan".to_string()),
+                governance_attempt_id: "attempt-plan-1".to_string(),
+                previous_governance_attempt_id: None,
+                packet_ref: Some(".canon/planning-packet".to_string()),
+                decision_ref: None,
+                stage_council: None,
+                blocked_reason: None,
+            }],
+            accumulated_context: Vec::new(),
+            terminal_reason: Some("awaiting approval fallback".to_string()),
+            planning_input_fingerprint: None,
+        }),
+        project_scale: None,
+        delight_feedback: None,
+        latest_voting: None,
+    };
+    assert!(matches!(
+        runtime.run_native_goal_plan(&mut gated_session, None),
+        Err(super::SessionRuntimeError::PlanningGovernanceUnresolved {
+            stage_key,
+            state: GovernanceLifecycleState::AwaitingApproval,
+            reason: Some(reason),
+        }) if stage_key == "plan:requirements" && reason == "awaiting approval fallback"
+    ));
+
+    let mut delegation_routing = RoutingConfig::default();
+    delegation_routing.set_slot(
+        RouteSlot::Implementation,
+        ModelRoute { runtime: RuntimeKind::Codex, model: "gpt-4o".to_string() },
+    );
+    delegation_routing.assistant_runtimes = vec![RuntimeKind::Codex, RuntimeKind::Claude];
+    delegation_routing.set_runtime_capability(
+        RuntimeKind::Codex,
+        RuntimeCapabilityProfile {
+            continuation: CapabilityState::Unsupported,
+            resume: CapabilityState::Supported,
+            validation: CapabilityState::Supported,
+            handoff_target: CapabilityState::Unsupported,
+            escalation_context: CapabilityState::Supported,
+            notes: Some("implementation runtime cannot continue".to_string()),
+        },
+    );
+    delegation_routing.set_runtime_capability(
+        RuntimeKind::Claude,
+        RuntimeCapabilityProfile {
+            continuation: CapabilityState::Supported,
+            resume: CapabilityState::Supported,
+            validation: CapabilityState::Supported,
+            handoff_target: CapabilityState::Supported,
+            escalation_context: CapabilityState::Supported,
+            notes: None,
+        },
+    );
+    delegation_routing.set_slot_effort_policy(
+        RouteSlot::Implementation,
+        SlotEffortPolicy {
+            level: EffortLevel::High,
+            fallback: EffortFallbackPolicy::Preserve,
+            rationale: None,
+        },
+    );
+    save_local_routing(&workspace, delegation_routing);
+
+    let mut goal_plan = GoalPlan::new(
+        "Drive a delegated continuation boundary",
+        vec![PlannedTask {
+            task_id: "planned-task-1".to_string(),
+            description: "Inspect the delegated boundary".to_string(),
+            target: "src/lib.rs".to_string(),
+            expected_outcome: Some("status explains the continuity boundary".to_string()),
+            decision_type_hint: None,
+        }],
+    )
+    .unwrap()
+    .with_flow(InferredFlow {
+        flow_name: "bug-fix".to_string(),
+        confidence_reason: "flow confirmed for native routing".to_string(),
+        confirmed: true,
+    });
+    goal_plan.confirm().unwrap();
+
+    let mut session = ActiveSessionRecord {
+        session_id: "session-runtime".to_string(),
+        workspace_ref: workspace.to_string_lossy().into_owned(),
+        goal: Some("Drive a delegated continuation boundary".to_string()),
+        authored_brief: None,
+        negotiation_packet: None,
+        active_flow: None,
+        active_task: None,
+        goal_plan: Some(goal_plan),
+        workflow_progress: None,
+        decisions: Vec::new(),
+        active_flow_policy: None,
+        latest_status: SessionStatus::Planned,
+        latest_terminal_reason: None,
+        latest_trace_ref: None,
+        created_at: 10,
+        updated_at: 10,
+        governance_lifecycle: None,
+        project_scale: None,
+        delight_feedback: None,
+        latest_voting: None,
+    };
+
+    let response = runtime.run_native_goal_plan(&mut session, None).unwrap();
+    assert_eq!(response.terminal_status, TaskStatus::Failed);
+    assert_eq!(response.terminal_reason.condition, TerminalCondition::NoCredibleNextStep);
+    let continuity = session
+        .goal_plan
+        .as_ref()
+        .and_then(|goal_plan| goal_plan.delegation_continuity())
+        .expect("delegation continuity should be recorded");
+    assert_eq!(continuity.mode, DelegationContinuityMode::HandoffRequired);
+    assert_eq!(continuity.next_command, "boundline status");
+    assert!(session.active_task.is_none());
+    assert!(session.decisions.is_empty());
+}
+
+#[test]
 fn execute_next_step_falls_back_to_local_governance_when_canon_is_optional() {
     let workspace = write_governed_execution_profile_workspace(
         "boundline-runtime-governance-local-fallback",
@@ -4504,6 +4829,101 @@ fn execute_next_step_falls_back_to_local_governance_when_canon_is_optional() {
         "{:?}",
         trace.events
     );
+}
+
+#[test]
+fn run_native_goal_plan_projects_local_governance_task_when_canon_is_optional() {
+    let workspace = write_governed_execution_profile_workspace(
+        "boundline-runtime-native-governance-local-task",
+        vec![ExecutionAttemptDefinition {
+            attempt_id: "fix-add".to_string(),
+            summary: String::new(),
+            failure_mode: ExecutionFailureMode::Terminal,
+            changes: vec![WorkspaceChange {
+                path: "src/lib.rs".to_string(),
+                find: "left - right".to_string(),
+                replace: "left + right".to_string(),
+            }],
+        }],
+        vec!["README.md".to_string()],
+        Some(GovernanceProfile {
+            default_runtime: GovernanceRuntimeKind::Local,
+            canon: Some(CanonRuntimeConfig {
+                command: "canon-missing-for-test".to_string(),
+                default_owner: Some("platform".to_string()),
+                default_risk: Some("medium".to_string()),
+                default_zone: Some("engineering".to_string()),
+                default_system_context: Some(SystemContextBinding::Existing),
+            }),
+            stages: vec![StageGovernancePolicy {
+                flow_name: "bug-fix".to_string(),
+                stage_id: "investigate".to_string(),
+                enabled: true,
+                required: false,
+                autopilot: false,
+                require_adaptive_companion: false,
+                runtime: Some(GovernanceRuntimeKind::Canon),
+                canon_mode: Some(CanonMode::Discovery),
+                reasoning_profile: None,
+                system_context: Some(SystemContextBinding::Existing),
+                risk: Some("medium".to_string()),
+                zone: Some("engineering".to_string()),
+                owner: Some("platform".to_string()),
+            }],
+        }),
+    );
+    let runtime = SessionRuntime::for_workspace(&workspace);
+    let mut session = ActiveSessionRecord {
+        session_id: "session-runtime".to_string(),
+        workspace_ref: workspace.to_string_lossy().into_owned(),
+        goal: None,
+        authored_brief: None,
+        negotiation_packet: None,
+        active_flow: None,
+        active_task: None,
+        goal_plan: None,
+        workflow_progress: None,
+        decisions: Vec::new(),
+        active_flow_policy: None,
+        latest_status: SessionStatus::Initialized,
+        latest_terminal_reason: None,
+        latest_trace_ref: None,
+        created_at: 10,
+        updated_at: 10,
+        governance_lifecycle: None,
+        project_scale: None,
+        delight_feedback: None,
+        latest_voting: None,
+    };
+
+    runtime.capture_goal(&mut session, "Drive governed bug fix").unwrap();
+    runtime.select_flow(&mut session, "bug-fix").unwrap();
+    session.goal_plan = Some(
+        GoalPlan::new(
+            "Drive governed bug fix",
+            vec![PlannedTask {
+                task_id: "planned-task-1".to_string(),
+                description: "Repair arithmetic".to_string(),
+                target: "src/lib.rs".to_string(),
+                expected_outcome: Some("tests pass".to_string()),
+                decision_type_hint: Some(DecisionType::Code),
+            }],
+        )
+        .unwrap(),
+    );
+
+    let response = runtime.run_native_goal_plan(&mut session, None).unwrap();
+
+    assert!(matches!(response.terminal_status, TaskStatus::Succeeded | TaskStatus::Failed));
+    let task = session.active_task.as_ref().expect("projected task should persist");
+    let governed_stage = task
+        .context
+        .latest_governance_stage()
+        .unwrap()
+        .expect("governance stage should be recorded");
+    assert_eq!(governed_stage.stage_key, "bug-fix:investigate");
+    assert_eq!(governed_stage.runtime, GovernanceRuntimeKind::Local);
+    assert_eq!(governed_stage.lifecycle_state, GovernanceLifecycleState::GovernedReady);
 }
 
 #[test]
@@ -4842,6 +5262,127 @@ fn native_persistence_projects_cluster_story_and_copies_changes() {
         session.goal_plan.as_ref().unwrap().cluster_delivery_story.as_ref().unwrap();
     assert_eq!(cluster_story.execution_condition.kind, ClusteredExecutionKind::Failed);
     assert!(cluster_story.execution_condition.summary.contains("blocked by workspace"));
+}
+
+#[test]
+fn cluster_change_propagation_covers_noop_and_read_error_paths() {
+    let workspace = temp_workspace("boundline-runtime-cluster-propagation-noop");
+    let runtime = SessionRuntime::for_workspace(&workspace);
+    fs::create_dir_all(workspace.join("src")).unwrap();
+    fs::write(workspace.join("src/lib.rs"), "left - right\n").unwrap();
+    let mut goal_plan = GoalPlan::new(
+        "Deliver cluster follow-through",
+        vec![PlannedTask {
+            task_id: "planned-task-cluster".to_string(),
+            description: "Propagate the bounded change".to_string(),
+            target: "src/lib.rs".to_string(),
+            expected_outcome: Some("cluster state records the authoritative route".to_string()),
+            decision_type_hint: None,
+        }],
+    )
+    .unwrap();
+
+    let fixture_runtime = manual_runtime();
+    runtime.propagate_cluster_delivery_changes(&goal_plan, &fixture_runtime).unwrap();
+
+    let member = write_execution_profile_workspace(
+        "boundline-runtime-cluster-propagation-member",
+        manual_runtime().profile.attempts,
+    );
+    fs::create_dir_all(member.join("src")).unwrap();
+    fs::write(member.join("src/lib.rs"), "left - right\n").unwrap();
+    goal_plan.cluster_session_projection = Some(ClusterSessionProjection {
+        cluster_id: "cluster-1".to_string(),
+        primary_workspace_ref: workspace.to_string_lossy().into_owned(),
+        member_workspace_refs: vec![
+            workspace.to_string_lossy().into_owned(),
+            member.to_string_lossy().into_owned(),
+        ],
+        started_from_command: "boundline cluster status".to_string(),
+        updated_at: 10,
+    });
+
+    let mut empty_runtime = manual_runtime();
+    empty_runtime.profile.attempts.clear();
+    runtime.propagate_cluster_delivery_changes(&goal_plan, &empty_runtime).unwrap();
+
+    runtime.propagate_cluster_delivery_changes(&goal_plan, &fixture_runtime).unwrap();
+
+    fs::create_dir_all(workspace.join("fresh")).unwrap();
+    fs::write(workspace.join("fresh/nested.rs"), "before\n").unwrap();
+    let mut nested_success_runtime = manual_runtime();
+    nested_success_runtime.profile.attempts = vec![ExecutionAttemptDefinition {
+        attempt_id: "nested-success".to_string(),
+        summary: String::new(),
+        failure_mode: ExecutionFailureMode::Terminal,
+        changes: vec![WorkspaceChange {
+            path: "fresh/nested.rs".to_string(),
+            find: "before".to_string(),
+            replace: "after".to_string(),
+        }],
+    }];
+    runtime.propagate_cluster_delivery_changes(&goal_plan, &nested_success_runtime).unwrap();
+    assert_eq!(fs::read_to_string(member.join("fresh/nested.rs")).unwrap(), "before\n");
+
+    let mut failing_runtime = manual_runtime();
+    failing_runtime.profile.attempts = vec![ExecutionAttemptDefinition {
+        attempt_id: "missing-source".to_string(),
+        summary: String::new(),
+        failure_mode: ExecutionFailureMode::Terminal,
+        changes: vec![WorkspaceChange {
+            path: "src/missing.rs".to_string(),
+            find: "before".to_string(),
+            replace: "after".to_string(),
+        }],
+    }];
+
+    assert!(matches!(
+        runtime.propagate_cluster_delivery_changes(&goal_plan, &failing_runtime),
+        Err(super::SessionRuntimeError::FixtureRuntime(
+            crate::fixture::FixtureRuntimeError::Io { .. }
+        ))
+    ));
+
+    fs::create_dir_all(workspace.join("locked")).unwrap();
+    fs::write(workspace.join("locked/file.rs"), "before\n").unwrap();
+    fs::write(member.join("locked"), "blocking parent path\n").unwrap();
+    let mut parent_error_runtime = manual_runtime();
+    parent_error_runtime.profile.attempts = vec![ExecutionAttemptDefinition {
+        attempt_id: "parent-create-error".to_string(),
+        summary: String::new(),
+        failure_mode: ExecutionFailureMode::Terminal,
+        changes: vec![WorkspaceChange {
+            path: "locked/file.rs".to_string(),
+            find: "before".to_string(),
+            replace: "after".to_string(),
+        }],
+    }];
+    assert!(matches!(
+        runtime.propagate_cluster_delivery_changes(&goal_plan, &parent_error_runtime),
+        Err(super::SessionRuntimeError::FixtureRuntime(
+            crate::fixture::FixtureRuntimeError::Io { .. }
+        ))
+    ));
+
+    fs::write(workspace.join("directory-target"), "before\n").unwrap();
+    fs::create_dir_all(member.join("directory-target")).unwrap();
+    let mut write_error_runtime = manual_runtime();
+    write_error_runtime.profile.attempts = vec![ExecutionAttemptDefinition {
+        attempt_id: "write-error".to_string(),
+        summary: String::new(),
+        failure_mode: ExecutionFailureMode::Terminal,
+        changes: vec![WorkspaceChange {
+            path: "directory-target".to_string(),
+            find: "before".to_string(),
+            replace: "after".to_string(),
+        }],
+    }];
+    assert!(matches!(
+        runtime.propagate_cluster_delivery_changes(&goal_plan, &write_error_runtime),
+        Err(super::SessionRuntimeError::FixtureRuntime(
+            crate::fixture::FixtureRuntimeError::Io { .. }
+        ))
+    ));
 }
 
 #[test]
@@ -6345,6 +6886,18 @@ fn planning_runtime_helpers_cover_governance_resolution_upstream_briefs_and_adap
             status: crate::adapters::FrameworkAdapterStageExecutionStatus::Succeeded,
             summary: "plan stage unexpectedly reported success in failure helper".to_string(),
             produced_artifacts: vec!["artifact.md".to_string()],
+            workflow_id: None,
+            executed_commands: Vec::new(),
+            planning_findings: Vec::new(),
+            remediation_tasks_attempted: Vec::new(),
+            remediation_tasks_completed: Vec::new(),
+            remediation_tasks_skipped: Vec::new(),
+            remaining_blocking_findings: Vec::new(),
+            final_planning_readiness_status: None,
+            analyze_pass_count: None,
+            remediation_cycles_used: None,
+            implementation_status: None,
+            validation_refs: Vec::new(),
             next_action: None,
             failure_class: None,
         },
@@ -6360,6 +6913,18 @@ fn planning_runtime_helpers_cover_governance_resolution_upstream_briefs_and_adap
             status: crate::adapters::FrameworkAdapterStageExecutionStatus::Blocked,
             summary: "adapter blocked planning".to_string(),
             produced_artifacts: vec!["artifact.md".to_string()],
+            workflow_id: None,
+            executed_commands: Vec::new(),
+            planning_findings: Vec::new(),
+            remediation_tasks_attempted: Vec::new(),
+            remediation_tasks_completed: Vec::new(),
+            remediation_tasks_skipped: Vec::new(),
+            remaining_blocking_findings: Vec::new(),
+            final_planning_readiness_status: None,
+            analyze_pass_count: None,
+            remediation_cycles_used: None,
+            implementation_status: None,
+            validation_refs: Vec::new(),
             next_action: Some("resume planning".to_string()),
             failure_class: Some(crate::adapters::FrameworkAdapterFailureClass::AdapterRuntime),
         },
@@ -6408,6 +6973,18 @@ fn planning_runtime_helpers_cover_governance_resolution_upstream_briefs_and_adap
             status: crate::adapters::FrameworkAdapterStageExecutionStatus::Blocked,
             summary: "adapter blocked planning".to_string(),
             produced_artifacts: vec!["artifact.md".to_string()],
+            workflow_id: None,
+            executed_commands: Vec::new(),
+            planning_findings: Vec::new(),
+            remediation_tasks_attempted: Vec::new(),
+            remediation_tasks_completed: Vec::new(),
+            remediation_tasks_skipped: Vec::new(),
+            remaining_blocking_findings: Vec::new(),
+            final_planning_readiness_status: None,
+            analyze_pass_count: None,
+            remediation_cycles_used: None,
+            implementation_status: None,
+            validation_refs: Vec::new(),
             next_action: Some("resume planning".to_string()),
             failure_class: None,
         },
@@ -6427,6 +7004,7 @@ fn planning_runtime_helpers_cover_governance_resolution_upstream_briefs_and_adap
         run_id,
         "speckit".to_string(),
         vec!["artifact.md".to_string()],
+        None,
     );
     assert_eq!(
         success_routing.stage_status,

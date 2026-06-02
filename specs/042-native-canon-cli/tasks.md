@@ -202,8 +202,8 @@ bounded, inspectable value independently.
 
 **Purpose**: Documentation, coverage, assistant README, and cross-story integration hardening
 
-- [x] T076 [P] Update `docs/getting-started.md` to document Canon-default workspace setup, guided init, and the primary governed development workflow
-- [x] T077 [P] Update `docs/configuration.md` to document the `[canon]` config section, mode-selection preferences, and `config set-canon` command
+- [x] T076 [P] Update `tech-docs/getting-started.md` to document Canon-default workspace setup, guided init, and the primary governed development workflow
+- [x] T077 [P] Update `tech-docs/configuration.md` to document the `[canon]` config section, mode-selection preferences, and `config set-canon` command
 - [x] T078 [P] Update `assistant/README.md` to list all new assistant commands (`/boundline-init`, `/boundline-doctor`, `/boundline-config-show`, `/boundline-config-set-canon`, `/boundline-goal`, mode aliases) and document the Canon-default path as primary
 - [x] T079 [P] Update `CHANGELOG.md` with feature 042 entry covering Canon-default governance, CanonMode expansion, config commands, install diagnostics surface verification, and assistant command parity
 - [x] T080 [P] Add unit tests in `tests/unit/` for `resolve_workspace()` covering: explicit path, `.boundline/` upward search, git root fallback, CWD fallback, and ambiguous-workspace error

@@ -40,7 +40,39 @@ become the persisted stage outcomes; blocked responses leave the stage blocked
 and incomplete; post-claim failures stop the lifecycle. The template repository may
 remain a generic scaffold, but the Speckit repository must bridge real Speckit
 workflow execution and return real produced artifacts or actionable blocked and
-failure outcomes.
+failure outcomes. The corrected stage map is now explicit: `goal` stays native
+to Boundline; a Speckit-claimed `plan` stage owns the full planning lifecycle
+through workflow ID `speckit-planning`; a Speckit-claimed `run` stage owns
+implementation only through workflow ID `speckit-implementation`; and
+`status` plus `inspect` remain Boundline-owned visibility surfaces over
+adapter artifacts, findings, validation refs, and ownership records.
+
+Within one claimed `plan` attempt, the Speckit bridge inherits Boundline's
+host retry and stop controls and may execute at most one initial analyze pass
+plus two remediation or analyze re-check cycles. The `plan` stage is not
+complete until the final analyze pass has no blocking findings. If blocking
+findings still remain after the second re-check, the adapter must return a
+blocked outcome with the remaining findings and a recovery action rather than
+pretending planning succeeded. The claimed `run` stage is narrower by design:
+it invokes `speckit.implement` plus implementation validation or status capture
+only, and it must not rerun `speckit.specify`, `speckit.clarify`,
+`speckit.plan`, `speckit.tasks`, or `speckit.analyze`.
+
+## Normative Stage Mapping
+
+| Boundline surface | Execution owner | Workflow ID | Required command surface | Minimum response fields | Minimum artifact classes |
+|-------------------|-----------------|-------------|--------------------------|-------------------------|--------------------------|
+| `goal` | Boundline built-in only | `boundline-native-goal` | Native goal capture only | Native Boundline stage outcome fields | Goal or session context artifacts |
+| `plan` | Speckit when `plan` is claimed and preflight is ready | `speckit-planning` | `speckit.specify`; `speckit.clarify` when required; `speckit.plan`; `speckit.tasks`; mandatory `speckit.analyze`; remediation work; analyze re-checks | `status`, `summary`, `workflow_id`, `executed_commands`, `produced_artifacts`, `planning_findings`, `remediation_status`, `analyze_pass_count`, `remediation_cycles_used`, `next_action` | Specification, plan, tasks, and planning-readiness artifacts |
+| `run` | Speckit when `run` is claimed and preflight is ready | `speckit-implementation` | `speckit.implement` plus implementation validation or status capture only | `status`, `summary`, `workflow_id`, `executed_commands`, `produced_artifacts`, `implementation_status`, `validation_refs`, `next_action` | Implementation and validation or status artifacts |
+| `status` / `inspect` | Boundline built-in only | `boundline-native-visibility` | Native visibility over adapter evidence | Native Boundline status and inspect fields plus adapter overlays | Audit, trace, ownership, findings, and validation visibility artifacts |
+
+The split workflow assets at repo root under `.specify/workflows/speckit/`
+are the entrypoints the bridge launches through `specify workflow run <path>`.
+The adapter bridge remains responsible for conditional clarify behavior, the
+mandatory planning-readiness analyze loop, bounded remediation or re-check
+accounting, and run-stage validation or status capture that must appear in the
+host-visible claimed-stage payload.
 
 ## Technical Context
 
@@ -54,15 +86,19 @@ failure outcomes.
 focused unit tests for config parsing, known-profile lookup, preflight, and
 stage-routing decisions, contract tests for CLI JSON and adapter wire payloads
 including standard success or error envelope classification, `describe`
-transport-declaration enforcement, and best-effort structured stderr handling,
-temp-workspace integration tests covering default no-adapter execution,
-`boundline adapter add speckit`, custom adapter registration, interactive
-required-field collection, non-interactive missing-config failure,
-unsupported-transport blocking before stage claim, and post-claim stage-failure
-stop semantics, plus authoritative-routing tests that prove built-in `plan` and
-`run` completion is not treated as the completed stage outcome once an adapter
-claims those stages, and cross-repo compile plus end-to-end tests for the
-template and Speckit repos against the released protocol line
+transport-declaration enforcement, best-effort structured stderr handling, and
+the corrected `plan` or `run` response fields, temp-workspace integration tests
+covering default no-adapter execution, `boundline adapter add speckit`, custom
+adapter registration, interactive required-field collection, non-interactive
+missing-config failure, unsupported-transport blocking before stage claim, and
+post-claim stage-failure stop semantics, plus stage-mapping tests that prove a
+claimed `plan` stage invokes only the `speckit-planning` command surface with
+mandatory analyze gating and bounded remediation loops while a claimed `run`
+stage invokes only `speckit-implementation` or `speckit.implement` plus
+implementation validation or status capture. Validation must also prove that
+Boundline status and inspect surfaces remain host-owned while surfacing adapter
+artifacts, planning findings, remediation counts, and validation refs, and the
+cross-repo suite must rerun after the corrected packet passes `/speckit.analyze`.
 
 **Target Platform**: macOS and Linux developer workstations, plus Linux CI,
 with trusted local adapter binaries discovered on `PATH` or configured through
@@ -70,24 +106,34 @@ an explicit command/path override
 
 **Project Type**: multi-repo Rust CLI and library workspace in this repository plus one reusable sibling adapter-template repo and one sibling Speckit adapter-binary repo
 
-**Execution Model**: sequential one-run/one-adapter local subprocess model.
+**Execution Model**: sequential one-run or one-adapter local subprocess model.
 Boundline loads adapter capabilities once per lifecycle run, validates required
 config before adapter-owned stages begin, requires `describe` to declare
 supported transports, invokes every one-shot subprocess command over JSON
-stdin/stdout using the same standard host-visible success/error response
+stdin or stdout using the same standard host-visible success or error response
 envelope with command-specific outcomes kept inside `data`, records ownership
 per stage and hook, may ingest optional structured stderr diagnostics into
-traces without letting stderr change result classification, routes declared
+traces without letting stderr change result classification, and routes declared
 `plan` and `run` stages to the adapter as the authoritative stage path after
-successful preflight, persists the adapter response as the stage outcome, and
-never starts background daemons, hidden retries, or concurrent adapters
+successful preflight. For the known Speckit profile, a claimed `plan` stage
+must execute workflow ID `speckit-planning` with the required command sequence
+and mandatory analyze gate, while a claimed `run` stage must execute workflow
+ID `speckit-implementation` through implementation-only behavior. A single
+claimed `plan` stage attempt may execute at most one initial analyze pass plus
+two remediation or analyze re-check cycles before it returns `blocked`. Any
+additional retry is governed only by the host's existing stage retry controls.
+The host persists the adapter response as the stage outcome and never starts
+background daemons, hidden retries, or concurrent adapters.
 
 **Observability Surface**: `boundline adapter add|show|remove`, `boundline init`,
 `boundline config show`, `boundline goal|plan|run|status|inspect`,
 `.boundline/config.toml`, `.boundline/session.json`, `.boundline/traces/`, and
 adapter audit records that expose execution source, capability compatibility,
-hook delivery, optional structured adapter diagnostics when emitted, and
-intervention-required failure reasons
+workflow ID, produced artifacts, planning findings summaries, remediation loop
+counts, implementation validation refs, hook delivery, optional structured
+adapter diagnostics when emitted, and intervention-required failure reasons.
+`status` and `inspect` stay Boundline-owned even when `plan` or `run` is
+adapter-owned.
 
 **Performance Goals**: preserve the current no-adapter path with effectively no
 behavioral regression, keep capability discovery and preflight to one bounded
@@ -103,8 +149,12 @@ local subprocesses only; no MCP core dependency is introduced; committed
 cross-repo path dependencies are forbidden; V1 accepts only a declared JSON
 over stdin/stdout transport; graceful shutdown for persistent transports is
 deferred; the known Speckit profile cannot satisfy this slice with placeholder
-claimed-stage markers alone; and the sibling template repo must be bootstrapped
-from its currently empty Git state
+claimed-stage markers alone; a Speckit-claimed `plan` stage must not complete
+until `speckit.analyze` has no blocking findings; a Speckit-claimed `run`
+stage must not invoke planning commands; a claimed `plan` stage attempt may use
+at most two remediation or analyze re-check cycles after the initial analyze
+pass; `goal`, `status`, and `inspect` remain Boundline-owned surfaces; and the
+sibling template repo must be bootstrapped from its currently empty Git state
 
 **Scale/Scope**: one Boundline host repo, one empty adapter-template repo to
 bootstrap, one known Speckit adapter repo with an initial commit, one shipped
@@ -132,17 +182,20 @@ for the existing Boundline delivery flow
   introduced. See `research.md` Decisions 2 and 3.
 - **PASS** Bounded execution: The slice supports one adapter or none, one-shot
   subprocess commands, explicit preflight, explicit stop semantics after a
-  claimed-stage failure, and no unbounded retries or daemons. See Technical
-  Context, `data-model.md`, and
-  `contracts/framework-adapter-stdio-contract.md`.
+  claimed-stage failure, inherited host retry controls, and an explicit cap of
+  one initial analyze pass plus two remediation or analyze re-check cycles
+  inside one claimed Speckit `plan` attempt. See Summary, Technical Context,
+  `data-model.md`, and `contracts/framework-adapter-stdio-contract.md`.
 - **PASS** Stateful execution: Adapter selection, resolved config values,
   capability snapshots, stage ownership, and hook outcomes are persisted through
   workspace config, session state, and traces rather than transient prompt-only
   state. See `data-model.md` and `quickstart.md`.
-- **PASS** Mutable planning: Boundline still owns plan mutation and execution
-  state. Adapters receive explicit context and return explicit outcomes instead
-  of introducing opaque self-modifying control flow. See Summary,
-  `data-model.md`, and `contracts/framework-adapter-stdio-contract.md`.
+- **PASS** Mutable planning: Boundline owns lifecycle state, persistence, and
+  visibility, while a claimed Speckit `plan` stage owns the bounded planning
+  workflow and returns explicit artifacts, findings, remediation counts, and
+  outcomes instead of introducing opaque self-modifying control flow. See
+  Summary, Normative Stage Mapping, `data-model.md`, and
+  `contracts/framework-adapter-stdio-contract.md`.
 - **PASS** Sequential-first design: The initial slice forbids concurrent
   adapters and background workers. One lifecycle run has one active adapter and
   one active stage at a time. See Technical Context and `research.md` Decision 3.
@@ -179,6 +232,9 @@ for the existing Boundline delivery flow
 ### Documentation
 
 ```text
+.specify/workflows/speckit/
+├── planning.yml
+└── implementation.yml
 specs/066-agentic-framework-integration/
 ├── plan.md
 ├── research.md

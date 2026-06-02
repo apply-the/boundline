@@ -63,7 +63,7 @@ runtime summaries, and retrieval policy behavior.
 ## Final Phase: Documentation, Validation, And Release Closeout
 
 - [x] T024 Realign the feature spec, implementation plan, and feature-local contract mirrors to the S5 V1 local SQLite + FTS5 baseline in `specs/058-advanced-context-intelligence/spec.md`, `specs/058-advanced-context-intelligence/plan.md`, `specs/058-advanced-context-intelligence/contracts/advanced-context-intelligence-projection-contract.md`, `specs/058-advanced-context-intelligence/contracts/canon-semantic-retrieval-consumer-contract.md`, and `specs/058-advanced-context-intelligence/tasks.md`
-- [x] T025 Update operator and contributor docs for the advanced-context policy and retrieval surfaces in `docs/configuration.md`, `README.md`, `CHANGELOG.md`, `AGENTS.md`, and `assistant/README.md`
+- [x] T025 Update operator and contributor docs for the advanced-context policy and retrieval surfaces in `tech-docs/configuration.md`, `README.md`, `CHANGELOG.md`, `AGENTS.md`, and `assistant/README.md`
 - [x] T026 Run focused validation plus `cargo test --no-run --all-targets` in `repo root`
 - [x] T027 Run `cargo fmt --all`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, and coverage refresh for all modified Boundline files in `repo root`
 

@@ -106,7 +106,7 @@ tests/
 ├── integration/
 └── unit/
 
-docs/
+tech-docs/
 ├── configuration.md
 └── getting-started.md
 

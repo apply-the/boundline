@@ -109,7 +109,7 @@
 
 - [ ] T025 [P] Refresh generated agent and contributor context in `AGENTS.md` and `CONTRIBUTING.md`
 - [X] T026 [P] Run focused governance validation and refresh `lcov.info` via `cargo test --no-run --all-targets`, `cargo nextest run --workspace --all-features`, `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`, and `cargo deny check licenses advisories bans sources`
-- [X] T027 Update `README.md`, `ROADMAP.md`, `CHANGELOG.md`, `docs/`, `assistant/`, `.specify/templates/`, and touched tests or `lcov.info` for the `0.17.0` Canon governance expansion release, guarantee coverage on touched Rust files, run `cargo fmt`, and resolve all `cargo clippy` warnings and errors
+- [X] T027 Update `README.md`, `ROADMAP.md`, `CHANGELOG.md`, `tech-docs/`, `assistant/`, `.specify/templates/`, and touched tests or `lcov.info` for the `0.17.0` Canon governance expansion release, guarantee coverage on touched Rust files, run `cargo fmt`, and resolve all `cargo clippy` warnings and errors
 
 ---
 

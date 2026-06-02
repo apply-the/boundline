@@ -20,7 +20,7 @@ No blockers found. The task list is implementation-ready and remains consistent 
 - **US2 Idea-To-Code Delivery Path**: Covered by `T021` through `T028`, including broad brief pathing, insufficient context stop, path persistence, stage transitions, runtime summaries, and assistant metadata.
 - **US3 Explicit Governed Stage Work**: Covered by `T029` through `T036`, including Canon `0.45.0` capability parsing, full mode support, unsupported-mode failure, `boundline govern`, `/boundline:govern`, packet refs, approval state, and inspect/status output.
 - **US4 Voting At Risky Quality Boundaries**: Covered by `T037` through `T044`, including high-risk triggers, validation exhaustion, PR-ready diff, low-risk skip behavior, voting outcomes, persistence, and docs.
-- **US5 Delivery Pilot Model Documentation**: Covered by `T045` through `T050`, including docs tests, `docs/delivery-model.md`, README sections, cross-links, assistant docs, and starter prompts.
+- **US5 Delivery Pilot Model Documentation**: Covered by `T045` through `T050`, including docs tests, `tech-docs/delivery-model.md`, README sections, cross-links, assistant docs, and starter prompts.
 
 ## Requirement Coverage
 

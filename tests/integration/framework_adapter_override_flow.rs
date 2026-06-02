@@ -372,7 +372,7 @@ fn write_run_adapter_with_behavior(
     fs::create_dir_all(adapter_dir)?;
     let binary_path = adapter_dir.join(SPECKIT_BINARY_NAME);
     let script = format!(
-        "#!/bin/sh\nset -eu\ncase \"$1\" in\n  describe)\n    cat <<'BOUNDLINE_JSON'\n{describe_json}\nBOUNDLINE_JSON\n    ;;\n  preflight)\n    cat <<'BOUNDLINE_JSON'\n{preflight_json}\nBOUNDLINE_JSON\n    ;;\n  execute-stage)\n{execute_stage_script}\n    ;;\n  emit-hook)\n    cat > \"{}\"\n    cat <<'BOUNDLINE_JSON'\n{emit_hook_json}\nBOUNDLINE_JSON\n    ;;\n  *)\n    echo \"unsupported command: $1\" >&2\n    exit 64\n    ;;\nesac\n",
+        "#!/bin/sh\nset -eu\nconsume_stdin() {{\n  stdin_line=''\n  while IFS= read -r stdin_line || [ -n \"$stdin_line\" ]; do\n    stdin_line=''\n  done\n}}\nconsume_stdin_to_file() {{\n  target_path=$1\n  : > \"$target_path\"\n  stdin_line=''\n  while IFS= read -r stdin_line || [ -n \"$stdin_line\" ]; do\n    printf '%s\\n' \"$stdin_line\" >> \"$target_path\"\n    stdin_line=''\n  done\n}}\nprint_json() {{\n  while IFS= read -r line; do\n    printf '%s\\n' \"$line\"\n  done\n}}\ncase \"$1\" in\n  describe)\n    print_json <<'BOUNDLINE_JSON'\n{describe_json}\nBOUNDLINE_JSON\n    ;;\n  preflight)\n    consume_stdin\n    print_json <<'BOUNDLINE_JSON'\n{preflight_json}\nBOUNDLINE_JSON\n    ;;\n  execute-stage)\n    consume_stdin\n{execute_stage_script}\n    ;;\n  emit-hook)\n    consume_stdin_to_file \"{}\"\n    print_json <<'BOUNDLINE_JSON'\n{emit_hook_json}\nBOUNDLINE_JSON\n    ;;\n  *)\n    echo \"unsupported command: $1\" >&2\n    exit 64\n    ;;\nesac\n",
         hook_request_path.to_string_lossy(),
     );
     fs::write(&binary_path, script)?;
@@ -395,7 +395,7 @@ fn execute_stage_script(
                     sample_framework_adapter_execute_stage_success_response(),
                 ))?;
             Ok(format!(
-                "    : > \"{run_marker_ref}\"\n    cat <<'BOUNDLINE_JSON'\n{execute_stage_json}\nBOUNDLINE_JSON"
+                "    : > \"{run_marker_ref}\"\n    print_json <<'BOUNDLINE_JSON'\n{execute_stage_json}\nBOUNDLINE_JSON"
             ))
         }
         ExecuteStageBehavior::Blocked => {
@@ -406,7 +406,7 @@ fn execute_stage_script(
             let execute_stage_json =
                 serde_json::to_string(&sample_framework_adapter_success_envelope(response))?;
             Ok(format!(
-                "    : > \"{run_marker_ref}\"\n    cat <<'BOUNDLINE_JSON'\n{execute_stage_json}\nBOUNDLINE_JSON"
+                "    : > \"{run_marker_ref}\"\n    print_json <<'BOUNDLINE_JSON'\n{execute_stage_json}\nBOUNDLINE_JSON"
             ))
         }
         ExecuteStageBehavior::InBandFailed => {
@@ -417,7 +417,7 @@ fn execute_stage_script(
             let execute_stage_json =
                 serde_json::to_string(&sample_framework_adapter_success_envelope(response))?;
             Ok(format!(
-                "    : > \"{run_marker_ref}\"\n    printf '%s\\n' 'adapter stderr: in-band failed outcome' >&2\n    cat <<'BOUNDLINE_JSON'\n{execute_stage_json}\nBOUNDLINE_JSON"
+                "    : > \"{run_marker_ref}\"\n    printf '%s\\n' 'adapter stderr: in-band failed outcome' >&2\n    print_json <<'BOUNDLINE_JSON'\n{execute_stage_json}\nBOUNDLINE_JSON"
             ))
         }
         ExecuteStageBehavior::ProtocolError => {
@@ -434,7 +434,7 @@ fn execute_stage_script(
                 },
             ))?;
             Ok(format!(
-                "    : > \"{run_marker_ref}\"\n    printf '%s\\n' 'adapter stderr: protocol error envelope' >&2\n    cat <<'BOUNDLINE_JSON'\n{execute_stage_json}\nBOUNDLINE_JSON"
+                "    : > \"{run_marker_ref}\"\n    printf '%s\\n' 'adapter stderr: protocol error envelope' >&2\n    print_json <<'BOUNDLINE_JSON'\n{execute_stage_json}\nBOUNDLINE_JSON"
             ))
         }
         ExecuteStageBehavior::TransportFailure => Ok(format!(

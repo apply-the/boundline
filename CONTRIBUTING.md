@@ -151,8 +151,8 @@ Rules:
 If you change a user-visible command, session workflow, or flow behavior, update the relevant docs in the same change. Common files include:
 
 - [README.md](README.md)
-- [docs/getting-started.md](docs/getting-started.md)
-- [docs/configuration.md](docs/configuration.md)
+- [tech-docs/getting-started.md](tech-docs/getting-started.md)
+- [tech-docs/configuration.md](tech-docs/configuration.md)
 - [assistant/README.md](assistant/README.md)
 - [ROADMAP.md](ROADMAP.md)
 - the relevant assistant command pack files under [assistant](assistant)
@@ -226,5 +226,5 @@ Boundline follows Semantic Versioning.
 Before `1.0.0`, breaking changes may still land in minor releases, but version bumps should remain intentional and consistent with the user-visible scope of the change.
 
 When advancing the version or the supported Canon companion target, follow the checklist in
-[docs/release-checklist.md](docs/release-checklist.md), which lists every file
+[tech-docs/release-checklist.md](tech-docs/release-checklist.md), which lists every file
 that must change and the two contract tests that enforce alignment.

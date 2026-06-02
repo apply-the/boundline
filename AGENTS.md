@@ -10,7 +10,7 @@ Auto-generated from all feature plans. Last updated: 2026-05-31
 
 - Rust 1.96.0, edition 2024 + `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, `rusqlite`, `dialoguer`
 - Workspace-local config and traces: `.boundline/session.json`, `.boundline/traces/`, `.boundline/config.toml`, `.boundline/execution.json`, `.boundline/workflows.toml`
-- Repository-managed assets: `assistant/`, `distribution/`, `docs/`, `specs/`
+- Repository-managed assets: `assistant/`, `distribution/`, `tech-docs/`, `specs/`
 - Local SQLite + FTS5 retrieval index for semantic context (no remote embedding services yet)
 
 ## Project Structure

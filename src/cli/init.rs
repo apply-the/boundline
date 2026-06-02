@@ -120,9 +120,10 @@ const CANON_MAINTAINABILITY_REVIEWER_SLOT_ORDER: [RouteSlot; 4] =
     [RouteSlot::Review, RouteSlot::Planning, RouteSlot::Verification, RouteSlot::Implementation];
 
 #[cfg(test)]
-static CANON_INSTALL_STATUS_OVERRIDE: std::sync::OnceLock<
-    std::sync::Mutex<Option<CanonInstallStatus>>,
-> = std::sync::OnceLock::new();
+std::thread_local! {
+    static CANON_INSTALL_STATUS_OVERRIDE: std::cell::RefCell<Option<CanonInstallStatus>> =
+    const { std::cell::RefCell::new(None) };
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct CanonBootstrapReadiness {
@@ -940,6 +941,58 @@ fn apply_init_scaffold_changes(
         }
     }
 
+    apply_global_init_scaffold_changes(
+        interactive_terminal,
+        global_env_template_path,
+        global_env_template_contents,
+        global_config,
+    )?;
+
+    if let Some(workspace) = workspace {
+        apply_workspace_init_scaffold_changes(
+            &mut outcome,
+            workspace,
+            WorkspaceInitScaffoldInputs {
+                interactive_terminal,
+                execution_path,
+                execution_contents,
+                local_config,
+                local_env_template_path,
+                local_env_template_contents,
+                assistant_assets,
+                docs_plan,
+                hygiene_plan,
+                ide_plan,
+                manifest_path,
+                manifest_contents,
+            },
+        )?;
+    }
+
+    Ok(InitApplyExit::Applied(outcome))
+}
+
+struct WorkspaceInitScaffoldInputs<'a> {
+    interactive_terminal: bool,
+    execution_path: Option<&'a Path>,
+    execution_contents: Option<&'a str>,
+    local_config: Option<&'a ConfigFile>,
+    local_env_template_path: Option<&'a Path>,
+    local_env_template_contents: Option<&'a str>,
+    assistant_assets: &'a [AssistantAsset],
+    docs_plan: &'a [DocsExportPlanEntry],
+    hygiene_plan: &'a [PlannedHygieneEntry],
+    ide_plan: &'a [PlannedIdeEntry],
+    manifest_path: Option<&'a Path>,
+    manifest_contents: Option<&'a str>,
+}
+
+fn apply_global_init_scaffold_changes(
+    interactive_terminal: bool,
+    global_env_template_path: Option<&Path>,
+    global_env_template_contents: Option<&str>,
+    global_config: Option<&ConfigFile>,
+) -> Result<(), InitCommandError> {
     if let (Some(path), Some(contents)) = (global_env_template_path, global_env_template_contents) {
         run_init_activity("writing global provider env template", interactive_terminal, || {
             write_scaffold_file(path, contents)
@@ -953,67 +1006,104 @@ fn apply_init_scaffold_changes(
         })?;
     }
 
-    if let Some(workspace) = workspace {
-        let boundline_dir = workspace.join(BOUNDLINE_DIR_RELATIVE);
-        fs::create_dir_all(&boundline_dir).map_err(|source| InitCommandError::WriteFile {
-            path: boundline_dir.clone(),
-            source,
+    Ok(())
+}
+
+fn apply_workspace_init_scaffold_changes(
+    outcome: &mut InitApplyOutcome,
+    workspace: &Path,
+    inputs: WorkspaceInitScaffoldInputs<'_>,
+) -> Result<(), InitCommandError> {
+    let boundline_dir = workspace.join(BOUNDLINE_DIR_RELATIVE);
+    fs::create_dir_all(&boundline_dir)
+        .map_err(|source| InitCommandError::WriteFile { path: boundline_dir.clone(), source })?;
+    outcome.project_doc_roots = Some(ensure_workspace_project_doc_roots(workspace)?);
+    outcome.hygiene_actions = apply_workspace_hygiene_plan(workspace, inputs.hygiene_plan)?;
+
+    write_workspace_execution_profile(
+        inputs.interactive_terminal,
+        inputs.execution_path,
+        inputs.execution_contents,
+    )?;
+    write_workspace_config_and_hooks(inputs.interactive_terminal, workspace, inputs.local_config)?;
+    write_workspace_env_template(
+        inputs.interactive_terminal,
+        inputs.local_env_template_path,
+        inputs.local_env_template_contents,
+    )?;
+
+    outcome.assistant_actions =
+        run_init_activity("scaffolding assistant packs", inputs.interactive_terminal, || {
+            apply_assistant_assets(workspace, inputs.assistant_assets)
         })?;
-        outcome.project_doc_roots = Some(ensure_workspace_project_doc_roots(workspace)?);
-        outcome.hygiene_actions = apply_workspace_hygiene_plan(workspace, hygiene_plan)?;
+    outcome.docs_actions =
+        run_init_activity("exporting repo-local docs", inputs.interactive_terminal, || {
+            apply_docs_plan(workspace, inputs.docs_plan)
+        })?;
+    outcome.ide_actions =
+        run_init_activity("scaffolding IDE setup", inputs.interactive_terminal, || {
+            apply_ide_setup(workspace, inputs.ide_plan)
+        })?;
 
-        if let (Some(path), Some(contents)) = (execution_path, execution_contents) {
-            run_init_activity("writing execution profile", interactive_terminal, || {
-                fs::write(path, contents).map_err(|source| InitCommandError::WriteFile {
-                    path: path.to_path_buf(),
-                    source,
-                })
-            })?;
-        }
-
-        if let Some(local) = local_config {
-            let store = FileConfigStore::for_workspace(workspace);
-            run_init_activity("writing workspace config", interactive_terminal, || {
-                store.save_local(local)?;
-                Ok(())
-            })?;
-            if semantic_index_hook_action(local) == SemanticIndexHookAction::MarkStale {
-                run_init_activity("installing semantic index hooks", interactive_terminal, || {
-                    install_semantic_index_hooks(workspace)
-                })?;
-            }
-        }
-
-        if let (Some(path), Some(contents)) = (local_env_template_path, local_env_template_contents)
-        {
-            run_init_activity(
-                "writing workspace provider env template",
-                interactive_terminal,
-                || write_scaffold_file(path, contents),
-            )?;
-        }
-
-        outcome.assistant_actions =
-            run_init_activity("scaffolding assistant packs", interactive_terminal, || {
-                apply_assistant_assets(workspace, assistant_assets)
-            })?;
-        outcome.docs_actions =
-            run_init_activity("exporting repo-local docs", interactive_terminal, || {
-                apply_docs_plan(workspace, docs_plan)
-            })?;
-        outcome.ide_actions =
-            run_init_activity("scaffolding IDE setup", interactive_terminal, || {
-                apply_ide_setup(workspace, ide_plan)
-            })?;
-
-        if let (Some(path), Some(contents)) = (manifest_path, manifest_contents) {
-            run_init_activity("writing scaffold manifest", interactive_terminal, || {
-                write_scaffold_file(path, contents)
-            })?;
-        }
+    if let (Some(path), Some(contents)) = (inputs.manifest_path, inputs.manifest_contents) {
+        run_init_activity("writing scaffold manifest", inputs.interactive_terminal, || {
+            write_scaffold_file(path, contents)
+        })?;
     }
 
-    Ok(InitApplyExit::Applied(outcome))
+    Ok(())
+}
+
+fn write_workspace_execution_profile(
+    interactive_terminal: bool,
+    execution_path: Option<&Path>,
+    execution_contents: Option<&str>,
+) -> Result<(), InitCommandError> {
+    if let (Some(path), Some(contents)) = (execution_path, execution_contents) {
+        run_init_activity("writing execution profile", interactive_terminal, || {
+            fs::write(path, contents)
+                .map_err(|source| InitCommandError::WriteFile { path: path.to_path_buf(), source })
+        })?;
+    }
+
+    Ok(())
+}
+
+fn write_workspace_config_and_hooks(
+    interactive_terminal: bool,
+    workspace: &Path,
+    local_config: Option<&ConfigFile>,
+) -> Result<(), InitCommandError> {
+    let Some(local) = local_config else {
+        return Ok(());
+    };
+
+    let store = FileConfigStore::for_workspace(workspace);
+    run_init_activity("writing workspace config", interactive_terminal, || {
+        store.save_local(local)?;
+        Ok(())
+    })?;
+    if semantic_index_hook_action(local) == SemanticIndexHookAction::MarkStale {
+        run_init_activity("installing semantic index hooks", interactive_terminal, || {
+            install_semantic_index_hooks(workspace)
+        })?;
+    }
+
+    Ok(())
+}
+
+fn write_workspace_env_template(
+    interactive_terminal: bool,
+    local_env_template_path: Option<&Path>,
+    local_env_template_contents: Option<&str>,
+) -> Result<(), InitCommandError> {
+    if let (Some(path), Some(contents)) = (local_env_template_path, local_env_template_contents) {
+        run_init_activity("writing workspace provider env template", interactive_terminal, || {
+            write_scaffold_file(path, contents)
+        })?;
+    }
+
+    Ok(())
 }
 
 pub fn execute_init(mut request: InitRequest<'_>) -> Result<InitCommandReport, InitCommandError> {
@@ -1316,11 +1406,12 @@ pub fn execute_update(request: UpdateRequest<'_>) -> Result<UpdateCommandReport,
         effective_template,
         request.template,
     )?;
-    let ide_setup = if selected_targets.contains(&UpdateTarget::Ide) {
-        resolve_ide_setup(request.ide, request.auto_approve, existing_manifest.as_ref())
-    } else {
-        existing_manifest.as_ref().map(|manifest| manifest.ide_setup.clone()).unwrap_or_default()
-    };
+    let ide_setup = resolve_update_ide_setup(
+        &selected_targets,
+        request.ide,
+        request.auto_approve,
+        existing_manifest.as_ref(),
+    );
 
     let mut desired_config = existing_local.clone();
     let assistants = configured_assistant_hosts(&desired_config);
@@ -1353,16 +1444,8 @@ pub fn execute_update(request: UpdateRequest<'_>) -> Result<UpdateCommandReport,
     let execution_contents = effective_template
         .map(|template| render_execution_profile_contents(template, desired_config.canon.as_ref()))
         .transpose()?;
-    let assistant_assets = if selected_targets.contains(&UpdateTarget::Assistant) {
-        assets_for_assistants(&assistants)
-    } else {
-        Vec::new()
-    };
-    let docs_assets = if selected_targets.contains(&UpdateTarget::Docs) {
-        docs_assets_for_assistants(&assistants)
-    } else {
-        Vec::new()
-    };
+    let assistant_assets = update_assistant_assets(&selected_targets, &assistants);
+    let docs_assets = update_docs_assets(&selected_targets, &assistants);
     let active_domains = desired_config
         .routing
         .domain_templates
@@ -1374,16 +1457,8 @@ pub fn execute_update(request: UpdateRequest<'_>) -> Result<UpdateCommandReport,
         )
         .collect::<BTreeSet<_>>();
 
-    let hygiene_plan = if selected_targets.contains(&UpdateTarget::Hygiene) {
-        plan_workspace_hygiene_defaults(&workspace, &active_domains)?
-    } else {
-        Vec::new()
-    };
-    let ide_plan = if selected_targets.contains(&UpdateTarget::Ide) {
-        plan_ide_setup(&workspace, &ide_setup)?
-    } else {
-        Vec::new()
-    };
+    let hygiene_plan = update_hygiene_plan(&workspace, &selected_targets, &active_domains)?;
+    let ide_plan = update_ide_plan(&workspace, &selected_targets, &ide_setup)?;
     let manifest_template = effective_template
         .or(existing_manifest.as_ref().and_then(|manifest| manifest.workspace_template));
     let desired_artifacts = collect_workspace_scaffold_artifacts(
@@ -1420,44 +1495,16 @@ pub fn execute_update(request: UpdateRequest<'_>) -> Result<UpdateCommandReport,
         serialize_scaffold_manifest(&plan.manifest_after_apply, &manifest_path)?;
     let manifest_status = scaffold_file_status(&manifest_path, &manifest_contents)?;
 
-    if request.status {
-        return Ok(UpdateCommandReport::new(
-            CommandExitStatus::Succeeded,
-            render_update_status_report(
-                &workspace,
-                &selected_targets,
-                existing_manifest.as_ref(),
-                &plan,
-                &manifest_path,
-                manifest_status,
-            ),
-        ));
-    }
-
-    if request.diff {
-        return Ok(UpdateCommandReport::new(
-            CommandExitStatus::Succeeded,
-            render_update_diff_report(
-                &workspace,
-                &selected_targets,
-                &plan,
-                &manifest_path,
-                manifest_status,
-            ),
-        ));
-    }
-
-    if !request.apply {
-        return Ok(UpdateCommandReport::new(
-            CommandExitStatus::Succeeded,
-            render_update_preview_report(
-                &workspace,
-                &selected_targets,
-                &plan,
-                &manifest_path,
-                manifest_status,
-            ),
-        ));
+    if let Some(report) = render_non_apply_update_report(
+        &request,
+        &workspace,
+        &selected_targets,
+        existing_manifest.as_ref(),
+        &plan,
+        &manifest_path,
+        manifest_status,
+    ) {
+        return Ok(report);
     }
 
     if plan.requires_adopt() {
@@ -1486,9 +1533,13 @@ pub fn execute_update(request: UpdateRequest<'_>) -> Result<UpdateCommandReport,
         ));
     }
 
-    ensure_workspace_project_doc_roots(&workspace)?;
-    apply_update_plan(&workspace, &plan, &desired_artifacts)?;
-    write_scaffold_file(&manifest_path, &manifest_contents)?;
+    apply_update_changes(
+        &workspace,
+        &plan,
+        &desired_artifacts,
+        &manifest_path,
+        &manifest_contents,
+    )?;
 
     Ok(UpdateCommandReport::new(
         CommandExitStatus::Succeeded,
@@ -1502,6 +1553,129 @@ pub fn execute_update(request: UpdateRequest<'_>) -> Result<UpdateCommandReport,
     ))
 }
 
+fn resolve_update_ide_setup(
+    selected_targets: &BTreeSet<UpdateTarget>,
+    requested_ide: &[IdeKind],
+    auto_approve: Option<TerminalAutoApproveProfile>,
+    existing_manifest: Option<&ScaffoldManifest>,
+) -> Vec<IdeSetupSelection> {
+    if selected_targets.contains(&UpdateTarget::Ide) {
+        resolve_ide_setup(requested_ide, auto_approve, existing_manifest)
+    } else {
+        existing_manifest.map(|manifest| manifest.ide_setup.clone()).unwrap_or_default()
+    }
+}
+
+fn update_assistant_assets(
+    selected_targets: &BTreeSet<UpdateTarget>,
+    assistants: &[AssistantHostKind],
+) -> Vec<AssistantAsset> {
+    if selected_targets.contains(&UpdateTarget::Assistant) {
+        assets_for_assistants(assistants)
+    } else {
+        Vec::new()
+    }
+}
+
+fn update_docs_assets(
+    selected_targets: &BTreeSet<UpdateTarget>,
+    assistants: &[AssistantHostKind],
+) -> Vec<DocsExportAsset> {
+    if selected_targets.contains(&UpdateTarget::Docs) {
+        docs_assets_for_assistants(assistants)
+    } else {
+        Vec::new()
+    }
+}
+
+fn update_hygiene_plan(
+    workspace: &Path,
+    selected_targets: &BTreeSet<UpdateTarget>,
+    active_domains: &BTreeSet<DomainFamily>,
+) -> Result<Vec<PlannedHygieneEntry>, InitCommandError> {
+    if selected_targets.contains(&UpdateTarget::Hygiene) {
+        plan_workspace_hygiene_defaults(workspace, active_domains)
+    } else {
+        Ok(Vec::new())
+    }
+}
+
+fn update_ide_plan(
+    workspace: &Path,
+    selected_targets: &BTreeSet<UpdateTarget>,
+    ide_setup: &[IdeSetupSelection],
+) -> Result<Vec<PlannedIdeEntry>, InitCommandError> {
+    if selected_targets.contains(&UpdateTarget::Ide) {
+        plan_ide_setup(workspace, ide_setup)
+    } else {
+        Ok(Vec::new())
+    }
+}
+
+fn render_non_apply_update_report(
+    request: &UpdateRequest<'_>,
+    workspace: &Path,
+    selected_targets: &BTreeSet<UpdateTarget>,
+    existing_manifest: Option<&ScaffoldManifest>,
+    plan: &UpdatePlan,
+    manifest_path: &Path,
+    manifest_status: ScaffoldFileStatus,
+) -> Option<UpdateCommandReport> {
+    if request.status {
+        return Some(UpdateCommandReport::new(
+            CommandExitStatus::Succeeded,
+            render_update_status_report(
+                workspace,
+                selected_targets,
+                existing_manifest,
+                plan,
+                manifest_path,
+                manifest_status,
+            ),
+        ));
+    }
+
+    if request.diff {
+        return Some(UpdateCommandReport::new(
+            CommandExitStatus::Succeeded,
+            render_update_diff_report(
+                workspace,
+                selected_targets,
+                plan,
+                manifest_path,
+                manifest_status,
+            ),
+        ));
+    }
+
+    if request.apply {
+        None
+    } else {
+        Some(UpdateCommandReport::new(
+            CommandExitStatus::Succeeded,
+            render_update_preview_report(
+                workspace,
+                selected_targets,
+                plan,
+                manifest_path,
+                manifest_status,
+            ),
+        ))
+    }
+}
+
+fn apply_update_changes(
+    workspace: &Path,
+    plan: &UpdatePlan,
+    desired_artifacts: &[RenderedManagedArtifact],
+    manifest_path: &Path,
+    manifest_contents: &str,
+) -> Result<(), InitCommandError> {
+    ensure_workspace_project_doc_roots(workspace)?;
+    apply_update_plan(workspace, plan, desired_artifacts)?;
+    write_scaffold_file(manifest_path, manifest_contents)
+}
+
 #[allow(clippy::too_many_arguments)]
 fn resolve_update_targets(
     workspace: &Path,
@@ -1513,43 +1687,81 @@ fn resolve_update_targets(
     effective_template: Option<InitTemplate>,
     explicit_template: Option<InitTemplate>,
 ) -> Result<BTreeSet<UpdateTarget>, InitCommandError> {
-    let mut targets = if requested.is_empty() {
-        let mut defaults =
-            BTreeSet::from([UpdateTarget::Config, UpdateTarget::Assistant, UpdateTarget::Hygiene]);
-        if workspace_has_exported_docs(workspace, &configured_assistant_hosts(config))
-            || existing_manifest_has_target(existing_manifest, ScaffoldTarget::Docs)
-        {
-            defaults.insert(UpdateTarget::Docs);
-        }
-        if existing_manifest_has_target(existing_manifest, ScaffoldTarget::Ide) {
-            defaults.insert(UpdateTarget::Ide);
-        }
-        defaults
-    } else {
-        requested.iter().copied().collect::<BTreeSet<_>>()
-    };
-
-    if !requested_ide.is_empty() || auto_approve.is_some() {
-        if requested.is_empty() {
-            targets.insert(UpdateTarget::Ide);
-        } else if !targets.contains(&UpdateTarget::Ide) {
-            return Err(InitCommandError::UpdateIdeOptionsRequireIdeTarget);
-        }
-    }
-
-    if explicit_template.is_some() {
-        if requested.is_empty() {
-            targets.insert(UpdateTarget::Execution);
-        } else if !targets.contains(&UpdateTarget::Execution) {
-            return Err(InitCommandError::UpdateTemplateRequiresExecutionTarget);
-        }
-    }
+    let mut targets = default_update_targets(workspace, config, existing_manifest, requested);
+    reconcile_update_ide_targets(&mut targets, requested, requested_ide, auto_approve)?;
+    reconcile_update_execution_targets(&mut targets, requested, explicit_template)?;
 
     if targets.contains(&UpdateTarget::Execution) && effective_template.is_none() {
         return Err(InitCommandError::UpdateExecutionTemplateRequired);
     }
 
     Ok(targets)
+}
+
+fn default_update_targets(
+    workspace: &Path,
+    config: &ConfigFile,
+    existing_manifest: Option<&ScaffoldManifest>,
+    requested: &[UpdateTarget],
+) -> BTreeSet<UpdateTarget> {
+    if !requested.is_empty() {
+        return requested.iter().copied().collect::<BTreeSet<_>>();
+    }
+
+    let mut defaults =
+        BTreeSet::from([UpdateTarget::Config, UpdateTarget::Assistant, UpdateTarget::Hygiene]);
+    if workspace_has_exported_docs(workspace, &configured_assistant_hosts(config))
+        || existing_manifest_has_target(existing_manifest, ScaffoldTarget::Docs)
+    {
+        defaults.insert(UpdateTarget::Docs);
+    }
+    if existing_manifest_has_target(existing_manifest, ScaffoldTarget::Ide) {
+        defaults.insert(UpdateTarget::Ide);
+    }
+    defaults
+}
+
+fn reconcile_update_ide_targets(
+    targets: &mut BTreeSet<UpdateTarget>,
+    requested: &[UpdateTarget],
+    requested_ide: &[IdeKind],
+    auto_approve: Option<TerminalAutoApproveProfile>,
+) -> Result<(), InitCommandError> {
+    if requested_ide.is_empty() && auto_approve.is_none() {
+        return Ok(());
+    }
+
+    if requested.is_empty() {
+        targets.insert(UpdateTarget::Ide);
+        return Ok(());
+    }
+
+    if targets.contains(&UpdateTarget::Ide) {
+        Ok(())
+    } else {
+        Err(InitCommandError::UpdateIdeOptionsRequireIdeTarget)
+    }
+}
+
+fn reconcile_update_execution_targets(
+    targets: &mut BTreeSet<UpdateTarget>,
+    requested: &[UpdateTarget],
+    explicit_template: Option<InitTemplate>,
+) -> Result<(), InitCommandError> {
+    if explicit_template.is_none() {
+        return Ok(());
+    }
+
+    if requested.is_empty() {
+        targets.insert(UpdateTarget::Execution);
+        return Ok(());
+    }
+
+    if targets.contains(&UpdateTarget::Execution) {
+        Ok(())
+    } else {
+        Err(InitCommandError::UpdateTemplateRequiresExecutionTarget)
+    }
 }
 
 fn existing_manifest_has_target(
@@ -1843,179 +2055,26 @@ fn build_update_plan(
     let mut entries = Vec::new();
 
     for artifact in desired_artifacts {
-        let path = workspace_relative_path(&artifact.path)
-            .unwrap_or_else(|| artifact.path.display().to_string());
-        let desired_entry = rendered_artifact_manifest_entry(artifact).unwrap_or_else(|| {
-            ScaffoldManifestEntry::new(
-                path.clone(),
-                artifact.target,
-                artifact.ownership,
-                &artifact.contents,
-            )
-        });
-        let manifest_entry = existing_entries.remove(&path);
-        let current_path = workspace.join(&path);
-        let current_contents = read_optional_file_contents(&current_path)?;
-        let current_fingerprint =
-            current_contents.as_deref().map(crate::domain::scaffold_manifest::fingerprint_text);
-        let tracked = manifest_entry.is_some();
-
-        let (action, detail, requires_force, requires_adopt, next_entry) = match (
-            artifact.ownership,
-            current_contents.as_deref(),
-            manifest_entry.as_ref(),
-        ) {
-            (_, None, _) => (
-                UpdatePlanAction::Create,
-                "managed scaffold file is missing and will be created".to_string(),
-                false,
-                false,
-                Some(desired_entry.clone()),
-            ),
-            (ScaffoldOwnershipMode::Merge, Some(current), _) => {
-                if current == artifact.contents {
-                    let detail = if tracked {
-                        "merge-owned file already matches the desired managed content".to_string()
-                    } else {
-                        "merge-owned file already matches the desired managed content and will be tracked".to_string()
-                    };
-                    (
-                        if tracked { UpdatePlanAction::Unchanged } else { UpdatePlanAction::Adopt },
-                        detail,
-                        false,
-                        false,
-                        Some(desired_entry.clone()),
-                    )
-                } else {
-                    (
-                        UpdatePlanAction::Merge,
-                        "merge-owned file will add managed patterns while preserving custom lines"
-                            .to_string(),
-                        false,
-                        false,
-                        Some(desired_entry.clone()),
-                    )
-                }
-            }
-            (ScaffoldOwnershipMode::Replace, Some(current), Some(existing_entry)) => {
-                if current == artifact.contents {
-                    (
-                        UpdatePlanAction::Unchanged,
-                        "tracked file already matches the desired managed content".to_string(),
-                        false,
-                        false,
-                        Some(desired_entry.clone()),
-                    )
-                } else if current_fingerprint.as_deref()
-                    == Some(existing_entry.fingerprint.as_str())
-                {
-                    (
-                        UpdatePlanAction::Replace,
-                        "tracked file differs from the desired managed content".to_string(),
-                        false,
-                        false,
-                        Some(desired_entry.clone()),
-                    )
-                } else {
-                    (
-                        UpdatePlanAction::Replace,
-                        "tracked file has local drift and requires --force before replacement"
-                            .to_string(),
-                        true,
-                        false,
-                        Some(desired_entry.clone()),
-                    )
-                }
-            }
-            (ScaffoldOwnershipMode::Replace, Some(current), None) => {
-                if current == artifact.contents {
-                    (
-                            UpdatePlanAction::Adopt,
-                            "untracked file already matches the desired managed content and will be tracked"
-                                .to_string(),
-                            false,
-                            false,
-                            Some(desired_entry.clone()),
-                        )
-                } else if adopt {
-                    let adopted_entry = ScaffoldManifestEntry::new(
-                        path.clone(),
-                        artifact.target,
-                        artifact.ownership,
-                        current,
-                    );
-                    (
-                            UpdatePlanAction::AdoptCurrent,
-                            "untracked file differs from the desired managed content and will be adopted as the current baseline"
-                                .to_string(),
-                            true,
-                            false,
-                            Some(adopted_entry),
-                        )
-                } else {
-                    (
-                            UpdatePlanAction::Conflict,
-                            "untracked file differs from the desired managed content; rerun with --adopt --force to baseline it"
-                                .to_string(),
-                            false,
-                            true,
-                            None,
-                        )
-                }
-            }
-        };
-
-        if let Some(next_entry) = next_entry {
-            next_manifest_entries.insert(path.clone(), next_entry);
-        }
-        entries.push(UpdatePlanEntry {
-            path,
-            target: artifact.target,
-            ownership: artifact.ownership,
-            action,
-            detail,
-            tracked,
-            requires_force,
-            requires_adopt,
-        });
+        append_update_plan_for_artifact(
+            workspace,
+            artifact,
+            adopt,
+            &mut existing_entries,
+            &mut next_manifest_entries,
+            &mut entries,
+        )?;
     }
 
     for (path, entry) in existing_entries {
-        if !selected_targets.contains(&update_target_for_scaffold_target(entry.target)) {
-            next_manifest_entries.insert(path, entry);
-            continue;
-        }
-
-        let current_path = workspace.join(&entry.path);
-        if !current_path.is_file() {
-            continue;
-        }
-
-        if prune {
-            entries.push(UpdatePlanEntry {
-                path: entry.path.clone(),
-                target: entry.target,
-                ownership: entry.ownership,
-                action: UpdatePlanAction::Remove,
-                detail: "tracked artifact is no longer desired and will be pruned".to_string(),
-                tracked: true,
-                requires_force: false,
-                requires_adopt: false,
-            });
-        } else {
-            next_manifest_entries.insert(path.clone(), entry.clone());
-            entries.push(UpdatePlanEntry {
-                path,
-                target: entry.target,
-                ownership: entry.ownership,
-                action: UpdatePlanAction::Orphaned,
-                detail: "tracked artifact is no longer desired; rerun with --prune to remove it"
-                    .to_string(),
-                tracked: true,
-                requires_force: false,
-                requires_adopt: false,
-            });
-        }
+        append_existing_update_plan_entry(
+            workspace,
+            &path,
+            &entry,
+            selected_targets,
+            prune,
+            &mut next_manifest_entries,
+            &mut entries,
+        );
     }
 
     let manifest_after_apply = scaffold_manifest_from_entries(
@@ -2028,6 +2087,264 @@ fn build_update_plan(
     entries.sort_by(|left, right| left.path.cmp(&right.path));
 
     Ok(UpdatePlan { entries, manifest_after_apply, manifest_present: existing_manifest.is_some() })
+}
+
+fn append_update_plan_for_artifact(
+    workspace: &Path,
+    artifact: &RenderedManagedArtifact,
+    adopt: bool,
+    existing_entries: &mut BTreeMap<String, ScaffoldManifestEntry>,
+    next_manifest_entries: &mut BTreeMap<String, ScaffoldManifestEntry>,
+    entries: &mut Vec<UpdatePlanEntry>,
+) -> Result<(), InitCommandError> {
+    let path = workspace_relative_path(&artifact.path)
+        .unwrap_or_else(|| artifact.path.display().to_string());
+    let desired_entry = rendered_artifact_manifest_entry(artifact).unwrap_or_else(|| {
+        ScaffoldManifestEntry::new(
+            path.clone(),
+            artifact.target,
+            artifact.ownership,
+            &artifact.contents,
+        )
+    });
+    let manifest_entry = existing_entries.remove(&path);
+    let current_path = workspace.join(&path);
+    let current_contents = read_optional_file_contents(&current_path)?;
+    let current_fingerprint =
+        current_contents.as_deref().map(crate::domain::scaffold_manifest::fingerprint_text);
+    let tracked = manifest_entry.is_some();
+
+    let (action, detail, requires_force, requires_adopt, next_entry) = update_plan_entry_decision(
+        artifact,
+        UpdatePlanEntryDecisionInputs {
+            path: &path,
+            desired_entry: &desired_entry,
+            current_contents: current_contents.as_deref(),
+            current_fingerprint: current_fingerprint.as_deref(),
+            manifest_entry: manifest_entry.as_ref(),
+            tracked,
+            adopt,
+        },
+    );
+
+    if let Some(next_entry) = next_entry {
+        next_manifest_entries.insert(path.clone(), next_entry);
+    }
+    entries.push(UpdatePlanEntry {
+        path,
+        target: artifact.target,
+        ownership: artifact.ownership,
+        action,
+        detail,
+        tracked,
+        requires_force,
+        requires_adopt,
+    });
+
+    Ok(())
+}
+
+struct UpdatePlanEntryDecisionInputs<'a> {
+    path: &'a str,
+    desired_entry: &'a ScaffoldManifestEntry,
+    current_contents: Option<&'a str>,
+    current_fingerprint: Option<&'a str>,
+    manifest_entry: Option<&'a ScaffoldManifestEntry>,
+    tracked: bool,
+    adopt: bool,
+}
+
+fn update_plan_entry_decision(
+    artifact: &RenderedManagedArtifact,
+    inputs: UpdatePlanEntryDecisionInputs<'_>,
+) -> (UpdatePlanAction, String, bool, bool, Option<ScaffoldManifestEntry>) {
+    match (artifact.ownership, inputs.current_contents, inputs.manifest_entry) {
+        (_, None, _) => (
+            UpdatePlanAction::Create,
+            "managed scaffold file is missing and will be created".to_string(),
+            false,
+            false,
+            Some(inputs.desired_entry.clone()),
+        ),
+        (ScaffoldOwnershipMode::Merge, Some(current), _) => merge_owned_update_plan_decision(
+            current,
+            &artifact.contents,
+            inputs.desired_entry,
+            inputs.tracked,
+        ),
+        (ScaffoldOwnershipMode::Replace, Some(current), Some(existing_entry)) => {
+            tracked_replace_update_plan_decision(
+                current,
+                &artifact.contents,
+                inputs.current_fingerprint,
+                existing_entry,
+                inputs.desired_entry,
+            )
+        }
+        (ScaffoldOwnershipMode::Replace, Some(current), None) => {
+            untracked_replace_update_plan_decision(
+                artifact,
+                inputs.path,
+                current,
+                inputs.desired_entry,
+                inputs.adopt,
+            )
+        }
+    }
+}
+
+fn merge_owned_update_plan_decision(
+    current: &str,
+    desired_contents: &str,
+    desired_entry: &ScaffoldManifestEntry,
+    tracked: bool,
+) -> (UpdatePlanAction, String, bool, bool, Option<ScaffoldManifestEntry>) {
+    if current == desired_contents {
+        let detail = if tracked {
+            "merge-owned file already matches the desired managed content".to_string()
+        } else {
+            "merge-owned file already matches the desired managed content and will be tracked"
+                .to_string()
+        };
+        (
+            if tracked { UpdatePlanAction::Unchanged } else { UpdatePlanAction::Adopt },
+            detail,
+            false,
+            false,
+            Some(desired_entry.clone()),
+        )
+    } else {
+        (
+            UpdatePlanAction::Merge,
+            "merge-owned file will add managed patterns while preserving custom lines".to_string(),
+            false,
+            false,
+            Some(desired_entry.clone()),
+        )
+    }
+}
+
+fn tracked_replace_update_plan_decision(
+    current: &str,
+    desired_contents: &str,
+    current_fingerprint: Option<&str>,
+    existing_entry: &ScaffoldManifestEntry,
+    desired_entry: &ScaffoldManifestEntry,
+) -> (UpdatePlanAction, String, bool, bool, Option<ScaffoldManifestEntry>) {
+    if current == desired_contents {
+        (
+            UpdatePlanAction::Unchanged,
+            "tracked file already matches the desired managed content".to_string(),
+            false,
+            false,
+            Some(desired_entry.clone()),
+        )
+    } else if current_fingerprint == Some(existing_entry.fingerprint.as_str()) {
+        (
+            UpdatePlanAction::Replace,
+            "tracked file differs from the desired managed content".to_string(),
+            false,
+            false,
+            Some(desired_entry.clone()),
+        )
+    } else {
+        (
+            UpdatePlanAction::Replace,
+            "tracked file has local drift and requires --force before replacement".to_string(),
+            true,
+            false,
+            Some(desired_entry.clone()),
+        )
+    }
+}
+
+fn untracked_replace_update_plan_decision(
+    artifact: &RenderedManagedArtifact,
+    path: &str,
+    current: &str,
+    desired_entry: &ScaffoldManifestEntry,
+    adopt: bool,
+) -> (UpdatePlanAction, String, bool, bool, Option<ScaffoldManifestEntry>) {
+    if current == artifact.contents {
+        (
+            UpdatePlanAction::Adopt,
+            "untracked file already matches the desired managed content and will be tracked"
+                .to_string(),
+            false,
+            false,
+            Some(desired_entry.clone()),
+        )
+    } else if adopt {
+        let adopted_entry = ScaffoldManifestEntry::new(
+            path.to_string(),
+            artifact.target,
+            artifact.ownership,
+            current,
+        );
+        (
+            UpdatePlanAction::AdoptCurrent,
+            "untracked file differs from the desired managed content and will be adopted as the current baseline"
+                .to_string(),
+            true,
+            false,
+            Some(adopted_entry),
+        )
+    } else {
+        (
+            UpdatePlanAction::Conflict,
+            "untracked file differs from the desired managed content; rerun with --adopt --force to baseline it"
+                .to_string(),
+            false,
+            true,
+            None,
+        )
+    }
+}
+
+fn append_existing_update_plan_entry(
+    workspace: &Path,
+    path: &str,
+    entry: &ScaffoldManifestEntry,
+    selected_targets: &BTreeSet<UpdateTarget>,
+    prune: bool,
+    next_manifest_entries: &mut BTreeMap<String, ScaffoldManifestEntry>,
+    entries: &mut Vec<UpdatePlanEntry>,
+) {
+    if !selected_targets.contains(&update_target_for_scaffold_target(entry.target)) {
+        next_manifest_entries.insert(path.to_string(), entry.clone());
+        return;
+    }
+
+    let current_path = workspace.join(&entry.path);
+    if !current_path.is_file() {
+        return;
+    }
+
+    if prune {
+        entries.push(UpdatePlanEntry {
+            path: entry.path.clone(),
+            target: entry.target,
+            ownership: entry.ownership,
+            action: UpdatePlanAction::Remove,
+            detail: "tracked artifact is no longer desired and will be pruned".to_string(),
+            tracked: true,
+            requires_force: false,
+            requires_adopt: false,
+        });
+    } else {
+        next_manifest_entries.insert(path.to_string(), entry.clone());
+        entries.push(UpdatePlanEntry {
+            path: path.to_string(),
+            target: entry.target,
+            ownership: entry.ownership,
+            action: UpdatePlanAction::Orphaned,
+            detail: "tracked artifact is no longer desired; rerun with --prune to remove it"
+                .to_string(),
+            tracked: true,
+            requires_force: false,
+            requires_adopt: false,
+        });
+    }
 }
 
 fn current_timestamp_millis() -> u64 {
@@ -2179,69 +2496,45 @@ fn resolve_init_inputs(
         .iter()
         .map(|raw_route| parse_model_route(raw_route))
         .collect::<Result<Vec<_>, _>>()?;
-    let prompt_for_canon_mode =
-        request.canon_mode_selection.or(stored_defaults.canon_mode_selection).is_none();
-    let prompt_for_assistants = request.assistants.is_empty()
-        && stored_defaults.assistants.is_empty()
-        && explicit_routes.is_empty()
-        && stored_defaults.routes.is_empty();
-    let prompt_for_routes = explicit_routes.is_empty() && stored_defaults.routes.is_empty();
-    let needs_guided_values = prompt_for_canon_mode || prompt_for_assistants || prompt_for_routes;
+    let guided_prompt_state = guided_init_prompt_state(request, &stored_defaults, &explicit_routes);
 
-    if !request.non_interactive && needs_guided_values && !interactive_terminal {
+    if !request.non_interactive && guided_prompt_state.needs_guided_values && !interactive_terminal
+    {
         return Err(InitCommandError::InteractiveTerminalUnavailable);
     }
 
     let mut default_interactor: Box<dyn InitInteractor> = Box::new(DialoguerInitInteractor);
+    let requested_assistants = request.assistants;
+    let non_interactive = request.non_interactive;
     let interactor: &mut dyn InitInteractor = match request.interactor.as_mut() {
         Some(i) => i.as_mut(),
         None => default_interactor.as_mut(),
     };
 
-    let guided_answers = if !request.non_interactive && interactive_terminal && needs_guided_values
-    {
-        Some(collect_guided_init_answers_with_interactor(
-            interactor,
-            prompt_for_canon_mode,
-            prompt_for_assistants,
-            prompt_for_routes,
-            &catalog,
-            if request.assistants.is_empty() {
-                stored_defaults.assistants.as_slice()
-            } else {
-                request.assistants
-            },
-        )?)
-    } else {
-        None
-    };
+    let guided_answers = collect_guided_init_answers_if_needed(
+        non_interactive,
+        requested_assistants,
+        interactive_terminal,
+        &guided_prompt_state,
+        &catalog,
+        &stored_defaults,
+        interactor,
+    )?;
 
     let effective_canon_mode_selection = request
         .canon_mode_selection
         .or(stored_defaults.canon_mode_selection)
         .or_else(|| guided_answers.as_ref().and_then(|answers| answers.canon_mode_selection));
-    let effective_assistants = if request.assistants.is_empty() {
-        guided_answers
-            .as_ref()
-            .map(|answers| answers.assistants.clone())
-            .unwrap_or_else(|| stored_defaults.assistants.clone())
-    } else {
-        request.assistants.to_vec()
-    };
+    let effective_assistants =
+        resolve_effective_assistants(request, &stored_defaults, guided_answers.as_ref());
     let effective_assistant_runtimes = assistant_runtimes_for_hosts(&effective_assistants);
 
-    let guided_routes = if explicit_routes.is_empty()
-        && prompt_for_routes
-        && let Some(answers) = guided_answers.as_ref()
-    {
-        answers
-            .routes
-            .iter()
-            .filter_map(|selection| selection.route.clone().map(|route| (selection.slot, route)))
-            .collect::<Vec<_>>()
-    } else {
-        stored_defaults.routes.clone()
-    };
+    let guided_routes = resolve_guided_routes(
+        &explicit_routes,
+        guided_prompt_state.prompt_for_routes,
+        &stored_defaults,
+        guided_answers.as_ref(),
+    );
     let guided_route_decisions = guided_answers
         .as_ref()
         .map(|answers| {
@@ -2284,6 +2577,95 @@ fn resolve_init_inputs(
         effective_routes,
         requested_domain_templates,
     })
+}
+
+struct GuidedInitPromptState {
+    prompt_for_canon_mode: bool,
+    prompt_for_assistants: bool,
+    prompt_for_routes: bool,
+    needs_guided_values: bool,
+}
+
+fn guided_init_prompt_state(
+    request: &InitRequest<'_>,
+    stored_defaults: &StoredInitDefaults,
+    explicit_routes: &[(RouteSlot, ModelRoute)],
+) -> GuidedInitPromptState {
+    let prompt_for_canon_mode =
+        request.canon_mode_selection.or(stored_defaults.canon_mode_selection).is_none();
+    let prompt_for_assistants = request.assistants.is_empty()
+        && stored_defaults.assistants.is_empty()
+        && explicit_routes.is_empty()
+        && stored_defaults.routes.is_empty();
+    let prompt_for_routes = explicit_routes.is_empty() && stored_defaults.routes.is_empty();
+
+    GuidedInitPromptState {
+        prompt_for_canon_mode,
+        prompt_for_assistants,
+        prompt_for_routes,
+        needs_guided_values: prompt_for_canon_mode || prompt_for_assistants || prompt_for_routes,
+    }
+}
+
+fn collect_guided_init_answers_if_needed(
+    non_interactive: bool,
+    requested_assistants: &[AssistantHostKind],
+    interactive_terminal: bool,
+    prompt_state: &GuidedInitPromptState,
+    catalog: &BundledModelCatalog,
+    stored_defaults: &StoredInitDefaults,
+    interactor: &mut dyn InitInteractor,
+) -> Result<Option<GuidedInitAnswers>, InitCommandError> {
+    if non_interactive || !interactive_terminal || !prompt_state.needs_guided_values {
+        return Ok(None);
+    }
+
+    Ok(Some(collect_guided_init_answers_with_interactor(
+        interactor,
+        prompt_state.prompt_for_canon_mode,
+        prompt_state.prompt_for_assistants,
+        prompt_state.prompt_for_routes,
+        catalog,
+        if requested_assistants.is_empty() {
+            stored_defaults.assistants.as_slice()
+        } else {
+            requested_assistants
+        },
+    )?))
+}
+
+fn resolve_effective_assistants(
+    request: &InitRequest<'_>,
+    stored_defaults: &StoredInitDefaults,
+    guided_answers: Option<&GuidedInitAnswers>,
+) -> Vec<AssistantHostKind> {
+    if request.assistants.is_empty() {
+        guided_answers
+            .map(|answers| answers.assistants.clone())
+            .unwrap_or_else(|| stored_defaults.assistants.clone())
+    } else {
+        request.assistants.to_vec()
+    }
+}
+
+fn resolve_guided_routes(
+    explicit_routes: &[(RouteSlot, ModelRoute)],
+    prompt_for_routes: bool,
+    stored_defaults: &StoredInitDefaults,
+    guided_answers: Option<&GuidedInitAnswers>,
+) -> Vec<(RouteSlot, ModelRoute)> {
+    if explicit_routes.is_empty()
+        && prompt_for_routes
+        && let Some(answers) = guided_answers
+    {
+        answers
+            .routes
+            .iter()
+            .filter_map(|selection| selection.route.clone().map(|route| (selection.slot, route)))
+            .collect::<Vec<_>>()
+    } else {
+        stored_defaults.routes.clone()
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -2971,11 +3353,7 @@ fn evaluate_init_canon_install(executable_path: &Path) -> CanonInstallStatus {
     #[cfg(test)]
     {
         let _ = executable_path;
-        let overrides = CANON_INSTALL_STATUS_OVERRIDE.get_or_init(|| std::sync::Mutex::new(None));
-        let overridden = match overrides.lock() {
-            Ok(guard) => guard.clone(),
-            Err(poisoned) => poisoned.into_inner().clone(),
-        };
+        let overridden = CANON_INSTALL_STATUS_OVERRIDE.with(|overrides| overrides.borrow().clone());
         overridden.unwrap_or_else(default_test_canon_install_status)
     }
 
@@ -2989,14 +3367,8 @@ fn evaluate_init_canon_install(executable_path: &Path) -> CanonInstallStatus {
 fn replace_test_canon_install_status_override(
     status: Option<CanonInstallStatus>,
 ) -> Option<CanonInstallStatus> {
-    let overrides = CANON_INSTALL_STATUS_OVERRIDE.get_or_init(|| std::sync::Mutex::new(None));
-    match overrides.lock() {
-        Ok(mut guard) => std::mem::replace(&mut *guard, status),
-        Err(poisoned) => {
-            let mut guard = poisoned.into_inner();
-            std::mem::replace(&mut *guard, status)
-        }
-    }
+    CANON_INSTALL_STATUS_OVERRIDE
+        .with(|overrides| std::mem::replace(&mut *overrides.borrow_mut(), status))
 }
 
 #[cfg(test)]
@@ -5213,7 +5585,7 @@ mod tests {
         let workspace = temp_workspace("boundline-init-canon-blocked");
         let mut blocked_status = blocked_canon_install_status(
             "Canon governance surface is unavailable",
-            "install or repair Canon 0.62.0 before rerunning init",
+            "install or repair Canon 0.63.0 before rerunning init",
         );
         if let Some(surface) = blocked_status.surface_verification.as_mut() {
             surface.operations_verified = false;
@@ -5262,7 +5634,7 @@ mod tests {
             report.terminal_output
         );
         assert!(
-            report.terminal_output.contains("install or repair Canon 0.62.0 before rerunning init"),
+            report.terminal_output.contains("install or repair Canon 0.63.0 before rerunning init"),
             "{}",
             report.terminal_output
         );
@@ -5276,8 +5648,8 @@ mod tests {
         // must say "blocked before planning" and no workspace files must exist.
         let workspace = temp_workspace("boundline-init-canon-preflight");
         let mut blocked_status = blocked_canon_install_status(
-            "Canon 0.10.0 is present but version 0.62.0 is required",
-            "upgrade Canon to 0.62.0 or later",
+            "Canon 0.10.0 is present but version 0.63.0 is required",
+            "upgrade Canon to 0.63.0 or later",
         );
         if let Some(surface) = blocked_status.surface_verification.as_mut() {
             surface.version_compatible = false;
@@ -5324,7 +5696,7 @@ mod tests {
             "expected 'blocked before planning' in output to confirm fail-fast path;\n{}",
             report.terminal_output
         );
-        assert!(report.terminal_output.contains("0.62.0"), "{}", report.terminal_output);
+        assert!(report.terminal_output.contains("0.63.0"), "{}", report.terminal_output);
         // No workspace files must be created by the blocked run.
         assert!(!workspace.join(".boundline").exists());
     }
@@ -5428,7 +5800,7 @@ mod tests {
         let workspace = temp_workspace("boundline-init-partial-routes");
         let explicit = ["planning=copilot:gpt-4o".to_string()];
 
-        let report = execute_init(InitRequest {
+        let report = execute_successful_init(InitRequest {
             workspace: &workspace,
             scope: InitConfigScope::Workspace,
             non_interactive: true,
@@ -5453,8 +5825,7 @@ mod tests {
             docs_diff: false,
             docs_output_dir: None,
             force: true,
-        })
-        .unwrap();
+        });
 
         assert!(report.terminal_output.contains("route_setup:"));
         assert!(report.terminal_output.contains("explicit planning: copilot:gpt-4o [explicit]"));

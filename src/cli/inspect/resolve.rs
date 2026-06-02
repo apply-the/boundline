@@ -36,21 +36,35 @@ pub(super) fn load_trace(
         .flatten();
     let (target, trace_path) = resolve_trace_path(trace, workspace, session_trace_ref.as_deref())?;
 
+    let resolved_trace_path = match target {
+        TraceResolutionTarget::SessionTraceRef => {
+            if let Some(workspace_path) = workspace.filter(|_| trace_path.is_relative()) {
+                workspace_path.join(&trace_path)
+            } else {
+                trace_path.clone()
+            }
+        }
+        TraceResolutionTarget::ExplicitTrace | TraceResolutionTarget::LatestWorkspaceTrace => {
+            trace_path.clone()
+        }
+    };
+
     let trace = match target {
         TraceResolutionTarget::LatestWorkspaceTrace => {
             let Some(workspace_path) = workspace else {
                 return Err(InspectCommandError::MissingTraceReference);
             };
             let store = FileTraceStore::for_workspace(workspace_path);
-            store.load(&trace_path)?
+            store.load(&resolved_trace_path)?
         }
         TraceResolutionTarget::ExplicitTrace | TraceResolutionTarget::SessionTraceRef => {
-            let store = FileTraceStore::new(trace_path.parent().unwrap_or_else(|| Path::new(".")));
-            store.load(&trace_path)?
+            let store =
+                FileTraceStore::new(resolved_trace_path.parent().unwrap_or_else(|| Path::new(".")));
+            store.load(&resolved_trace_path)?
         }
     };
 
-    Ok((target, trace_path, trace))
+    Ok((target, resolved_trace_path, trace))
 }
 
 pub(super) fn resolve_session_trace_ref(

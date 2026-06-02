@@ -88,7 +88,7 @@ Assistant surface:
 CLI equivalent:
 
 ```bash
-boundline govern --mode architecture --brief docs/architecture.md
+boundline govern --mode architecture --brief tech-docs/architecture.md
 boundline govern --mode requirements --goal "Bound the customer onboarding capability"
 boundline govern --mode pr-review --base refs/heads/main --head HEAD
 ```

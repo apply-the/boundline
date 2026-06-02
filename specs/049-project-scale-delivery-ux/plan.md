@@ -78,7 +78,7 @@ assistant/
 │   ├── copilot/
 │   └── gemini/
 └── prompts/
-docs/
+tech-docs/
 ├── architecture.md
 ├── delivery-model.md
 ├── getting-started.md

@@ -28,30 +28,7 @@ const SESSION_BRIEF_ITEM_LIMIT: usize = 3;
 pub fn render_session_status_brief(view: &SessionStatusView) -> String {
     let mut lines = Vec::new();
 
-    if let Some(goal) = &view.goal {
-        lines.push(format!("goal: {}", preview_session_brief_text(goal)));
-    }
-
-    if let Some(negotiation_goal_summary) = &view.negotiation_goal_summary {
-        lines.push(format!(
-            "negotiation_goal_summary: {}",
-            preview_session_brief_text(negotiation_goal_summary)
-        ));
-    }
-
-    if let Some(negotiation_resolution) = &view.negotiation_resolution {
-        lines.push(format!(
-            "negotiation_resolution: {}",
-            preview_session_brief_text(negotiation_resolution)
-        ));
-    }
-
-    if let Some(negotiation_acceptance_boundary) = &view.negotiation_acceptance_boundary {
-        lines.push(format!(
-            "negotiation_acceptance_boundary: {}",
-            preview_session_brief_text(negotiation_acceptance_boundary)
-        ));
-    }
+    push_session_overview_brief_lines(&mut lines, view);
 
     lines.extend(session_input_brief_lines(view));
 
@@ -78,66 +55,7 @@ pub fn render_session_status_brief(view: &SessionStatusView) -> String {
         view.latest_framework_adapter_stage_failure.as_ref(),
     ));
 
-    if let Some(continuity_authority) = view.continuity_authority {
-        lines.push(format!("continuity_authority: {}", continuity_authority.as_str()));
-    }
-
-    if let Some(compatibility_follow_up) = &view.compatibility_follow_up {
-        lines.extend(render_compatibility_follow_up_lines(
-            compatibility_follow_up,
-            "compatibility_routing",
-            "compatibility_follow_up",
-            "compatibility_follow_up_command",
-        ));
-    }
-
-    if let Some(cluster_story) = &view.cluster_delivery_story {
-        lines.extend(render_cluster_story_lines(cluster_story));
-    }
-
-    if let Some(active_flow) = &view.active_flow {
-        lines.push(format!("active_flow: {active_flow}"));
-    }
-
-    if let Some(current_stage_id) = &view.current_stage_id {
-        lines.push(format!("current_stage: {current_stage_id}"));
-    }
-
-    if let (Some(current_stage_index), Some(total_stages)) =
-        (view.current_stage_index, view.total_stages)
-    {
-        lines.push(format!("stage_progress: {}/{}", current_stage_index + 1, total_stages));
-    }
-
-    if let Some(execution_path) = &view.execution_path {
-        lines.push(format!("execution_path: {execution_path}"));
-    }
-
-    if let Some(plan_revision) = view.plan_revision {
-        lines.push(format!("plan_revision: {plan_revision}"));
-    }
-
-    if let Some(current_step_index) = view.current_step_index {
-        lines.push(format!("current_step_index: {current_step_index}"));
-    }
-
-    if let Some(current_step_id) = &view.current_step_id {
-        lines.push(format!("current_step_id: {current_step_id}"));
-    }
-
-    if let Some(latest_validation_status) = &view.latest_validation_status {
-        lines.push(format!("latest_validation_status: {latest_validation_status}"));
-    }
-
-    if let Some(latest_trace_ref) = &view.latest_trace_ref {
-        lines.push(format!("latest_trace_ref: {latest_trace_ref}"));
-    }
-
-    if let Some(latest_changed_files) = &view.latest_changed_files
-        && !latest_changed_files.is_empty()
-    {
-        lines.push(format!("latest_changed_files: {}", latest_changed_files.join(", ")));
-    }
+    push_session_progress_brief_lines(&mut lines, view);
 
     if let Some(summary_line) = session_summary_brief_line(view) {
         lines.push(summary_line);
@@ -157,40 +75,102 @@ pub fn render_session_status_brief(view: &SessionStatusView) -> String {
         lines.push(governance_line);
     }
 
-    if let Some(latest_governance_stage) = &view.latest_governance_stage {
-        lines.push(format!("latest_governance_stage: {latest_governance_stage}"));
+    push_session_governance_detail_lines(&mut lines, view);
+
+    if let Some(reasoning_line) = session_reasoning_brief_line(view) {
+        lines.push(reasoning_line);
     }
 
-    if let Some(latest_governance_runtime) = &view.latest_governance_runtime {
-        lines.push(format!("latest_governance_runtime: {latest_governance_runtime}"));
+    push_session_footer_brief_lines(&mut lines, view);
+    lines.join("\n")
+}
+
+fn push_session_overview_brief_lines(lines: &mut Vec<String>, view: &SessionStatusView) {
+    push_optional_preview_text_line(lines, "goal", view.goal.as_deref());
+    push_optional_preview_text_line(
+        lines,
+        "negotiation_goal_summary",
+        view.negotiation_goal_summary.as_deref(),
+    );
+    push_optional_preview_text_line(
+        lines,
+        "negotiation_resolution",
+        view.negotiation_resolution.as_deref(),
+    );
+    push_optional_preview_text_line(
+        lines,
+        "negotiation_acceptance_boundary",
+        view.negotiation_acceptance_boundary.as_deref(),
+    );
+}
+
+fn push_session_progress_brief_lines(lines: &mut Vec<String>, view: &SessionStatusView) {
+    if let Some(continuity_authority) = view.continuity_authority {
+        lines.push(format!("continuity_authority: {}", continuity_authority.as_str()));
     }
 
-    if let Some(latest_governance_mode) = &view.latest_governance_mode {
-        lines.push(format!("latest_governance_mode: {latest_governance_mode}"));
-    }
-
-    if let Some(latest_governance_run_ref) = &view.latest_governance_run_ref {
-        lines.push(format!("latest_governance_run_ref: {latest_governance_run_ref}"));
-    }
-
-    if let Some(latest_governance_state) = &view.latest_governance_state {
-        lines.push(format!("latest_governance_state: {latest_governance_state}"));
-    }
-
-    if let Some(latest_governance_runtime_state) = &view.latest_governance_runtime_state {
-        lines.push(format!("latest_governance_runtime_state: {latest_governance_runtime_state}"));
-    }
-
-    if let Some(latest_governance_rollout_profile) = &view.latest_governance_rollout_profile {
-        lines.push(format!(
-            "latest_governance_rollout_profile: {latest_governance_rollout_profile}"
+    if let Some(compatibility_follow_up) = &view.compatibility_follow_up {
+        lines.extend(render_compatibility_follow_up_lines(
+            compatibility_follow_up,
+            "compatibility_routing",
+            "compatibility_follow_up",
+            "compatibility_follow_up_command",
         ));
     }
 
-    if let Some(latest_governance_reason) = &view.latest_governance_reason {
-        lines.push(format!("latest_governance_reason: {latest_governance_reason}"));
+    if let Some(cluster_story) = &view.cluster_delivery_story {
+        lines.extend(render_cluster_story_lines(cluster_story));
     }
 
+    push_optional_line(lines, "active_flow", view.active_flow.as_deref());
+    push_optional_line(lines, "current_stage", view.current_stage_id.as_deref());
+    if let (Some(current_stage_index), Some(total_stages)) =
+        (view.current_stage_index, view.total_stages)
+    {
+        lines.push(format!("stage_progress: {}/{}", current_stage_index + 1, total_stages));
+    }
+    push_optional_line(lines, "execution_path", view.execution_path.as_deref());
+    if let Some(plan_revision) = view.plan_revision {
+        lines.push(format!("plan_revision: {plan_revision}"));
+    }
+    if let Some(current_step_index) = view.current_step_index {
+        lines.push(format!("current_step_index: {current_step_index}"));
+    }
+    push_optional_line(lines, "current_step_id", view.current_step_id.as_deref());
+    push_optional_line(lines, "latest_validation_status", view.latest_validation_status.as_deref());
+    push_optional_line(lines, "latest_trace_ref", view.latest_trace_ref.as_deref());
+    if let Some(latest_changed_files) = &view.latest_changed_files
+        && !latest_changed_files.is_empty()
+    {
+        lines.push(format!("latest_changed_files: {}", latest_changed_files.join(", ")));
+    }
+}
+
+fn push_session_governance_detail_lines(lines: &mut Vec<String>, view: &SessionStatusView) {
+    push_optional_line(lines, "latest_governance_stage", view.latest_governance_stage.as_deref());
+    push_optional_line(
+        lines,
+        "latest_governance_runtime",
+        view.latest_governance_runtime.as_deref(),
+    );
+    push_optional_line(lines, "latest_governance_mode", view.latest_governance_mode.as_deref());
+    push_optional_line(
+        lines,
+        "latest_governance_run_ref",
+        view.latest_governance_run_ref.as_deref(),
+    );
+    push_optional_line(lines, "latest_governance_state", view.latest_governance_state.as_deref());
+    push_optional_line(
+        lines,
+        "latest_governance_runtime_state",
+        view.latest_governance_runtime_state.as_deref(),
+    );
+    push_optional_line(
+        lines,
+        "latest_governance_rollout_profile",
+        view.latest_governance_rollout_profile.as_deref(),
+    );
+    push_optional_line(lines, "latest_governance_reason", view.latest_governance_reason.as_deref());
     if let Some(latest_governance_contract_lines) = &view.latest_governance_contract_lines
         && !latest_governance_contract_lines.is_empty()
     {
@@ -199,61 +179,56 @@ pub fn render_session_status_brief(view: &SessionStatusView) -> String {
             latest_governance_contract_lines.join(" | ")
         ));
     }
-
-    if let Some(latest_governance_approval_provenance) = &view.latest_governance_approval_provenance
-    {
-        lines.push(format!(
-            "latest_governance_approval_provenance: {latest_governance_approval_provenance}"
-        ));
-    }
-
-    if let Some(latest_governance_blocked_reason) = &view.latest_governance_blocked_reason {
-        lines.push(format!("latest_governance_blocked_reason: {latest_governance_blocked_reason}"));
-    }
-
-    if let Some(latest_governance_packet_ref) = &view.latest_governance_packet_ref {
-        lines.push(format!("latest_governance_packet_ref: {latest_governance_packet_ref}"));
-    }
-
-    if let Some(latest_governance_packet_source_stage) = &view.latest_governance_packet_source_stage
-    {
-        lines.push(format!(
-            "latest_governance_packet_source_stage: {latest_governance_packet_source_stage}"
-        ));
-    }
-
-    if let Some(latest_governance_packet_binding_reason) =
-        &view.latest_governance_packet_binding_reason
-    {
-        lines.push(format!(
-            "latest_governance_packet_binding_reason: {latest_governance_packet_binding_reason}"
-        ));
-    }
-
-    if let Some(latest_governance_approval) = &view.latest_governance_approval {
-        lines.push(format!("latest_governance_approval: {latest_governance_approval}"));
-    }
-
-    if let Some(latest_governance_decision) = &view.latest_governance_decision {
-        lines.push(format!("latest_governance_decision: {latest_governance_decision}"));
-    }
-
-    if let Some(governance_lifecycle_runtime) = &view.governance_lifecycle_runtime {
-        lines.push(format!("governance_lifecycle_runtime: {governance_lifecycle_runtime}"));
-    }
-
-    if let Some(governance_lifecycle_mode_selection) = &view.governance_lifecycle_mode_selection {
-        lines.push(format!(
-            "governance_lifecycle_mode_selection: {governance_lifecycle_mode_selection}"
-        ));
-    }
-
-    if let Some(governance_lifecycle_selected_mode) = &view.governance_lifecycle_selected_mode {
-        lines.push(format!(
-            "governance_lifecycle_selected_mode: {governance_lifecycle_selected_mode}"
-        ));
-    }
-
+    push_optional_line(
+        lines,
+        "latest_governance_approval_provenance",
+        view.latest_governance_approval_provenance.as_deref(),
+    );
+    push_optional_line(
+        lines,
+        "latest_governance_blocked_reason",
+        view.latest_governance_blocked_reason.as_deref(),
+    );
+    push_optional_line(
+        lines,
+        "latest_governance_packet_ref",
+        view.latest_governance_packet_ref.as_deref(),
+    );
+    push_optional_line(
+        lines,
+        "latest_governance_packet_source_stage",
+        view.latest_governance_packet_source_stage.as_deref(),
+    );
+    push_optional_line(
+        lines,
+        "latest_governance_packet_binding_reason",
+        view.latest_governance_packet_binding_reason.as_deref(),
+    );
+    push_optional_line(
+        lines,
+        "latest_governance_approval",
+        view.latest_governance_approval.as_deref(),
+    );
+    push_optional_line(
+        lines,
+        "latest_governance_decision",
+        view.latest_governance_decision.as_deref(),
+    );
+    push_optional_line(
+        lines,
+        "governance_lifecycle_runtime",
+        view.governance_lifecycle_runtime.as_deref(),
+    );
+    push_optional_line(
+        lines,
+        "governance_lifecycle_mode_selection",
+        view.governance_lifecycle_mode_selection.as_deref(),
+    );
+    push_optional_line(
+        lines,
+        "governance_lifecycle_selected_mode",
+        view.governance_lifecycle_selected_mode.as_deref(),
+    );
     if let Some(governance_lifecycle_selected_mode_sequence) =
         &view.governance_lifecycle_selected_mode_sequence
         && !governance_lifecycle_selected_mode_sequence.is_empty()
@@ -263,7 +238,6 @@ pub fn render_session_status_brief(view: &SessionStatusView) -> String {
             governance_lifecycle_selected_mode_sequence.join(", ")
         ));
     }
-
     if let Some(latest_governance_candidates) = &view.latest_governance_candidates
         && !latest_governance_candidates.is_empty()
     {
@@ -272,19 +246,12 @@ pub fn render_session_status_brief(view: &SessionStatusView) -> String {
             latest_governance_candidates.join(", ")
         ));
     }
+}
 
-    if let Some(reasoning_line) = session_reasoning_brief_line(view) {
-        lines.push(reasoning_line);
-    }
-
+fn push_session_footer_brief_lines(lines: &mut Vec<String>, view: &SessionStatusView) {
     lines.push(format!("latest_status: {}", session_status_text(view.latest_status)));
-
-    if let Some(next_command) = &view.next_command {
-        lines.push(format!("next_command: {next_command}"));
-    }
-
+    push_optional_line(lines, "next_command", view.next_command.as_deref());
     lines.push(format!("explanation: {}", preview_session_brief_text(&view.explanation)));
-    lines.join("\n")
 }
 
 fn session_input_brief_lines(view: &SessionStatusView) -> Vec<String> {
@@ -395,77 +362,68 @@ fn session_artifacts_brief_line(view: &SessionStatusView) -> Option<String> {
 fn session_clarification_brief_lines(view: &SessionStatusView) -> Vec<String> {
     let mut lines = Vec::new();
 
-    if let Some(headline) = &view.clarification_headline {
-        lines.push(format!("clarification_headline: {}", preview_session_brief_text(headline)));
-    }
-    if let Some(prompt) = &view.clarification_prompt {
-        lines.push(format!("clarification_prompt: {}", preview_session_brief_text(prompt)));
-    }
-    if let Some(fields) = &view.clarification_missing_fields
-        && !fields.is_empty()
-    {
-        lines
-            .push(format!("clarification_missing_fields: {}", preview_session_brief_items(fields)));
-    }
-    if let Some(questions) = &view.clarification_questions
-        && !questions.is_empty()
-    {
-        lines.push(format!("clarification_questions: {}", preview_session_brief_items(questions)));
-    }
-    if let Some(state) = &view.goal_quality_state {
-        lines.push(format!("goal_quality_state: {state}"));
-    }
-    if let Some(findings) = &view.goal_quality_findings
-        && !findings.is_empty()
-    {
-        lines.push(format!("goal_quality_findings: {}", preview_session_brief_items(findings)));
-    }
-    if let Some(assumptions) = &view.goal_quality_assumptions
-        && !assumptions.is_empty()
-    {
-        lines.push(format!(
-            "goal_quality_assumptions: {}",
-            preview_session_brief_items(assumptions)
-        ));
-    }
-    if let Some(state) = &view.plan_quality_state {
-        lines.push(format!("plan_quality_state: {state}"));
-    }
-    if let Some(findings) = &view.plan_quality_findings
-        && !findings.is_empty()
-    {
-        lines.push(format!("plan_quality_findings: {}", preview_session_brief_items(findings)));
-    }
-    if let Some(assumptions) = &view.plan_quality_assumptions
-        && !assumptions.is_empty()
-    {
-        lines.push(format!(
-            "plan_quality_assumptions: {}",
-            preview_session_brief_items(assumptions)
-        ));
-    }
-    if let Some(state) = &view.backlog_quality_state {
-        lines.push(format!("backlog_quality_state: {state}"));
-    }
-    if let Some(findings) = &view.backlog_quality_findings
-        && !findings.is_empty()
-    {
-        lines.push(format!("backlog_quality_findings: {}", preview_session_brief_items(findings)));
-    }
+    push_optional_preview_text_line(
+        &mut lines,
+        "clarification_headline",
+        view.clarification_headline.as_deref(),
+    );
+    push_optional_preview_text_line(
+        &mut lines,
+        "clarification_prompt",
+        view.clarification_prompt.as_deref(),
+    );
+    push_optional_preview_items_line(
+        &mut lines,
+        "clarification_missing_fields",
+        view.clarification_missing_fields.as_deref(),
+    );
+    push_optional_preview_items_line(
+        &mut lines,
+        "clarification_questions",
+        view.clarification_questions.as_deref(),
+    );
+    push_quality_brief_lines(
+        &mut lines,
+        "goal_quality_state",
+        view.goal_quality_state.as_deref(),
+        "goal_quality_findings",
+        view.goal_quality_findings.as_deref(),
+        Some(("goal_quality_assumptions", view.goal_quality_assumptions.as_deref())),
+    );
+    push_quality_brief_lines(
+        &mut lines,
+        "plan_quality_state",
+        view.plan_quality_state.as_deref(),
+        "plan_quality_findings",
+        view.plan_quality_findings.as_deref(),
+        Some(("plan_quality_assumptions", view.plan_quality_assumptions.as_deref())),
+    );
+    push_quality_brief_lines(
+        &mut lines,
+        "backlog_quality_state",
+        view.backlog_quality_state.as_deref(),
+        "backlog_quality_findings",
+        view.backlog_quality_findings.as_deref(),
+        None,
+    );
     if let Some(task_count) = view.backlog_task_count {
         lines.push(format!("backlog_task_count: {task_count}"));
     }
-    if let Some(scope) = &view.backlog_mvp_scope {
-        lines.push(format!("backlog_mvp_scope: {}", preview_session_brief_text(scope)));
-    }
-    if let Some(unmapped) = &view.backlog_unmapped_items
-        && !unmapped.is_empty()
-    {
-        lines.push(format!("backlog_unmapped_items: {}", preview_session_brief_items(unmapped)));
-    }
-    if let Some(state) = &view.planning_analysis_state {
-        lines.push(format!("planning_analysis_state: {state}"));
-    }
+    push_optional_preview_text_line(
+        &mut lines,
+        "backlog_mvp_scope",
+        view.backlog_mvp_scope.as_deref(),
+    );
+    push_optional_preview_items_line(
+        &mut lines,
+        "backlog_unmapped_items",
+        view.backlog_unmapped_items.as_deref(),
+    );
+    push_optional_line(
+        &mut lines,
+        "planning_analysis_state",
+        view.planning_analysis_state.as_deref(),
+    );
     if let Some(findings) = &view.planning_analysis_findings
         && !findings.is_empty()
     {
@@ -482,6 +440,45 @@ fn session_clarification_brief_lines(view: &SessionStatusView) -> Vec<String> {
     }
 
     lines
+}
+
+fn push_quality_brief_lines(
+    lines: &mut Vec<String>,
+    state_label: &str,
+    state: Option<&str>,
+    findings_label: &str,
+    findings: Option<&[String]>,
+    assumptions: Option<(&str, Option<&[String]>)>,
+) {
+    push_optional_line(lines, state_label, state);
+    push_optional_preview_items_line(lines, findings_label, findings);
+    if let Some((assumptions_label, assumptions)) = assumptions {
+        push_optional_preview_items_line(lines, assumptions_label, assumptions);
+    }
+}
+
+fn push_optional_line(lines: &mut Vec<String>, label: &str, value: Option<&str>) {
+    if let Some(value) = value {
+        lines.push(format!("{label}: {value}"));
+    }
+}
+
+fn push_optional_preview_text_line(lines: &mut Vec<String>, label: &str, value: Option<&str>) {
+    if let Some(value) = value.filter(|value| !value.trim().is_empty()) {
+        lines.push(format!("{label}: {}", preview_session_brief_text(value)));
+    }
+}
+
+fn push_optional_preview_items_line(
+    lines: &mut Vec<String>,
+    label: &str,
+    values: Option<&[String]>,
+) {
+    if let Some(values) = values
+        && !values.is_empty()
+    {
+        lines.push(format!("{label}: {}", preview_session_brief_items(values)));
+    }
 }
 
 fn session_review_brief_line(view: &SessionStatusView) -> Option<String> {

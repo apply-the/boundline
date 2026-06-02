@@ -215,8 +215,8 @@ path; `boundline run` with recorded goal uses decision loop
 
 - [x] T080 Update `ROADMAP.md`: move Priority 1 items to completed status under v0.13.0, remove the companion review reference from Priority 1 since the work is done
 - [x] T081 Update `README.md`: document the session-native flow (`goal → plan → run → inspect`) as the primary usage path, push `init` to optional/advanced section
-- [x] T082 Update `docs/getting-started.md`: rewrite getting started around goal capture and plan instead of init templates
-- [x] T083 Update `docs/configuration.md`: document new `--flow` and `--no-flow` flags, document GoalPlan interaction with config
+- [x] T082 Update `tech-docs/getting-started.md`: rewrite getting started around goal capture and plan instead of init templates
+- [x] T083 Update `tech-docs/configuration.md`: document new `--flow` and `--no-flow` flags, document GoalPlan interaction with config
 - [x] T084 Update `CONTRIBUTING.md`: add new domain modules and test files to the contributor map
 - [x] T085 Ensure all new modules have adequate test coverage — run `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info` and verify new code paths are covered
 - [x] T086 Run `cargo fmt --all` to format all source files

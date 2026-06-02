@@ -12,7 +12,7 @@ architecture while keeping the Boundline versus Canon boundary explicit.
 
 - README must lead with a quick path that covers install, verification,
   initialization, and the first bounded run.
-- `docs/getting-started.md` or its linked advanced companion must explain the
+- `tech-docs/getting-started.md` or its linked advanced companion must explain the
   session-native model, the source-install fallback, and when Canon matters.
 - Advanced docs must state clearly that Boundline owns orchestration and delivery
   state while Canon remains a bounded governance companion.

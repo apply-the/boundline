@@ -125,7 +125,7 @@ version scenarios and verify consumer behavior.
 
 **Purpose**: Ensure everything compiles, passes, and is well-formatted
 
-- [x] T028 Update `docs/getting-started.md` or `docs/architecture.md` with Canon project-memory integration documentation
+- [x] T028 Update `tech-docs/getting-started.md` or `tech-docs/architecture.md` with Canon project-memory integration documentation
 - [x] T029 [P] Update `CHANGELOG.md` with 0.51.0 entry
 - [x] T030 [P] Update `ROADMAP.md` if applicable
 - [x] T031 Run `cargo fmt` and verify clean with `cargo fmt --check`

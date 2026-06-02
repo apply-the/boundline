@@ -125,7 +125,7 @@ workspace and confirm the release surfaces match the shipped runtime behavior.
 
 ### Implementation for User Story 4
 
-- [x] T017 [US4] Update the `0.32.0` release story in `README.md`, `docs/getting-started.md`, `docs/configuration.md`, `CONTRIBUTING.md`, `ROADMAP.md`, and `CHANGELOG.md`
+- [x] T017 [US4] Update the `0.32.0` release story in `README.md`, `tech-docs/getting-started.md`, `tech-docs/configuration.md`, `CONTRIBUTING.md`, `ROADMAP.md`, and `CHANGELOG.md`
 - [x] T018 [US4] Regenerate assistant or agent context for product closure in `AGENTS.md`
 
 **Checkpoint**: Maintainers and assistants now describe one coherent `0.32.0`

@@ -1586,48 +1586,74 @@ impl DispatchOutcome {
 
     fn render_human_output(&self, verbose: bool) -> String {
         if verbose {
-            if self.prefer_compact_output_in_verbose
-                && let Some(compact_output) = &self.compact_output
-            {
-                return compact_output.clone();
-            }
-
-            if let Some(session_status) = &self.session_status {
-                let mut rendered = output::render_session_status(session_status);
-                if let Some(guidance_guardian) = &self.guidance_guardian {
-                    let guidance_lines =
-                        output::render_guidance_projection_lines(guidance_guardian);
-                    if !guidance_lines.is_empty() {
-                        rendered.push('\n');
-                        rendered.push_str(&guidance_lines.join("\n"));
-                    }
-                }
-                return rendered;
-            }
-
-            return self.output.clone();
+            return self.render_verbose_human_output();
         }
 
+        self.render_brief_human_output()
+    }
+
+    fn render_verbose_human_output(&self) -> String {
+        if self.prefer_compact_output_in_verbose
+            && let Some(compact_output) = &self.compact_output
+        {
+            return compact_output.clone();
+        }
+
+        self.session_status
+            .as_ref()
+            .map(|session_status| self.render_verbose_session_status(session_status))
+            .unwrap_or_else(|| self.output.clone())
+    }
+
+    fn render_verbose_session_status(
+        &self,
+        session_status: &crate::domain::session::SessionStatusView,
+    ) -> String {
+        let mut rendered = output::render_session_status(session_status);
+        if let Some(guidance_guardian) = &self.guidance_guardian {
+            let guidance_lines = output::render_guidance_projection_lines(guidance_guardian);
+            if !guidance_lines.is_empty() {
+                rendered.push('\n');
+                rendered.push_str(&guidance_lines.join("\n"));
+            }
+        }
+        rendered
+    }
+
+    fn render_brief_human_output(&self) -> String {
         if let Some(compact_output) = &self.compact_output {
             return compact_output.clone();
         }
 
-        if let Some(trace_summary) = &self.trace_summary {
-            let next_command = self.next_command_from_output().unwrap_or_else(|| {
-                if self.inspection_target.is_some() {
-                    output::next_command_after_inspect(trace_summary.terminal_status)
-                } else {
-                    output::next_command_after_run(trace_summary.terminal_status)
-                }
-            });
-            return output::render_trace_summary_brief(
-                trace_summary,
-                self.inspection_target.as_deref(),
-                next_command,
-            );
-        }
+        self.trace_summary
+            .as_ref()
+            .map(|trace_summary| self.render_trace_summary_brief(trace_summary))
+            .unwrap_or_else(|| self.output.clone())
+    }
 
-        self.output.clone()
+    fn render_trace_summary_brief(
+        &self,
+        trace_summary: &crate::domain::trace::TraceSummaryView,
+    ) -> String {
+        let next_command = self
+            .next_command_from_output()
+            .unwrap_or_else(|| self.default_trace_summary_next_command(trace_summary));
+        output::render_trace_summary_brief(
+            trace_summary,
+            self.inspection_target.as_deref(),
+            next_command,
+        )
+    }
+
+    fn default_trace_summary_next_command(
+        &self,
+        trace_summary: &crate::domain::trace::TraceSummaryView,
+    ) -> &'static str {
+        if self.inspection_target.is_some() {
+            output::next_command_after_inspect(trace_summary.terminal_status)
+        } else {
+            output::next_command_after_run(trace_summary.terminal_status)
+        }
     }
 
     fn render_host_output(&self) -> &str {
@@ -1759,11 +1785,7 @@ fn load_command_environment(command: Option<&DeveloperCommand>) -> Result<(), St
 fn command_environment_workspace(command: &DeveloperCommand) -> Option<PathBuf> {
     match command {
         DeveloperCommand::Doctor { workspace, install } => {
-            if *install {
-                None
-            } else {
-                resolve_command_workspace(workspace.as_deref())
-            }
+            doctor_command_environment_workspace(*install, workspace.as_deref())
         }
         DeveloperCommand::Goal { workspace, .. }
         | DeveloperCommand::Flow { workspace, .. }
@@ -1779,57 +1801,88 @@ fn command_environment_workspace(command: &DeveloperCommand) -> Option<PathBuf> 
         | DeveloperCommand::Govern { workspace, .. } => {
             resolve_command_workspace(workspace.as_deref())
         }
-        DeveloperCommand::Index { command } => match command {
-            IndexSubcommand::Status { workspace }
-            | IndexSubcommand::Refresh { workspace }
-            | IndexSubcommand::Rebuild { workspace }
-            | IndexSubcommand::Clean { workspace }
-            | IndexSubcommand::Doctor { workspace } => {
-                resolve_command_workspace(workspace.as_deref())
-            }
-        },
-        DeveloperCommand::Session { command } => match command {
-            SessionSubcommand::List { workspace, cluster }
-            | SessionSubcommand::Resume { workspace, cluster, .. } => {
-                resolve_command_workspace(workspace.as_deref().or(cluster.as_deref()))
-            }
-        },
-        DeveloperCommand::Workflow { command } => match command {
-            WorkflowSubcommand::List { workspace }
-            | WorkflowSubcommand::Run { workspace, .. }
-            | WorkflowSubcommand::Status { workspace }
-            | WorkflowSubcommand::Resume { workspace }
-            | WorkflowSubcommand::Inspect { workspace } => {
-                resolve_command_workspace(workspace.as_deref())
-            }
-        },
-        DeveloperCommand::Checkpoint { command } => match command {
-            CheckpointSubcommand::List { workspace, .. }
-            | CheckpointSubcommand::Restore { workspace, .. } => {
-                resolve_command_workspace(workspace.as_deref())
-            }
-        },
+        DeveloperCommand::Index { command } => index_command_environment_workspace(command),
+        DeveloperCommand::Session { command } => session_command_environment_workspace(command),
+        DeveloperCommand::Workflow { command } => workflow_command_environment_workspace(command),
+        DeveloperCommand::Checkpoint { command } => {
+            checkpoint_command_environment_workspace(command)
+        }
         DeveloperCommand::Init { scope, workspace, .. } => {
-            if *scope == InitConfigScope::Global {
-                None
-            } else {
-                resolve_command_workspace(Some(workspace.as_path()))
-            }
+            init_command_environment_workspace(*scope, workspace)
         }
         DeveloperCommand::Update { workspace, .. } => {
-            resolve_command_workspace(Some(workspace.as_path()))
+            update_command_environment_workspace(workspace)
         }
         DeveloperCommand::Config { command } => command_environment_workspace_for_config(command),
         DeveloperCommand::Adapter { command } => command_environment_workspace_for_adapter(command),
-        DeveloperCommand::Cluster { command } => match command {
-            ClusterSubcommand::Init { workspace, .. }
-            | ClusterSubcommand::Status { workspace }
-            | ClusterSubcommand::Inspect { workspace } => {
-                resolve_command_workspace(Some(workspace.as_path()))
-            }
-        },
+        DeveloperCommand::Cluster { command } => cluster_command_environment_workspace(command),
         DeveloperCommand::Assistant { .. } => None,
         DeveloperCommand::Models { .. } => None,
+    }
+}
+
+fn doctor_command_environment_workspace(
+    install: bool,
+    workspace: Option<&Path>,
+) -> Option<PathBuf> {
+    if install { None } else { resolve_command_workspace(workspace) }
+}
+
+fn index_command_environment_workspace(command: &IndexSubcommand) -> Option<PathBuf> {
+    match command {
+        IndexSubcommand::Status { workspace }
+        | IndexSubcommand::Refresh { workspace }
+        | IndexSubcommand::Rebuild { workspace }
+        | IndexSubcommand::Clean { workspace }
+        | IndexSubcommand::Doctor { workspace } => resolve_command_workspace(workspace.as_deref()),
+    }
+}
+
+fn session_command_environment_workspace(command: &SessionSubcommand) -> Option<PathBuf> {
+    match command {
+        SessionSubcommand::List { workspace, cluster }
+        | SessionSubcommand::Resume { workspace, cluster, .. } => {
+            resolve_command_workspace(workspace.as_deref().or(cluster.as_deref()))
+        }
+    }
+}
+
+fn workflow_command_environment_workspace(command: &WorkflowSubcommand) -> Option<PathBuf> {
+    match command {
+        WorkflowSubcommand::List { workspace }
+        | WorkflowSubcommand::Run { workspace, .. }
+        | WorkflowSubcommand::Status { workspace }
+        | WorkflowSubcommand::Resume { workspace }
+        | WorkflowSubcommand::Inspect { workspace } => {
+            resolve_command_workspace(workspace.as_deref())
+        }
+    }
+}
+
+fn checkpoint_command_environment_workspace(command: &CheckpointSubcommand) -> Option<PathBuf> {
+    match command {
+        CheckpointSubcommand::List { workspace, .. }
+        | CheckpointSubcommand::Restore { workspace, .. } => {
+            resolve_command_workspace(workspace.as_deref())
+        }
+    }
+}
+
+fn init_command_environment_workspace(scope: InitConfigScope, workspace: &Path) -> Option<PathBuf> {
+    if scope == InitConfigScope::Global { None } else { resolve_command_workspace(Some(workspace)) }
+}
+
+fn update_command_environment_workspace(workspace: &Path) -> Option<PathBuf> {
+    resolve_command_workspace(Some(workspace))
+}
+
+fn cluster_command_environment_workspace(command: &ClusterSubcommand) -> Option<PathBuf> {
+    match command {
+        ClusterSubcommand::Init { workspace, .. }
+        | ClusterSubcommand::Status { workspace }
+        | ClusterSubcommand::Inspect { workspace } => {
+            resolve_command_workspace(Some(workspace.as_path()))
+        }
     }
 }
 

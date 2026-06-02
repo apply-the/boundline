@@ -68,5 +68,5 @@
 - Decision: Update README, getting-started, review-voting, adaptive-execution references where needed, assistant command-pack docs, and add a dedicated configuration guide so the documented workflow matches the shipped init and config behavior.
 - Rationale: This feature is mostly about usability. If the documentation still teaches manual JSON editing as the normal path, the product remains effectively incomplete even if the code ships.
 - Alternatives considered:
-  - Update only README: rejected because `docs/getting-started.md` and review-oriented docs currently carry more detailed workflow guidance.
+  - Update only README: rejected because `tech-docs/getting-started.md` and review-oriented docs currently carry more detailed workflow guidance.
   - Defer assistant doc updates to a later slice: rejected because assistant-driven usage is part of the feature’s declared support surface.

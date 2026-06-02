@@ -2,7 +2,7 @@ use std::fs;
 
 #[test]
 fn workflow_registry_guidance_contract_describes_supported_authored_shape_and_boundaries() {
-    let configuration = fs::read_to_string("docs/configuration.md").unwrap();
+    let configuration = fs::read_to_string("tech-docs/configuration.md").unwrap();
 
     assert!(configuration.contains("[workflow.governed-delivery]"), "{configuration}");
     assert!(

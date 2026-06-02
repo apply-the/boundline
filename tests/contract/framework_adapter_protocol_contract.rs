@@ -532,7 +532,7 @@ fn write_fixture_protocol_script(workspace: &Path) -> Result<PathBuf, Box<dyn Er
     ))?;
 
     let script = format!(
-        "#!/bin/sh\ncase \"$1\" in\n  describe)\n    cat <<'BOUNDLINE_JSON'\n{describe}\nBOUNDLINE_JSON\n    ;;\n  preflight)\n    cat <<'BOUNDLINE_JSON'\n{preflight}\nBOUNDLINE_JSON\n    ;;\n  execute-stage)\n    cat <<'BOUNDLINE_JSON'\n{execute_stage}\nBOUNDLINE_JSON\n    ;;\n  emit-hook)\n    cat <<'BOUNDLINE_JSON'\n{emit_hook}\nBOUNDLINE_JSON\n    ;;\n  *)\n    echo \"unsupported command: $1\" >&2\n    exit 64\n    ;;\nesac\n"
+        "#!/bin/sh\nconsume_stdin() {{\n  stdin_line=''\n  while IFS= read -r stdin_line || [ -n \"$stdin_line\" ]; do\n    stdin_line=''\n  done\n}}\nprint_json() {{\n  while IFS= read -r line; do\n    printf '%s\\n' \"$line\"\n  done\n}}\ncase \"$1\" in\n  describe)\n    print_json <<'BOUNDLINE_JSON'\n{describe}\nBOUNDLINE_JSON\n    ;;\n  preflight)\n    consume_stdin\n    print_json <<'BOUNDLINE_JSON'\n{preflight}\nBOUNDLINE_JSON\n    ;;\n  execute-stage)\n    consume_stdin\n    print_json <<'BOUNDLINE_JSON'\n{execute_stage}\nBOUNDLINE_JSON\n    ;;\n  emit-hook)\n    consume_stdin\n    print_json <<'BOUNDLINE_JSON'\n{emit_hook}\nBOUNDLINE_JSON\n    ;;\n  *)\n    echo \"unsupported command: $1\" >&2\n    exit 64\n    ;;\nesac\n"
     );
 
     write_protocol_script(workspace, script.as_str())
@@ -543,7 +543,7 @@ fn write_describe_script(
     describe_stdout: String,
 ) -> Result<PathBuf, Box<dyn Error>> {
     let script = format!(
-        "#!/bin/sh\ncase \"$1\" in\n  describe)\n    cat <<'BOUNDLINE_JSON'\n{describe_stdout}\nBOUNDLINE_JSON\n    ;;\n  *)\n    echo \"unsupported command: $1\" >&2\n    exit 64\n    ;;\nesac\n"
+        "#!/bin/sh\nprint_json() {{\n  while IFS= read -r line; do\n    printf '%s\\n' \"$line\"\n  done\n}}\ncase \"$1\" in\n  describe)\n    print_json <<'BOUNDLINE_JSON'\n{describe_stdout}\nBOUNDLINE_JSON\n    ;;\n  *)\n    echo \"unsupported command: $1\" >&2\n    exit 64\n    ;;\nesac\n"
     );
     write_protocol_script(workspace, script.as_str())
 }
@@ -563,7 +563,7 @@ fn write_protocol_error_script(
 ) -> Result<PathBuf, Box<dyn Error>> {
     let stdout_json = serde_json::to_string(&envelope)?;
     let script = format!(
-        "#!/bin/sh\necho \"{stderr_line}\" >&2\ncat <<'BOUNDLINE_JSON'\n{stdout_json}\nBOUNDLINE_JSON\n"
+        "#!/bin/sh\nprint_json() {{\n  while IFS= read -r line; do\n    printf '%s\\n' \"$line\"\n  done\n}}\necho \"{stderr_line}\" >&2\nprint_json <<'BOUNDLINE_JSON'\n{stdout_json}\nBOUNDLINE_JSON\n"
     );
     write_protocol_script(workspace, script.as_str())
 }
@@ -576,10 +576,10 @@ fn write_execute_stage_script(
 ) -> Result<PathBuf, Box<dyn Error>> {
     let stderr_lines = stderr_line.map(|line| format!("echo \"{line}\" >&2\n")).unwrap_or_default();
     let stdout_block = stdout_json
-        .map(|json| format!("cat <<'BOUNDLINE_JSON'\n{json}\nBOUNDLINE_JSON\n"))
+        .map(|json| format!("print_json <<'BOUNDLINE_JSON'\n{json}\nBOUNDLINE_JSON\n"))
         .unwrap_or_default();
     let script = format!(
-        "#!/bin/sh\ncase \"$1\" in\n  execute-stage)\n    {stderr_lines}{stdout_block}    exit {exit_code}\n    ;;\n  *)\n    echo \"unsupported command: $1\" >&2\n    exit 64\n    ;;\nesac\n"
+        "#!/bin/sh\nconsume_stdin() {{\n  stdin_line=''\n  while IFS= read -r stdin_line || [ -n \"$stdin_line\" ]; do\n    stdin_line=''\n  done\n}}\nprint_json() {{\n  while IFS= read -r line; do\n    printf '%s\\n' \"$line\"\n  done\n}}\ncase \"$1\" in\n  execute-stage)\n    consume_stdin\n    {stderr_lines}{stdout_block}    exit {exit_code}\n    ;;\n  *)\n    echo \"unsupported command: $1\" >&2\n    exit 64\n    ;;\nesac\n"
     );
     write_protocol_script(workspace, script.as_str())
 }

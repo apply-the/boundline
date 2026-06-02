@@ -111,7 +111,7 @@
 
 - [X] T027 [P] Refresh generated agent and contributor context in `AGENTS.md` and `CONTRIBUTING.md`
 - [X] T028 [P] Run release validation and refresh `lcov.info` via `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test --no-run --all-targets`, `cargo nextest run --workspace --all-features`, and `cargo deny check licenses advisories bans sources`
-- [X] T029 Increase coverage in `tests/unit/`, `tests/integration/`, and `lcov.info` and update `README.md`, `ROADMAP.md`, `docs/session-native-orchestrator-review.md`, `docs/adaptive-execution.md`, `assistant/README.md`, `.specify/templates/spec-template.md`, `.specify/templates/plan-template.md`, `.specify/templates/tasks-template.md`, `assistant/claude/commands/`, `assistant/codex/commands/`, and `assistant/copilot/prompts/` for the `0.15.0` runtime refoundation
+- [X] T029 Increase coverage in `tests/unit/`, `tests/integration/`, and `lcov.info` and update `README.md`, `ROADMAP.md`, `tech-docs/session-native-orchestrator-review.md`, `tech-docs/adaptive-execution.md`, `assistant/README.md`, `.specify/templates/spec-template.md`, `.specify/templates/plan-template.md`, `.specify/templates/tasks-template.md`, `assistant/claude/commands/`, `assistant/codex/commands/`, and `assistant/copilot/prompts/` for the `0.15.0` runtime refoundation
 
 ---
 

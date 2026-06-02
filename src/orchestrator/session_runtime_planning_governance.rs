@@ -169,3 +169,198 @@ fn stage_council_status_text(status: StageCouncilStatus) -> &'static str {
         StageCouncilStatus::Degraded => "degraded",
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use crate::domain::configuration::{
+        EffectiveRouting, ModelRoute, RuntimeKind, SourcedRoute, ValueSource,
+    };
+    use crate::domain::review::ReviewerDisposition;
+    use crate::domain::stage_council::{
+        StageCouncilAdjudication, StageCouncilArtifact, StageCouncilFinding,
+        StageCouncilFindingDisposition, StageCouncilOutcome, StageCouncilStatus,
+        StageCouncilVoteResolution,
+    };
+    use crate::orchestrator::session_runtime::ProviderReviewDisposition;
+
+    use super::{
+        discovery_stage_council_request, discovery_stage_council_reviewers, model_route_label,
+        planning_stage_council_block_reason, provider_review_disposition_text,
+        reviewer_disposition_from_provider, stage_council_disposition_from_provider,
+        stage_council_voting_session_state,
+    };
+
+    const BRIEF_REF: &str = "brief.md";
+    const DISCOVERY_STAGE_KEY: &str = "plan:discovery";
+    const GOAL: &str = "Clarify the bounded context";
+
+    #[test]
+    fn planning_governance_helpers_cover_request_reviewer_and_disposition_paths() {
+        let request = discovery_stage_council_request(DISCOVERY_STAGE_KEY, GOAL, BRIEF_REF);
+        assert_eq!(request.stage_key, DISCOVERY_STAGE_KEY);
+        assert_eq!(request.goal, GOAL);
+        assert_eq!(request.producer_slot, "planning");
+        assert_eq!(request.phase, "planning-discovery");
+        assert_eq!(request.target_refs, vec![BRIEF_REF.to_string()]);
+        assert_eq!(request.current_artifact_ref.as_deref(), Some(BRIEF_REF));
+        assert_eq!(request.constraints.len(), 2);
+
+        let review_route =
+            ModelRoute { runtime: RuntimeKind::Copilot, model: "gpt-5.4".to_string() };
+        let first_reviewer_route =
+            ModelRoute { runtime: RuntimeKind::Gemini, model: "gemini-2.5-pro".to_string() };
+        let second_reviewer_route =
+            ModelRoute { runtime: RuntimeKind::Claude, model: "sonnet-4".to_string() };
+
+        let configured_routing = EffectiveRouting {
+            planning: sourced_route(RuntimeKind::Copilot, "gpt-5.4"),
+            implementation: sourced_route(RuntimeKind::Copilot, "gpt-5.4"),
+            verification: sourced_route(RuntimeKind::Copilot, "gpt-5.4"),
+            review: SourcedRoute { route: review_route.clone(), source: ValueSource::Workspace },
+            chat: None,
+            adjudication: sourced_route(RuntimeKind::Copilot, "gpt-5.4"),
+            reviewer_roles: BTreeMap::from([
+                (
+                    "security_reviewer".to_string(),
+                    SourcedRoute {
+                        route: first_reviewer_route.clone(),
+                        source: ValueSource::Workspace,
+                    },
+                ),
+                (
+                    "ux-reviewer".to_string(),
+                    SourcedRoute {
+                        route: second_reviewer_route.clone(),
+                        source: ValueSource::Workspace,
+                    },
+                ),
+            ]),
+        };
+        let configured_reviewers = discovery_stage_council_reviewers(&configured_routing);
+        assert_eq!(configured_reviewers.len(), 2);
+        assert_eq!(configured_reviewers[0].reviewer.reviewer_id, "security_reviewer");
+        assert_eq!(configured_reviewers[0].reviewer.role, "security reviewer");
+        assert_eq!(
+            configured_reviewers[0].reviewer.source.as_deref(),
+            Some("gemini/gemini-2.5-pro")
+        );
+        assert_eq!(configured_reviewers[1].reviewer.reviewer_id, "ux-reviewer");
+        assert_eq!(configured_reviewers[1].reviewer.role, "ux reviewer");
+        assert_eq!(configured_reviewers[1].route, second_reviewer_route);
+
+        let fallback_routing = EffectiveRouting {
+            planning: sourced_route(RuntimeKind::Copilot, "gpt-5.4"),
+            implementation: sourced_route(RuntimeKind::Copilot, "gpt-5.4"),
+            verification: sourced_route(RuntimeKind::Copilot, "gpt-5.4"),
+            review: SourcedRoute { route: review_route.clone(), source: ValueSource::Workspace },
+            chat: None,
+            adjudication: sourced_route(RuntimeKind::Copilot, "gpt-5.4"),
+            reviewer_roles: BTreeMap::new(),
+        };
+        let fallback_reviewers = discovery_stage_council_reviewers(&fallback_routing);
+        assert_eq!(fallback_reviewers.len(), 2);
+        assert_eq!(fallback_reviewers[0].reviewer.reviewer_id, "reviewer-a");
+        assert_eq!(fallback_reviewers[0].route, review_route);
+        assert_eq!(fallback_reviewers[1].reviewer.source.as_deref(), Some("copilot/gpt-5.4"));
+
+        assert_eq!(
+            reviewer_disposition_from_provider(ProviderReviewDisposition::Approve),
+            ReviewerDisposition::Approve
+        );
+        assert_eq!(
+            reviewer_disposition_from_provider(ProviderReviewDisposition::Concern),
+            ReviewerDisposition::Concern
+        );
+        assert_eq!(
+            reviewer_disposition_from_provider(ProviderReviewDisposition::Block),
+            ReviewerDisposition::Block
+        );
+        assert_eq!(
+            stage_council_disposition_from_provider(ProviderReviewDisposition::Approve),
+            StageCouncilFindingDisposition::Approve
+        );
+        assert_eq!(
+            stage_council_disposition_from_provider(ProviderReviewDisposition::Concern),
+            StageCouncilFindingDisposition::Concern
+        );
+        assert_eq!(
+            stage_council_disposition_from_provider(ProviderReviewDisposition::Block),
+            StageCouncilFindingDisposition::Block
+        );
+        assert_eq!(provider_review_disposition_text(ProviderReviewDisposition::Approve), "approve");
+        assert_eq!(provider_review_disposition_text(ProviderReviewDisposition::Concern), "concern");
+        assert_eq!(provider_review_disposition_text(ProviderReviewDisposition::Block), "block");
+        assert_eq!(model_route_label(&first_reviewer_route), "gemini/gemini-2.5-pro");
+    }
+
+    #[test]
+    fn planning_governance_helpers_cover_block_reason_and_voting_projection() {
+        let outcome = StageCouncilOutcome {
+            producer_output: StageCouncilArtifact {
+                route_slot: "planning".to_string(),
+                evidence_ref: "evidence/discovery.md".to_string(),
+                summary: Some("draft discovery packet".to_string()),
+            },
+            reviewer_findings: vec![
+                StageCouncilFinding {
+                    reviewer_id: "reviewer-a".to_string(),
+                    effective_route: "copilot/gpt-5.4".to_string(),
+                    disposition: StageCouncilFindingDisposition::Concern,
+                    summary: "needs tighter scope".to_string(),
+                    accepted: false,
+                },
+                StageCouncilFinding {
+                    reviewer_id: "reviewer-b".to_string(),
+                    effective_route: "gemini/gemini-2.5-pro".to_string(),
+                    disposition: StageCouncilFindingDisposition::Block,
+                    summary: "independent review collapsed".to_string(),
+                    accepted: false,
+                },
+            ],
+            vote_resolution: StageCouncilVoteResolution {
+                strategy: "bounded_majority".to_string(),
+                accepted_findings: vec!["reviewer-b".to_string()],
+                rejected_findings: Vec::new(),
+                independent_review: false,
+            },
+            adjudication: Some(StageCouncilAdjudication {
+                adjudicator_route: "claude/sonnet-4".to_string(),
+                decision: "block".to_string(),
+                rationale: "independence requirement not met".to_string(),
+            }),
+            revised_output: StageCouncilArtifact {
+                route_slot: "planning".to_string(),
+                evidence_ref: "evidence/discovery-revised.md".to_string(),
+                summary: Some("revised discovery packet".to_string()),
+            },
+            status: StageCouncilStatus::Blocked,
+            next_action: "restore distinct reviewer routes".to_string(),
+        };
+
+        assert_eq!(
+            planning_stage_council_block_reason(DISCOVERY_STAGE_KEY, &outcome),
+            "plan:discovery stage council blocked planning: independent review collapsed"
+        );
+
+        let voting_state = stage_council_voting_session_state(DISCOVERY_STAGE_KEY, &outcome);
+        assert_eq!(voting_state.trigger, "stage_council:plan:discovery");
+        assert_eq!(voting_state.reviewed_evidence_ref.as_deref(), Some("evidence/discovery.md"));
+        assert_eq!(voting_state.result, "blocked");
+        assert!(voting_state.blocking);
+        assert_eq!(voting_state.next_action, "restore distinct reviewer routes");
+        assert_eq!(voting_state.reviewer_findings.len(), 2);
+        assert_eq!(
+            voting_state.adjudication_result.as_deref(),
+            Some("block: independence requirement not met")
+        );
+    }
+
+    fn sourced_route(runtime: RuntimeKind, model: &str) -> SourcedRoute {
+        SourcedRoute {
+            route: ModelRoute { runtime, model: model.to_string() },
+            source: ValueSource::BuiltIn,
+        }
+    }
+}

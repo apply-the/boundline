@@ -113,7 +113,7 @@ path. The target release is `0.11.0`.
 
 **Purpose**: Finalize docs, release metadata, coverage, and repository-wide validation for the `0.11.0` slice.
 
-- [X] T030 [P] Update operator docs and walkthroughs in README.md, docs/getting-started.md, docs/review-voting.md, docs/adaptive-execution.md, docs/configuration.md, assistant/README.md, and specs/011-init-model-routing/quickstart.md
+- [X] T030 [P] Update operator docs and walkthroughs in README.md, tech-docs/getting-started.md, tech-docs/review-voting.md, tech-docs/adaptive-execution.md, tech-docs/configuration.md, assistant/README.md, and specs/011-init-model-routing/quickstart.md
 - [X] T031 [P] Update release notes, roadmap references, and version metadata for `0.11.0` in CHANGELOG.md, ROADMAP.md, Cargo.toml, and Cargo.lock
 - [X] T032 [P] Raise coverage for init, config precedence, and review-role routing in tests/unit/coverage_additional.rs, tests/unit/config_resolution.rs, tests/unit/runtime_capability.rs, tests/integration/init_bootstrap_flow.rs, tests/integration/config_precedence_flow.rs, and tests/integration/review_routing_flow.rs
 - [X] T033 Run formatting, lint, tests, and coverage validation with `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test --all-targets`, and `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`
