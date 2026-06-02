@@ -103,7 +103,7 @@ README.md
 ROADMAP.md
 CHANGELOG.md
 assistant/
-docs/
+tech-docs/
 Cargo.toml
 Cargo.lock
 AGENTS.md

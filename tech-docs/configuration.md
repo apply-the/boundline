@@ -149,6 +149,15 @@ Use `adapter show --json` to inspect the persisted selection, config
 completeness, declared supported transports, stage override claims, hook
 subscriptions, and compatibility metadata before running `plan` or `run`.
 
+For the shipped `speckit` profile, read that report together with the corrected
+stage map: `goal` stays native to Boundline, `plan` is the only planning-stage
+override and reports workflow ID `speckit-planning`, `run` is the
+implementation-only override and reports workflow ID `speckit-implementation`,
+and `status` plus `inspect` remain host-owned visibility surfaces. The runtime
+uses the split workflow assets `.specify/workflows/speckit/planning.yml` and
+`.specify/workflows/speckit/implementation.yml` behind the scenes, but the
+operator-visible identity is still the semantic workflow ID.
+
 `config show` surfaces the same selection at the config layer, including the
 adapter config state, whether guided setup was used, and the stored adapter
 value count. Secret adapter values remain redacted in operator-visible output.
@@ -162,6 +171,15 @@ reason instead of letting the adapter silently claim the stage.
 Transport compatibility is explicit in V1. `adapter show --json` exposes the
 declared `supported_transports`, and the current release accepts only JSON over
 stdin/stdout.
+
+When a claimed Speckit `plan` stage runs, the adapter must complete the full
+planning lifecycle and end with a mandatory `speckit.analyze` readiness gate.
+One claimed plan attempt may use one initial analyze pass plus at most two
+remediation or analyze re-check cycles before it must return `blocked` instead
+of pretending planning succeeded. A claimed `run` stage is narrower: it may
+invoke `speckit.implement` plus implementation validation or status capture,
+and it must not rerun `speckit.specify`, `speckit.plan`, `speckit.tasks`, or
+`speckit.analyze`.
 
 ## Canon Workspace Preferences
 
@@ -182,7 +200,7 @@ boundline config show --scope workspace
 boundline config set-canon --workspace . --mode-selection auto-confirm
 ```
 
-The current release documents Canon `0.62.0` support for the machine-facing
+The current release documents Canon `0.63.0` support for the machine-facing
 `canon governance start|refresh|capabilities --json` `v1` surface.
 
 ## Workflow Registry Boundaries

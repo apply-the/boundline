@@ -60,7 +60,7 @@ Expected result:
 ## 4. Explicit Governed Stage Work
 
 ```bash
-boundline govern --mode architecture --brief docs/architecture.md
+boundline govern --mode architecture --brief tech-docs/architecture.md
 boundline govern --mode security-assessment --goal "Assess auth and audit logging risks"
 boundline govern --mode pr-review --base refs/heads/main --head HEAD
 ```
@@ -94,11 +94,11 @@ Review:
 
 ```text
 README.md
-docs/getting-started.md
-docs/architecture.md
-docs/delivery-model.md
-docs/guides/assistant-plugin-packages.md
-docs/review-voting.md
+tech-docs/getting-started.md
+tech-docs/architecture.md
+tech-docs/delivery-model.md
+tech-docs/guides/assistant-plugin-packages.md
+tech-docs/review-voting.md
 ```
 
 Expected result:

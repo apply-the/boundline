@@ -45,7 +45,7 @@ governance details.
 
 ## Scenario 5: Read the advanced architecture layer when deeper control is needed
 
-1. Open the advanced docs linked from README or `docs/getting-started.md`.
+1. Open the advanced docs linked from README or `tech-docs/getting-started.md`.
 2. Read the sections that explain session-native routing, source-install
    fallback, and the Boundline versus Canon boundary.
 

@@ -70,7 +70,7 @@
 
 - [ ] T017 [US2] Implement bundled catalog parsing, route-table derivation, and per-slot model selection in `src/cli/init.rs` and `assistant/catalog/model-catalog.toml`
 - [ ] T018 [US2] Extend assistant-pack scaffolding reporting and explicit unset/custom slot summaries in `src/cli/init.rs` and `src/cli/assistant_assets.rs`
-- [ ] T019 [US2] Align repository docs for the bundled catalog and guided route editing surface in `README.md`, `docs/getting-started.md`, and `assistant/README.md`
+- [ ] T019 [US2] Align repository docs for the bundled catalog and guided route editing surface in `README.md`, `tech-docs/getting-started.md`, and `assistant/README.md`
 
 **Checkpoint**: User Stories 1 and 2 work together and route choices are explicit, inspectable, and reviewable.
 
@@ -102,7 +102,7 @@
 
 **Purpose**: Close release, coverage, and validation requirements across the full slice.
 
-- [ ] T026 [P] Refresh init command help and release-aligned docs in `README.md`, `docs/configuration.md`, and `assistant/README.md`
+- [ ] T026 [P] Refresh init command help and release-aligned docs in `README.md`, `tech-docs/configuration.md`, and `assistant/README.md`
 - [ ] T027 [P] Refresh coverage artifacts and verify every modified or created Rust file reaches at least 95% line coverage in `lcov.info`
 - [ ] T028 Run the full validation sweep from `specs/046-guided-init-tui/quickstart.md`, including `cargo test --no-run --all-targets --all-features`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, and `cargo fmt --check`
 - [ ] T029 Mark completed tasks and capture the released feature summary in `specs/046-guided-init-tui/tasks.md`

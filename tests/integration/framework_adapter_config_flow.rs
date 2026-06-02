@@ -97,7 +97,7 @@ fn known_speckit_profile_activates_with_prefilled_defaults_and_runs_plan()
     assert!(plan_text.contains("framework_adapter_stage_status: succeeded"), "{plan_text}");
     assert!(
         plan_text.contains(
-            "framework_adapter_produced_artifacts: specs/066-agentic-framework-integration/plan.md, specs/066-agentic-framework-integration/tasks.md"
+            "framework_adapter_produced_artifacts: specs/066-agentic-framework-integration/spec.md, specs/066-agentic-framework-integration/plan.md, specs/066-agentic-framework-integration/tasks.md, .specify/workflows/speckit/planning.yml"
         ),
         "{plan_text}"
     );

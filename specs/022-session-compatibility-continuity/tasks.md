@@ -91,7 +91,7 @@
 
 ### Implementation for User Story 3
 
-- [X] T018 [US3] Ship continuity guidance in `README.md`, `docs/getting-started.md`, `docs/configuration.md`, `docs/adaptive-execution.md`, and `assistant/README.md`
+- [X] T018 [US3] Ship continuity guidance in `README.md`, `tech-docs/getting-started.md`, `tech-docs/configuration.md`, `tech-docs/adaptive-execution.md`, and `assistant/README.md`
 - [X] T019 [US3] Update contributor and release guidance for `0.22.0` in `CONTRIBUTING.md`, `ROADMAP.md`, and `CHANGELOG.md`
 
 **Checkpoint**: Maintainers and assistants have one coherent continuity story for the release.

@@ -54,7 +54,7 @@ bounded, inspectable value independently.
 - [ ] T013 [US1] Implement install diagnostics checks and Canon pairing evaluation in `src/cli/diagnostics.rs`
 - [ ] T014 [US1] Render install diagnostics output and bounded actions in `src/cli/output.rs`
 - [ ] T015 [US1] Publish bundled install metadata in `distribution/homebrew/Formula/boundline.rb`, `distribution/winget/manifests/a/ApplyThe/Boundline/0.39.0/ApplyThe.Boundline.installer.yaml`, `distribution/winget/manifests/a/ApplyThe/Boundline/0.39.0/ApplyThe.Boundline.locale.en-US.yaml`, and `distribution/winget/manifests/a/ApplyThe/Boundline/0.39.0/ApplyThe.Boundline.yaml`
-- [ ] T016 [US1] Rewrite the first-run quick path in `README.md` and `docs/getting-started.md`
+- [ ] T016 [US1] Rewrite the first-run quick path in `README.md` and `tech-docs/getting-started.md`
 
 **Checkpoint**: Fresh installs are diagnosable, official channel metadata exists, and the quick path reaches the first session-native flow.
 
@@ -78,7 +78,7 @@ bounded, inspectable value independently.
 - [ ] T021 [US2] Extend install diagnostics for drift, blocked channels, and repair-needed states in `src/cli/diagnostics.rs` and `src/cli/output.rs`
 - [ ] T022 [US2] Implement release bundle assembly and checksum publication in `.github/workflows/release-distribution.yml`
 - [ ] T023 [US2] Wire version and checksum sync into package metadata in `scripts/sync-distribution-metadata.sh`, `distribution/homebrew/Formula/boundline.rb`, and `distribution/winget/manifests/a/ApplyThe/Boundline/0.39.0/ApplyThe.Boundline.installer.yaml`
-- [ ] T024 [US2] Document update and repair flows in `README.md`, `docs/getting-started.md`, and `docs/architecture.md`
+- [ ] T024 [US2] Document update and repair flows in `README.md`, `tech-docs/getting-started.md`, and `tech-docs/architecture.md`
 
 **Checkpoint**: Installed users have one bounded update and repair story backed by release assets and explicit diagnostics.
 
@@ -97,7 +97,7 @@ bounded, inspectable value independently.
 
 ### Implementation for User Story 3
 
-- [ ] T027 [US3] Split the onboarding and architecture narrative across `README.md`, `docs/getting-started.md`, and `docs/architecture.md`
+- [ ] T027 [US3] Split the onboarding and architecture narrative across `README.md`, `tech-docs/getting-started.md`, and `tech-docs/architecture.md`
 - [ ] T028 [US3] Align Boundline versus Canon messaging in `assistant/README.md`, `assistant/codex/commands/boundline-start.md`, `assistant/codex/commands/boundline-plan.md`, `assistant/codex/commands/boundline-run.md`, `assistant/codex/commands/boundline-status.md`, `assistant/codex/commands/boundline-next.md`, and `assistant/codex/commands/boundline-inspect.md`
 - [ ] T029 [US3] Align Copilot and Claude guidance with the new docs split in `assistant/copilot/prompts/boundline-start.prompt.md`, `assistant/copilot/prompts/boundline-plan.prompt.md`, `assistant/copilot/prompts/boundline-run.prompt.md`, `assistant/copilot/prompts/boundline-status.prompt.md`, `assistant/copilot/prompts/boundline-next.prompt.md`, `assistant/copilot/prompts/boundline-inspect.prompt.md`, `assistant/claude/commands/boundline-start.md`, `assistant/claude/commands/boundline-plan.md`, `assistant/claude/commands/boundline-run.md`, `assistant/claude/commands/boundline-status.md`, `assistant/claude/commands/boundline-next.md`, and `assistant/claude/commands/boundline-inspect.md`
 
@@ -120,7 +120,7 @@ bounded, inspectable value independently.
 
 - [ ] T032 [US4] Bump the release version in `Cargo.toml` and `Cargo.lock`
 - [ ] T033 [US4] Update the public release narrative in `CHANGELOG.md`, `ROADMAP.md`, `README.md`, and `AGENTS.md`
-- [ ] T034 [US4] Make channel readiness and source fallback explicit in `distribution/homebrew/Formula/boundline.rb`, `distribution/winget/manifests/a/ApplyThe/Boundline/0.39.0/ApplyThe.Boundline.yaml`, `.github/workflows/release-distribution.yml`, and `docs/architecture.md`
+- [ ] T034 [US4] Make channel readiness and source fallback explicit in `distribution/homebrew/Formula/boundline.rb`, `distribution/winget/manifests/a/ApplyThe/Boundline/0.39.0/ApplyThe.Boundline.yaml`, `.github/workflows/release-distribution.yml`, and `tech-docs/architecture.md`
 
 **Checkpoint**: The release surface tells one coherent `0.39.0` story across metadata, docs, roadmap, and compatibility guidance.
 
@@ -183,7 +183,7 @@ Task: "Add blocked-companion integration coverage in tests/integration/distribut
 
 # Launch metadata and docs work after CLI wiring stabilizes:
 Task: "Publish bundled install metadata in distribution/homebrew/Formula/boundline.rb and distribution/winget/manifests/a/ApplyThe/Boundline/0.39.0/..."
-Task: "Rewrite the first-run quick path in README.md and docs/getting-started.md"
+Task: "Rewrite the first-run quick path in README.md and tech-docs/getting-started.md"
 ```
 
 ---

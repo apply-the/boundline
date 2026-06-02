@@ -601,3 +601,608 @@ impl SessionRuntime {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::error::Error;
+    use std::fs;
+    use std::path::{Path, PathBuf};
+    use std::sync::Arc;
+
+    use serde_json::{Map, json};
+    use uuid::Uuid;
+
+    use crate::adapters::governance_runtime::GovernanceRuntimeResponse;
+    use crate::domain::decision::Decision;
+    use crate::domain::execution::{
+        ExecutionAttemptDefinition, ExecutionCommand, ExecutionFailureMode, WorkspaceChange,
+        WorkspaceExecutionProfile,
+    };
+    use crate::domain::flow::built_in_flow;
+    use crate::domain::goal_plan::{GoalPlan, PlannedTask};
+    use crate::domain::governance::{
+        ApprovalState, CanonMode, CanonModeSelectionPreference, GovernanceLifecycleState,
+        GovernanceProfile, GovernanceRuntimeKind, GovernedSessionLifecycle, GovernedStagePacket,
+        GovernedStageRecord, PacketReadiness,
+    };
+    use crate::domain::limits::{RunLimits, TerminalCondition};
+    use crate::domain::plan::Plan;
+    use crate::domain::session::{ActiveSessionRecord, SessionStatus};
+    use crate::domain::step::Step;
+    use crate::domain::task::{Task, TaskStatus, TerminalReason};
+    use crate::domain::task_context::TaskContext;
+    use crate::fixture::{FixtureRuntime, execution_manifest_path};
+    use crate::orchestrator::decision_loop::LoopTerminal;
+    use crate::orchestrator::planner::StaticPlanner;
+    use crate::registry::agent_registry::AgentRegistry;
+    use crate::registry::tool_registry::ToolRegistry;
+
+    use super::{
+        EXECUTION_GOVERNANCE_ROOT, EXECUTION_STAGE_BRIEF_FILE_NAME, NativeGovernanceProjection,
+        SessionRuntime, SessionRuntimeError,
+    };
+
+    const BLOCKED_REASON: &str = "manual governance gate required";
+    const CHANGE_PATH: &str = "src/lib.rs";
+    const GOVERNANCE_STAGE_KEY: &str = "run:implementation";
+    const LATEST_CHANGED_FILES_STATE_KEY: &str = "latest_changed_files";
+    const LATEST_VALIDATION_STATUS_STATE_KEY: &str = "latest_validation_status";
+    const PATCHED_STATE_KEY: &str = "patched_state";
+    const PROFILE_NAME: &str = "native-governance-profile";
+    const SESSION_ID: &str = "session-1";
+    const STEP_ID: &str = "step-1";
+    const TASK_ID: &str = "task-1";
+    const TRACE_REF: &str = ".boundline/traces/trace.json";
+    const UPDATED_AT: u64 = 91;
+    const WORKSPACE_GOAL: &str = "Finish native execution";
+
+    #[test]
+    fn native_governance_halt_response_requires_latest_governance_stage_and_marks_planned_tasks_running()
+    -> Result<(), Box<dyn Error>> {
+        let workspace = temp_workspace("boundline-native-governance-halt")?;
+        let runtime = SessionRuntime::for_workspace(workspace.as_path());
+
+        let mut missing_stage_task = sample_task(workspace.as_path())?;
+        let session = sample_session(workspace.as_path());
+        let error = runtime
+            .build_native_governance_halt_response(&session, &mut missing_stage_task)
+            .unwrap_err();
+        assert!(matches!(error, SessionRuntimeError::MissingGovernanceStage));
+        assert_eq!(missing_stage_task.status, TaskStatus::Running);
+
+        let mut awaiting_task = sample_task(workspace.as_path())?;
+        awaiting_task.context.set_latest_governance_stage(&sample_stage_record(
+            GovernanceLifecycleState::AwaitingApproval,
+            None,
+        ))?;
+
+        let response =
+            runtime.build_native_governance_halt_response(&session, &mut awaiting_task)?;
+        assert_eq!(response.terminal_status, TaskStatus::Running);
+        assert!(response.terminal_reason.message.contains("approval is still pending"));
+        assert!(response.terminal_reason.message.contains(GOVERNANCE_STAGE_KEY));
+        assert_eq!(response.trace_location, TRACE_REF);
+
+        Ok(())
+    }
+
+    #[test]
+    fn native_governance_helpers_cover_blocked_halt_messages_and_loop_terminal_mapping()
+    -> Result<(), Box<dyn Error>> {
+        let workspace = temp_workspace("boundline-native-governance-terminal")?;
+        let runtime = SessionRuntime::for_workspace(workspace.as_path());
+        let session = sample_session(workspace.as_path());
+        let mut blocked_task = sample_task(workspace.as_path())?;
+        blocked_task.context.set_latest_governance_stage(&sample_stage_record(
+            GovernanceLifecycleState::Blocked,
+            Some(BLOCKED_REASON.to_string()),
+        ))?;
+
+        let response =
+            runtime.build_native_governance_halt_response(&session, &mut blocked_task)?;
+        assert!(response.terminal_reason.message.contains(BLOCKED_REASON));
+        assert!(response.terminal_reason.message.contains(GOVERNANCE_STAGE_KEY));
+
+        let success_reason = runtime.native_terminal_reason(&LoopTerminal::Success);
+        assert_eq!(success_reason.condition, TerminalCondition::GoalSatisfied);
+
+        let failure_reason =
+            runtime.native_terminal_reason(&LoopTerminal::Failure("boom".to_string()));
+        assert_eq!(failure_reason.condition, TerminalCondition::UnrecoverableError);
+        assert_eq!(failure_reason.message, "boom");
+
+        let exhausted_reason = runtime
+            .native_terminal_reason(&LoopTerminal::Exhausted { steps_taken: 3, max_steps: 5 });
+        assert_eq!(exhausted_reason.condition, TerminalCondition::StepLimitExceeded);
+        let exhausted_details = exhausted_reason.details.ok_or("missing exhausted details")?;
+        assert_eq!(
+            exhausted_details.get("steps_taken").and_then(serde_json::Value::as_u64),
+            Some(3)
+        );
+        assert_eq!(exhausted_details.get("max_steps").and_then(serde_json::Value::as_u64), Some(5));
+
+        let no_action_reason =
+            runtime.native_terminal_reason(&LoopTerminal::NoActionableState("stalled".to_string()));
+        assert_eq!(no_action_reason.condition, TerminalCondition::NoCredibleNextStep);
+        assert_eq!(no_action_reason.message, "stalled");
+
+        Ok(())
+    }
+
+    #[test]
+    fn native_governance_projection_helpers_cover_runtime_helper_paths()
+    -> Result<(), Box<dyn Error>> {
+        let workspace = temp_workspace("boundline-native-governance-projection")?;
+        write_execution_profile(workspace.as_path(), None)?;
+        let runtime = SessionRuntime::for_workspace(workspace.as_path());
+        let goal_plan = sample_goal_plan()?;
+
+        let mut session_without_lifecycle = sample_session(workspace.as_path());
+        runtime.upsert_execution_stage_record(
+            &mut session_without_lifecycle,
+            sample_stage_record(
+                GovernanceLifecycleState::Blocked,
+                Some(BLOCKED_REASON.to_string()),
+            ),
+        );
+        assert!(session_without_lifecycle.governance_lifecycle.is_none());
+
+        let mut session_with_lifecycle = sample_session(workspace.as_path());
+        session_with_lifecycle.governance_lifecycle =
+            Some(sample_lifecycle(vec![sample_stage_record(
+                GovernanceLifecycleState::AwaitingApproval,
+                None,
+            )]));
+        runtime.upsert_execution_stage_record(
+            &mut session_with_lifecycle,
+            sample_stage_record(
+                GovernanceLifecycleState::Blocked,
+                Some(BLOCKED_REASON.to_string()),
+            ),
+        );
+        let lifecycle = session_with_lifecycle
+            .governance_lifecycle
+            .as_ref()
+            .ok_or_else(|| std::io::Error::other("missing governance lifecycle"))?;
+        assert_eq!(lifecycle.stage_records.len(), 1);
+        assert_eq!(lifecycle.stage_records[0].lifecycle_state, GovernanceLifecycleState::Blocked);
+        assert_eq!(lifecycle.stage_records[0].blocked_reason.as_deref(), Some(BLOCKED_REASON));
+
+        runtime.upsert_execution_stage_record(
+            &mut session_with_lifecycle,
+            sample_stage_record_for(
+                "run:verification",
+                GovernanceLifecycleState::GovernedReady,
+                None,
+            ),
+        );
+        let updated_lifecycle = session_with_lifecycle
+            .governance_lifecycle
+            .as_ref()
+            .ok_or_else(|| std::io::Error::other("missing updated governance lifecycle"))?;
+        assert_eq!(updated_lifecycle.stage_records.len(), 2);
+        assert!(updated_lifecycle.stage_records.iter().any(|record| {
+            record.stage_key == "run:verification"
+                && record.lifecycle_state == GovernanceLifecycleState::GovernedReady
+        }));
+
+        let decisions = vec![sample_decision()];
+        let native_context = TaskContext::new(
+            SESSION_ID,
+            workspace.as_path().to_string_lossy().into_owned(),
+            RunLimits::default(),
+            Map::from_iter([
+                (LATEST_CHANGED_FILES_STATE_KEY.to_string(), json!([CHANGE_PATH])),
+                (LATEST_VALIDATION_STATUS_STATE_KEY.to_string(), json!("passed")),
+            ]),
+        );
+        let stage_brief_ref = runtime.materialize_execution_stage_brief(
+            CanonMode::Implementation,
+            &decisions,
+            &goal_plan,
+            &native_context,
+            &["fallback.rs".to_string()],
+        )?;
+        assert_eq!(
+            stage_brief_ref,
+            format!(
+                "{}/{}/{}",
+                EXECUTION_GOVERNANCE_ROOT,
+                CanonMode::Implementation.as_str(),
+                EXECUTION_STAGE_BRIEF_FILE_NAME
+            )
+        );
+        let stage_brief_contents = fs::read_to_string(workspace.as_path().join(&stage_brief_ref))?;
+        assert!(stage_brief_contents.contains("# Execution Governance Brief"));
+        assert!(stage_brief_contents.contains(CHANGE_PATH));
+        assert!(stage_brief_contents.contains("- status: passed"));
+
+        let runtime_without_governance = sample_runtime(None)?;
+        let mut no_flow_session = sample_session(workspace.as_path());
+        assert!(matches!(
+            runtime.prepare_native_governance_projection(
+                &mut no_flow_session,
+                &runtime_without_governance,
+                &goal_plan,
+            )?,
+            NativeGovernanceProjection::None
+        ));
+
+        let mut no_governance_session = sample_session(workspace.as_path());
+        no_governance_session.active_flow = Some(sample_active_flow()?);
+        assert!(matches!(
+            runtime.prepare_native_governance_projection(
+                &mut no_governance_session,
+                &runtime_without_governance,
+                &goal_plan,
+            )?,
+            NativeGovernanceProjection::None
+        ));
+
+        let runtime_with_governance = sample_runtime(Some(sample_governance_profile()))?;
+        let mut missing_goal_session = sample_session(workspace.as_path());
+        missing_goal_session.active_flow = Some(sample_active_flow()?);
+        missing_goal_session.goal = None;
+        let error = match runtime.prepare_native_governance_projection(
+            &mut missing_goal_session,
+            &runtime_with_governance,
+            &goal_plan,
+        ) {
+            Ok(_) => return Err(std::io::Error::other("expected missing-goal error").into()),
+            Err(error) => error,
+        };
+        assert!(matches!(error, SessionRuntimeError::MissingGoal));
+
+        Ok(())
+    }
+
+    #[test]
+    fn native_governance_projection_helpers_cover_task_synthesis_and_promotion_noops()
+    -> Result<(), Box<dyn Error>> {
+        let workspace = temp_workspace("boundline-native-governance-synthesis")?;
+        write_execution_profile(workspace.as_path(), None)?;
+        let runtime = SessionRuntime::for_workspace(workspace.as_path());
+        let session = sample_session(workspace.as_path());
+        let goal_plan = sample_goal_plan()?;
+        let terminal_reason = TerminalReason::new(
+            TerminalCondition::TaskNotCredible,
+            "halt native workflow",
+            Some(json!({"kind": "blocked"})),
+        );
+        let final_context = TaskContext::new(
+            SESSION_ID,
+            workspace.as_path().to_string_lossy().into_owned(),
+            RunLimits::default(),
+            Map::from_iter([(PATCHED_STATE_KEY.to_string(), json!(true))]),
+        );
+
+        let finalized_task = runtime.finalize_native_projected_task(
+            sample_task(workspace.as_path())?,
+            TaskStatus::Failed,
+            &terminal_reason,
+            &final_context,
+        );
+        assert_eq!(finalized_task.status, TaskStatus::Failed);
+        assert_eq!(finalized_task.context.state.get(PATCHED_STATE_KEY), Some(&json!(true)));
+        assert_eq!(finalized_task.terminal_reason.as_ref(), Some(&terminal_reason));
+
+        let synthesized_task = runtime.synthesize_native_persisted_task(
+            &session,
+            &goal_plan,
+            &final_context,
+            TaskStatus::Failed,
+            &terminal_reason,
+        )?;
+        assert_eq!(synthesized_task.id, goal_plan.plan_id);
+        assert_eq!(synthesized_task.goal, goal_plan.goal_text);
+        assert_eq!(synthesized_task.status, TaskStatus::Failed);
+        assert_eq!(synthesized_task.context, final_context);
+        assert_eq!(synthesized_task.terminal_reason.as_ref(), Some(&terminal_reason));
+
+        runtime.promote_governed_evidence_outputs(
+            GOVERNANCE_STAGE_KEY,
+            CanonMode::Implementation,
+            &GovernanceRuntimeResponse {
+                status: GovernanceLifecycleState::GovernedReady,
+                approval_state: ApprovalState::NotNeeded,
+                run_ref: Some("run-1".to_string()),
+                packet: None,
+                reason_code: None,
+                message: "no packet".to_string(),
+            },
+        )?;
+        runtime.promote_governed_evidence_outputs(
+            GOVERNANCE_STAGE_KEY,
+            CanonMode::Implementation,
+            &GovernanceRuntimeResponse {
+                status: GovernanceLifecycleState::GovernedReady,
+                approval_state: ApprovalState::NotNeeded,
+                run_ref: Some("run-2".to_string()),
+                packet: Some(sample_packet(
+                    PacketReadiness::Incomplete,
+                    vec!["doc.md".to_string()],
+                )),
+                reason_code: None,
+                message: "incomplete packet".to_string(),
+            },
+        )?;
+        runtime.promote_governed_evidence_outputs(
+            GOVERNANCE_STAGE_KEY,
+            CanonMode::Implementation,
+            &GovernanceRuntimeResponse {
+                status: GovernanceLifecycleState::GovernedReady,
+                approval_state: ApprovalState::NotNeeded,
+                run_ref: Some("run-3".to_string()),
+                packet: Some(sample_packet(PacketReadiness::Reusable, Vec::new())),
+                reason_code: None,
+                message: "empty documents".to_string(),
+            },
+        )?;
+        runtime.promote_governed_evidence_outputs(
+            GOVERNANCE_STAGE_KEY,
+            CanonMode::Implementation,
+            &GovernanceRuntimeResponse {
+                status: GovernanceLifecycleState::GovernedReady,
+                approval_state: ApprovalState::NotNeeded,
+                run_ref: Some("   ".to_string()),
+                packet: Some(sample_packet(PacketReadiness::Reusable, vec!["doc.md".to_string()])),
+                reason_code: None,
+                message: "blank run ref".to_string(),
+            },
+        )?;
+
+        Ok(())
+    }
+
+    fn sample_session(workspace: &Path) -> ActiveSessionRecord {
+        ActiveSessionRecord {
+            session_id: SESSION_ID.to_string(),
+            workspace_ref: workspace.to_string_lossy().into_owned(),
+            goal: Some(WORKSPACE_GOAL.to_string()),
+            authored_brief: None,
+            negotiation_packet: None,
+            active_flow: None,
+            active_task: None,
+            goal_plan: None,
+            workflow_progress: None,
+            decisions: Vec::new(),
+            active_flow_policy: None,
+            latest_status: SessionStatus::Initialized,
+            latest_terminal_reason: None,
+            latest_trace_ref: Some(TRACE_REF.to_string()),
+            created_at: UPDATED_AT,
+            updated_at: UPDATED_AT,
+            governance_lifecycle: None,
+            project_scale: None,
+            latest_voting: None,
+            delight_feedback: None,
+        }
+    }
+
+    fn sample_goal_plan() -> Result<GoalPlan, Box<dyn Error>> {
+        GoalPlan::new(
+            WORKSPACE_GOAL,
+            vec![PlannedTask {
+                task_id: "planned-task-1".to_string(),
+                description: "Finish native execution".to_string(),
+                target: CHANGE_PATH.to_string(),
+                expected_outcome: Some("governance helpers stay covered".to_string()),
+                decision_type_hint: None,
+            }],
+        )
+        .map_err(Into::into)
+    }
+
+    fn sample_decision() -> Decision {
+        let mut decision = Decision::new(
+            crate::domain::decision::DecisionType::Code,
+            CHANGE_PATH,
+            "exercise native governance brief rendering",
+            "native governance evidence should be materialized",
+            Vec::new(),
+        );
+        decision.status = crate::domain::decision::DecisionStatus::Verified;
+        decision
+    }
+
+    fn sample_active_flow() -> Result<crate::domain::flow::SessionFlowState, Box<dyn Error>> {
+        built_in_flow("bug-fix")
+            .map(|flow| flow.initial_state())
+            .ok_or_else(|| std::io::Error::other("missing bug-fix flow"))
+            .map_err(Into::into)
+    }
+
+    fn sample_governance_profile() -> GovernanceProfile {
+        GovernanceProfile {
+            default_runtime: GovernanceRuntimeKind::Local,
+            canon: None,
+            stages: Vec::new(),
+        }
+    }
+
+    fn sample_lifecycle(stage_records: Vec<GovernedStageRecord>) -> GovernedSessionLifecycle {
+        GovernedSessionLifecycle {
+            governance_runtime: GovernanceRuntimeKind::Canon,
+            explicit_opt_out: false,
+            mode_selection_preference: CanonModeSelectionPreference::AutoConfirm,
+            selected_mode: None,
+            selected_mode_sequence: Vec::new(),
+            latest_reasoning_profile: None,
+            current_stage_index: 0,
+            stage_records,
+            accumulated_context: Vec::new(),
+            terminal_reason: None,
+            planning_input_fingerprint: None,
+        }
+    }
+
+    fn sample_stage_record_for(
+        stage_key: &str,
+        lifecycle_state: GovernanceLifecycleState,
+        blocked_reason: Option<String>,
+    ) -> GovernedStageRecord {
+        GovernedStageRecord {
+            stage_key: stage_key.to_string(),
+            runtime: GovernanceRuntimeKind::Canon,
+            lifecycle_state,
+            required: false,
+            autopilot_enabled: true,
+            approval_state: ApprovalState::NotNeeded,
+            canon_run_ref: None,
+            governance_attempt_id: format!("attempt-{stage_key}"),
+            previous_governance_attempt_id: None,
+            packet_ref: None,
+            decision_ref: None,
+            stage_council: None,
+            blocked_reason,
+        }
+    }
+
+    fn sample_packet(
+        readiness: PacketReadiness,
+        document_refs: Vec<String>,
+    ) -> GovernedStagePacket {
+        GovernedStagePacket {
+            packet_ref: ".canon/runs/run-1/packet".to_string(),
+            runtime: GovernanceRuntimeKind::Canon,
+            canon_mode: Some(CanonMode::Implementation),
+            expected_document_refs: document_refs.clone(),
+            document_refs,
+            readiness,
+            missing_sections: Vec::new(),
+            headline: "native governance packet".to_string(),
+            reason_code: None,
+            authority_governance: None,
+            adaptive_governance: None,
+            semantic_descriptor: None,
+        }
+    }
+
+    fn sample_runtime(
+        governance: Option<GovernanceProfile>,
+    ) -> Result<FixtureRuntime, Box<dyn Error>> {
+        let planner = Arc::new(StaticPlanner::new(Plan::new(vec![Step::agent(
+            STEP_ID,
+            "planner",
+            json!({"goal": WORKSPACE_GOAL}),
+        )?])?));
+        Ok(FixtureRuntime {
+            profile: sample_workspace_execution_profile(governance),
+            planner,
+            agents: AgentRegistry::new(),
+            tools: ToolRegistry::new(),
+        })
+    }
+
+    fn sample_workspace_execution_profile(
+        governance: Option<GovernanceProfile>,
+    ) -> WorkspaceExecutionProfile {
+        WorkspaceExecutionProfile {
+            name: PROFILE_NAME.to_string(),
+            read_targets: vec![CHANGE_PATH.to_string()],
+            validation_command: ExecutionCommand {
+                program: "cargo".to_string(),
+                args: vec!["test".to_string()],
+            },
+            attempts: vec![ExecutionAttemptDefinition {
+                attempt_id: "attempt-1".to_string(),
+                summary: "apply change".to_string(),
+                failure_mode: ExecutionFailureMode::Terminal,
+                changes: vec![WorkspaceChange {
+                    path: CHANGE_PATH.to_string(),
+                    find: "before".to_string(),
+                    replace: "after".to_string(),
+                }],
+            }],
+            adaptive: None,
+            limits: RunLimits::default(),
+            governance,
+            review: None,
+            legacy_source: None,
+        }
+    }
+
+    fn write_execution_profile(
+        workspace: &Path,
+        governance: Option<GovernanceProfile>,
+    ) -> Result<(), Box<dyn Error>> {
+        let manifest_path = execution_manifest_path(workspace);
+        if let Some(parent) = manifest_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let profile = sample_workspace_execution_profile(governance);
+        let contents = serde_json::to_vec_pretty(&profile)?;
+        fs::write(manifest_path, contents)?;
+        Ok(())
+    }
+
+    fn sample_task(workspace: &Path) -> Result<Task, Box<dyn Error>> {
+        let step = Step::agent(STEP_ID, "planner", serde_json::json!({"goal": WORKSPACE_GOAL}))?;
+        let plan = Plan::new(vec![step])?;
+        Ok(Task {
+            id: TASK_ID.to_string(),
+            goal: WORKSPACE_GOAL.to_string(),
+            input: serde_json::json!({"goal": WORKSPACE_GOAL}),
+            context: TaskContext::new(
+                SESSION_ID,
+                workspace.to_string_lossy().into_owned(),
+                RunLimits::default(),
+                Map::new(),
+            ),
+            plan,
+            status: TaskStatus::Planned,
+            limits: RunLimits::default(),
+            terminal_reason: None,
+            retry_count: 0,
+            replan_count: 0,
+            total_step_attempts: 0,
+        })
+    }
+
+    fn sample_stage_record(
+        lifecycle_state: GovernanceLifecycleState,
+        blocked_reason: Option<String>,
+    ) -> GovernedStageRecord {
+        GovernedStageRecord {
+            stage_key: GOVERNANCE_STAGE_KEY.to_string(),
+            runtime: GovernanceRuntimeKind::Canon,
+            lifecycle_state,
+            required: false,
+            autopilot_enabled: true,
+            approval_state: ApprovalState::NotNeeded,
+            canon_run_ref: None,
+            governance_attempt_id: "attempt-1".to_string(),
+            previous_governance_attempt_id: None,
+            packet_ref: None,
+            decision_ref: None,
+            stage_council: None,
+            blocked_reason,
+        }
+    }
+
+    fn temp_workspace(prefix: &str) -> Result<TestWorkspace, Box<dyn Error>> {
+        TestWorkspace::new(prefix)
+    }
+
+    struct TestWorkspace {
+        path: PathBuf,
+    }
+
+    impl TestWorkspace {
+        fn new(prefix: &str) -> Result<Self, Box<dyn Error>> {
+            let path = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
+            fs::create_dir_all(&path)?;
+            Ok(Self { path })
+        }
+
+        fn as_path(&self) -> &Path {
+            &self.path
+        }
+    }
+
+    impl Drop for TestWorkspace {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.path);
+        }
+    }
+}

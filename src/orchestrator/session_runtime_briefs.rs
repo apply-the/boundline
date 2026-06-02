@@ -719,3 +719,375 @@ pub(super) fn render_stage_council_blocked_note(reason: &str) -> String {
         "# Discovery Stage Council Blocked\n\n- reason: {reason}\n\nRerun `boundline plan` after restoring independent provider-backed council execution.\n"
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use std::error::Error;
+
+    use serde_json::{Map, Value, json};
+
+    use crate::domain::decision::{Decision, DecisionStatus, DecisionType};
+    use crate::domain::goal_plan::{
+        ContextPack, ContextPackCredibility, GoalPlan, InferredFlow, PlannedTask,
+    };
+    use crate::domain::governance::{CanonMode, CompactedCanonMemory, MemoryCredibilityState};
+    use crate::domain::limits::RunLimits;
+    use crate::domain::stage_council::{
+        StageCouncilFinding, StageCouncilFindingDisposition, StageCouncilRequest,
+    };
+    use crate::domain::task_context::TaskContext;
+    use crate::orchestrator::goal_planner::PlanningContextSources;
+
+    use super::{
+        decompose_goal_text, plain_goal_planning_clarification_prompt,
+        plain_goal_requires_planning_clarification, planning_assumptions, planning_problem_domain,
+        planning_unknown_markers, render_execution_stage_brief, render_goal_decomposition_section,
+        render_planning_stage_brief, render_stage_council_blocked_markdown,
+        render_stage_council_blocked_note,
+    };
+
+    const RICH_GOAL: &str = "Rust microservice (edition 2024) with Axum and tonic gRPC service for user management. Users: first name, last name, email, role. Persistence: sqlite. Auth: OAuth2 JWT. Operations: CreateUser, GetUser, ListUsers. Intended outcome: a complete Cargo workspace with unit tests. Validation: cargo test.";
+    const ACTIX_GOAL: &str = "Actix service for order intake. cargo test";
+    const BROAD_GOAL: &str = "Build a user management microservice API";
+    const DEFAULT_GOAL: &str = "Refine release checklist";
+    const SESSION_ID: &str = "session-briefs";
+    const WORKSPACE_REF: &str = "workspace-briefs";
+
+    #[test]
+    fn brief_helpers_cover_goal_decomposition_and_clarification_paths() {
+        let decomposition = decompose_goal_text(RICH_GOAL);
+        assert_eq!(
+            decomposition.problem.as_deref(),
+            Some(
+                "Rust microservice (edition 2024) with Axum and tonic gRPC service for user management. Users: first name, last name, email, role"
+            )
+        );
+        assert_eq!(
+            decomposition.outcome.as_deref(),
+            Some("a complete Cargo workspace with unit tests")
+        );
+        assert_eq!(decomposition.validation.as_deref(), Some("cargo test"));
+        assert!(decomposition.constraints.contains(&"Persistence: sqlite".to_string()));
+        assert!(decomposition.constraints.contains(&"Auth: OAuth2 JWT".to_string()));
+        assert!(decomposition.constraints.contains(&"Rust edition 2024".to_string()));
+        assert!(decomposition.constraints.contains(&"Axum HTTP framework".to_string()));
+        assert!(decomposition.constraints.contains(&"gRPC RPC surface".to_string()));
+        assert!(decomposition.constraints.contains(&"Tonic gRPC framework".to_string()));
+        assert_eq!(
+            decomposition.entities,
+            vec!["Users: first name, last name, email, role".to_string()]
+        );
+        assert_eq!(
+            decomposition.operations,
+            vec!["CreateUser".to_string(), "GetUser".to_string(), "ListUsers".to_string(),]
+        );
+
+        let actix_decomposition = decompose_goal_text(ACTIX_GOAL);
+        assert_eq!(
+            actix_decomposition.validation.as_deref(),
+            Some("cargo test (detected from goal text)")
+        );
+        assert!(actix_decomposition.constraints.contains(&"Actix-web HTTP framework".to_string()));
+
+        assert!(render_goal_decomposition_section("").is_none());
+        let rendered_section = render_goal_decomposition_section(RICH_GOAL);
+        assert!(rendered_section.as_deref().is_some_and(|section| {
+            section.contains("## Structured Goal Decomposition")
+                && section.contains("### Constraints")
+                && section.contains("### Domain Entities")
+                && section.contains("### Operations In Scope")
+                && section.contains("### Validation Criteria")
+        }));
+
+        assert!(plain_goal_requires_planning_clarification(
+            BROAD_GOAL,
+            &PlanningContextSources::default(),
+        ));
+        assert!(!plain_goal_requires_planning_clarification(
+            BROAD_GOAL,
+            &PlanningContextSources {
+                authored_input_sources: vec!["brief.md".to_string()],
+                ..PlanningContextSources::default()
+            },
+        ));
+        assert!(!plain_goal_requires_planning_clarification(
+            "Build a user management microservice API. Validation: cargo test.",
+            &PlanningContextSources::default(),
+        ));
+        assert!(
+            plain_goal_planning_clarification_prompt()
+                .contains("What exact outcome should Boundline deliver?")
+        );
+
+        let unknowns = planning_unknown_markers(BROAD_GOAL, None, false);
+        assert!(unknowns.contains(&"validation_target requires operator confirmation".to_string()));
+        assert!(
+            unknowns.contains(&"persistence assumptions require operator confirmation".to_string())
+        );
+        assert!(unknowns.contains(&"authored source provenance is unavailable".to_string()));
+        assert!(unknowns.contains(&"desired outcome could not be extracted from goal text and requires operator confirmation".to_string()));
+        assert!(unknowns.contains(&"API operations or endpoints in scope could not be identified and require operator specification".to_string()));
+        assert!(unknowns.contains(
+            &"domain entities and their attributes could not be parsed from goal text".to_string()
+        ));
+
+        let no_unknowns = planning_unknown_markers(RICH_GOAL, Some("cargo test"), true);
+        assert_eq!(
+            no_unknowns,
+            vec!["no explicit unknown markers were detected from the captured brief".to_string()]
+        );
+    }
+
+    #[test]
+    fn brief_helpers_cover_planning_brief_and_assumption_rendering() -> Result<(), Box<dyn Error>> {
+        let rich_goal_plan = rich_goal_plan()?;
+        let rich_sources = PlanningContextSources {
+            authored_input_summary: Some("brief.md plus research.md".to_string()),
+            authored_input_sources: vec!["brief.md".to_string(), "research.md".to_string()],
+            ..PlanningContextSources::default()
+        };
+        let rich_brief = render_planning_stage_brief(
+            "plan:discovery",
+            CanonMode::Discovery,
+            &rich_goal_plan,
+            &rich_sources,
+        );
+        assert!(rich_brief.contains(super::PLANNING_STAGE_BRIEF_TITLE));
+        assert!(rich_brief.contains("- canon_mode: discovery"));
+        assert!(rich_brief.contains("- flow: delivery"));
+        assert!(rich_brief.contains("- targets: src/api.rs, src/auth.rs"));
+        assert!(rich_brief.contains("- authored_input_summary: brief.md plus research.md"));
+        assert!(rich_brief.contains("- authored_input_sources: brief.md, research.md"));
+        assert!(rich_brief.contains(super::PLANNING_STAGE_CANON_MEMORY_HEADING));
+        assert!(rich_brief.contains("governed discovery packet [credible]"));
+        assert!(rich_brief.contains("## Structured Goal Decomposition"));
+        assert!(rich_brief.contains(
+            "## Unknowns\n- no explicit unknown markers were detected from the captured brief"
+        ));
+        assert!(rich_brief.contains("language/runtime: Rust"));
+        assert!(rich_brief.contains("HTTP framework: Axum"));
+        assert!(rich_brief.contains("RPC surface: gRPC"));
+        assert!(rich_brief.contains("security: OAuth2 protected surface"));
+        assert_eq!(planning_problem_domain(&rich_goal_plan), "user management and authentication");
+        assert_eq!(
+            planning_assumptions(&rich_goal_plan),
+            vec![
+                "language/runtime: Rust".to_string(),
+                "HTTP framework: Axum".to_string(),
+                "RPC surface: gRPC".to_string(),
+                "security: OAuth2 protected surface".to_string(),
+            ]
+        );
+
+        let service_goal_plan = sample_goal_plan("Implement a bounded gRPC API service")?;
+        assert_eq!(planning_problem_domain(&service_goal_plan), "service/API delivery");
+
+        let default_goal_plan = sample_goal_plan(DEFAULT_GOAL)?;
+        let default_brief = render_planning_stage_brief(
+            "plan:discovery",
+            CanonMode::Discovery,
+            &default_goal_plan,
+            &PlanningContextSources::default(),
+        );
+        assert!(default_brief.contains("- flow: unspecified"));
+        assert!(default_brief.contains(&format!("- targets: {}", super::PLANNING_DEFAULT_TARGET)));
+        assert!(default_brief.contains("- primary_inputs: none"));
+        assert!(default_brief.contains("- authored_input_summary: none"));
+        assert!(default_brief.contains("- authored_input_sources: none"));
+        assert!(!default_brief.contains(super::PLANNING_STAGE_CANON_MEMORY_HEADING));
+        assert_eq!(
+            planning_assumptions(&default_goal_plan),
+            vec!["no concrete technical assumptions were captured".to_string()]
+        );
+        assert_eq!(
+            planning_problem_domain(&default_goal_plan),
+            "bounded delivery target from captured goal"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn brief_helpers_cover_execution_brief_and_stage_council_rendering()
+    -> Result<(), Box<dyn Error>> {
+        let goal_plan = rich_goal_plan()?;
+        let decisions = vec![
+            sample_decision("src/api.rs", DecisionType::Code, DecisionStatus::Verified),
+            sample_decision("src/auth.rs", DecisionType::Fix, DecisionStatus::Recovered),
+            sample_decision("tests/api.rs", DecisionType::Test, DecisionStatus::Failed),
+            sample_decision("README.md", DecisionType::Analyze, DecisionStatus::Pending),
+        ];
+        let changed_files_context = TaskContext::new(
+            SESSION_ID,
+            WORKSPACE_REF,
+            RunLimits::default(),
+            Map::from_iter([
+                (
+                    super::super::LATEST_CHANGED_FILES_KEY.to_string(),
+                    json!(["src/api.rs", "src/auth.rs"]),
+                ),
+                (
+                    super::LATEST_VALIDATION_STATUS_KEY.to_string(),
+                    Value::String("passed".to_string()),
+                ),
+            ]),
+        );
+        let execution_brief = render_execution_stage_brief(
+            CanonMode::Verification,
+            &goal_plan,
+            &decisions,
+            &changed_files_context,
+            &["fallback.rs".to_string()],
+        );
+        assert!(execution_brief.contains("# Execution Governance Brief"));
+        assert!(execution_brief.contains("- canon_mode: verification"));
+        assert!(execution_brief.contains("- src/api.rs"));
+        assert!(execution_brief.contains("- src/auth.rs"));
+        assert!(!execution_brief.contains("fallback.rs"));
+        assert!(execution_brief.contains("- status: passed"));
+        assert!(execution_brief.contains("## Canon Memory"));
+        assert!(
+            execution_brief
+                .contains("code: src/api.rs (status: verified) -> coverage should improve")
+        );
+        assert!(
+            execution_brief
+                .contains("fix: src/auth.rs (status: recovered) -> coverage should improve")
+        );
+        assert!(
+            execution_brief
+                .contains("test: tests/api.rs (status: failed) -> coverage should improve")
+        );
+        assert!(!execution_brief.contains("README.md"));
+
+        let fallback_context =
+            TaskContext::new(SESSION_ID, WORKSPACE_REF, RunLimits::default(), Map::new());
+        let fallback_brief = render_execution_stage_brief(
+            CanonMode::Verification,
+            &goal_plan,
+            &[],
+            &fallback_context,
+            &["fallback.rs".to_string()],
+        );
+        assert!(fallback_brief.contains("- fallback.rs"));
+        assert!(fallback_brief.contains("- no terminal decisions were recorded"));
+
+        let no_targets_brief = render_execution_stage_brief(
+            CanonMode::Verification,
+            &goal_plan,
+            &[],
+            &fallback_context,
+            &[],
+        );
+        assert!(no_targets_brief.contains("- no bounded file targets were recorded"));
+
+        let request = StageCouncilRequest {
+            stage_key: "plan:discovery".to_string(),
+            phase: "planning-discovery".to_string(),
+            producer_slot: "planning".to_string(),
+            target_refs: vec!["brief.md".to_string()],
+            current_artifact_ref: Some("brief.md".to_string()),
+            goal: "Clarify the bounded scope".to_string(),
+            constraints: vec!["preserve delivery defaults".to_string()],
+        };
+        let findings = vec![
+            StageCouncilFinding {
+                reviewer_id: "reviewer-a".to_string(),
+                effective_route: "copilot/gpt-5.4".to_string(),
+                disposition: StageCouncilFindingDisposition::Concern,
+                summary: "needs a narrower target".to_string(),
+                accepted: false,
+            },
+            StageCouncilFinding {
+                reviewer_id: "reviewer-b".to_string(),
+                effective_route: "gemini/gemini-2.5-pro".to_string(),
+                disposition: StageCouncilFindingDisposition::Block,
+                summary: "independence collapsed".to_string(),
+                accepted: false,
+            },
+        ];
+        let blocked_markdown =
+            render_stage_council_blocked_markdown(&request, &findings, &["reviewer-a".to_string()]);
+        assert!(
+            blocked_markdown
+                .contains("- reviewer-a [copilot/gpt-5.4] accepted: needs a narrower target")
+        );
+        assert!(
+            blocked_markdown
+                .contains("- reviewer-b [gemini/gemini-2.5-pro] rejected: independence collapsed")
+        );
+
+        let blocked_without_findings = render_stage_council_blocked_markdown(&request, &[], &[]);
+        assert!(
+            blocked_without_findings
+                .contains("- findings: no provider-backed reviewer findings were recorded")
+        );
+
+        let blocked_note = render_stage_council_blocked_note("review routes converged");
+        assert!(blocked_note.contains("- reason: review routes converged"));
+        Ok(())
+    }
+
+    fn rich_goal_plan() -> Result<GoalPlan, Box<dyn Error>> {
+        let mut goal_plan = sample_goal_plan(RICH_GOAL)?
+            .with_flow(InferredFlow {
+                flow_name: "delivery".to_string(),
+                confidence_reason: "goal text maps to the delivery lifecycle".to_string(),
+                confirmed: true,
+            })
+            .with_context_pack(ContextPack {
+                pack_id: "context-pack-1".to_string(),
+                summary: "bounded workspace evidence narrowed the delivery target".to_string(),
+                credibility: ContextPackCredibility::Credible,
+                inputs: Vec::new(),
+                selected_targets: vec!["src/api.rs".to_string(), "src/auth.rs".to_string()],
+                advanced_context: None,
+                staleness_reason: None,
+            })
+            .with_compacted_canon_memory(CompactedCanonMemory {
+                headline: "governed discovery packet".to_string(),
+                credibility: MemoryCredibilityState::Credible,
+                stage_key: Some("plan:discovery".to_string()),
+                run_ref: Some("run-123".to_string()),
+                packet_ref: Some("packet-123".to_string()),
+                reason_code: Some("governed-default".to_string()),
+                artifact_refs: vec!["brief.md".to_string(), "research.md".to_string()],
+                mode_summary: None,
+                possible_actions: Vec::new(),
+                recommended_next_action: None,
+                evidence_summary: None,
+                authority_provenance_lines: Vec::new(),
+                adaptive_provenance_lines: Vec::new(),
+                semantic_provenance_lines: Vec::new(),
+            });
+        goal_plan.planning_rationale =
+            Some("reuse canonical planning context before generating the next slice".to_string());
+        goal_plan.verification_strategy = Some("cargo test".to_string());
+        Ok(goal_plan)
+    }
+
+    fn sample_goal_plan(goal: &str) -> Result<GoalPlan, Box<dyn Error>> {
+        GoalPlan::new(
+            goal,
+            vec![PlannedTask {
+                task_id: "task-1".to_string(),
+                description: "Implement the bounded slice".to_string(),
+                target: "src/orchestrator/session_runtime_briefs.rs".to_string(),
+                expected_outcome: Some("coverage should improve".to_string()),
+                decision_type_hint: None,
+            }],
+        )
+        .map_err(Into::into)
+    }
+
+    fn sample_decision(target: &str, kind: DecisionType, status: DecisionStatus) -> Decision {
+        let mut decision = Decision::new(
+            kind,
+            target,
+            "exercise the execution brief renderer",
+            "coverage should improve",
+            Vec::new(),
+        );
+        decision.status = status;
+        decision
+    }
+}

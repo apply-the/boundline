@@ -18,7 +18,7 @@
 **Purpose**: Refresh shared planning evidence and create the repo-visible document surfaces this slice will fill.
 
 - [x] T001 Refresh the provider-doc audit and record the applied delta or no-change result in `assistant/catalog/model-catalog.toml` and `specs/057-adaptive-governance/research.md`
-- [x] T002 Create the operator-facing S4 document stubs and section outlines in `docs/control-graduation-model.md`, `docs/adaptive-governance.md`, `docs/runtime-confidence-and-calibration.md`, and `docs/degradation-and-escalation.md`
+- [x] T002 Create the operator-facing S4 document stubs and section outlines in `tech-docs/control-graduation-model.md`, `tech-docs/adaptive-governance.md`, `tech-docs/runtime-confidence-and-calibration.md`, and `tech-docs/degradation-and-escalation.md`
 - [x] T003 [P] Align the feature-local consumer contract, projection contract, and scenario wording in `specs/057-adaptive-governance/contracts/adaptive-governance-consumer-contract.md`, `specs/057-adaptive-governance/contracts/adaptive-governance-projection-contract.md`, and `specs/057-adaptive-governance/quickstart.md`
 
 ---
@@ -104,7 +104,7 @@ projection scaffolds required for contract-boundary work are ready.
 
 - [x] T026 [US3] Implement optional `adaptive_governance` companion consumption and stage-policy gating in `src/adapters/governance_runtime.rs` and `src/domain/governance.rs`
 - [x] T027 [US3] Keep Canon contract lines, approval/readiness/project-memory/lineage/promotion semantics, and local runtime authority separated in `src/orchestrator/governance.rs`, `src/domain/session.rs`, and `src/cli/inspect.rs`
-- [x] T028 [US3] Document the S4 contract boundary in `docs/control-graduation-model.md`, `docs/adaptive-governance.md`, and `specs/057-adaptive-governance/contracts/adaptive-governance-consumer-contract.md`
+- [x] T028 [US3] Document the S4 contract boundary in `tech-docs/control-graduation-model.md`, `tech-docs/adaptive-governance.md`, and `specs/057-adaptive-governance/contracts/adaptive-governance-consumer-contract.md`
 
 **Checkpoint**: All three user stories are independently functional and the cross-repo contract boundary remains explicit.
 
@@ -114,10 +114,10 @@ projection scaffolds required for contract-boundary work are ready.
 
 **Purpose**: Close documentation, validation, and coverage across all user stories.
 
-- [ ] T029 [P] Update operator documentation and release notes in `README.md`, `CHANGELOG.md`, `docs/runtime-confidence-and-calibration.md`, and `docs/degradation-and-escalation.md`
+- [ ] T029 [P] Update operator documentation and release notes in `README.md`, `CHANGELOG.md`, `tech-docs/runtime-confidence-and-calibration.md`, and `tech-docs/degradation-and-escalation.md`
 - [ ] T030 [P] Refresh contributor and assistant guidance for the new governance surfaces in `AGENTS.md` and `assistant/README.md`
 - [x] T031 Run focused and full validation for `tests/unit/governance_policy.rs`, `tests/unit/governance_runtime.rs`, `tests/integration/session_governance_flow.rs`, `cargo test --no-run --all-targets`, and `cargo nextest run --workspace --all-features`
-- [ ] T032 Validate the operator walkthrough and recorded runtime scenarios in `specs/057-adaptive-governance/quickstart.md` and `docs/adaptive-governance.md`
+- [ ] T032 Validate the operator walkthrough and recorded runtime scenarios in `specs/057-adaptive-governance/quickstart.md` and `tech-docs/adaptive-governance.md`
 - [ ] T033 Increase the workspace version and release-facing references in `Cargo.toml`, `CHANGELOG.md`, `assistant/plugin-metadata.json`, and distribution metadata under `distribution/`
 - [ ] T034 Apply an appropriate design pattern to break up oversized files or functions in `src/orchestrator/governance.rs`, `src/domain/governance.rs`, `src/cli/output.rs`, and any newly expanded governance modules before final sign-off
 - [ ] T035 Ensure modified-file and feature-level coverage remains at 95% or higher by refreshing `lcov.info`, any package-scoped coverage artifacts, and the recorded evidence in `specs/057-adaptive-governance/quickstart.md`

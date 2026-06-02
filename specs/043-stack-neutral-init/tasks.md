@@ -100,7 +100,7 @@
 
 **Purpose**: Finalize docs, release metadata, and focused validation for the shipped slice.
 
-- [x] T024 [P] Update release-facing docs in README.md, docs/getting-started.md, docs/configuration.md, assistant/README.md, ROADMAP.md, and CHANGELOG.md
+- [x] T024 [P] Update release-facing docs in README.md, tech-docs/getting-started.md, tech-docs/configuration.md, assistant/README.md, ROADMAP.md, and CHANGELOG.md
 - [x] T025 [P] Bump version references in Cargo.toml, docs, and release metadata to 0.43.0
 - [x] T026 [P] Refresh coverage-facing artifacts and command expectations in lcov.info and any touched contract fixtures if validation changes them
 - [x] T027 Run focused validation from specs/043-stack-neutral-init/quickstart.md and the new targeted cargo test slices

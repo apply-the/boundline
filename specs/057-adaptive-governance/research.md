@@ -73,7 +73,7 @@
 - `tests/integration/session_governance_flow.rs`
 - `tests/integration/governance_autopilot_flow.rs`
 - `tests/integration/workflow_follow_through.rs`
-- `docs/control-graduation-model.md`
-- `docs/adaptive-governance.md`
-- `docs/runtime-confidence-and-calibration.md`
-- `docs/degradation-and-escalation.md`
+- `tech-docs/control-graduation-model.md`
+- `tech-docs/adaptive-governance.md`
+- `tech-docs/runtime-confidence-and-calibration.md`
+- `tech-docs/degradation-and-escalation.md`

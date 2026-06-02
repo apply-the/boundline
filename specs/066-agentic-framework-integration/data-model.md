@@ -216,6 +216,8 @@ path or the adapter owns the stage.
 - `run_id`: owning lifecycle run identifier
 - `stage_key`: host-known lifecycle stage key
 - `execution_source`: `built_in` or `adapter`
+- `workflow_id`: host-owned native workflow surface or adapter-reported workflow
+  ID for the claimed stage
 - `decision_reason`: `no_adapter_selected`, `undeclared_stage`,
   `declared_override`, `preflight_blocked`, `invalid_manifest`, or
   `compatibility_blocked`
@@ -253,12 +255,26 @@ session state and traces.
 - `stage_key`: host-known lifecycle stage key
 - `execution_source`: `built_in` or `adapter`
 - `adapter_id`: adapter identity when applicable
+- `workflow_id`: `boundline-native-goal`, `speckit-planning`,
+  `speckit-implementation`, or another host-known workflow surface identifier
 - `status`: `succeeded`, `failed`, `blocked`, or `skipped`
 - `intervention_required`: whether the operator must act before continuing
 - `failure_class`: `preflight`, `manifest`, `missing_config`, `adapter_runtime`,
   `adapter_protocol`, `adapter_transport`, `built_in`, or
   `hook_warning_only`
+- `executed_commands`: bounded ordered list of the commands or workflow steps
+  the host or adapter reports for the stage
 - `produced_artifacts`: bounded list of artifact refs returned by the stage
+- `planning_findings_summary`: optional blocking or non-blocking counts plus a
+  report ref for claimed `plan` stage outcomes
+- `remediation_cycles_used`: optional bounded count of remediation or analyze
+  re-check cycles used within a claimed `plan` attempt
+- `implementation_status`: optional implementation validation summary for a
+  claimed `run` stage outcome
+- `validation_refs`: optional validation or status artifact refs for a claimed
+  `run` stage outcome
+- `next_action`: optional operator-facing recovery or continuation guidance for
+  blocked or failed stage outcomes
 - `diagnostic_trace_refs`: optional trace refs for structured adapter stderr
   captured during stage execution, when emitted
 - `started_at`: start timestamp
@@ -277,6 +293,12 @@ session state and traces.
 - a `blocked` status must surface an actionable next step or missing-field list
 - built-in stages must remain recordable even when an adapter is configured but
   undeclared for that stage
+- a claimed Speckit `plan` stage must report `workflow_id = speckit-planning`,
+  at least one planning-readiness artifact ref, and a planning findings summary
+  before it can be rendered as `succeeded` or `blocked`
+- a claimed Speckit `run` stage must report `workflow_id = speckit-implementation`
+  and at least one validation or status ref before it can be rendered as
+  `succeeded`
 
 ## 9. HookEventDispatchRecord
 

@@ -1,6 +1,6 @@
 # Boundline
 
-![Boundline banner](docs/images/boundline-banner.jpg)
+![Boundline banner](tech-docs/images/boundline-banner.jpg)
 [![Version](https://img.shields.io/github/v/release/apply-the/boundline?color=blue&label=version)](https://github.com/apply-the/boundline/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![CI](https://github.com/apply-the/boundline/actions/workflows/ci.yml/badge.svg)](https://github.com/apply-the/boundline/actions/workflows/ci.yml)
@@ -78,6 +78,24 @@ declared supported transports, stage overrides, hook subscriptions, and the
 current config-completeness state before `plan` or `run` tries to hand off a
 stage.
 
+For the shipped Speckit profile, the corrected ownership map is explicit:
+`goal` stays Boundline-native, `plan` maps to workflow ID
+`speckit-planning`, `run` maps to workflow ID `speckit-implementation`, and
+`status` plus `inspect` remain Boundline-owned visibility surfaces over the
+adapter's stage outcomes. The split workflow assets live under
+`.specify/workflows/speckit/planning.yml` and
+`.specify/workflows/speckit/implementation.yml`, while the adapter response
+still reports the semantic workflow IDs instead of the file paths used to
+launch the real Speckit CLI.
+
+That stage map also defines the command boundary. A claimed `plan` stage must
+run the Speckit planning lifecycle and finish with a mandatory
+`speckit.analyze` readiness gate. One claimed plan attempt may use one initial
+analyze pass plus at most two remediation or analyze re-check cycles before it
+must return `blocked` with the remaining findings. A claimed `run` stage is
+implementation-only by design: it invokes `speckit.implement` plus validation
+or status capture and must not rerun planning commands.
+
 Adapter execution in V1 stays intentionally bounded: one trusted local
 subprocess, one-shot JSON over stdin/stdout, the same standard success or error
 envelope on stdout for every command, optional structured stderr captured only
@@ -111,10 +129,10 @@ when the operator deliberately asks for `--compatibility`.
 
 ## 📚 Deep Dive Documentation
 
-- [Getting Started](docs/getting-started.md)
-- [Configuration and Precedence](docs/configuration.md)
-- [Architecture and Canon Boundaries](docs/architecture.md)
-- [Project Scale Delivery Model](docs/delivery-model.md)
+- [Getting Started](tech-docs/getting-started.md)
+- [Configuration and Precedence](tech-docs/configuration.md)
+- [Architecture and Canon Boundaries](tech-docs/architecture.md)
+- [Project Scale Delivery Model](tech-docs/delivery-model.md)
 - [Assistant Command Packs](assistant/README.md)
 
 ## 🤝 Community And Support

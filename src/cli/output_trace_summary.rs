@@ -28,11 +28,7 @@ pub fn render_trace_summary_brief(
 ) -> String {
     let mut lines = Vec::new();
 
-    if let Some(inspection_target) = inspection_target {
-        lines.push(format!("inspection_target: {inspection_target}"));
-    }
-
-    lines.push(format!("goal: {}", preview_trace_brief_text(&summary.goal)));
+    push_trace_overview_brief_lines(&mut lines, summary, inspection_target);
 
     lines.extend(trace_input_brief_lines(summary));
 
@@ -68,26 +64,7 @@ pub fn render_trace_summary_brief(
         lines.push(clarification_line);
     }
 
-    if let Some(clarification_headline) = &summary.clarification_headline {
-        lines.push(format!(
-            "clarification_headline: {}",
-            preview_trace_brief_text(clarification_headline)
-        ));
-    }
-
-    if let Some(clarification_prompt) = &summary.clarification_prompt {
-        lines.push(format!(
-            "clarification_prompt: {}",
-            preview_trace_brief_text(clarification_prompt)
-        ));
-    }
-
-    if !summary.clarification_missing_fields.is_empty() {
-        lines.push(format!(
-            "clarification_missing_fields: {}",
-            preview_trace_brief_items(&summary.clarification_missing_fields)
-        ));
-    }
+    push_trace_clarification_detail_lines(&mut lines, summary);
 
     if let Some(review_line) = trace_review_brief_line(summary) {
         lines.push(review_line);
@@ -97,31 +74,7 @@ pub fn render_trace_summary_brief(
         lines.push(audit_line);
     }
 
-    if let Some(governance_line) = trace_governance_brief_line(summary) {
-        lines.push(governance_line);
-    }
-
-    lines.extend(summary.governance_timeline.iter().cloned());
-
-    if let Some(governance_runtime_state) = &summary.governance_runtime_state {
-        lines.push(format!("governance_runtime_state: {governance_runtime_state}"));
-    }
-
-    if let Some(governance_rollout_profile) = &summary.governance_rollout_profile {
-        lines.push(format!("governance_rollout_profile: {governance_rollout_profile}"));
-    }
-
-    if let Some(governance_reason) = &summary.governance_reason {
-        lines.push(format!("governance_reason: {governance_reason}"));
-    }
-
-    if let Some(governance_approval_provenance) = &summary.governance_approval_provenance {
-        lines.push(format!("governance_approval_provenance: {governance_approval_provenance}"));
-    }
-
-    if let Some(governance_next_action) = &summary.governance_next_action {
-        lines.push(format!("governance_next_action: {governance_next_action}"));
-    }
+    push_trace_governance_detail_lines(&mut lines, summary);
 
     if let Some(reasoning_line) = trace_reasoning_brief_line(summary) {
         lines.push(reasoning_line);
@@ -130,14 +83,75 @@ pub fn render_trace_summary_brief(
     let explanation_projection = explanation_projection_for_trace_summary(summary, next_command);
     lines.extend(explanation_projection_lines(&explanation_projection));
 
+    push_trace_footer_brief_lines(&mut lines, summary, next_command);
+    lines.join("\n")
+}
+
+fn push_trace_overview_brief_lines(
+    lines: &mut Vec<String>,
+    summary: &TraceSummaryView,
+    inspection_target: Option<&str>,
+) {
+    if let Some(inspection_target) = inspection_target {
+        lines.push(format!("inspection_target: {inspection_target}"));
+    }
+    lines.push(format!("goal: {}", preview_trace_brief_text(&summary.goal)));
+}
+
+fn push_trace_clarification_detail_lines(lines: &mut Vec<String>, summary: &TraceSummaryView) {
+    if let Some(clarification_headline) = &summary.clarification_headline {
+        lines.push(format!(
+            "clarification_headline: {}",
+            preview_trace_brief_text(clarification_headline)
+        ));
+    }
+    if let Some(clarification_prompt) = &summary.clarification_prompt {
+        lines.push(format!(
+            "clarification_prompt: {}",
+            preview_trace_brief_text(clarification_prompt)
+        ));
+    }
+    if !summary.clarification_missing_fields.is_empty() {
+        lines.push(format!(
+            "clarification_missing_fields: {}",
+            preview_trace_brief_items(&summary.clarification_missing_fields)
+        ));
+    }
+}
+
+fn push_trace_governance_detail_lines(lines: &mut Vec<String>, summary: &TraceSummaryView) {
+    if let Some(governance_line) = trace_governance_brief_line(summary) {
+        lines.push(governance_line);
+    }
+    lines.extend(summary.governance_timeline.iter().cloned());
+    if let Some(governance_runtime_state) = &summary.governance_runtime_state {
+        lines.push(format!("governance_runtime_state: {governance_runtime_state}"));
+    }
+    if let Some(governance_rollout_profile) = &summary.governance_rollout_profile {
+        lines.push(format!("governance_rollout_profile: {governance_rollout_profile}"));
+    }
+    if let Some(governance_reason) = &summary.governance_reason {
+        lines.push(format!("governance_reason: {governance_reason}"));
+    }
+    if let Some(governance_approval_provenance) = &summary.governance_approval_provenance {
+        lines.push(format!("governance_approval_provenance: {governance_approval_provenance}"));
+    }
+    if let Some(governance_next_action) = &summary.governance_next_action {
+        lines.push(format!("governance_next_action: {governance_next_action}"));
+    }
+}
+
+fn push_trace_footer_brief_lines(
+    lines: &mut Vec<String>,
+    summary: &TraceSummaryView,
+    next_command: &str,
+) {
     if !summary.terminal_reason.message.trim().is_empty() {
         lines.push(format!("terminal_reason: {}", summary.terminal_reason.message));
     }
-
     lines.push(format!("terminal_status: {}", task_status_text(summary.terminal_status)));
     lines.push(format!("latest_status: {}", task_status_text(summary.terminal_status)));
     lines.push(format!("next_command: {next_command}"));
-    lines.join("\n")
 }
 
 fn trace_input_brief_lines(summary: &TraceSummaryView) -> Vec<String> {

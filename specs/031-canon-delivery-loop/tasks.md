@@ -129,7 +129,7 @@ coverage, lint, and formatting align with shipped behavior.
 
 ### Implementation for User Story 4
 
-- [x] T017 [US4] Update the `0.31.0` governed-delivery release story in `README.md`, `docs/getting-started.md`, `docs/configuration.md`, `CONTRIBUTING.md`, `ROADMAP.md`, and `CHANGELOG.md`
+- [x] T017 [US4] Update the `0.31.0` governed-delivery release story in `README.md`, `tech-docs/getting-started.md`, `tech-docs/configuration.md`, `CONTRIBUTING.md`, `ROADMAP.md`, and `CHANGELOG.md`
 - [x] T018 [US4] Update assistant guidance and regenerate agent context for governed delivery in `assistant/README.md`, `assistant/claude/commands/boundline-status.md`, `assistant/claude/commands/boundline-next.md`, `assistant/claude/commands/boundline-inspect.md`, `assistant/codex/commands/boundline-status.md`, `assistant/codex/commands/boundline-next.md`, `assistant/codex/commands/boundline-inspect.md`, `assistant/copilot/prompts/boundline-status.prompt.md`, `assistant/copilot/prompts/boundline-next.prompt.md`, `assistant/copilot/prompts/boundline-inspect.prompt.md`, and `AGENTS.md`
 
 **Checkpoint**: Maintainers and assistants now describe one coherent `0.31.0`

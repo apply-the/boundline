@@ -104,7 +104,7 @@
 
 **Purpose**: Finalize docs, versioning, coverage, and full validation for the adaptive slice.
 
-- [X] T028 [P] Add adaptive execution documentation in docs/adaptive-execution.md covering manifest shape, workspace-slice selection, deterministic candidate generation, no-repeat behavior, and explicit terminal outcomes
+- [X] T028 [P] Add adaptive execution documentation in tech-docs/adaptive-execution.md covering manifest shape, workspace-slice selection, deterministic candidate generation, no-repeat behavior, and explicit terminal outcomes
 - [ ] T029 [P] Update feature documentation in README.md, ROADMAP.md, AGENTS.md, assistant/README.md, and specs/008-adaptive-execution-engine/quickstart.md
 - [X] T030 [P] Bump crate and lockfile version to 0.8.0 in Cargo.toml and Cargo.lock
 - [ ] T031 [P] Raise source coverage for new adaptive paths in tests/unit/adaptive_execution.rs, adaptive contract tests, and adaptive integration tests

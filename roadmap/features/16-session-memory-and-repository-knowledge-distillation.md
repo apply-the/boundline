@@ -14,7 +14,7 @@ B-level, after traces and project memory are stable
 - First slice: propose one trace-linked operational memory entry, let the user
   accept/reject/edit it, and show provenance in `inspect`.
 - Depends on: stable trace export from seed 08 and existing project-memory roots
-  documented under `docs/project-memory-and-evidence-structure.md`.
+  documented under `tech-docs/project-memory-and-evidence-structure.md`.
 - De-duplication: this seed owns workspace-local memory proposals; durable
   project memory, Canon promotion, and governed knowledge remain outside the
   first Boundline slice.

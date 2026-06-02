@@ -129,7 +129,7 @@
 **Purpose**: Close the feature as a release-aligned macrofeature with validation evidence.
 
 - [x] T028 Bump crate version to `0.38.0` in `Cargo.toml` and `Cargo.lock`
-- [x] T029 [P] Update impacted docs and release narrative in `README.md`, `docs/`, `CONTRIBUTING.md`, `CHANGELOG.md`, and `AGENTS.md`
+- [x] T029 [P] Update impacted docs and release narrative in `README.md`, `tech-docs/`, `CONTRIBUTING.md`, `CHANGELOG.md`, and `AGENTS.md`
 - [x] T030 [P] Update assistant guidance impacted by domain templates in `assistant/README.md`, `assistant/claude/commands/`, `assistant/codex/commands/`, and `assistant/copilot/prompts/`
 - [x] T031 Update `ROADMAP.md` to mark Spec 038 as delivered and remove it from the upcoming macrofeature line
 - [x] T032 [P] Run formatting with `cargo fmt --all`

@@ -569,3 +569,449 @@ fn missing_planning_canon_runtime_reason() -> String {
 fn unavailable_planning_canon_command_reason(command: &str) -> String {
     format!("planning governance requires Canon, but command '{}' is unavailable", command)
 }
+
+#[cfg(test)]
+mod tests {
+    use std::error::Error;
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
+    use uuid::Uuid;
+
+    use crate::adapters::governance_runtime::{
+        GovernanceBoundedContext, GovernanceRequestKind, GovernanceRuntimeRequest,
+        GovernanceRuntimeResponse,
+    };
+    use crate::domain::brief::{GovernanceIntent, normalize_inputs_with_governance};
+    use crate::domain::configuration::{CanonPreferences, ConfigFile};
+    use crate::domain::goal_plan::{GoalPlan, PlannedTask};
+    use crate::domain::governance::{
+        ApprovalState, CanonMode, CanonModeSelectionPreference, GovernanceLifecycleState,
+        GovernanceRuntimeKind, GovernedDocumentRef, GovernedSessionLifecycle, GovernedStagePacket,
+        GovernedStageRecord, PacketReadiness, SystemContextBinding,
+    };
+    use crate::domain::session::ActiveSessionRecord;
+    use crate::orchestrator::goal_planner::PlanningContextSources;
+
+    use super::{
+        SessionRuntime, missing_planning_canon_runtime_reason,
+        unavailable_planning_canon_command_reason,
+    };
+    use crate::orchestrator::session_runtime::SYSTEM_CONTEXT_EXISTING_TEXT;
+
+    const BRIEF_FILE_NAME: &str = "brief.md";
+    const DEFAULT_OWNER: &str = "  Platform  ";
+    const DEFAULT_RISK: &str = "  Medium  ";
+    const DEFAULT_ZONE: &str = "  Engineering  ";
+    const GOVERNANCE_ATTEMPT_ID: &str = "attempt-1";
+    const NEXT_GOVERNANCE_ATTEMPT_ID: &str = "attempt-2";
+    const GOVERNED_PACKET_REF: &str = ".canon/requirements";
+    const GOVERNED_STAGE_KEY: &str = "plan:requirements";
+    const GOVERNED_TERMINAL_REASON: &str = "awaiting approval";
+    const GOAL_TEXT: &str = "Deliver a governed feature";
+    const MISSING_SECTION_CONSTRAINTS: &str = "constraints";
+    const MISSING_SECTION_SCOPE: &str = "scope";
+    const REJECTED_PACKET_REASON_CODE: &str = "packet_rejected";
+    const RUN_REF: &str = "canon-run-1";
+    const SECOND_RUN_REF: &str = "canon-run-2";
+    const UNAVAILABLE_CANON_COMMAND: &str = "canon-command-that-does-not-exist";
+    const UPDATED_AT: u64 = 42;
+
+    #[test]
+    fn planning_canon_helpers_cover_stage_gate_reason_and_request_kind_resolution()
+    -> Result<(), Box<dyn Error>> {
+        let workspace = temp_workspace("boundline-planning-canon-helpers")?;
+        let runtime = SessionRuntime::for_workspace(workspace.as_path());
+        let mut session = sample_session(workspace.as_path());
+
+        assert!(!runtime.planning_stage_already_ready(&session, GOVERNED_STAGE_KEY));
+        assert!(!runtime.planning_stage_has_unresolved_gate(&session, GOVERNED_STAGE_KEY));
+        assert_eq!(runtime.latest_planning_stage_reason(&session), None);
+        assert!(runtime.planning_accumulated_context(&session).is_empty());
+
+        session.governance_lifecycle = Some(sample_lifecycle());
+        assert!(runtime.planning_stage_already_ready(&session, GOVERNED_STAGE_KEY));
+        assert!(!runtime.planning_stage_has_unresolved_gate(&session, GOVERNED_STAGE_KEY));
+        assert_eq!(
+            runtime.latest_planning_stage_reason(&session),
+            Some(GOVERNED_TERMINAL_REASON.to_string())
+        );
+        assert_eq!(runtime.planning_accumulated_context(&session).len(), 1);
+
+        let blocked_record = GovernedStageRecord {
+            lifecycle_state: GovernanceLifecycleState::Blocked,
+            blocked_reason: Some("missing packet".to_string()),
+            ..sample_stage_record()
+        };
+        runtime.upsert_planning_stage_record(
+            &mut session,
+            blocked_record,
+            2,
+            Some("blocked now".to_string()),
+        );
+        assert!(runtime.planning_stage_has_unresolved_gate(&session, GOVERNED_STAGE_KEY));
+        assert_eq!(
+            runtime.latest_planning_stage_reason(&session),
+            Some("missing packet".to_string())
+        );
+
+        runtime.set_planning_stage_progress(&mut session, 3, Some("progressed".to_string()));
+        let lifecycle =
+            session.governance_lifecycle.as_ref().ok_or("missing governance lifecycle")?;
+        assert_eq!(lifecycle.current_stage_index, 3);
+        assert_eq!(lifecycle.terminal_reason.as_deref(), Some("progressed"));
+
+        let existing_record = lifecycle.stage_records.first().ok_or("missing stage record")?;
+        let planning_sources = PlanningContextSources::default();
+        assert_eq!(
+            runtime.resolve_planning_request_kind(&session, "plan:architecture", &planning_sources),
+            (super::GovernanceRequestKind::Start, None, None)
+        );
+        assert_eq!(
+            runtime.resolve_planning_request_kind(&session, GOVERNED_STAGE_KEY, &planning_sources),
+            (
+                super::GovernanceRequestKind::Refresh,
+                Some(RUN_REF.to_string()),
+                existing_record.packet_ref.clone(),
+            )
+        );
+
+        assert!(missing_planning_canon_runtime_reason().contains("governance.canon"));
+        assert!(unavailable_planning_canon_command_reason("canon").contains("command 'canon'"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn planning_canon_helpers_cover_runtime_and_governance_default_resolution()
+    -> Result<(), Box<dyn Error>> {
+        let missing_runtime_workspace = temp_workspace("boundline-planning-canon-no-runtime")?;
+        let missing_runtime = SessionRuntime::for_workspace(missing_runtime_workspace.as_path());
+        assert!(missing_runtime.resolve_planning_canon_runtime().is_none());
+
+        let workspace = temp_workspace("boundline-planning-canon-defaults")?;
+        seed_brief(workspace.as_path())?;
+        let config_store = super::FileConfigStore::for_workspace(workspace.as_path());
+        config_store.save_local(&ConfigFile {
+            canon: Some(CanonPreferences {
+                mode_selection: CanonModeSelectionPreference::AutoConfirm,
+                default_risk: Some(DEFAULT_RISK.to_string()),
+                default_zone: Some(DEFAULT_ZONE.to_string()),
+                default_owner: Some(DEFAULT_OWNER.to_string()),
+                default_system_context: Some(SYSTEM_CONTEXT_EXISTING_TEXT.to_string()),
+            }),
+            ..ConfigFile::default()
+        })?;
+
+        let runtime = SessionRuntime::for_workspace(workspace.as_path());
+        let mut session = sample_session(workspace.as_path());
+        session.authored_brief = Some(normalize_inputs_with_governance(
+            workspace.as_path(),
+            Some(GOAL_TEXT),
+            &[PathBuf::from(BRIEF_FILE_NAME)],
+            Some(GovernanceIntent {
+                requested: true,
+                runtime_preference: Some(GovernanceRuntimeKind::Canon),
+                risk: None,
+                zone: None,
+                owner: None,
+                explicit_mode: None,
+                explicit_no_canon: false,
+            }),
+        )?);
+
+        let defaults =
+            runtime.resolve_planning_governance_defaults(&session, CanonMode::Requirements)?;
+        assert_eq!(defaults.system_context, SystemContextBinding::Existing);
+        assert_eq!(defaults.risk, "bounded-impact");
+        assert_eq!(defaults.zone, "yellow");
+        assert_eq!(defaults.owner, "delivery-engineer");
+
+        let author_override_session = ActiveSessionRecord {
+            authored_brief: Some(normalize_inputs_with_governance(
+                workspace.as_path(),
+                Some(GOAL_TEXT),
+                &[PathBuf::from(BRIEF_FILE_NAME)],
+                Some(GovernanceIntent {
+                    requested: true,
+                    runtime_preference: Some(GovernanceRuntimeKind::Canon),
+                    risk: Some("High".to_string()),
+                    zone: Some("Red".to_string()),
+                    owner: Some("Council".to_string()),
+                    explicit_mode: None,
+                    explicit_no_canon: false,
+                }),
+            )?),
+            ..sample_session(workspace.as_path())
+        };
+        let overridden = runtime.resolve_planning_governance_defaults(
+            &author_override_session,
+            CanonMode::Requirements,
+        )?;
+        assert_eq!(overridden.risk, "systemic-impact");
+        assert_eq!(overridden.zone, "red");
+        assert_eq!(overridden.owner, "Council");
+
+        let missing_defaults_workspace =
+            temp_workspace("boundline-planning-canon-missing-defaults")?;
+        seed_brief(missing_defaults_workspace.as_path())?;
+        let missing_defaults_runtime =
+            SessionRuntime::for_workspace(missing_defaults_workspace.as_path());
+        let missing_defaults_session = sample_session(missing_defaults_workspace.as_path());
+        let error = missing_defaults_runtime
+            .resolve_planning_governance_defaults(
+                &missing_defaults_session,
+                CanonMode::Requirements,
+            )
+            .unwrap_err();
+        assert!(error.to_string().contains("requires field 'risk'"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn planning_canon_helpers_cover_preflight_block_and_blocked_response_projection()
+    -> Result<(), Box<dyn Error>> {
+        let workspace = temp_workspace("boundline-planning-canon-blocks")?;
+        let runtime = SessionRuntime::for_workspace(workspace.as_path());
+
+        let mut preflight_session = sample_session(workspace.as_path());
+        preflight_session.governance_lifecycle = Some(sample_lifecycle());
+        let mut preflight_goal_plan = sample_goal_plan()?;
+        let request = sample_governance_request(workspace.as_path());
+        let expected_reason = unavailable_planning_canon_command_reason(UNAVAILABLE_CANON_COMMAND);
+
+        let blocked = runtime.record_planning_preflight_block(
+            &mut preflight_session,
+            &mut preflight_goal_plan,
+            &request,
+            0,
+            &crate::domain::governance::CanonRuntimeConfig {
+                command: UNAVAILABLE_CANON_COMMAND.to_string(),
+                default_owner: None,
+                default_risk: None,
+                default_zone: None,
+                default_system_context: None,
+            },
+            None,
+        );
+        assert!(blocked);
+        assert!(runtime.planning_stage_has_unresolved_gate(&preflight_session, GOVERNED_STAGE_KEY));
+        let preflight_record = preflight_session
+            .governance_lifecycle
+            .as_ref()
+            .and_then(|lifecycle| lifecycle.stage_records.first())
+            .ok_or("missing preflight record")?;
+        assert_eq!(preflight_record.lifecycle_state, GovernanceLifecycleState::Blocked);
+        assert_eq!(
+            preflight_record.previous_governance_attempt_id.as_deref(),
+            Some(GOVERNANCE_ATTEMPT_ID)
+        );
+        assert_eq!(preflight_record.blocked_reason.as_deref(), Some(expected_reason.as_str()));
+        let preflight_memory = preflight_goal_plan
+            .compacted_canon_memory
+            .as_ref()
+            .ok_or("missing preflight canon memory")?;
+        assert_eq!(preflight_memory.stage_key.as_deref(), Some(GOVERNED_STAGE_KEY));
+        assert_eq!(preflight_memory.reason_code.as_deref(), Some("blocked_context"));
+
+        let mut response_session = sample_session(workspace.as_path());
+        response_session.governance_lifecycle = Some(sample_lifecycle());
+        let mut response_goal_plan = sample_goal_plan()?;
+        let should_halt = runtime.record_planning_governance_response(
+            &mut response_session,
+            &mut response_goal_plan,
+            &request,
+            GovernanceRuntimeResponse {
+                status: GovernanceLifecycleState::GovernedReady,
+                approval_state: ApprovalState::Requested,
+                run_ref: Some(SECOND_RUN_REF.to_string()),
+                packet: Some(GovernedStagePacket {
+                    packet_ref: "packet-2".to_string(),
+                    runtime: GovernanceRuntimeKind::Canon,
+                    canon_mode: Some(CanonMode::Requirements),
+                    expected_document_refs: vec!["requirements.md".to_string()],
+                    document_refs: vec!["requirements.md".to_string()],
+                    readiness: PacketReadiness::Rejected,
+                    missing_sections: vec![
+                        MISSING_SECTION_SCOPE.to_string(),
+                        MISSING_SECTION_CONSTRAINTS.to_string(),
+                    ],
+                    headline: "Requirements packet rejected".to_string(),
+                    reason_code: Some(REJECTED_PACKET_REASON_CODE.to_string()),
+                    authority_governance: None,
+                    adaptive_governance: None,
+                    semantic_descriptor: None,
+                }),
+                reason_code: Some(REJECTED_PACKET_REASON_CODE.to_string()),
+                message: "Needs more planning context".to_string(),
+            },
+            1,
+            None,
+        )?;
+        assert!(should_halt);
+        let response_record = response_session
+            .governance_lifecycle
+            .as_ref()
+            .and_then(|lifecycle| lifecycle.stage_records.first())
+            .ok_or("missing response record")?;
+        assert_eq!(response_record.lifecycle_state, GovernanceLifecycleState::Blocked);
+        assert_eq!(response_record.canon_run_ref.as_deref(), Some(SECOND_RUN_REF));
+        assert_eq!(response_record.packet_ref.as_deref(), Some("packet-2"));
+        let blocked_reason =
+            response_record.blocked_reason.as_deref().ok_or("missing blocked reason")?;
+        assert!(blocked_reason.contains(MISSING_SECTION_SCOPE));
+        assert!(blocked_reason.contains(MISSING_SECTION_CONSTRAINTS));
+        let response_memory = response_goal_plan
+            .compacted_canon_memory
+            .as_ref()
+            .ok_or("missing response canon memory")?;
+        assert_eq!(response_memory.stage_key.as_deref(), Some(GOVERNED_STAGE_KEY));
+        assert_eq!(response_memory.packet_ref.as_deref(), Some("packet-2"));
+        assert_eq!(response_memory.reason_code.as_deref(), Some(REJECTED_PACKET_REASON_CODE));
+
+        Ok(())
+    }
+
+    fn sample_session(workspace: &Path) -> ActiveSessionRecord {
+        ActiveSessionRecord {
+            session_id: format!("session-{}", Uuid::new_v4()),
+            workspace_ref: workspace.to_string_lossy().into_owned(),
+            goal: Some(GOAL_TEXT.to_string()),
+            authored_brief: None,
+            negotiation_packet: None,
+            active_flow: None,
+            active_task: None,
+            goal_plan: None,
+            workflow_progress: None,
+            decisions: Vec::new(),
+            active_flow_policy: None,
+            latest_status: crate::domain::session::SessionStatus::Initialized,
+            latest_terminal_reason: None,
+            latest_trace_ref: None,
+            created_at: UPDATED_AT,
+            updated_at: UPDATED_AT,
+            governance_lifecycle: None,
+            project_scale: None,
+            latest_voting: None,
+            delight_feedback: None,
+        }
+    }
+
+    fn sample_lifecycle() -> GovernedSessionLifecycle {
+        GovernedSessionLifecycle {
+            governance_runtime: GovernanceRuntimeKind::Canon,
+            explicit_opt_out: false,
+            mode_selection_preference: CanonModeSelectionPreference::AutoConfirm,
+            selected_mode: Some(CanonMode::Requirements),
+            selected_mode_sequence: vec![CanonMode::Requirements],
+            latest_reasoning_profile: None,
+            current_stage_index: 0,
+            stage_records: vec![sample_stage_record()],
+            accumulated_context: vec![GovernedDocumentRef {
+                stage_key: GOVERNED_STAGE_KEY.to_string(),
+                canon_mode: CanonMode::Requirements,
+                packet_ref: GOVERNED_PACKET_REF.to_string(),
+                document_path: Some("brief.md".to_string()),
+                readiness: PacketReadiness::Reusable,
+            }],
+            terminal_reason: Some(GOVERNED_TERMINAL_REASON.to_string()),
+            planning_input_fingerprint: None,
+        }
+    }
+
+    fn sample_stage_record() -> GovernedStageRecord {
+        GovernedStageRecord {
+            stage_key: GOVERNED_STAGE_KEY.to_string(),
+            runtime: GovernanceRuntimeKind::Canon,
+            lifecycle_state: GovernanceLifecycleState::GovernedReady,
+            required: true,
+            autopilot_enabled: false,
+            approval_state: ApprovalState::Requested,
+            canon_run_ref: Some(RUN_REF.to_string()),
+            governance_attempt_id: GOVERNANCE_ATTEMPT_ID.to_string(),
+            previous_governance_attempt_id: None,
+            packet_ref: Some(GOVERNED_PACKET_REF.to_string()),
+            decision_ref: None,
+            stage_council: None,
+            blocked_reason: None,
+        }
+    }
+
+    fn sample_governance_request(workspace: &Path) -> GovernanceRuntimeRequest {
+        GovernanceRuntimeRequest {
+            request_kind: GovernanceRequestKind::Refresh,
+            governance_attempt_id: NEXT_GOVERNANCE_ATTEMPT_ID.to_string(),
+            stage_key: GOVERNED_STAGE_KEY.to_string(),
+            goal: GOAL_TEXT.to_string(),
+            workspace_ref: workspace.to_string_lossy().into_owned(),
+            autopilot: false,
+            mode: Some(CanonMode::Requirements),
+            system_context: Some(SystemContextBinding::Existing),
+            risk: Some("bounded-impact".to_string()),
+            zone: Some("yellow".to_string()),
+            owner: Some("delivery-engineer".to_string()),
+            run_ref: Some(RUN_REF.to_string()),
+            packet_ref: Some(GOVERNED_PACKET_REF.to_string()),
+            bounded_context: GovernanceBoundedContext {
+                read_targets: Vec::new(),
+                stage_brief_ref: None,
+                reused_packets: Vec::new(),
+            },
+            input_documents: Vec::new(),
+        }
+    }
+
+    fn sample_goal_plan() -> Result<GoalPlan, Box<dyn Error>> {
+        GoalPlan::new(
+            GOAL_TEXT,
+            vec![PlannedTask {
+                task_id: "T001".to_string(),
+                description: "Prepare governed planning context".to_string(),
+                target: "src/lib.rs".to_string(),
+                expected_outcome: None,
+                decision_type_hint: None,
+            }],
+        )
+        .map_err(Into::into)
+    }
+
+    fn seed_brief(workspace: &Path) -> Result<(), Box<dyn Error>> {
+        fs::create_dir_all(workspace.join("src"))?;
+        fs::write(
+            workspace.join("src/lib.rs"),
+            "pub fn add(left: i32, right: i32) -> i32 { left + right }\n",
+        )?;
+        fs::write(
+            workspace.join(BRIEF_FILE_NAME),
+            "Deliver the governed feature through requirements for src/lib.rs and keep the scope bounded.\n",
+        )?;
+        Ok(())
+    }
+
+    fn temp_workspace(prefix: &str) -> Result<TestWorkspace, Box<dyn Error>> {
+        TestWorkspace::new(prefix)
+    }
+
+    struct TestWorkspace {
+        path: PathBuf,
+    }
+
+    impl TestWorkspace {
+        fn new(prefix: &str) -> Result<Self, Box<dyn Error>> {
+            let path = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
+            fs::create_dir_all(&path)?;
+            Ok(Self { path })
+        }
+
+        fn as_path(&self) -> &Path {
+            &self.path
+        }
+    }
+
+    impl Drop for TestWorkspace {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.path);
+        }
+    }
+}

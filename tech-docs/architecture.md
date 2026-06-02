@@ -18,7 +18,7 @@ Keep this boundary explicit:
 Canon is not the orchestrator and not the product entrypoint. A Boundline
 install can stay fully usable without Canon on the default local path.
 
-The current Boundline adapter documents Canon `0.62.0` support for the
+The current Boundline adapter documents Canon `0.63.0` support for the
 `canon governance start|refresh|capabilities --json` `v1` surface. That is a
 bounded compatibility target, not a claim of total Canon feature parity.
 
@@ -114,6 +114,24 @@ This makes transport inspection a first-class operator concern. The host can
 block activation or fall back before claim when `describe` does not declare a
 compatible stdin/stdout transport, and `adapter show --json` is the stable
 surface for confirming that compatibility before a stage runs.
+
+The shipped Speckit profile keeps ownership boundaries explicit. `goal` remains
+Boundline-native, `plan` may be adapter-owned through workflow ID
+`speckit-planning`, `run` may be adapter-owned through workflow ID
+`speckit-implementation`, and `status` plus `inspect` remain Boundline-owned.
+The runtime launches the split workflow assets
+`.specify/workflows/speckit/planning.yml` and
+`.specify/workflows/speckit/implementation.yml` by local YAML path, while the
+persisted stage outcome and operator surfaces continue to use the semantic
+workflow IDs.
+
+A claimed Speckit `plan` stage has a bounded readiness loop: one initial
+`speckit.analyze` pass plus at most two remediation or analyze re-check cycles.
+If blocking findings remain after that budget, the adapter must return a
+blocked outcome with the remaining findings and recovery guidance. A claimed
+Speckit `run` stage is implementation-only and must not rerun planning
+commands. This keeps the host's stage routing and the adapter's command surface
+aligned to the same contract.
 
 ## Planning, Guidance, And Traceability
 

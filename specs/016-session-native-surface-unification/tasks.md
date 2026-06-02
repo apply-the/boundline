@@ -111,7 +111,7 @@
 
 - [X] T027 [P] Refresh generated agent and contributor context in `AGENTS.md` and `CONTRIBUTING.md`
 - [X] T028 [P] Run release validation and refresh `lcov.info` via `cargo test --no-run --all-targets`, `cargo nextest run --workspace --all-features`, `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`, and `cargo deny check licenses advisories bans sources`
-- [X] T029 Increase coverage on staged files in `tests/unit/`, `tests/integration/`, and `lcov.info` and update `README.md`, `ROADMAP.md`, `docs/getting-started.md`, `docs/configuration.md`, `docs/adaptive-execution.md`, `docs/review-voting.md`, `docs/session-native-orchestrator-review.md`, `assistant/README.md`, `assistant/claude/commands/`, `assistant/codex/commands/`, `assistant/copilot/prompts/`, `.specify/templates/spec-template.md`, `.specify/templates/plan-template.md`, and `.specify/templates/tasks-template.md` for the `0.16.0` session-native surface unification release
+- [X] T029 Increase coverage on staged files in `tests/unit/`, `tests/integration/`, and `lcov.info` and update `README.md`, `ROADMAP.md`, `tech-docs/getting-started.md`, `tech-docs/configuration.md`, `tech-docs/adaptive-execution.md`, `tech-docs/review-voting.md`, `tech-docs/session-native-orchestrator-review.md`, `assistant/README.md`, `assistant/claude/commands/`, `assistant/codex/commands/`, `assistant/copilot/prompts/`, `.specify/templates/spec-template.md`, `.specify/templates/plan-template.md`, and `.specify/templates/tasks-template.md` for the `0.16.0` session-native surface unification release
 
 ---
 

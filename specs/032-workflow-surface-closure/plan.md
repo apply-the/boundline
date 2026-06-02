@@ -101,7 +101,7 @@ assistant/
 ├── copilot/prompts/
 └── gemini/
 
-docs/
+tech-docs/
 ├── configuration.md
 └── getting-started.md
 

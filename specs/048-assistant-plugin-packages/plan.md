@@ -11,7 +11,7 @@ Add repository-local host package surfaces that make Boundline discoverable from
 
 **Language/Version**: Rust 1.96.0 workspace, edition 2024, plus JSON, Markdown, Bash, and SVG repository assets  
 **Primary Dependencies**: Existing workspace dependencies only (`serde_json` and `toml` already available for validation); no new external crates planned  
-**Storage**: Repository files only: hidden host package folders, shared assistant metadata under `assistant/`, docs under `docs/`, validation script under `scripts/`, and Spec Kit artifacts under `specs/048-assistant-plugin-packages/`  
+**Storage**: Repository files only: hidden host package folders, shared assistant metadata under `assistant/`, docs under `tech-docs/`, validation script under `scripts/`, and Spec Kit artifacts under `specs/048-assistant-plugin-packages/`  
 **Testing**: `cargo test --test assistant_plugin_packages`, `bash scripts/validate-assistant-plugins.sh`, `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test`, and touched-file coverage with `cargo llvm-cov`  
 **Target Platform**: Local developer repositories and CI on macOS/Linux/Windows-friendly metadata; validation script targets Unix-like shells used by the repo scripts  
 **Project Type**: Rust CLI workspace with repository-managed assistant command packs and local runtime state under `.boundline/`  

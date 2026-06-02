@@ -91,7 +91,7 @@
 
 ### Implementation for User Story 3
 
-- [ ] T018 [US3] Update the unified route-summary operator story, impacted docs, and release notes in `README.md`, `docs/getting-started.md`, `docs/configuration.md`, `docs/adaptive-execution.md`, `assistant/README.md`, `CONTRIBUTING.md`, `ROADMAP.md`, and `CHANGELOG.md`
+- [ ] T018 [US3] Update the unified route-summary operator story, impacted docs, and release notes in `README.md`, `tech-docs/getting-started.md`, `tech-docs/configuration.md`, `tech-docs/adaptive-execution.md`, `assistant/README.md`, `CONTRIBUTING.md`, `ROADMAP.md`, and `CHANGELOG.md`
 - [ ] T019 [US3] Refresh generated agent context for the unified summary surface in `AGENTS.md`
 
 **Checkpoint**: Maintainers and assistants have one coherent `0.24.0` story for route summaries, ownership, and config projection.

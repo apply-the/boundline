@@ -97,7 +97,7 @@ tests/
     └── session_model.rs
 
 README.md
-docs/
+tech-docs/
 assistant/
 ROADMAP.md
 CHANGELOG.md

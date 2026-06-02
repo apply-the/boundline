@@ -33,6 +33,7 @@ use super::{
     compute_planning_input_fingerprint, configured_framework_adapter_binding,
     current_timestamp_millis, discovery_stage_council_reviewers,
     framework_adapter_stage_failure_terminal_condition,
+    framework_adapter_stage_outcome_details_from_response,
     framework_adapter_stage_routing_trace_payload, framework_adapter_stage_routing_value,
     load_workspace_execution_profile, map_framework_adapter_failure_class, model_route_label,
     plain_goal_planning_clarification_prompt, plain_goal_requires_planning_clarification,
@@ -636,11 +637,14 @@ impl SessionRuntime {
                 if response.status
                     == crate::adapters::FrameworkAdapterStageExecutionStatus::Succeeded =>
             {
+                let response_details =
+                    framework_adapter_stage_outcome_details_from_response(&response);
                 Ok(FrameworkAdapterPlanStageOutcome::ClaimedSucceeded(
                     plan_stage_routing_record_from_success(
                         run_id,
                         binding.selection.selection.adapter_id.clone(),
                         response.produced_artifacts,
+                        response_details,
                     ),
                 ))
             }
@@ -1334,6 +1338,7 @@ pub(super) fn plan_stage_failure_from_execute_response(
         .failure_class
         .map(map_framework_adapter_failure_class)
         .or(Some(AdapterFailureClass::AdapterRuntime));
+    let response_details = framework_adapter_stage_outcome_details_from_response(&response);
     let status = match response.status {
         crate::adapters::FrameworkAdapterStageExecutionStatus::Succeeded => {
             LifecycleStageExecutionStatus::Succeeded
@@ -1356,6 +1361,7 @@ pub(super) fn plan_stage_failure_from_execute_response(
             intervention_required: true,
             failure_class,
             produced_artifacts: response.produced_artifacts,
+            details: response_details,
             started_at: Some(finished_at),
             finished_at: Some(finished_at),
         },
@@ -1413,6 +1419,7 @@ pub(super) fn plan_stage_failure_from_host_error(
             intervention_required: true,
             failure_class: Some(failure_class),
             produced_artifacts: Vec::new(),
+            details: None,
             started_at: Some(finished_at),
             finished_at: Some(finished_at),
         },
@@ -1435,6 +1442,7 @@ pub(super) fn plan_stage_routing_record_from_failure(
         adapter_id: failure.execution.adapter_id.clone(),
         stage_status: Some(failure.execution.status),
         produced_artifacts: failure.execution.produced_artifacts.clone(),
+        details: failure.execution.details.clone(),
         recorded_at: current_timestamp_millis(),
     }
 }
@@ -1443,6 +1451,7 @@ pub(super) fn plan_stage_routing_record_from_success(
     run_id: Uuid,
     adapter_id: String,
     produced_artifacts: Vec<String>,
+    details: Option<crate::domain::framework_adapter::FrameworkAdapterStageOutcomeDetails>,
 ) -> StageRoutingDecisionRecord {
     StageRoutingDecisionRecord {
         run_id: run_id.to_string(),
@@ -1453,6 +1462,7 @@ pub(super) fn plan_stage_routing_record_from_success(
         adapter_id: Some(adapter_id),
         stage_status: Some(LifecycleStageExecutionStatus::Succeeded),
         produced_artifacts,
+        details,
         recorded_at: current_timestamp_millis(),
     }
 }
@@ -1469,6 +1479,7 @@ pub(super) fn plan_stage_routing_record_from_blocked(
         adapter_id: blocked.execution.adapter_id.clone(),
         stage_status: Some(blocked.execution.status),
         produced_artifacts: blocked.execution.produced_artifacts.clone(),
+        details: blocked.execution.details.clone(),
         recorded_at: current_timestamp_millis(),
     }
 }
@@ -1479,6 +1490,7 @@ pub(super) fn plan_stage_blocked_from_execute_response(
     response: crate::adapters::FrameworkAdapterExecuteStageResponse,
 ) -> FrameworkAdapterStageFailureDetails {
     let finished_at = current_timestamp_millis();
+    let response_details = framework_adapter_stage_outcome_details_from_response(&response);
 
     FrameworkAdapterStageFailureDetails {
         execution: LifecycleStageExecutionRecord {
@@ -1490,6 +1502,7 @@ pub(super) fn plan_stage_blocked_from_execute_response(
             intervention_required: true,
             failure_class: None,
             produced_artifacts: response.produced_artifacts,
+            details: response_details,
             started_at: Some(finished_at),
             finished_at: Some(finished_at),
         },
@@ -1540,4 +1553,708 @@ pub(super) fn framework_adapter_config_values(
             int_value: value.int_value,
         })
         .collect()
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use std::error::Error;
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+    use std::path::{Path, PathBuf};
+
+    use uuid::Uuid;
+
+    use crate::adapters::config_store::FileConfigStore;
+    use crate::adapters::trace_store::TraceStore;
+    use crate::adapters::{
+        FrameworkAdapterDescribeResponse, FrameworkAdapterExecuteStageResponse,
+        FrameworkAdapterPreflightResponse, FrameworkAdapterStageExecutionStatus,
+    };
+    use crate::domain::brief::normalize_inputs;
+    use crate::domain::configuration::{
+        AdapterSelectionRecord, ConfigFile, PersistedAdapterConfiguration,
+    };
+    use crate::domain::framework_adapter::{
+        AdapterConfigCompletenessState, AdapterDiscoveryState, AdapterFailureClass,
+        AdapterRegistrationSource, AdapterSelectionMode, LifecycleStageExecutionStatus,
+        StageClaimState, StageRoutingDecisionReason,
+    };
+    use crate::domain::goal_plan::{GoalPlan, PlannedTask};
+    use crate::domain::limits::TerminalCondition;
+    use crate::domain::session::{ActiveSessionRecord, SessionStatus};
+    use crate::domain::trace::TraceEventType;
+    use crate::fixture::{
+        sample_framework_adapter_describe_response,
+        sample_framework_adapter_execute_stage_failed_response,
+        sample_framework_adapter_execute_stage_success_response,
+        sample_framework_adapter_preflight_blocked_response,
+        sample_framework_adapter_preflight_ready_response,
+        sample_framework_adapter_success_envelope,
+    };
+    use crate::orchestrator::{FRAMEWORK_ADAPTER_PROTOCOL_LINE_V1, FrameworkStageKey};
+
+    use super::{
+        ADAPTER_FALLBACK_REASON_PREFLIGHT_BLOCKED, ADAPTER_FALLBACK_REASON_UNAVAILABLE_BINARY,
+        ADAPTER_FALLBACK_REASON_UNSUPPORTED_TRANSPORT, FrameworkAdapterPlanStageOutcome,
+        SessionRuntime,
+    };
+
+    const ADAPTER_COMMAND_MISSING: &str = "definitely-missing-boundline-adapter";
+    const ADAPTER_DISPLAY_NAME: &str = "Speckit";
+    const ADAPTER_ID: &str = "speckit";
+    const EXECUTE_RESPONSE_FILE_NAME: &str = "execute-stage-response.json";
+    const FRAMEWORK_ADAPTER_SCRIPT_FILE_NAME: &str = "framework-adapter.sh";
+    const GOAL_TEXT: &str = "Drive the planning runtime";
+    const PLANNED_TASK_DESCRIPTION: &str = "Repair arithmetic";
+    const PLANNED_TASK_ID: &str = "planned-task-1";
+    const PLANNED_TASK_TARGET: &str = "src/lib.rs";
+    const PREFLIGHT_RESPONSE_FILE_NAME: &str = "preflight-response.json";
+    const SCHEMA_FINGERPRINT: &str = "schema-v1";
+    const SUCCESS_ARTIFACT: &str = "specs/066-agentic-framework-integration/plan.md";
+    const UPDATED_AT: u64 = 42;
+
+    #[test]
+    fn planning_runtime_framework_adapter_not_claimed_paths_cover_binding_and_preflight()
+    -> Result<(), Box<dyn Error>> {
+        let missing_selection_workspace = temp_workspace("boundline-plan-stage-no-selection")?;
+        let missing_selection_runtime =
+            SessionRuntime::for_workspace(missing_selection_workspace.as_path());
+        let mut missing_selection_goal_plan = sample_goal_plan()?;
+        assert!(matches!(
+            missing_selection_runtime
+                .maybe_apply_framework_adapter_plan_stage(&mut missing_selection_goal_plan)?,
+            FrameworkAdapterPlanStageOutcome::NotClaimed
+        ));
+        assert_eq!(missing_selection_goal_plan.planning_rationale, None);
+
+        let missing_binary_workspace = temp_workspace("boundline-plan-stage-missing-binary")?;
+        save_local_adapter(
+            missing_binary_workspace.as_path(),
+            sample_adapter_selection(ADAPTER_COMMAND_MISSING),
+        )?;
+        let missing_binary_runtime =
+            SessionRuntime::for_workspace(missing_binary_workspace.as_path());
+        let mut missing_binary_goal_plan = sample_goal_plan()?;
+        assert!(matches!(
+            missing_binary_runtime
+                .maybe_apply_framework_adapter_plan_stage(&mut missing_binary_goal_plan)?,
+            FrameworkAdapterPlanStageOutcome::NotClaimed
+        ));
+        assert!(has_fallback_reason(
+            &missing_binary_goal_plan,
+            ADAPTER_FALLBACK_REASON_UNAVAILABLE_BINARY,
+        ));
+
+        let undeclared_workspace = temp_workspace("boundline-plan-stage-undeclared")?;
+        let mut undeclared_describe = sample_framework_adapter_describe_response();
+        undeclared_describe
+            .declared_stage_overrides
+            .retain(|stage| *stage != FrameworkStageKey::Plan);
+        let undeclared_script = write_framework_adapter_script(
+            undeclared_workspace.as_path(),
+            &undeclared_describe,
+            PreflightMode::Response(sample_framework_adapter_preflight_ready_response()),
+            ExecuteMode::Response(sample_framework_adapter_execute_stage_success_response()),
+        )?;
+        save_local_adapter(
+            undeclared_workspace.as_path(),
+            sample_adapter_selection(undeclared_script.as_str()),
+        )?;
+        let undeclared_runtime = SessionRuntime::for_workspace(undeclared_workspace.as_path());
+        let mut undeclared_goal_plan = sample_goal_plan()?;
+        assert!(matches!(
+            undeclared_runtime
+                .maybe_apply_framework_adapter_plan_stage(&mut undeclared_goal_plan)?,
+            FrameworkAdapterPlanStageOutcome::NotClaimed
+        ));
+        assert_eq!(undeclared_goal_plan.planning_rationale, None);
+
+        let unsupported_workspace = temp_workspace("boundline-plan-stage-unsupported-transport")?;
+        let mut unsupported_describe = sample_framework_adapter_describe_response();
+        unsupported_describe.supported_transports = Vec::new();
+        let unsupported_script = write_framework_adapter_script(
+            unsupported_workspace.as_path(),
+            &unsupported_describe,
+            PreflightMode::Response(sample_framework_adapter_preflight_ready_response()),
+            ExecuteMode::Response(sample_framework_adapter_execute_stage_success_response()),
+        )?;
+        save_local_adapter(
+            unsupported_workspace.as_path(),
+            sample_adapter_selection(unsupported_script.as_str()),
+        )?;
+        let unsupported_runtime = SessionRuntime::for_workspace(unsupported_workspace.as_path());
+        let mut unsupported_goal_plan = sample_goal_plan()?;
+        assert!(matches!(
+            unsupported_runtime
+                .maybe_apply_framework_adapter_plan_stage(&mut unsupported_goal_plan)?,
+            FrameworkAdapterPlanStageOutcome::NotClaimed
+        ));
+        assert!(has_fallback_reason(
+            &unsupported_goal_plan,
+            ADAPTER_FALLBACK_REASON_UNSUPPORTED_TRANSPORT,
+        ));
+
+        let preflight_failure_workspace = temp_workspace("boundline-plan-stage-preflight-failure")?;
+        let preflight_failure_script = write_framework_adapter_script(
+            preflight_failure_workspace.as_path(),
+            &sample_framework_adapter_describe_response(),
+            PreflightMode::ProcessFailure,
+            ExecuteMode::Response(sample_framework_adapter_execute_stage_success_response()),
+        )?;
+        save_local_adapter(
+            preflight_failure_workspace.as_path(),
+            sample_adapter_selection(preflight_failure_script.as_str()),
+        )?;
+        let preflight_failure_runtime =
+            SessionRuntime::for_workspace(preflight_failure_workspace.as_path());
+        let mut preflight_failure_goal_plan = sample_goal_plan()?;
+        assert!(matches!(
+            preflight_failure_runtime
+                .maybe_apply_framework_adapter_plan_stage(&mut preflight_failure_goal_plan)?,
+            FrameworkAdapterPlanStageOutcome::NotClaimed
+        ));
+        assert!(has_fallback_reason(
+            &preflight_failure_goal_plan,
+            ADAPTER_FALLBACK_REASON_UNAVAILABLE_BINARY,
+        ));
+
+        let preflight_blocked_workspace = temp_workspace("boundline-plan-stage-preflight-blocked")?;
+        let preflight_blocked_script = write_framework_adapter_script(
+            preflight_blocked_workspace.as_path(),
+            &sample_framework_adapter_describe_response(),
+            PreflightMode::Response(sample_framework_adapter_preflight_blocked_response()),
+            ExecuteMode::Response(sample_framework_adapter_execute_stage_success_response()),
+        )?;
+        save_local_adapter(
+            preflight_blocked_workspace.as_path(),
+            sample_adapter_selection(preflight_blocked_script.as_str()),
+        )?;
+        let preflight_blocked_runtime =
+            SessionRuntime::for_workspace(preflight_blocked_workspace.as_path());
+        let mut preflight_blocked_goal_plan = sample_goal_plan()?;
+        assert!(matches!(
+            preflight_blocked_runtime
+                .maybe_apply_framework_adapter_plan_stage(&mut preflight_blocked_goal_plan)?,
+            FrameworkAdapterPlanStageOutcome::NotClaimed
+        ));
+        assert!(has_fallback_reason(
+            &preflight_blocked_goal_plan,
+            ADAPTER_FALLBACK_REASON_PREFLIGHT_BLOCKED,
+        ));
+
+        Ok(())
+    }
+
+    #[test]
+    fn planning_runtime_framework_adapter_claimed_paths_cover_execute_outcomes()
+    -> Result<(), Box<dyn Error>> {
+        let success_workspace = temp_workspace("boundline-plan-stage-claimed-success")?;
+        let success_script = write_framework_adapter_script(
+            success_workspace.as_path(),
+            &sample_framework_adapter_describe_response(),
+            PreflightMode::Response(sample_framework_adapter_preflight_ready_response()),
+            ExecuteMode::Response(sample_framework_adapter_execute_stage_success_response()),
+        )?;
+        save_local_adapter(
+            success_workspace.as_path(),
+            sample_adapter_selection(success_script.as_str()),
+        )?;
+        let success_runtime = SessionRuntime::for_workspace(success_workspace.as_path());
+        let mut success_goal_plan = sample_goal_plan()?;
+        match success_runtime.maybe_apply_framework_adapter_plan_stage(&mut success_goal_plan)? {
+            FrameworkAdapterPlanStageOutcome::ClaimedSucceeded(routing_record) => {
+                assert_eq!(routing_record.claim_state, StageClaimState::Completed);
+                assert_eq!(
+                    routing_record.stage_status,
+                    Some(LifecycleStageExecutionStatus::Succeeded)
+                );
+                assert_eq!(
+                    routing_record.decision_reason,
+                    StageRoutingDecisionReason::DeclaredOverride
+                );
+                assert_eq!(
+                    routing_record.produced_artifacts,
+                    vec![
+                        SUCCESS_ARTIFACT.to_string(),
+                        "specs/066-agentic-framework-integration/tasks.md".to_string()
+                    ]
+                );
+            }
+            _ => return Err("expected claimed success outcome".into()),
+        }
+
+        let blocked_workspace = temp_workspace("boundline-plan-stage-claimed-blocked")?;
+        let blocked_script = write_framework_adapter_script(
+            blocked_workspace.as_path(),
+            &sample_framework_adapter_describe_response(),
+            PreflightMode::Response(sample_framework_adapter_preflight_ready_response()),
+            ExecuteMode::Response(blocked_execute_stage_response()),
+        )?;
+        save_local_adapter(
+            blocked_workspace.as_path(),
+            sample_adapter_selection(blocked_script.as_str()),
+        )?;
+        let blocked_runtime = SessionRuntime::for_workspace(blocked_workspace.as_path());
+        let mut blocked_goal_plan = sample_goal_plan()?;
+        match blocked_runtime.maybe_apply_framework_adapter_plan_stage(&mut blocked_goal_plan)? {
+            FrameworkAdapterPlanStageOutcome::ClaimedBlocked(blocked) => {
+                assert_eq!(blocked.claim_state, StageClaimState::Claimed);
+                assert_eq!(blocked.execution.status, LifecycleStageExecutionStatus::Blocked);
+                assert_eq!(blocked.detail.as_deref(), Some("resume planning"));
+                let details =
+                    blocked.execution.details.as_ref().ok_or("missing blocked details")?;
+                assert_eq!(details.workflow_id.as_deref(), Some("speckit-planning"));
+                assert_eq!(
+                    details.final_planning_readiness_status,
+                    Some(crate::domain::framework_adapter::PlanningReadinessStatus::Blocked)
+                );
+                assert_eq!(details.analyze_pass_count, Some(2));
+                assert_eq!(details.remediation_cycles_used, Some(1));
+                assert_eq!(details.remaining_blocking_findings.len(), 1);
+            }
+            _ => return Err("expected claimed blocked outcome".into()),
+        }
+
+        let failed_workspace = temp_workspace("boundline-plan-stage-claimed-failed")?;
+        let failed_script = write_framework_adapter_script(
+            failed_workspace.as_path(),
+            &sample_framework_adapter_describe_response(),
+            PreflightMode::Response(sample_framework_adapter_preflight_ready_response()),
+            ExecuteMode::Response(sample_framework_adapter_execute_stage_failed_response()),
+        )?;
+        save_local_adapter(
+            failed_workspace.as_path(),
+            sample_adapter_selection(failed_script.as_str()),
+        )?;
+        let failed_runtime = SessionRuntime::for_workspace(failed_workspace.as_path());
+        let mut failed_goal_plan = sample_goal_plan()?;
+        match failed_runtime.maybe_apply_framework_adapter_plan_stage(&mut failed_goal_plan)? {
+            FrameworkAdapterPlanStageOutcome::ClaimedFailed(failure) => {
+                assert_eq!(failure.claim_state, StageClaimState::FailedAfterClaim);
+                assert_eq!(failure.execution.status, LifecycleStageExecutionStatus::Failed);
+                assert_eq!(
+                    failure.execution.failure_class,
+                    Some(AdapterFailureClass::AdapterRuntime)
+                );
+                assert_eq!(failure.detail, None);
+            }
+            _ => return Err("expected claimed failed outcome".into()),
+        }
+
+        let transport_failure_workspace =
+            temp_workspace("boundline-plan-stage-claimed-transport-failure")?;
+        let transport_failure_script = write_framework_adapter_script(
+            transport_failure_workspace.as_path(),
+            &sample_framework_adapter_describe_response(),
+            PreflightMode::Response(sample_framework_adapter_preflight_ready_response()),
+            ExecuteMode::ProcessFailure,
+        )?;
+        save_local_adapter(
+            transport_failure_workspace.as_path(),
+            sample_adapter_selection(transport_failure_script.as_str()),
+        )?;
+        let transport_failure_runtime =
+            SessionRuntime::for_workspace(transport_failure_workspace.as_path());
+        let mut transport_failure_goal_plan = sample_goal_plan()?;
+        match transport_failure_runtime
+            .maybe_apply_framework_adapter_plan_stage(&mut transport_failure_goal_plan)?
+        {
+            FrameworkAdapterPlanStageOutcome::ClaimedFailed(failure) => {
+                assert_eq!(failure.claim_state, StageClaimState::FailedAfterClaim);
+                assert_eq!(
+                    failure.execution.failure_class,
+                    Some(AdapterFailureClass::TransportFailure)
+                );
+                assert!(failure.summary.contains("transport failed"));
+            }
+            _ => return Err("expected claimed transport-failure outcome".into()),
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn planning_runtime_plan_task_framework_adapter_persists_success_and_blocked_traces()
+    -> Result<(), Box<dyn Error>> {
+        let success_workspace = temp_workspace("boundline-plan-task-adapter-success")?;
+        seed_planning_workspace(success_workspace.as_path())?;
+        let success_script = write_framework_adapter_script(
+            success_workspace.as_path(),
+            &sample_framework_adapter_describe_response(),
+            PreflightMode::Response(sample_framework_adapter_preflight_ready_response()),
+            ExecuteMode::Response(sample_framework_adapter_execute_stage_success_response()),
+        )?;
+        save_local_adapter(
+            success_workspace.as_path(),
+            sample_adapter_selection(success_script.as_str()),
+        )?;
+        let success_runtime = SessionRuntime::for_workspace(success_workspace.as_path());
+        let mut success_session = sample_planning_session(success_workspace.as_path());
+
+        success_runtime.capture_goal(&mut success_session, GOAL_TEXT)?;
+        success_session.authored_brief = Some(sample_authored_brief(success_workspace.as_path())?);
+        success_runtime.select_flow(&mut success_session, "bug-fix")?;
+        success_runtime.plan_task(&mut success_session, None, false)?;
+
+        assert_eq!(success_session.latest_status, SessionStatus::Planned);
+        assert!(success_session.latest_terminal_reason.is_none());
+        assert!(
+            success_session.goal_plan.as_ref().is_some_and(|plan| !plan.requires_confirmation())
+        );
+        let success_trace_ref =
+            success_session.latest_trace_ref.as_deref().ok_or("missing success trace ref")?;
+        let success_trace = success_runtime.trace_store().load(Path::new(success_trace_ref))?;
+        let success_stage_routed = success_trace
+            .events
+            .iter()
+            .find(|event| event.event_type == TraceEventType::StageRouted)
+            .ok_or("missing success stage routed event")?;
+        assert_eq!(
+            success_stage_routed.payload["framework_adapter_stage_routing"]["stage_status"],
+            serde_json::json!("succeeded")
+        );
+
+        let blocked_workspace = temp_workspace("boundline-plan-task-adapter-blocked")?;
+        seed_planning_workspace(blocked_workspace.as_path())?;
+        let blocked_script = write_framework_adapter_script(
+            blocked_workspace.as_path(),
+            &sample_framework_adapter_describe_response(),
+            PreflightMode::Response(sample_framework_adapter_preflight_ready_response()),
+            ExecuteMode::Response(blocked_execute_stage_response()),
+        )?;
+        save_local_adapter(
+            blocked_workspace.as_path(),
+            sample_adapter_selection(blocked_script.as_str()),
+        )?;
+        let blocked_runtime = SessionRuntime::for_workspace(blocked_workspace.as_path());
+        let mut blocked_session = sample_planning_session(blocked_workspace.as_path());
+
+        blocked_runtime.capture_goal(&mut blocked_session, GOAL_TEXT)?;
+        blocked_session.authored_brief = Some(sample_authored_brief(blocked_workspace.as_path())?);
+        blocked_runtime.select_flow(&mut blocked_session, "bug-fix")?;
+        blocked_runtime.plan_task(&mut blocked_session, None, false)?;
+
+        assert_eq!(blocked_session.latest_status, SessionStatus::Blocked);
+        assert_eq!(
+            blocked_session.latest_terminal_reason.as_ref().map(|reason| reason.condition),
+            Some(TerminalCondition::NoCredibleNextStep)
+        );
+        let blocked_trace_ref =
+            blocked_session.latest_trace_ref.as_deref().ok_or("missing blocked trace ref")?;
+        let blocked_trace = blocked_runtime.trace_store().load(Path::new(blocked_trace_ref))?;
+        let blocked_stage_routed = blocked_trace
+            .events
+            .iter()
+            .find(|event| event.event_type == TraceEventType::StageRouted)
+            .ok_or("missing blocked stage routed event")?;
+        assert_eq!(
+            blocked_stage_routed.payload["framework_adapter_stage_routing"]["stage_status"],
+            serde_json::json!("blocked")
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn planning_runtime_plan_task_framework_adapter_persists_failed_trace_and_status()
+    -> Result<(), Box<dyn Error>> {
+        let failed_workspace = temp_workspace("boundline-plan-task-adapter-failed")?;
+        seed_planning_workspace(failed_workspace.as_path())?;
+        let failed_script = write_framework_adapter_script(
+            failed_workspace.as_path(),
+            &sample_framework_adapter_describe_response(),
+            PreflightMode::Response(sample_framework_adapter_preflight_ready_response()),
+            ExecuteMode::Response(sample_framework_adapter_execute_stage_failed_response()),
+        )?;
+        save_local_adapter(
+            failed_workspace.as_path(),
+            sample_adapter_selection(failed_script.as_str()),
+        )?;
+        let failed_runtime = SessionRuntime::for_workspace(failed_workspace.as_path());
+        let mut failed_session = sample_planning_session(failed_workspace.as_path());
+
+        failed_runtime.capture_goal(&mut failed_session, GOAL_TEXT)?;
+        failed_session.authored_brief = Some(sample_authored_brief(failed_workspace.as_path())?);
+        failed_runtime.select_flow(&mut failed_session, "bug-fix")?;
+        let error = failed_runtime.plan_task(&mut failed_session, None, false).unwrap_err();
+        assert!(
+            error.to_string().contains("framework-adapter plan stage execution failed after claim")
+        );
+
+        assert_eq!(failed_session.latest_status, SessionStatus::Failed);
+        assert_eq!(
+            failed_session.latest_terminal_reason.as_ref().map(|reason| reason.condition),
+            Some(TerminalCondition::TaskNotCredible)
+        );
+        let failed_trace_ref =
+            failed_session.latest_trace_ref.as_deref().ok_or("missing failed trace ref")?;
+        let failed_trace = failed_runtime.trace_store().load(Path::new(failed_trace_ref))?;
+        let failed_stage = failed_trace
+            .events
+            .iter()
+            .find(|event| event.event_type == TraceEventType::StageFailed)
+            .ok_or("missing failed stage event")?;
+        assert_eq!(
+            failed_stage.payload["framework_adapter_stage_failure"]["summary"],
+            serde_json::json!("Speckit could not complete the claimed stage")
+        );
+        let terminal_event = failed_trace
+            .events
+            .iter()
+            .find(|event| event.event_type == TraceEventType::TerminalRecorded)
+            .ok_or("missing terminal event")?;
+        assert_eq!(terminal_event.payload["terminal_status"], serde_json::json!("failed"));
+
+        Ok(())
+    }
+
+    #[derive(Clone)]
+    enum PreflightMode {
+        Response(FrameworkAdapterPreflightResponse),
+        ProcessFailure,
+    }
+
+    #[derive(Clone)]
+    #[allow(clippy::large_enum_variant)]
+    enum ExecuteMode {
+        Response(FrameworkAdapterExecuteStageResponse),
+        ProcessFailure,
+    }
+
+    fn blocked_execute_stage_response() -> FrameworkAdapterExecuteStageResponse {
+        FrameworkAdapterExecuteStageResponse {
+            status: FrameworkAdapterStageExecutionStatus::Blocked,
+            summary: "adapter blocked planning".to_string(),
+            produced_artifacts: vec![SUCCESS_ARTIFACT.to_string()],
+            workflow_id: Some("speckit-planning".to_string()),
+            executed_commands: vec!["speckit.analyze".to_string()],
+            planning_findings: vec![crate::adapters::FrameworkAdapterPlanningFinding {
+                finding_id: "F-001".to_string(),
+                summary: "Blocking planning finding".to_string(),
+                severity: crate::adapters::FrameworkAdapterPlanningFindingSeverity::Blocking,
+            }],
+            remediation_tasks_attempted: vec![
+                crate::adapters::FrameworkAdapterPlanningRemediationTaskOutcome {
+                    task_id: "R-001".to_string(),
+                    summary: "Attempt remediation".to_string(),
+                    finding_ids: vec!["F-001".to_string()],
+                    skip_reason: None,
+                },
+            ],
+            remediation_tasks_completed: Vec::new(),
+            remediation_tasks_skipped: vec![
+                crate::adapters::FrameworkAdapterPlanningRemediationTaskOutcome {
+                    task_id: "R-002".to_string(),
+                    summary: "Needs operator input".to_string(),
+                    finding_ids: vec!["F-001".to_string()],
+                    skip_reason: Some(
+                        crate::adapters::FrameworkAdapterPlanningRemediationSkipReason::RequiresOperatorInput,
+                    ),
+                },
+            ],
+            remaining_blocking_findings: vec![crate::adapters::FrameworkAdapterPlanningFinding {
+                finding_id: "F-001".to_string(),
+                summary: "Blocking planning finding".to_string(),
+                severity: crate::adapters::FrameworkAdapterPlanningFindingSeverity::Blocking,
+            }],
+            final_planning_readiness_status: Some(
+                crate::adapters::FrameworkAdapterPlanningReadinessStatus::Blocked,
+            ),
+            analyze_pass_count: Some(2),
+            remediation_cycles_used: Some(1),
+            implementation_status: None,
+            validation_refs: vec!["specs/066-agentic-framework-integration/analysis.md".to_string()],
+            next_action: Some("resume planning".to_string()),
+            failure_class: None,
+        }
+    }
+
+    fn has_fallback_reason(goal_plan: &GoalPlan, reason: &str) -> bool {
+        goal_plan.planning_rationale.as_deref().is_some_and(|rationale| {
+            rationale.contains(&format!("adapter_fallback_reason: {reason}"))
+        })
+    }
+
+    fn path_string(path: &Path) -> String {
+        PathBuf::from(path).to_string_lossy().into_owned()
+    }
+
+    fn sample_planning_session(workspace: &Path) -> ActiveSessionRecord {
+        ActiveSessionRecord {
+            session_id: format!("session-{}", Uuid::new_v4()),
+            workspace_ref: workspace.to_string_lossy().into_owned(),
+            goal: None,
+            authored_brief: None,
+            negotiation_packet: None,
+            active_flow: None,
+            active_task: None,
+            goal_plan: None,
+            workflow_progress: None,
+            decisions: Vec::new(),
+            active_flow_policy: None,
+            latest_status: SessionStatus::Initialized,
+            latest_terminal_reason: None,
+            latest_trace_ref: None,
+            created_at: UPDATED_AT,
+            updated_at: UPDATED_AT,
+            governance_lifecycle: None,
+            project_scale: None,
+            delight_feedback: None,
+            latest_voting: None,
+        }
+    }
+
+    fn sample_adapter_selection(command: &str) -> PersistedAdapterConfiguration {
+        PersistedAdapterConfiguration {
+            selection: AdapterSelectionRecord {
+                selection_mode: AdapterSelectionMode::KnownProfile,
+                adapter_id: ADAPTER_ID.to_string(),
+                display_name: ADAPTER_DISPLAY_NAME.to_string(),
+                command: command.to_string(),
+                args: Vec::new(),
+                registration_source: AdapterRegistrationSource::AdapterAdd,
+                discovery_state: AdapterDiscoveryState::ExplicitCommand,
+                compatibility_line: FRAMEWORK_ADAPTER_PROTOCOL_LINE_V1.to_string(),
+                updated_at: UPDATED_AT,
+            },
+            schema_fingerprint: SCHEMA_FINGERPRINT.to_string(),
+            completeness_state: AdapterConfigCompletenessState::Complete,
+            interactive_resolution: false,
+            last_validated_at: Some(UPDATED_AT),
+            value_count: 0,
+            values: Vec::new(),
+        }
+    }
+
+    fn sample_goal_plan() -> Result<GoalPlan, Box<dyn Error>> {
+        GoalPlan::new(
+            GOAL_TEXT,
+            vec![PlannedTask {
+                task_id: PLANNED_TASK_ID.to_string(),
+                description: PLANNED_TASK_DESCRIPTION.to_string(),
+                target: PLANNED_TASK_TARGET.to_string(),
+                expected_outcome: Some("tests pass".to_string()),
+                decision_type_hint: None,
+            }],
+        )
+        .map_err(Into::into)
+    }
+
+    fn sample_authored_brief(
+        workspace: &Path,
+    ) -> Result<crate::domain::brief::AuthoredBriefBundle, Box<dyn Error>> {
+        normalize_inputs(workspace, Some(GOAL_TEXT), &[PathBuf::from("brief.md")])
+            .map_err(Into::into)
+    }
+
+    fn save_local_adapter(
+        workspace: &Path,
+        adapter: PersistedAdapterConfiguration,
+    ) -> Result<(), Box<dyn Error>> {
+        FileConfigStore::for_workspace(workspace)
+            .save_local(&ConfigFile { adapter: Some(adapter), ..ConfigFile::default() })?;
+        Ok(())
+    }
+
+    fn seed_planning_workspace(workspace: &Path) -> Result<(), Box<dyn Error>> {
+        fs::create_dir_all(workspace.join("src"))?;
+        fs::create_dir_all(workspace.join("tests"))?;
+        fs::write(
+            workspace.join("src/lib.rs"),
+            "pub fn add(left: i32, right: i32) -> i32 { left - right }\n",
+        )?;
+        fs::write(
+            workspace.join("tests/add.rs"),
+            "#[test]\nfn adds() { assert_eq!(2 + 2, 4); }\n",
+        )?;
+        fs::write(
+            workspace.join("brief.md"),
+            "Focus on src/lib.rs and tests/add.rs before broad scanning. Repair the arithmetic bug and keep the change narrowly scoped.\n",
+        )?;
+        Ok(())
+    }
+
+    fn temp_workspace(prefix: &str) -> Result<TestWorkspace, Box<dyn Error>> {
+        TestWorkspace::new(prefix)
+    }
+
+    fn write_framework_adapter_script(
+        workspace: &Path,
+        describe: &FrameworkAdapterDescribeResponse,
+        preflight_mode: PreflightMode,
+        execute_mode: ExecuteMode,
+    ) -> Result<String, Box<dyn Error>> {
+        let describe_path = workspace.join("describe-response.json");
+        let preflight_path = workspace.join(PREFLIGHT_RESPONSE_FILE_NAME);
+        let execute_path = workspace.join(EXECUTE_RESPONSE_FILE_NAME);
+        let script_path = workspace.join(FRAMEWORK_ADAPTER_SCRIPT_FILE_NAME);
+
+        fs::write(
+            &describe_path,
+            serde_json::to_string(&sample_framework_adapter_success_envelope(describe.clone()))?,
+        )?;
+
+        let preflight_block = match preflight_mode {
+            PreflightMode::Response(response) => {
+                fs::write(
+                    &preflight_path,
+                    serde_json::to_string(&sample_framework_adapter_success_envelope(response))?,
+                )?;
+                format!("cat >/dev/null\n  cat '{}'", preflight_path.to_string_lossy())
+            }
+            PreflightMode::ProcessFailure => {
+                "cat >/dev/null\n  echo 'preflight failed' >&2\n  exit 1".to_string()
+            }
+        };
+
+        let execute_block = match execute_mode {
+            ExecuteMode::Response(response) => {
+                fs::write(
+                    &execute_path,
+                    serde_json::to_string(&sample_framework_adapter_success_envelope(response))?,
+                )?;
+                format!("cat >/dev/null\n  cat '{}'", execute_path.to_string_lossy())
+            }
+            ExecuteMode::ProcessFailure => {
+                "cat >/dev/null\n  echo 'transport failed' >&2\n  exit 1".to_string()
+            }
+        };
+
+        fs::write(
+            &script_path,
+            format!(
+                "#!/bin/sh\ncase \"$1\" in\ndescribe)\n  cat '{}'\n  ;;\npreflight)\n  {}\n  ;;\nexecute-stage)\n  {}\n  ;;\n*)\n  exit 1\n  ;;\nesac\n",
+                describe_path.to_string_lossy(),
+                preflight_block,
+                execute_block,
+            ),
+        )?;
+
+        let mut permissions = fs::metadata(&script_path)?.permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&script_path, permissions)?;
+        Ok(path_string(&script_path))
+    }
+
+    struct TestWorkspace {
+        path: PathBuf,
+    }
+
+    impl TestWorkspace {
+        fn new(prefix: &str) -> Result<Self, Box<dyn Error>> {
+            let path = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
+            fs::create_dir_all(&path)?;
+            Ok(Self { path })
+        }
+
+        fn as_path(&self) -> &Path {
+            &self.path
+        }
+    }
+
+    impl Drop for TestWorkspace {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.path);
+        }
+    }
 }

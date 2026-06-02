@@ -1363,12 +1363,14 @@ mod tests {
         ClusterConfigFile, ClusterMemberRegistration, ClusterMemberRole, WorkspaceCluster,
     };
     use crate::domain::configuration::{
-        AdapterSelectionRecord, PersistedAdapterConfiguration, RoutingConfig,
+        AdapterConfigValueRecord, AdapterSelectionRecord, PersistedAdapterConfiguration,
+        RoutingConfig,
     };
     use crate::domain::domain_templates::{DomainFamily, ExternalContextKind};
     use crate::domain::framework_adapter::{
         AdapterConfigCompletenessState, AdapterDiscoveryState, AdapterRegistrationSource,
-        AdapterSelectionMode, FRAMEWORK_ADAPTER_PROTOCOL_LINE_V1,
+        AdapterSelectionMode, AdapterValueKind, AdapterValueSource,
+        FRAMEWORK_ADAPTER_PROTOCOL_LINE_V1, StoredAdapterConfigValueState,
     };
 
     fn temp_workspace(prefix: &str) -> PathBuf {
@@ -1433,6 +1435,24 @@ mod tests {
             last_validated_at: Some(1),
             value_count: 0,
             values: Vec::new(),
+        }
+    }
+
+    fn sample_adapter_value(
+        field_key: &str,
+        value_kind: AdapterValueKind,
+        value_source: AdapterValueSource,
+    ) -> AdapterConfigValueRecord {
+        AdapterConfigValueRecord {
+            field_key: field_key.to_string(),
+            value_kind,
+            secret: false,
+            string_value: None,
+            path_value: None,
+            bool_value: None,
+            int_value: None,
+            value_source,
+            resolution_state: StoredAdapterConfigValueState::Present,
         }
     }
 
@@ -1745,6 +1765,76 @@ mod tests {
             ),
             Err(ConfigCommandError::MissingClusterConfig(_))
         ));
+    }
+
+    #[test]
+    fn adapter_value_rendering_covers_redaction_and_built_in_effective_defaults() {
+        let workspace = temp_workspace("boundline-cli-config-adapter-values");
+        let mut adapter = sample_persisted_adapter();
+        let mut plain_value = sample_adapter_value(
+            "workspace_root",
+            AdapterValueKind::Path,
+            AdapterValueSource::CliFlag,
+        );
+        plain_value.path_value = Some("./fixtures/workspace".to_string());
+
+        let mut secret_value = sample_adapter_value(
+            "api_token",
+            AdapterValueKind::String,
+            AdapterValueSource::OperatorPrompt,
+        );
+        secret_value.secret = true;
+        secret_value.string_value = Some("super-secret".to_string());
+
+        let mut bool_value = sample_adapter_value(
+            "strict_mode",
+            AdapterValueKind::Boolean,
+            AdapterValueSource::KnownProfileDefault,
+        );
+        bool_value.bool_value = Some(true);
+
+        let mut int_value = sample_adapter_value(
+            "max_attempts",
+            AdapterValueKind::Integer,
+            AdapterValueSource::MigratedConfig,
+        );
+        int_value.int_value = Some(7);
+
+        adapter.value_count = 4;
+        adapter.values = vec![plain_value, secret_value, bool_value, int_value];
+
+        let config = ConfigFile { adapter: Some(adapter), ..ConfigFile::default() };
+
+        let rendered = render_scope("workspace", &config);
+        assert!(rendered.contains("framework_adapter:"));
+        assert!(rendered.contains("  config_values:"));
+        assert!(rendered.contains("  - workspace_root: ./fixtures/workspace [cli_flag]"));
+        assert!(rendered.contains("  - api_token: <redacted> [operator_prompt]"));
+        assert!(rendered.contains("  - strict_mode: true [known_profile_default]"));
+        assert!(rendered.contains("  - max_attempts: 7 [migrated_config]"));
+
+        FileConfigStore::for_workspace(&workspace).save_local(&config).unwrap();
+        let effective =
+            execute_show(Some(workspace.as_path()), None, Some(ConfigShowScope::Effective))
+                .unwrap();
+        assert!(
+            effective.terminal_output.contains("framework_adapter_status: configured [workspace]")
+        );
+        assert!(effective.terminal_output.contains("framework_adapter_config_values:"));
+        assert!(effective.terminal_output.contains("- api_token: <redacted> [operator_prompt]"));
+
+        let built_in_workspace = temp_workspace("boundline-cli-config-adapter-built-in");
+        let built_in_effective = execute_show(
+            Some(built_in_workspace.as_path()),
+            None,
+            Some(ConfigShowScope::Effective),
+        )
+        .unwrap();
+        assert!(
+            built_in_effective
+                .terminal_output
+                .contains("framework_adapter_status: built_in_default [built-in]")
+        );
     }
 
     #[test]

@@ -133,6 +133,11 @@ struct PreparedConfigValues {
     interactive_resolution: bool,
 }
 
+enum AdapterAddStep<T> {
+    Continue(T),
+    Report(AdapterCommandReport),
+}
+
 #[derive(Debug, Error)]
 enum AdapterCommandError {
     #[error("adapter commands require --workspace")]
@@ -207,88 +212,21 @@ fn execute_add_inner(
 
     let plan = resolve_registration_plan(&request)?;
     let host = adapter_host(&plan.command, &plan.args, workspace)?;
-    let describe = match host.describe() {
-        Ok(describe) => describe,
-        Err(error) => {
-            if let Some(report) =
-                unavailable_binary_report(&plan, request.profile, workspace, &error)
-            {
-                return Ok(report);
-            }
-            return Err(error.into());
-        }
+    let describe = match resolve_add_describe(&host, &plan, request.profile, workspace)? {
+        AdapterAddStep::Continue(describe) => describe,
+        AdapterAddStep::Report(report) => return Ok(report),
     };
 
-    if describe.protocol_line != plan.compatibility_line {
-        return Ok(blocked_report(
-            &plan.adapter_id,
-            REASON_INCOMPATIBLE_PROTOCOL,
-            Some(format!(
-                "{ADD_RECOVERY_TEMPLATE} {} --workspace {}",
-                request.profile,
-                workspace.display()
-            )),
-            Vec::new(),
-        ));
-    }
-
-    if plan.selection_mode == AdapterSelectionMode::KnownProfile
-        && describe.adapter_id != plan.adapter_id
-    {
-        return Ok(blocked_report(
-            &plan.adapter_id,
-            REASON_UNEXPECTED_ADAPTER_ID,
-            Some(format!(
-                "{ADD_RECOVERY_TEMPLATE} {} --workspace {}",
-                request.profile,
-                workspace.display()
-            )),
-            Vec::new(),
-        ));
-    }
-
-    if !framework_adapter_supports_v1_transport(&describe.supported_transports) {
-        return Ok(unsupported_transport_report(
-            &plan.adapter_id,
-            request.profile,
-            workspace,
-            &describe,
-        ));
-    }
-
-    let mut prepared = prepare_config_values(&plan, request.set, &describe)?;
-    if !prepared.missing_fields.is_empty() && !request.non_interactive {
-        if !interactive_terminal {
-            return Err(AdapterCommandError::InteractiveTerminalUnavailable);
-        }
-        prepared = match collect_guided_config_values(
-            &plan,
-            request.set,
-            &describe,
-            &prepared,
-            request.interactor.as_mut(),
-        ) {
-            Ok(prepared) => prepared,
-            Err(AdapterCommandError::PromptInteraction(message))
-                if is_guided_cancel_message(&message) =>
-            {
-                return Ok(cancelled_report(&plan.adapter_id, workspace, &request, &message));
-            }
-            Err(error) => return Err(error),
-        };
-    }
-    if !prepared.missing_fields.is_empty() {
-        return Ok(blocked_report(
-            &plan.adapter_id,
-            REASON_MISSING_REQUIRED_CONFIG,
-            Some(format!(
-                "{ADD_RECOVERY_TEMPLATE} {} --workspace {}",
-                request.profile,
-                workspace.display()
-            )),
-            prepared.missing_fields,
-        ));
-    }
+    let prepared = match resolve_add_config_values(
+        &mut request,
+        &plan,
+        &describe,
+        interactive_terminal,
+        workspace,
+    )? {
+        AdapterAddStep::Continue(prepared) => prepared,
+        AdapterAddStep::Report(report) => return Ok(report),
+    };
 
     let preflight = host.preflight(&FrameworkAdapterPreflightRequest {
         boundline_version: CURRENT_BOUNDLINE_VERSION.to_string(),
@@ -305,6 +243,104 @@ fn execute_add_inner(
         build_persisted_configuration(&plan, &prepared, &preflight, registration_source);
     save_adapter_selection(&store, persisted.clone())?;
     Ok(ready_report(&persisted, &describe))
+}
+
+fn resolve_add_describe(
+    host: &SubprocessFrameworkAdapterHost,
+    plan: &AdapterRegistrationPlan,
+    profile: &str,
+    workspace: &Path,
+) -> Result<AdapterAddStep<FrameworkAdapterDescribeResponse>, AdapterCommandError> {
+    let describe = match host.describe() {
+        Ok(describe) => describe,
+        Err(error) => {
+            if let Some(report) = unavailable_binary_report(plan, profile, workspace, &error) {
+                return Ok(AdapterAddStep::Report(report));
+            }
+            return Err(error.into());
+        }
+    };
+
+    if describe.protocol_line != plan.compatibility_line {
+        return Ok(AdapterAddStep::Report(blocked_report(
+            &plan.adapter_id,
+            REASON_INCOMPATIBLE_PROTOCOL,
+            Some(format!("{ADD_RECOVERY_TEMPLATE} {profile} --workspace {}", workspace.display())),
+            Vec::new(),
+        )));
+    }
+
+    if plan.selection_mode == AdapterSelectionMode::KnownProfile
+        && describe.adapter_id != plan.adapter_id
+    {
+        return Ok(AdapterAddStep::Report(blocked_report(
+            &plan.adapter_id,
+            REASON_UNEXPECTED_ADAPTER_ID,
+            Some(format!("{ADD_RECOVERY_TEMPLATE} {profile} --workspace {}", workspace.display())),
+            Vec::new(),
+        )));
+    }
+
+    if !framework_adapter_supports_v1_transport(&describe.supported_transports) {
+        return Ok(AdapterAddStep::Report(unsupported_transport_report(
+            &plan.adapter_id,
+            profile,
+            workspace,
+            &describe,
+        )));
+    }
+
+    Ok(AdapterAddStep::Continue(describe))
+}
+
+fn resolve_add_config_values(
+    request: &mut AddAdapterRequest<'_>,
+    plan: &AdapterRegistrationPlan,
+    describe: &FrameworkAdapterDescribeResponse,
+    interactive_terminal: bool,
+    workspace: &Path,
+) -> Result<AdapterAddStep<PreparedConfigValues>, AdapterCommandError> {
+    let mut prepared = prepare_config_values(plan, request.set, describe)?;
+    if !prepared.missing_fields.is_empty() && !request.non_interactive {
+        if !interactive_terminal {
+            return Err(AdapterCommandError::InteractiveTerminalUnavailable);
+        }
+        prepared = match collect_guided_config_values(
+            plan,
+            request.set,
+            describe,
+            &prepared,
+            request.interactor.as_mut(),
+        ) {
+            Ok(prepared) => prepared,
+            Err(AdapterCommandError::PromptInteraction(message))
+                if is_guided_cancel_message(&message) =>
+            {
+                return Ok(AdapterAddStep::Report(cancelled_report(
+                    &plan.adapter_id,
+                    workspace,
+                    request,
+                    &message,
+                )));
+            }
+            Err(error) => return Err(error),
+        };
+    }
+
+    if !prepared.missing_fields.is_empty() {
+        return Ok(AdapterAddStep::Report(blocked_report(
+            &plan.adapter_id,
+            REASON_MISSING_REQUIRED_CONFIG,
+            Some(format!(
+                "{ADD_RECOVERY_TEMPLATE} {} --workspace {}",
+                request.profile,
+                workspace.display()
+            )),
+            prepared.missing_fields,
+        )));
+    }
+
+    Ok(AdapterAddStep::Continue(prepared))
 }
 
 fn execute_show_inner(
@@ -1021,4 +1057,434 @@ fn contains_path_component(path: &Path) -> bool {
         || path.as_os_str().to_string_lossy().contains(std::path::MAIN_SEPARATOR)
         || path.as_os_str().to_string_lossy().contains('/')
         || path.as_os_str().to_string_lossy().contains('\\')
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use std::collections::VecDeque;
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+    use std::path::{Path, PathBuf};
+
+    use tempfile::tempdir;
+
+    use super::{
+        AdapterConfigInteractor, AddAdapterRequest, CommandExitStatus, FileConfigStore,
+        RemoveAdapterRequest, ShowAdapterRequest, execute_add, execute_add_from_init,
+        execute_remove, execute_show,
+    };
+    use crate::adapters::{FrameworkAdapterDescribeResponse, FrameworkAdapterPreflightResponse};
+    use crate::domain::framework_adapter::AdapterRegistrationSource;
+    use crate::fixture::{
+        sample_framework_adapter_describe_response,
+        sample_framework_adapter_preflight_blocked_response,
+        sample_framework_adapter_preflight_ready_response,
+        sample_framework_adapter_success_envelope,
+    };
+
+    #[derive(Debug)]
+    struct ScriptedAdapterConfigInteractor {
+        responses: VecDeque<Result<String, String>>,
+    }
+
+    impl ScriptedAdapterConfigInteractor {
+        fn new(responses: impl IntoIterator<Item = Result<String, String>>) -> Self {
+            Self { responses: responses.into_iter().collect() }
+        }
+    }
+
+    impl AdapterConfigInteractor for ScriptedAdapterConfigInteractor {
+        fn input(
+            &mut self,
+            _prompt: &str,
+            _initial: &str,
+            _secret: bool,
+        ) -> Result<String, String> {
+            self.responses
+                .pop_front()
+                .unwrap_or_else(|| Err("missing scripted adapter response".to_string()))
+        }
+    }
+
+    #[test]
+    fn show_and_remove_surface_built_in_default_without_local_adapter() {
+        let temp = tempdir().unwrap();
+
+        let show = execute_show(ShowAdapterRequest { workspace: Some(temp.path()) });
+        assert_eq!(show.exit_status, CommandExitStatus::Succeeded);
+        assert!(
+            show.terminal_output.contains("status: built_in_default"),
+            "{}",
+            show.terminal_output
+        );
+        assert!(
+            show.terminal_output.contains("execution_source: built_in"),
+            "{}",
+            show.terminal_output
+        );
+
+        let remove = execute_remove(RemoveAdapterRequest { workspace: Some(temp.path()) });
+        assert_eq!(remove.exit_status, CommandExitStatus::Succeeded);
+        assert!(remove.terminal_output.contains("status: removed"), "{}", remove.terminal_output);
+        assert!(
+            remove.terminal_output.contains("execution_source: built_in"),
+            "{}",
+            remove.terminal_output
+        );
+    }
+
+    #[test]
+    fn execute_add_persists_known_profile_and_blocks_reselection() {
+        let temp = tempdir().unwrap();
+        let script = write_framework_adapter_script(
+            temp.path(),
+            &sample_framework_adapter_describe_response(),
+            &sample_framework_adapter_preflight_ready_response(),
+        );
+        let args = Vec::new();
+        let set = Vec::new();
+
+        let add = execute_add(AddAdapterRequest {
+            profile: "speckit",
+            workspace: Some(temp.path()),
+            id: None,
+            command: Some(script.as_str()),
+            arg: &args,
+            set: &set,
+            non_interactive: true,
+            interactive_terminal_override: Some(false),
+            interactor: None,
+        });
+
+        assert_eq!(add.exit_status, CommandExitStatus::Succeeded);
+        assert!(add.terminal_output.contains("status: ready"), "{}", add.terminal_output);
+        assert!(add.terminal_output.contains("adapter_id: speckit"), "{}", add.terminal_output);
+
+        let persisted =
+            FileConfigStore::for_workspace(temp.path()).local_adapter().unwrap().unwrap();
+        assert_eq!(persisted.selection.registration_source, AdapterRegistrationSource::AdapterAdd);
+        assert_eq!(persisted.selection.command, script);
+
+        let show = execute_show(ShowAdapterRequest { workspace: Some(temp.path()) });
+        assert_eq!(show.exit_status, CommandExitStatus::Succeeded);
+        assert!(show.terminal_output.contains("status: configured"), "{}", show.terminal_output);
+        assert!(show.terminal_output.contains("adapter_id: speckit"), "{}", show.terminal_output);
+
+        let second_add = execute_add(AddAdapterRequest {
+            profile: "speckit",
+            workspace: Some(temp.path()),
+            id: None,
+            command: Some(script.as_str()),
+            arg: &args,
+            set: &set,
+            non_interactive: true,
+            interactive_terminal_override: Some(false),
+            interactor: None,
+        });
+        assert_eq!(second_add.exit_status, CommandExitStatus::NonSuccess);
+        assert!(
+            second_add.terminal_output.contains("reason: adapter_already_selected"),
+            "{}",
+            second_add.terminal_output
+        );
+
+        let remove = execute_remove(RemoveAdapterRequest { workspace: Some(temp.path()) });
+        assert_eq!(remove.exit_status, CommandExitStatus::Succeeded);
+        assert!(remove.terminal_output.contains("status: removed"), "{}", remove.terminal_output);
+    }
+
+    #[test]
+    fn execute_add_from_init_persists_init_registration_source() {
+        let temp = tempdir().unwrap();
+        let script = write_framework_adapter_script(
+            temp.path(),
+            &sample_framework_adapter_describe_response(),
+            &sample_framework_adapter_preflight_ready_response(),
+        );
+        let args = Vec::new();
+        let set = Vec::new();
+
+        let add = execute_add_from_init(AddAdapterRequest {
+            profile: "speckit",
+            workspace: Some(temp.path()),
+            id: None,
+            command: Some(script.as_str()),
+            arg: &args,
+            set: &set,
+            non_interactive: true,
+            interactive_terminal_override: Some(false),
+            interactor: None,
+        });
+
+        assert_eq!(add.exit_status, CommandExitStatus::Succeeded);
+        let persisted =
+            FileConfigStore::for_workspace(temp.path()).local_adapter().unwrap().unwrap();
+        assert_eq!(persisted.selection.registration_source, AdapterRegistrationSource::Init);
+    }
+
+    #[test]
+    fn execute_add_reports_unavailable_binary_for_unresolved_known_profile() {
+        let temp = tempdir().unwrap();
+        let args = Vec::new();
+        let set = Vec::new();
+
+        let add = execute_add(AddAdapterRequest {
+            profile: "speckit",
+            workspace: Some(temp.path()),
+            id: None,
+            command: None,
+            arg: &args,
+            set: &set,
+            non_interactive: true,
+            interactive_terminal_override: Some(false),
+            interactor: None,
+        });
+
+        assert_eq!(add.exit_status, CommandExitStatus::NonSuccess);
+        assert!(
+            add.terminal_output.contains("reason: unavailable_binary"),
+            "{}",
+            add.terminal_output
+        );
+        assert!(
+            add.terminal_output.contains("discovery_state: unresolved"),
+            "{}",
+            add.terminal_output
+        );
+    }
+
+    #[test]
+    fn execute_add_blocks_on_protocol_adapter_id_transport_and_preflight_mismatches() {
+        let temp = tempdir().unwrap();
+        let args = Vec::new();
+        let set = Vec::new();
+
+        let mut incompatible = sample_framework_adapter_describe_response();
+        incompatible.protocol_line = "framework-adapter-protocol-v9".to_string();
+        let incompatible_script = write_framework_adapter_script(
+            temp.path(),
+            &incompatible,
+            &sample_framework_adapter_preflight_ready_response(),
+        );
+        let incompatible_report = execute_add(AddAdapterRequest {
+            profile: "speckit",
+            workspace: Some(temp.path()),
+            id: None,
+            command: Some(incompatible_script.as_str()),
+            arg: &args,
+            set: &set,
+            non_interactive: true,
+            interactive_terminal_override: Some(false),
+            interactor: None,
+        });
+        assert!(
+            incompatible_report.terminal_output.contains("reason: incompatible_protocol"),
+            "{}",
+            incompatible_report.terminal_output
+        );
+
+        let temp = tempdir().unwrap();
+        let mut unexpected = sample_framework_adapter_describe_response();
+        unexpected.adapter_id = "unexpected-adapter".to_string();
+        let unexpected_script = write_framework_adapter_script(
+            temp.path(),
+            &unexpected,
+            &sample_framework_adapter_preflight_ready_response(),
+        );
+        let unexpected_report = execute_add(AddAdapterRequest {
+            profile: "speckit",
+            workspace: Some(temp.path()),
+            id: None,
+            command: Some(unexpected_script.as_str()),
+            arg: &args,
+            set: &set,
+            non_interactive: true,
+            interactive_terminal_override: Some(false),
+            interactor: None,
+        });
+        assert!(
+            unexpected_report.terminal_output.contains("reason: unexpected_adapter_id"),
+            "{}",
+            unexpected_report.terminal_output
+        );
+
+        let temp = tempdir().unwrap();
+        let mut unsupported = sample_framework_adapter_describe_response();
+        unsupported.supported_transports.clear();
+        let unsupported_script = write_framework_adapter_script(
+            temp.path(),
+            &unsupported,
+            &sample_framework_adapter_preflight_ready_response(),
+        );
+        let unsupported_report = execute_add(AddAdapterRequest {
+            profile: "speckit",
+            workspace: Some(temp.path()),
+            id: None,
+            command: Some(unsupported_script.as_str()),
+            arg: &args,
+            set: &set,
+            non_interactive: true,
+            interactive_terminal_override: Some(false),
+            interactor: None,
+        });
+        assert!(
+            unsupported_report.terminal_output.contains("reason: unsupported_transport"),
+            "{}",
+            unsupported_report.terminal_output
+        );
+
+        let temp = tempdir().unwrap();
+        let blocked_script = write_framework_adapter_script(
+            temp.path(),
+            &sample_framework_adapter_describe_response(),
+            &sample_framework_adapter_preflight_blocked_response(),
+        );
+        let blocked_report = execute_add(AddAdapterRequest {
+            profile: "speckit",
+            workspace: Some(temp.path()),
+            id: None,
+            command: Some(blocked_script.as_str()),
+            arg: &args,
+            set: &set,
+            non_interactive: true,
+            interactive_terminal_override: Some(false),
+            interactor: None,
+        });
+        assert!(
+            blocked_report.terminal_output.contains("reason: missing_required_config"),
+            "{}",
+            blocked_report.terminal_output
+        );
+        assert!(
+            blocked_report.terminal_output.contains("missing_fields: template_repo"),
+            "{}",
+            blocked_report.terminal_output
+        );
+    }
+
+    #[test]
+    fn execute_add_surfaces_custom_profile_errors_missing_config_and_guided_cancel() {
+        let temp = tempdir().unwrap();
+        let script = write_framework_adapter_script(
+            temp.path(),
+            &sample_framework_adapter_describe_response(),
+            &sample_framework_adapter_preflight_ready_response(),
+        );
+        let args = Vec::new();
+        let set = Vec::new();
+
+        let missing_id = execute_add(AddAdapterRequest {
+            profile: "custom",
+            workspace: Some(temp.path()),
+            id: None,
+            command: Some(script.as_str()),
+            arg: &args,
+            set: &set,
+            non_interactive: true,
+            interactive_terminal_override: Some(false),
+            interactor: None,
+        });
+        assert!(
+            missing_id.terminal_output.contains("custom adapter registration requires --id"),
+            "{}",
+            missing_id.terminal_output
+        );
+
+        let missing_command = execute_add(AddAdapterRequest {
+            profile: "custom",
+            workspace: Some(temp.path()),
+            id: Some("custom-speckit"),
+            command: None,
+            arg: &args,
+            set: &set,
+            non_interactive: true,
+            interactive_terminal_override: Some(false),
+            interactor: None,
+        });
+        assert!(
+            missing_command
+                .terminal_output
+                .contains("custom adapter registration requires --command"),
+            "{}",
+            missing_command.terminal_output
+        );
+
+        let missing_config = execute_add(AddAdapterRequest {
+            profile: "custom",
+            workspace: Some(temp.path()),
+            id: Some("custom-speckit"),
+            command: Some(script.as_str()),
+            arg: &args,
+            set: &set,
+            non_interactive: true,
+            interactive_terminal_override: Some(false),
+            interactor: None,
+        });
+        assert_eq!(missing_config.exit_status, CommandExitStatus::NonSuccess);
+        assert!(
+            missing_config.terminal_output.contains("reason: missing_required_config"),
+            "{}",
+            missing_config.terminal_output
+        );
+
+        let guided_cancel = execute_add(AddAdapterRequest {
+            profile: "custom",
+            workspace: Some(temp.path()),
+            id: Some("custom-speckit"),
+            command: Some(script.as_str()),
+            arg: &args,
+            set: &set,
+            non_interactive: false,
+            interactive_terminal_override: Some(true),
+            interactor: Some(Box::new(ScriptedAdapterConfigInteractor::new([Err(
+                "operator cancelled prompt".to_string(),
+            )]))),
+        });
+        assert_eq!(guided_cancel.exit_status, CommandExitStatus::NonSuccess);
+        assert!(
+            guided_cancel.terminal_output.contains("status: cancelled"),
+            "{}",
+            guided_cancel.terminal_output
+        );
+        assert!(
+            guided_cancel.terminal_output.contains("reason: setup_cancelled"),
+            "{}",
+            guided_cancel.terminal_output
+        );
+    }
+
+    fn write_framework_adapter_script(
+        workspace: &Path,
+        describe: &FrameworkAdapterDescribeResponse,
+        preflight: &FrameworkAdapterPreflightResponse,
+    ) -> String {
+        let describe_path = workspace.join("describe-response.json");
+        let preflight_path = workspace.join("preflight-response.json");
+        let script_path = workspace.join("framework-adapter.sh");
+        let describe_payload =
+            serde_json::to_string(&sample_framework_adapter_success_envelope(describe.clone()))
+                .unwrap();
+        let preflight_payload =
+            serde_json::to_string(&sample_framework_adapter_success_envelope(preflight.clone()))
+                .unwrap();
+        fs::write(&describe_path, describe_payload).unwrap();
+        fs::write(&preflight_path, preflight_payload).unwrap();
+        fs::write(
+            &script_path,
+            format!(
+                "#!/bin/sh\ncase \"$1\" in\ndescribe)\n  cat '{}'\n  ;;\npreflight)\n  cat >/dev/null\n  cat '{}'\n  ;;\n*)\n  exit 1\n  ;;\nesac\n",
+                describe_path.to_string_lossy(),
+                preflight_path.to_string_lossy(),
+            ),
+        )
+        .unwrap();
+        let mut permissions = fs::metadata(&script_path).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&script_path, permissions).unwrap();
+        path_string(&script_path)
+    }
+
+    fn path_string(path: &Path) -> String {
+        PathBuf::from(path).to_string_lossy().into_owned()
+    }
 }

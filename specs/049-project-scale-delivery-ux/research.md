@@ -59,13 +59,13 @@ Voting should be triggered by material risk or evidence gaps: high-impact archit
 
 ## Decision: Delivery Pilot Model Belongs In Dedicated Docs And Architecture Cross-Links
 
-Add `docs/delivery-model.md` and cross-link it from `docs/architecture.md`, `docs/getting-started.md`, and `README.md`. The docs should define "Large work is supported by decomposition, not by unbounded autonomy" and explain `observe -> decide -> act -> verify -> update context`.
+Add `tech-docs/delivery-model.md` and cross-link it from `tech-docs/architecture.md`, `tech-docs/getting-started.md`, and `README.md`. The docs should define "Large work is supported by decomposition, not by unbounded autonomy" and explain `observe -> decide -> act -> verify -> update context`.
 
 **Rationale**: The model is product-facing and architectural. A dedicated doc prevents the architecture page from becoming overloaded while still giving users and contributors an obvious reference.
 
 **Alternatives considered**:
 
-- Only update `docs/architecture.md`: rejected because the user requested a visible model section and project-scale examples.
+- Only update `tech-docs/architecture.md`: rejected because the user requested a visible model section and project-scale examples.
 - Only update README: rejected because the behavior needs enough detail for contributors and testers.
 
 ## Decision: Version And Canon Compatibility Should Move First In Implementation

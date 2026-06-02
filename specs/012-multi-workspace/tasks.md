@@ -106,7 +106,7 @@ bounded, inspectable value independently.
 
 **Purpose**: Finalize docs, keep the spec artifacts aligned, and run repository validation.
 
-- [X] T027 [P] Update clustered workflow documentation in README.md, docs/getting-started.md, docs/configuration.md, and specs/012-multi-workspace/quickstart.md
+- [X] T027 [P] Update clustered workflow documentation in README.md, tech-docs/getting-started.md, tech-docs/configuration.md, and specs/012-multi-workspace/quickstart.md
 - [X] T028 [P] Sync planning metadata and roadmap guidance in AGENTS.md and ROADMAP.md
 - [X] T029 Run formatting, lint, and targeted/full test validation with `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, and `cargo test --all-targets`
 

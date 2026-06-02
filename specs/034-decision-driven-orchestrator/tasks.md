@@ -116,7 +116,7 @@
 ### Implementation for User Story 4
 
 - [x] T026 [US4] Bump crate version to `0.34.0` in `Cargo.toml` and `Cargo.lock`
-- [x] T027 [US4] Update impacted docs and release narrative in `README.md`, `docs/getting-started.md`, `docs/configuration.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, and `AGENTS.md`
+- [x] T027 [US4] Update impacted docs and release narrative in `README.md`, `tech-docs/getting-started.md`, `tech-docs/configuration.md`, `CONTRIBUTING.md`, `CHANGELOG.md`, and `AGENTS.md`
 - [x] T028 [US4] Update `ROADMAP.md` to mark Spec 034 as delivered and remove it from the remaining future macrofeature line
 - [x] T029 [US4] Update assistant guidance impacted by selector-driven execution in `assistant/README.md`, `assistant/claude/commands/boundline-status.md`, `assistant/claude/commands/boundline-next.md`, `assistant/codex/commands/boundline-status.md`, `assistant/codex/commands/boundline-next.md`, `assistant/copilot/prompts/boundline-status.prompt.md`, `assistant/copilot/prompts/boundline-next.prompt.md`, `assistant/gemini/README.md`, and `specs/034-decision-driven-orchestrator/quickstart.md`
 

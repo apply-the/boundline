@@ -51,7 +51,7 @@ version tag. Two contract tests enforce alignment automatically:
 - **`README.md`** — update the active feature-line paragraph and any
   current-release Canon compatibility statement.
 
-- **`docs/getting-started.md`** and **`docs/architecture.md`** — update any
+- **`tech-docs/getting-started.md`** and **`tech-docs/architecture.md`** — update any
   current Canon compatibility target named in the active product docs.
 
 - **Derived-index lifecycle docs** — when the local semantic retrieval surface

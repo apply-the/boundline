@@ -90,7 +90,7 @@
 
 ### Implementation for User Story 3
 
-- [ ] T017 [US3] Update the adaptive operator story, impacted docs, and release notes in `README.md`, `docs/adaptive-execution.md`, `docs/getting-started.md`, `docs/configuration.md`, `assistant/README.md`, `CONTRIBUTING.md`, `ROADMAP.md`, and `CHANGELOG.md`
+- [ ] T017 [US3] Update the adaptive operator story, impacted docs, and release notes in `README.md`, `tech-docs/adaptive-execution.md`, `tech-docs/getting-started.md`, `tech-docs/configuration.md`, `assistant/README.md`, `CONTRIBUTING.md`, `ROADMAP.md`, and `CHANGELOG.md`
 
 **Checkpoint**: Maintainers and assistants have one coherent `0.23.0` story for bounded adaptive repair, credibility, and exhaustion.
 

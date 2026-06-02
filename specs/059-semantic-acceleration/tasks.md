@@ -38,7 +38,7 @@ exist before any user story work can complete.
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
 - [x] T004 Extend typed semantic policy, hybrid outcome, and chunk-state models in `src/domain/context_intelligence.rs`
-- [x] T005 [P] Introduce the dedicated `semantic_acceleration` config surface plus the `boundline config set-semantic-acceleration` mutation path in `src/domain/configuration.rs`, `src/cli/config.rs`, and `docs/configuration.md`
+- [x] T005 [P] Introduce the dedicated `semantic_acceleration` config surface plus the `boundline config set-semantic-acceleration` mutation path in `src/domain/configuration.rs`, `src/cli/config.rs`, and `tech-docs/configuration.md`
 - [x] T006 [P] Add shared persistence slots for semantic projection state in `src/domain/goal_plan.rs`, `src/domain/session.rs`, `src/domain/task_context.rs`, and `src/domain/trace.rs`
 - [x] T007 Implement semantic index manifest, vector-capability detection, and shared refresh helpers in `src/orchestrator/context_intelligence.rs`
 - [x] T008 [P] Add foundational semantic-model validation coverage in `tests/unit/context_intelligence_state.rs`, `tests/unit/session_cli_runtime.rs`, and `tests/unit/cluster_config_resolution.rs`
@@ -134,7 +134,7 @@ policy explicit while preserving the primary session-native workflow.
 
 **Purpose**: Finish operator guidance, validation, and closeout for all stories.
 
-- [x] T029 [P] Update operator and contributor guidance for semantic acceleration in `docs/configuration.md`, `README.md`, and `assistant/README.md`
+- [x] T029 [P] Update operator and contributor guidance for semantic acceleration in `tech-docs/configuration.md`, `README.md`, and `assistant/README.md`
 - [x] T030 [P] Refresh repository agent guidance and release notes for semantic acceleration in `AGENTS.md` and `CHANGELOG.md`
 - [x] T031 [P] Create the semantic recall evaluation corpus and threshold harness in `tests/integration/context_intelligence_semantic_recall.rs` and `tests/fixtures/context_intelligence_semantic_eval/`
 - [x] T032 Run the semantic-acceleration quickstart walkthrough and capture any follow-up notes in `specs/059-semantic-acceleration/quickstart.md` and `specs/059-semantic-acceleration/checklists/requirements.md`

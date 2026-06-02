@@ -4,8 +4,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::framework_adapter::{
     AdapterCapabilitySnapshotState, AdapterExecutionSource, AdapterHookKey,
-    AdapterLifecycleStageKey, LifecycleStageExecutionStatus, ProtocolCompatibilityState,
-    StageClaimState, StageRoutingDecisionReason,
+    AdapterLifecycleStageKey, FrameworkAdapterStageOutcomeDetails, LifecycleStageExecutionStatus,
+    ProtocolCompatibilityState, StageClaimState, StageRoutingDecisionReason,
 };
 
 /// Validated adapter capabilities captured before a lifecycle run begins.
@@ -70,6 +70,9 @@ pub struct StageRoutingDecisionRecord {
     /// Produced artifacts captured from the authoritative adapter response.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub produced_artifacts: Vec<String>,
+    /// Optional adapter-owned detail payload preserved with the routing outcome.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub details: Option<FrameworkAdapterStageOutcomeDetails>,
     /// Timestamp of the routing decision.
     pub recorded_at: u64,
 }

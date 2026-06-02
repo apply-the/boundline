@@ -96,7 +96,7 @@
 ### Implementation for User Story 3
 
 - [x] T022 [US3] Preserve direct session-native and explicit compatibility behavior when workflow discovery metadata is present in `src/cli/run.rs`, `src/cli/session.rs`, and `src/cli/workflow.rs`
-- [x] T023 [US3] Ship bounded registry authoring examples and workflow command relationship guidance in `README.md`, `docs/getting-started.md`, `docs/configuration.md`, and `assistant/README.md`
+- [x] T023 [US3] Ship bounded registry authoring examples and workflow command relationship guidance in `README.md`, `tech-docs/getting-started.md`, `tech-docs/configuration.md`, and `assistant/README.md`
 
 **Checkpoint**: Registry authors have clear supported examples, and the workflow layer remains bounded and session-owned without taking over every execution path.
 

@@ -1015,3 +1015,495 @@ pub(super) struct GovernanceBlockContext {
     pub(super) runtime: GovernanceRuntimeKind,
     pub(super) reason: String,
 }
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+    use std::error::Error;
+
+    use crate::domain::configuration::{
+        EffectiveRouting, ModelRoute, RuntimeKind, SourcedRoute, ValueSource,
+    };
+    use crate::domain::governance::{CanonModeSelectionPreference, GovernedSessionLifecycle};
+    use crate::domain::reasoning::{
+        CanonAdmissionPriority, CanonChallengePostureInput, IndependenceAssessment,
+        IndependenceAssessmentResult, IndependenceFloor, ParticipantAssignment,
+        ParticipantRoleDefinition, ProfileActivationRecord, ReasoningActivationStatus,
+        ReasoningActivationTrigger, ReasoningAdjudicationMode, ReasoningAdmissionEffect,
+        ReasoningBudget, ReasoningCompatibilityWindow, ReasoningConfidenceContribution,
+        ReasoningConfidenceLevel, ReasoningDegradationPolicy, ReasoningObservedDistinctness,
+        ReasoningOutcome, ReasoningOutcomeKind, ReasoningParticipantRoleKind,
+        ReasoningParticipantStatus, ReasoningProfileDefinition, ReasoningProfileFamily,
+        ReasoningProfileId, ReasoningRoutePreference,
+    };
+    use crate::domain::session::SessionStatus;
+
+    use super::{
+        ActiveSessionRecord, CURRENT_BOUNDLINE_VERSION, CanonMode, GovernanceRuntimeKind,
+        REASONING_CONTEXT_BASIS_PREFIX, REASONING_POSTURE_V1_CONTRACT_LINE, SessionRuntimeError,
+        mark_reasoning_participants_completed, next_minor_exclusive, reasoning_activation_reason,
+        reasoning_confidence_for_activation, reasoning_participants_for_profile,
+        reasoning_posture_for_activation, reasoning_profile_block_message,
+        reasoning_route_for_role, reasoning_status_for_activation, store_latest_reasoning_profile,
+    };
+
+    const GOVERNANCE_ATTEMPT_ID: &str = "attempt-7";
+    const SESSION_ID: &str = "session-1";
+    const STAGE_KEY: &str = "run:implementation";
+    const UPDATED_AT: u64 = 42;
+
+    #[test]
+    fn reasoning_helper_paths_cover_routes_posture_confidence_and_lifecycle_storage()
+    -> Result<(), Box<dyn Error>> {
+        let routing = sample_effective_routing();
+        let definition = sample_reasoning_definition();
+        let security_role = definition.participant_roles[0].clone();
+        let builder_role = definition.participant_roles[2].clone();
+        let arbiter_role = sample_arbiter_role();
+
+        let (security_route, security_provider) =
+            reasoning_route_for_role(&security_role, &routing, 0);
+        assert_eq!(security_route, "reviewer_roles.security:claude:security-review");
+        assert_eq!(security_provider.as_deref(), Some("claude"));
+
+        let (builder_route, builder_provider) =
+            reasoning_route_for_role(&builder_role, &routing, 0);
+        assert_eq!(builder_route, "implementation:copilot:impl-main");
+        assert_eq!(builder_provider.as_deref(), Some("copilot"));
+
+        let (arbiter_route, arbiter_provider) =
+            reasoning_route_for_role(&arbiter_role, &routing, 0);
+        assert_eq!(arbiter_route, "adjudication:codex:judge-main");
+        assert_eq!(arbiter_provider.as_deref(), Some("codex"));
+
+        let participants = reasoning_participants_for_profile(STAGE_KEY, &definition, &routing);
+        assert_eq!(participants.len(), 3);
+        assert_eq!(participants[0].participant_id, "bounded_reflexion-security");
+        assert_eq!(
+            participants[0].context_basis,
+            format!("{REASONING_CONTEXT_BASIS_PREFIX}:{STAGE_KEY}")
+        );
+        assert_eq!(participants[0].status, ReasoningParticipantStatus::Pending);
+        assert_eq!(participants[2].effective_route, "implementation:copilot:impl-main");
+
+        let posture = reasoning_posture_for_activation(
+            &definition,
+            GovernanceRuntimeKind::Canon,
+            GOVERNANCE_ATTEMPT_ID,
+        )?
+        .ok_or("missing Canon reasoning posture")?;
+        assert_eq!(posture.contract_line, REASONING_POSTURE_V1_CONTRACT_LINE);
+        assert_eq!(posture.provenance_ref, format!("governance_attempt:{GOVERNANCE_ATTEMPT_ID}"));
+        assert_eq!(posture.required_profile_id, Some(ReasoningProfileId::BoundedReflexion));
+        assert!(posture.confidence_handoff_required);
+
+        assert_eq!(
+            reasoning_posture_for_activation(
+                &definition,
+                GovernanceRuntimeKind::Local,
+                GOVERNANCE_ATTEMPT_ID
+            )?,
+            None
+        );
+
+        let passed_independence = IndependenceAssessment {
+            requested_floor: sample_independence_floor(),
+            observed_distinctions: ReasoningObservedDistinctness {
+                distinct_routes: 2,
+                distinct_providers: 2,
+                distinct_contexts: 2,
+                distinct_prompt_patterns: 2,
+            },
+            result: IndependenceAssessmentResult::Passed,
+            reason: "all independence dimensions satisfied".to_string(),
+        };
+        let passed_confidence = reasoning_confidence_for_activation(
+            GovernanceRuntimeKind::Canon,
+            &passed_independence,
+            Some(&posture),
+        );
+        assert_eq!(passed_confidence.confidence_level, ReasoningConfidenceLevel::High);
+        assert_eq!(passed_confidence.admission_effect, ReasoningAdmissionEffect::None);
+        assert!(
+            passed_confidence
+                .basis
+                .iter()
+                .any(|entry| entry == "posture_contract=governed_reasoning_posture_v1")
+        );
+
+        assert_eq!(next_minor_exclusive("1.2.3")?, "1.3.0");
+        let invalid_error =
+            next_minor_exclusive("1.2").err().ok_or("expected invalid semantic version error")?;
+        assert!(matches!(invalid_error, SessionRuntimeError::ExecutionInvariant(_)));
+
+        let mut session = sample_session();
+        let first_activation = sample_activation_record(
+            STAGE_KEY,
+            ReasoningActivationStatus::Completed,
+            Some("re-run final verification".to_string()),
+        );
+        store_latest_reasoning_profile(
+            &mut session,
+            GovernanceRuntimeKind::Canon,
+            Some(CanonMode::Implementation),
+            first_activation.clone(),
+        );
+        let lifecycle = session
+            .governance_lifecycle
+            .as_ref()
+            .ok_or("missing lifecycle after first reasoning activation")?;
+        assert_eq!(lifecycle.governance_runtime, GovernanceRuntimeKind::Canon);
+        assert_eq!(lifecycle.selected_mode, Some(CanonMode::Implementation));
+        assert_eq!(lifecycle.selected_mode_sequence, vec![CanonMode::Implementation]);
+        assert_eq!(lifecycle.latest_reasoning_profile.as_ref(), Some(&first_activation));
+
+        let second_activation =
+            sample_activation_record("run:review", ReasoningActivationStatus::Blocked, None);
+        store_latest_reasoning_profile(
+            &mut session,
+            GovernanceRuntimeKind::Local,
+            Some(CanonMode::Review),
+            second_activation.clone(),
+        );
+        let updated_lifecycle = session
+            .governance_lifecycle
+            .as_ref()
+            .ok_or("missing lifecycle after second reasoning activation")?;
+        assert_eq!(updated_lifecycle.governance_runtime, GovernanceRuntimeKind::Local);
+        assert_eq!(updated_lifecycle.selected_mode, Some(CanonMode::Implementation));
+        assert_eq!(
+            updated_lifecycle.selected_mode_sequence,
+            vec![CanonMode::Implementation, CanonMode::Review]
+        );
+        assert_eq!(updated_lifecycle.latest_reasoning_profile.as_ref(), Some(&second_activation));
+
+        Ok(())
+    }
+
+    #[test]
+    fn reasoning_helper_paths_cover_completion_status_and_block_messages() {
+        let mut participants = vec![
+            ParticipantAssignment {
+                role_id: "critic".to_string(),
+                participant_id: "critic-1".to_string(),
+                effective_route: "review:copilot:gpt-5.4".to_string(),
+                provider_family: Some("copilot".to_string()),
+                context_basis: "workspace".to_string(),
+                prompting_pattern: "critique".to_string(),
+                status: ReasoningParticipantStatus::Pending,
+                result_summary: None,
+            },
+            ParticipantAssignment {
+                role_id: "reviser".to_string(),
+                participant_id: "reviser-1".to_string(),
+                effective_route: "implementation:copilot:impl-main".to_string(),
+                provider_family: Some("copilot".to_string()),
+                context_basis: "workspace".to_string(),
+                prompting_pattern: "revise".to_string(),
+                status: ReasoningParticipantStatus::Pending,
+                result_summary: Some("already summarized".to_string()),
+            },
+        ];
+        mark_reasoning_participants_completed(&mut participants);
+        assert!(
+            participants
+                .iter()
+                .all(|participant| { participant.status == ReasoningParticipantStatus::Completed })
+        );
+        assert_eq!(
+            participants[0].result_summary.as_deref(),
+            Some("completed via review:copilot:gpt-5.4")
+        );
+        assert_eq!(participants[1].result_summary.as_deref(), Some("already summarized"));
+
+        let passed = IndependenceAssessment {
+            requested_floor: sample_independence_floor(),
+            observed_distinctions: ReasoningObservedDistinctness {
+                distinct_routes: 2,
+                distinct_providers: 2,
+                distinct_contexts: 2,
+                distinct_prompt_patterns: 2,
+            },
+            result: IndependenceAssessmentResult::Passed,
+            reason: "passed".to_string(),
+        };
+        let degraded = IndependenceAssessment {
+            requested_floor: sample_independence_floor(),
+            observed_distinctions: ReasoningObservedDistinctness {
+                distinct_routes: 1,
+                distinct_providers: 1,
+                distinct_contexts: 2,
+                distinct_prompt_patterns: 2,
+            },
+            result: IndependenceAssessmentResult::Degraded,
+            reason: "degraded".to_string(),
+        };
+        let failed = IndependenceAssessment {
+            requested_floor: sample_independence_floor(),
+            observed_distinctions: ReasoningObservedDistinctness {
+                distinct_routes: 1,
+                distinct_providers: 1,
+                distinct_contexts: 1,
+                distinct_prompt_patterns: 1,
+            },
+            result: IndependenceAssessmentResult::Failed,
+            reason: "failed".to_string(),
+        };
+        let completed_outcome = ReasoningOutcome {
+            outcome_kind: ReasoningOutcomeKind::Converged,
+            headline: "completed".to_string(),
+            disagreement_summary: None,
+            next_action: None,
+            iterations: Vec::new(),
+        };
+        assert_eq!(
+            reasoning_status_for_activation(&passed, Some(&completed_outcome)),
+            ReasoningActivationStatus::Completed
+        );
+        assert_eq!(
+            reasoning_status_for_activation(&passed, None),
+            ReasoningActivationStatus::Active
+        );
+        assert_eq!(
+            reasoning_status_for_activation(&degraded, None),
+            ReasoningActivationStatus::Degraded
+        );
+        assert_eq!(
+            reasoning_status_for_activation(&failed, None),
+            ReasoningActivationStatus::Blocked
+        );
+
+        let canon_reason = reasoning_activation_reason(
+            STAGE_KEY,
+            &sample_reasoning_definition(),
+            GovernanceRuntimeKind::Canon,
+        );
+        assert!(canon_reason.contains("Canon governance activated reasoning profile"));
+        let local_reason = reasoning_activation_reason(
+            STAGE_KEY,
+            &sample_reasoning_definition(),
+            GovernanceRuntimeKind::Local,
+        );
+        assert!(local_reason.contains("stage governance activated reasoning profile"));
+
+        let blocked_with_next_action = sample_activation_record(
+            STAGE_KEY,
+            ReasoningActivationStatus::Blocked,
+            Some("escalate to review council".to_string()),
+        );
+        let blocked_message = reasoning_profile_block_message(&blocked_with_next_action);
+        assert!(blocked_message.contains("blocked stage run:implementation"));
+        assert!(blocked_message.contains("next action: escalate to review council"));
+
+        let blocked_without_next_action = ProfileActivationRecord {
+            outcome: None,
+            ..sample_activation_record(
+                "plan:requirements",
+                ReasoningActivationStatus::Blocked,
+                None,
+            )
+        };
+        let fallback_message = reasoning_profile_block_message(&blocked_without_next_action);
+        assert!(fallback_message.contains("stage plan:requirements"));
+        assert!(fallback_message.contains(&blocked_without_next_action.activation_reason));
+    }
+
+    fn sample_effective_routing() -> EffectiveRouting {
+        EffectiveRouting {
+            planning: sourced_route(RuntimeKind::Codex, "plan-main"),
+            implementation: sourced_route(RuntimeKind::Copilot, "impl-main"),
+            verification: sourced_route(RuntimeKind::Gemini, "verify-main"),
+            review: sourced_route(RuntimeKind::Gemini, "review-main"),
+            chat: None,
+            adjudication: sourced_route(RuntimeKind::Codex, "judge-main"),
+            reviewer_roles: BTreeMap::from([
+                ("quality".to_string(), sourced_route(RuntimeKind::Copilot, "quality-review")),
+                ("security".to_string(), sourced_route(RuntimeKind::Claude, "security-review")),
+            ]),
+        }
+    }
+
+    fn sourced_route(runtime: RuntimeKind, model: &str) -> SourcedRoute {
+        SourcedRoute {
+            route: ModelRoute { runtime, model: model.to_string() },
+            source: ValueSource::BuiltIn,
+        }
+    }
+
+    fn sample_reasoning_definition() -> ReasoningProfileDefinition {
+        ReasoningProfileDefinition {
+            profile_id: ReasoningProfileId::BoundedReflexion,
+            family: ReasoningProfileFamily::Reflexion,
+            allowed_stages: vec![CanonMode::Implementation],
+            limits: ReasoningBudget {
+                max_participants: 3,
+                max_branches: 1,
+                max_debate_rounds: 1,
+                max_reflexion_revisions: 1,
+                max_calls: 4,
+                max_tokens: 512,
+                max_adjudication_steps: 1,
+            },
+            participant_roles: vec![
+                ParticipantRoleDefinition {
+                    role_id: "security".to_string(),
+                    role_kind: ReasoningParticipantRoleKind::BlindReviewer,
+                    preferred_slot: ReasoningRoutePreference::Review,
+                    independence_requirements: sample_independence_floor(),
+                    required: true,
+                },
+                ParticipantRoleDefinition {
+                    role_id: "critic".to_string(),
+                    role_kind: ReasoningParticipantRoleKind::Critic,
+                    preferred_slot: ReasoningRoutePreference::Review,
+                    independence_requirements: sample_independence_floor(),
+                    required: false,
+                },
+                ParticipantRoleDefinition {
+                    role_id: "builder".to_string(),
+                    role_kind: ReasoningParticipantRoleKind::IndependentPath,
+                    preferred_slot: ReasoningRoutePreference::Implementation,
+                    independence_requirements: sample_independence_floor(),
+                    required: false,
+                },
+            ],
+            adjudication_mode: ReasoningAdjudicationMode::Arbiter,
+            degradation_policy: ReasoningDegradationPolicy {
+                allow_degraded_independence: true,
+                allow_reduced_participants: true,
+                interruptible: true,
+                blocked_next_action: Some("re-run final verification".to_string()),
+            },
+        }
+    }
+
+    fn sample_arbiter_role() -> ParticipantRoleDefinition {
+        ParticipantRoleDefinition {
+            role_id: "arbiter".to_string(),
+            role_kind: ReasoningParticipantRoleKind::Arbiter,
+            preferred_slot: ReasoningRoutePreference::Adjudication,
+            independence_requirements: sample_independence_floor(),
+            required: false,
+        }
+    }
+
+    fn sample_independence_floor() -> IndependenceFloor {
+        IndependenceFloor {
+            route_distinct: true,
+            provider_distinct: true,
+            context_distinct: false,
+            prompt_pattern_distinct: false,
+            minimum_participants: 2,
+        }
+    }
+
+    fn sample_activation_record(
+        stage_key: &str,
+        status: ReasoningActivationStatus,
+        next_action: Option<String>,
+    ) -> ProfileActivationRecord {
+        ProfileActivationRecord {
+            activation_id: format!("{GOVERNANCE_ATTEMPT_ID}-reasoning"),
+            stage_key: stage_key.to_string(),
+            profile_id: ReasoningProfileId::BoundedReflexion,
+            trigger: ReasoningActivationTrigger::LocalFixture,
+            activation_reason: format!(
+                "stage governance activated reasoning profile {} for {}",
+                ReasoningProfileId::BoundedReflexion,
+                stage_key
+            ),
+            status,
+            participants: Vec::new(),
+            budget: ReasoningBudget {
+                max_participants: 2,
+                max_branches: 1,
+                max_debate_rounds: 1,
+                max_reflexion_revisions: 1,
+                max_calls: 2,
+                max_tokens: 256,
+                max_adjudication_steps: 1,
+            },
+            posture: Some(CanonChallengePostureInput {
+                contract_line: REASONING_POSTURE_V1_CONTRACT_LINE.to_string(),
+                compatibility_window: ReasoningCompatibilityWindow {
+                    boundline_min: CURRENT_BOUNDLINE_VERSION.to_string(),
+                    boundline_max_exclusive: "999.0.0".to_string(),
+                    canon_min: "0.1.0".to_string(),
+                    canon_max_exclusive: "999.0.0".to_string(),
+                    contract_line: REASONING_POSTURE_V1_CONTRACT_LINE.to_string(),
+                },
+                required_profile_family: Some(ReasoningProfileFamily::Reflexion),
+                required_profile_id: Some(ReasoningProfileId::BoundedReflexion),
+                minimum_independence: sample_independence_floor(),
+                admission_priority: CanonAdmissionPriority::RequiredBeforeContinue,
+                confidence_handoff_required: true,
+                provenance_ref: format!("governance_attempt:{GOVERNANCE_ATTEMPT_ID}"),
+            }),
+            independence: Some(IndependenceAssessment {
+                requested_floor: sample_independence_floor(),
+                observed_distinctions: ReasoningObservedDistinctness {
+                    distinct_routes: 1,
+                    distinct_providers: 1,
+                    distinct_contexts: 1,
+                    distinct_prompt_patterns: 1,
+                },
+                result: IndependenceAssessmentResult::Failed,
+                reason: "reviewers shared the same route".to_string(),
+            }),
+            outcome: Some(ReasoningOutcome {
+                outcome_kind: ReasoningOutcomeKind::Blocked,
+                headline: format!(
+                    "reasoning profile {} blocked at {}",
+                    ReasoningProfileId::BoundedReflexion,
+                    stage_key
+                ),
+                disagreement_summary: Some("reviewers shared the same route".to_string()),
+                next_action,
+                iterations: Vec::new(),
+            }),
+            confidence: Some(ReasoningConfidenceContribution {
+                confidence_level: ReasoningConfidenceLevel::Low,
+                basis: vec!["independence=failed".to_string()],
+                admission_effect: ReasoningAdmissionEffect::Gate,
+                summary: "reasoning independence failed".to_string(),
+            }),
+        }
+    }
+
+    fn sample_session() -> ActiveSessionRecord {
+        ActiveSessionRecord {
+            session_id: SESSION_ID.to_string(),
+            workspace_ref: "/tmp/boundline-reasoning-tests".to_string(),
+            goal: Some("reasoning helper coverage".to_string()),
+            authored_brief: None,
+            negotiation_packet: None,
+            active_flow: None,
+            active_task: None,
+            goal_plan: None,
+            workflow_progress: None,
+            decisions: Vec::new(),
+            active_flow_policy: None,
+            latest_status: SessionStatus::Initialized,
+            latest_terminal_reason: None,
+            latest_trace_ref: None,
+            created_at: UPDATED_AT,
+            updated_at: UPDATED_AT,
+            governance_lifecycle: Some(GovernedSessionLifecycle {
+                governance_runtime: GovernanceRuntimeKind::Local,
+                explicit_opt_out: false,
+                mode_selection_preference: CanonModeSelectionPreference::default(),
+                selected_mode: None,
+                selected_mode_sequence: Vec::new(),
+                latest_reasoning_profile: None,
+                current_stage_index: 0,
+                stage_records: Vec::new(),
+                accumulated_context: Vec::new(),
+                terminal_reason: None,
+                planning_input_fingerprint: None,
+            }),
+            project_scale: None,
+            latest_voting: None,
+            delight_feedback: None,
+        }
+    }
+}

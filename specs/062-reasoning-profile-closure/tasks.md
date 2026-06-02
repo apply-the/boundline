@@ -20,7 +20,7 @@ place.
 
 ## Path Conventions
 
-- Boundline repo root paths are repo-relative (`src/`, `tests/`, `docs/`)
+- Boundline repo root paths are repo-relative (`src/`, `tests/`, `tech-docs/`)
 - Canon sibling repo paths are absolute under `../canon/`
 
 ## Phase 1: Setup (Shared Infrastructure)
@@ -135,7 +135,7 @@ standpoint.
 
 **Purpose**: Finish the repo-wide documentation and validation closeout.
 
-- [ ] T026 [P] Refresh release-facing docs and roadmap language in `README.md`, `ROADMAP.md`, `docs/adaptive-execution.md`, `docs/runtime-confidence-and-calibration.md`, `docs/architecture.md`, `docs/reasoning-profile-algorithms.md`, retire the completed `roadmap/S6*` drafts, and update `../canon/README.md`, `../canon/ROADMAP.md`, and `../canon/CHANGELOG.md`
+- [ ] T026 [P] Refresh release-facing docs and roadmap language in `README.md`, `ROADMAP.md`, `tech-docs/adaptive-execution.md`, `tech-docs/runtime-confidence-and-calibration.md`, `tech-docs/architecture.md`, `tech-docs/reasoning-profile-algorithms.md`, retire the completed `roadmap/S6*` drafts, and update `../canon/README.md`, `../canon/ROADMAP.md`, and `../canon/CHANGELOG.md`
 - [ ] T027 Run focused story validations, then run `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo nextest run --workspace --all-features`, `cargo llvm-cov clean --workspace`, and `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info` in Boundline; run `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, and `cargo nextest run --workspace --all-features` in `../canon/`; then record those results plus the `.github/workflows/quality.yml` SonarCloud quality-gate result in `specs/062-reasoning-profile-closure/validation-report.md`
 
 ---

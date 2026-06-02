@@ -150,7 +150,7 @@ description: "Task list for guidance and guardian capabilities implementation"
 
 **Purpose**: Finish documentation, code comments, lint, tests, and coverage
 
-- [x] T032 [P] Update operator-facing docs and roadmap in `docs/architecture.md`, `docs/configuration.md`, `docs/getting-started.md`, `README.md`, and `ROADMAP.md`
+- [x] T032 [P] Update operator-facing docs and roadmap in `tech-docs/architecture.md`, `tech-docs/configuration.md`, `tech-docs/getting-started.md`, `README.md`, and `ROADMAP.md`
 - [x] T033 [P] Add concise code documentation in `src/domain/guidance.rs`, `src/orchestrator/guidance_runtime.rs`, and any other modified runtime files where source resolution or guardian ordering is non-obvious
 - [x] T034 Run `cargo fmt --all` in `repo root`
 - [x] T035 Fix all clippy warnings in modified code and run `cargo clippy --workspace --all-targets --all-features -- -D warnings` in `repo root`

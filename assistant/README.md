@@ -162,7 +162,7 @@ Keep the product boundary explicit in assistant narration:
 - Boundline pilots the work through orchestration, decomposition, planning, execution, validation, and session state.
 - Canon governs packets, approvals, and governed artifacts when a delivery boundary requires it; it is not the product entrypoint.
 - If a user only needs the fast path, point them to README plus
-	`docs/getting-started.md`; use `docs/architecture.md` only for the second
+	`tech-docs/getting-started.md`; use `tech-docs/architecture.md` only for the second
 	read level.
 
 In `0.44.0`, workflows and direct runs are primary surfaces of the same Boundline
@@ -432,9 +432,9 @@ plain `run --goal` should continue to use the compatibility route.
 - Successful inspection summaries must expose `inspection_target`, `trace`, `routing_summary`, `route_owner`, `route_config_projection` when present, `execution_condition`, `goal_plan_summary`, `negotiation_goal_summary`, `negotiation_resolution`, `negotiation_acceptance_boundary`, `context_summary`, `context_credibility`, `context_primary_inputs`, `context_provenance`, `context_staleness_reason`, `delegation_mode`, `delegation_packet_id`, `delegation_packet_kind`, `delegation_packet_state`, `delegation_target_owner`, `delegation_headline`, `delegation_evidence_summary`, `decision_timeline`, `failure_evidence`, `adaptive_evidence`, `follow_through_guidance`, `follow_through_evidence_source`, `follow_through_next_action`, `follow_through_stop_reason`, `terminal_status`, `terminal_reason`, `authored_input_summary`, `authored_input_sources`, `authored_input_deduplicated_sources` when present, changed-file headlines, validation headlines, adaptive slice and lineage evidence when present, `candidate_family`, selection reason, rejected candidates, explicit exhaustion when present, review trigger, reviewer findings, vote summary, review outcome, governance runtime/mode/run-ref evidence, governance packet provenance when present, `governance_next_action` when present, and `next_command` so assistants can continue routing without dumping raw logs.
 - Trace-read failures must expose `terminal_reason`, `next_command: /boundline-inspect`, and a `corrected_command` that tells the user how to retry with a corrected trace reference or workspace. Workspace-based inspect session errors should route back to `/boundline-goal`.
 
-For the current adaptive execution manifest shape, broader bounded mutation-family vocabulary, and validation-guided bounded replanning behavior, see [`docs/adaptive-execution.md`](../docs/adaptive-execution.md).
+For the current adaptive execution manifest shape, broader bounded mutation-family vocabulary, and validation-guided bounded replanning behavior, see [`tech-docs/adaptive-execution.md`](../tech-docs/adaptive-execution.md).
 
-For the current review manifest shape and vote semantics, see [`docs/review-voting.md`](../docs/review-voting.md).
+For the current review manifest shape and vote semantics, see [`tech-docs/review-voting.md`](../tech-docs/review-voting.md).
 
 ## Continuity Rules
 - Preserve confirmed `workspace_ref`, recorded goal, confirmed brief paths, authored input summary, and latest trace reference across assistant turns.

@@ -95,7 +95,7 @@ assistant/
 ├── codex/
 └── copilot/
 
-docs/
+tech-docs/
 ├── adaptive-execution.md
 ├── configuration.md
 ├── getting-started.md

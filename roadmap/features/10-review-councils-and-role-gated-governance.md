@@ -13,8 +13,8 @@ B-level, after S2.1 guidance and guardian findings are operational
 - Seed role: hardening layer over the shipped authority-zoned council model.
 - First slice: choose one missing delta, such as finding deduplication or the
   producer response protocol, and prove it through a bounded review path.
-- Depends on: existing `docs/review-council-algorithms.md`,
-  `docs/review-voting.md`, and authority-zone stop semantics.
+- Depends on: existing `tech-docs/review-council-algorithms.md`,
+  `tech-docs/review-voting.md`, and authority-zone stop semantics.
 - De-duplication: do not respec council profiles, voting, or independence from
   scratch; future specs must name the gap against the shipped council surfaces.
 

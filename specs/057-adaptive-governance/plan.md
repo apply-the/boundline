@@ -105,7 +105,7 @@ tests/
 ├── integration/
 └── unit/
 
-docs/
+tech-docs/
 ├── adaptive-governance.md
 ├── control-graduation-model.md
 ├── degradation-and-escalation.md

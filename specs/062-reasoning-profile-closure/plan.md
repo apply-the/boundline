@@ -126,7 +126,7 @@ tests/
   ├── session_model.rs
   └── workflow_session_projection.rs
 
-docs/
+tech-docs/
 ├── architecture.md
 ├── getting-started.md
 └── release-checklist.md

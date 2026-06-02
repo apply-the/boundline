@@ -62,7 +62,7 @@ cargo deny check licenses advisories bans sources
 
 ```bash
 grep '^version =' Cargo.toml
-git diff -- README.md docs/adaptive-execution.md docs/getting-started.md docs/configuration.md assistant/README.md CONTRIBUTING.md ROADMAP.md CHANGELOG.md
+git diff -- README.md tech-docs/adaptive-execution.md tech-docs/getting-started.md tech-docs/configuration.md assistant/README.md CONTRIBUTING.md ROADMAP.md CHANGELOG.md
 ```
 
 **Expected**:

@@ -1,7 +1,9 @@
+# The latest published Boundline line remains 0.66.0 until the corrected
+# post-066 semantics ship under a new public release tag.
 boundline_version = "0.66.0"
 # canon_version is the explicit Canon compatibility target for this release.
 # Keep it pinned so Boundline can be prepared before the Canon tag is public.
-canon_version = "0.62.0"
+canon_version = "0.63.0"
 source_fallback = "cargo install --path ."
 
 [channels.homebrew]
@@ -20,4 +22,4 @@ manifest_root = "distribution/winget/manifests/a/ApplyThe/Boundline/0.66.0"
 install_command = "winget install ApplyThe.Boundline"
 update_command = "winget upgrade ApplyThe.Boundline"
 bundle_name = "boundline-bundle-0.66.0-windows-x86_64.zip"
-canon_asset = "https://github.com/apply-the/canon/releases/download/0.62.0/canon-0.62.0-windows-x86_64.zip"
+canon_asset = "https://github.com/apply-the/canon/releases/download/0.63.0/canon-0.63.0-windows-x86_64.zip"

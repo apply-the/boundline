@@ -12,7 +12,8 @@ use crate::cli::adapter::{
 use crate::domain::configuration::PersistedAdapterConfiguration;
 use crate::domain::execution::StageRoutingDecisionRecord;
 use crate::domain::framework_adapter::{
-    AdapterConfigCompletenessState, StoredAdapterConfigValueState,
+    AdapterConfigCompletenessState, FrameworkAdapterStageOutcomeDetails,
+    StoredAdapterConfigValueState,
 };
 use crate::domain::session::FrameworkAdapterStageFailureDetails;
 use crate::domain::trace::HookEventDispatchRecord;
@@ -388,6 +389,7 @@ pub(crate) fn framework_adapter_stage_failure_lines(
     if let Some(protocol_error_code) = failure.protocol_error_code.as_deref() {
         lines.push(format!("framework_adapter_protocol_error_code: {protocol_error_code}"));
     }
+    append_framework_adapter_stage_detail_lines(&mut lines, failure.execution.details.as_ref());
 
     lines
 }
@@ -421,7 +423,102 @@ pub(crate) fn framework_adapter_stage_routing_lines(
         ));
     }
 
+    append_framework_adapter_stage_detail_lines(&mut lines, routing.details.as_ref());
+
     lines
+}
+
+fn append_framework_adapter_stage_detail_lines(
+    lines: &mut Vec<String>,
+    details: Option<&FrameworkAdapterStageOutcomeDetails>,
+) {
+    let Some(details) = details else {
+        return;
+    };
+
+    if let Some(workflow_id) = details.workflow_id.as_deref() {
+        lines.push(format!("framework_adapter_workflow_id: {workflow_id}"));
+    }
+    if !details.executed_commands.is_empty() {
+        lines.push(format!(
+            "framework_adapter_executed_commands: {}",
+            details.executed_commands.join(", ")
+        ));
+    }
+    if let Some(readiness_status) = details.final_planning_readiness_status {
+        lines.push(format!("framework_adapter_planning_readiness: {}", readiness_status.as_str()));
+    }
+    if let Some(analyze_pass_count) = details.analyze_pass_count {
+        lines.push(format!("framework_adapter_analyze_pass_count: {analyze_pass_count}"));
+    }
+    if let Some(remediation_cycles_used) = details.remediation_cycles_used {
+        lines.push(format!("framework_adapter_remediation_cycles_used: {remediation_cycles_used}"));
+    }
+    if let Some(implementation_status) = details.implementation_status {
+        lines.push(format!(
+            "framework_adapter_implementation_status: {}",
+            implementation_status.as_str()
+        ));
+    }
+    if !details.planning_findings.is_empty() {
+        lines.push(format!(
+            "framework_adapter_planning_findings: {}",
+            format_planning_findings(&details.planning_findings)
+        ));
+    }
+    if !details.remaining_blocking_findings.is_empty() {
+        lines.push(format!(
+            "framework_adapter_remaining_blocking_findings: {}",
+            format_planning_findings(&details.remaining_blocking_findings)
+        ));
+    }
+    if !details.remediation_tasks_attempted.is_empty() {
+        lines.push(format!(
+            "framework_adapter_remediation_attempted: {}",
+            format_remediation_tasks(&details.remediation_tasks_attempted)
+        ));
+    }
+    if !details.remediation_tasks_completed.is_empty() {
+        lines.push(format!(
+            "framework_adapter_remediation_completed: {}",
+            format_remediation_tasks(&details.remediation_tasks_completed)
+        ));
+    }
+    if !details.remediation_tasks_skipped.is_empty() {
+        lines.push(format!(
+            "framework_adapter_remediation_skipped: {}",
+            format_remediation_tasks(&details.remediation_tasks_skipped)
+        ));
+    }
+    if !details.validation_refs.is_empty() {
+        lines.push(format!(
+            "framework_adapter_validation_refs: {}",
+            details.validation_refs.join(", ")
+        ));
+    }
+}
+
+fn format_planning_findings(
+    findings: &[crate::domain::framework_adapter::PlanningFinding],
+) -> String {
+    findings
+        .iter()
+        .map(|finding| format!("{}:{}", finding.finding_id, finding.severity.as_str()))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn format_remediation_tasks(
+    tasks: &[crate::domain::framework_adapter::PlanningRemediationTaskOutcome],
+) -> String {
+    tasks
+        .iter()
+        .map(|task| match task.skip_reason {
+            Some(skip_reason) => format!("{}:{}", task.task_id, skip_reason.as_str()),
+            None => task.task_id.clone(),
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 pub(crate) fn framework_adapter_hook_dispatch_lines(
@@ -452,4 +549,120 @@ fn configured_adapter_describe(
         host = host.with_working_directory(workspace.to_path_buf());
     }
     host.describe().ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{framework_adapter_stage_failure_lines, framework_adapter_stage_routing_lines};
+    use crate::domain::execution::StageRoutingDecisionRecord;
+    use crate::domain::framework_adapter::{
+        AdapterExecutionSource, AdapterFailureClass, AdapterLifecycleStageKey,
+        FrameworkAdapterStageOutcomeDetails, ImplementationStatus, LifecycleStageExecutionStatus,
+        PlanningFinding, PlanningFindingSeverity, PlanningReadinessStatus,
+        PlanningRemediationSkipReason, PlanningRemediationTaskOutcome, StageClaimState,
+        StageRoutingDecisionReason,
+    };
+    use crate::domain::session::{
+        FrameworkAdapterStageFailureDetails, LifecycleStageExecutionRecord,
+    };
+
+    #[test]
+    fn framework_adapter_stage_routing_lines_surface_planning_details() {
+        let lines = framework_adapter_stage_routing_lines(Some(&StageRoutingDecisionRecord {
+            run_id: "run-1".to_string(),
+            stage_key: AdapterLifecycleStageKey::Plan,
+            execution_source: AdapterExecutionSource::Adapter,
+            decision_reason: StageRoutingDecisionReason::DeclaredOverride,
+            claim_state: StageClaimState::Completed,
+            adapter_id: Some("speckit".to_string()),
+            stage_status: Some(LifecycleStageExecutionStatus::Blocked),
+            produced_artifacts: vec!["specs/066-agentic-framework-integration/plan.md".to_string()],
+            details: Some(sample_planning_details()),
+            recorded_at: 1,
+        }));
+
+        assert!(lines.iter().any(|line| line == "framework_adapter_workflow_id: speckit-planning"));
+        assert!(lines.iter().any(|line| line == "framework_adapter_planning_readiness: blocked"));
+        assert!(lines.iter().any(|line| line == "framework_adapter_analyze_pass_count: 2"));
+        assert!(lines.iter().any(|line| line == "framework_adapter_remediation_cycles_used: 1"));
+        assert!(lines.iter().any(|line| {
+            line == "framework_adapter_remediation_skipped: R-002:requires_operator_input"
+        }));
+    }
+
+    #[test]
+    fn framework_adapter_stage_failure_lines_surface_validation_refs() {
+        let lines =
+            framework_adapter_stage_failure_lines(Some(&FrameworkAdapterStageFailureDetails {
+                execution: LifecycleStageExecutionRecord {
+                    run_id: "run-2".to_string(),
+                    stage_key: AdapterLifecycleStageKey::Run,
+                    execution_source: AdapterExecutionSource::Adapter,
+                    adapter_id: Some("speckit".to_string()),
+                    status: LifecycleStageExecutionStatus::Blocked,
+                    intervention_required: true,
+                    failure_class: Some(AdapterFailureClass::AdapterRuntime),
+                    produced_artifacts: vec!["artifacts/run-brief.md".to_string()],
+                    details: Some(FrameworkAdapterStageOutcomeDetails {
+                        workflow_id: Some("speckit-implementation".to_string()),
+                        implementation_status: Some(ImplementationStatus::Blocked),
+                        validation_refs: vec!["validation/run.md".to_string()],
+                        ..FrameworkAdapterStageOutcomeDetails::default()
+                    }),
+                    started_at: Some(1),
+                    finished_at: Some(2),
+                },
+                claim_state: StageClaimState::Claimed,
+                summary: "run blocked".to_string(),
+                detail: Some("resume run".to_string()),
+                protocol_error_code: None,
+            }));
+
+        assert!(
+            lines
+                .iter()
+                .any(|line| line == "framework_adapter_workflow_id: speckit-implementation")
+        );
+        assert!(
+            lines.iter().any(|line| line == "framework_adapter_implementation_status: blocked")
+        );
+        assert!(
+            lines.iter().any(|line| line == "framework_adapter_validation_refs: validation/run.md")
+        );
+    }
+
+    fn sample_planning_details() -> FrameworkAdapterStageOutcomeDetails {
+        FrameworkAdapterStageOutcomeDetails {
+            workflow_id: Some("speckit-planning".to_string()),
+            executed_commands: vec!["speckit.analyze".to_string()],
+            planning_findings: vec![PlanningFinding {
+                finding_id: "F-001".to_string(),
+                summary: "Blocking planning finding".to_string(),
+                severity: PlanningFindingSeverity::Blocking,
+            }],
+            remediation_tasks_attempted: vec![PlanningRemediationTaskOutcome {
+                task_id: "R-001".to_string(),
+                summary: "Attempt remediation".to_string(),
+                finding_ids: vec!["F-001".to_string()],
+                skip_reason: None,
+            }],
+            remediation_tasks_completed: Vec::new(),
+            remediation_tasks_skipped: vec![PlanningRemediationTaskOutcome {
+                task_id: "R-002".to_string(),
+                summary: "Needs operator input".to_string(),
+                finding_ids: vec!["F-001".to_string()],
+                skip_reason: Some(PlanningRemediationSkipReason::RequiresOperatorInput),
+            }],
+            remaining_blocking_findings: vec![PlanningFinding {
+                finding_id: "F-001".to_string(),
+                summary: "Blocking planning finding".to_string(),
+                severity: PlanningFindingSeverity::Blocking,
+            }],
+            final_planning_readiness_status: Some(PlanningReadinessStatus::Blocked),
+            analyze_pass_count: Some(2),
+            remediation_cycles_used: Some(1),
+            implementation_status: None,
+            validation_refs: Vec::new(),
+        }
+    }
 }

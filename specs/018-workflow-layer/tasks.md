@@ -106,7 +106,7 @@
 **Purpose**: Release alignment, docs, assistant assets, and final validation closeout
 
 - [X] T023 [P] Refresh generated agent and contributor context for the new workflow surface in `AGENTS.md` and `CONTRIBUTING.md`
-- [X] T024 [P] Update `README.md`, `docs/getting-started.md`, `docs/configuration.md`, `assistant/README.md`, and workflow-related assistant command or prompt assets under `assistant/`
+- [X] T024 [P] Update `README.md`, `tech-docs/getting-started.md`, `tech-docs/configuration.md`, `assistant/README.md`, and workflow-related assistant command or prompt assets under `assistant/`
 - [X] T025 Update `ROADMAP.md`, `CHANGELOG.md`, and any touched `.specify` templates needed to reflect the `0.18.0` workflow-layer release
 - [X] T026 Run coverage-aware release validation, refresh `lcov.info`, resolve remaining `cargo clippy` issues, run `cargo fmt --all`, and finish with clean validation for touched files under `src/` and `tests/`
 

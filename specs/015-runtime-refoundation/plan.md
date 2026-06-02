@@ -91,7 +91,7 @@ assistant/
 ├── codex/
 └── copilot/
 
-docs/
+tech-docs/
 README.md
 ROADMAP.md
 

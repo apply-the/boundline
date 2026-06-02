@@ -36,7 +36,7 @@ Expected:
 ## 4. Check chat-to-runtime mapping
 
 ```bash
-rg -n '/boundline:(start|capture|plan|run|status|inspect|recover|govern)|session.json|next_command' .claude-plugin .codex-plugin .cursor-plugin .copilot-prompts assistant docs/guides/assistant-plugin-packages.md README.md
+rg -n '/boundline:(start|capture|plan|run|status|inspect|recover|govern)|session.json|next_command' .claude-plugin .codex-plugin .cursor-plugin .copilot-prompts assistant tech-docs/guides/assistant-plugin-packages.md README.md
 ```
 
 Expected:

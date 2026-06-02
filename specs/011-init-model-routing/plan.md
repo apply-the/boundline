@@ -105,7 +105,7 @@ assistant/
 ├── copilot/
 └── gemini/
 
-docs/
+tech-docs/
 ├── getting-started.md
 ├── adaptive-execution.md
 ├── review-voting.md
@@ -124,7 +124,7 @@ modules, and one new configuration domain model rather than spreading routing
 logic across unrelated modules. Keep the execution manifest under `.boundline` as
 the bounded runtime contract, but separate human-editable routing preferences
 into TOML config files so the operator path becomes friendlier without changing
-the execution engine’s core manifest schema. The new `docs/configuration.md`
+the execution engine’s core manifest schema. The new `tech-docs/configuration.md`
 file is justified because this feature introduces a new persistent user-facing
 configuration surface that cannot be explained cleanly only inside README.
 

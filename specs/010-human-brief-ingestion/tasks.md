@@ -112,7 +112,7 @@ All tasks below are complete and describe the delivered implementation.
 
 **Purpose**: Finalize docs, release metadata, coverage, assistant-facing assets, and repository-wide validation for the 0.10.0 slice.
 
-- [X] T027 [P] Update human-input operator docs and walkthroughs in README.md, docs/getting-started.md, docs/adaptive-execution.md, assistant/README.md, and specs/010-human-brief-ingestion/quickstart.md
+- [X] T027 [P] Update human-input operator docs and walkthroughs in README.md, tech-docs/getting-started.md, tech-docs/adaptive-execution.md, assistant/README.md, and specs/010-human-brief-ingestion/quickstart.md
 - [X] T028 [P] Update release notes and roadmap references for the human-input slice in CHANGELOG.md, README.md, and ROADMAP.md
 - [X] T029 [P] Raise source coverage for human-input normalization, provenance, clarification, and governed-entry branches in tests/unit/coverage_additional.rs, tests/unit/human_input_ingestion.rs, tests/unit/human_input_governance.rs, tests/integration/human_input_capture_flow.rs, tests/integration/human_input_multi_source_flow.rs, and tests/integration/human_input_governance_flow.rs
 - [X] T030 [P] Bump crate and lockfile version references to 0.10.0 in Cargo.toml and Cargo.lock

@@ -15,7 +15,7 @@
 
 ## Path Conventions
 
-- Boundline repo root paths are repo-relative (`src/`, `tests/`, `docs/`)
+- Boundline repo root paths are repo-relative (`src/`, `tests/`, `tech-docs/`)
 - Canon sibling repo paths are absolute under `../canon/`
 
 ## Phase 1: Setup (Shared Infrastructure)

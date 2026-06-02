@@ -87,6 +87,36 @@ valid stdout response envelope.
 - Unknown or unsupported IDs invalidate the capability manifest and block
   activation before stage execution begins.
 
+## Normative Known-Speckit Stage Mapping
+
+For the corrected Spec 066 slice, the known Speckit profile uses the following
+host-owned stage map:
+
+| Boundline surface | Ownership rule | Workflow ID | Command surface |
+|-------------------|----------------|-------------|-----------------|
+| `goal` | Boundline-owned only; the adapter must not claim it | `boundline-native-goal` | Native Boundline goal capture only |
+| `plan` | May be adapter-owned when `plan` is declared and preflight is ready | `speckit-planning` | `speckit.specify`; `speckit.clarify` when required; `speckit.plan`; `speckit.tasks`; mandatory `speckit.analyze`; bounded remediation plus analyze re-checks |
+| `run` | May be adapter-owned when `run` is declared and preflight is ready | `speckit-implementation` | `speckit.implement` plus implementation validation or status capture only |
+| `status` / `inspect` | Boundline-owned only; the adapter contributes evidence but does not own the surface | `boundline-native-visibility` | Native Boundline visibility over adapter ownership, findings, traces, and validation refs |
+
+Within one claimed `plan` attempt, the known Speckit bridge inherits the
+host's existing retry and stop controls and may execute at most one initial
+analyze pass plus two remediation or analyze re-check cycles. If blocking
+findings still remain after the second re-check, the adapter must return a
+blocked stage outcome with the remaining findings and a recovery action.
+
+The corrected workflow assets live at
+`.specify/workflows/speckit/planning.yml` and
+`.specify/workflows/speckit/implementation.yml`. When the real Speckit CLI is
+invoked, the bridge may execute those local YAML paths directly through
+`specify workflow run <path>` while still returning the semantic workflow IDs
+`speckit-planning` and `speckit-implementation` in the response payload.
+Those YAML assets are the workflow entrypoints only. The adapter bridge remains
+the authoritative layer for conditional clarify execution, the mandatory
+planning-readiness analyze loop, bounded remediation or analyze re-check
+cycles, and run-stage validation or status capture that the response payload
+must expose to Boundline.
+
 ## Commands
 
 ### 1. `describe`
@@ -237,32 +267,100 @@ boundline-adapter-speckit execute-stage
 }
 ```
 
-**Response shape**:
+**Plan-stage response shape** (`stage_key = plan`):
 
 ```json
 {
   "success": true,
   "data": {
     "status": "succeeded",
-    "summary": "Plan artifacts refreshed through the Speckit profile",
-    "produced_artifacts": [
-      "specs/066-agentic-framework-integration/plan.md",
-      "specs/066-agentic-framework-integration/tasks.md"
+    "summary": "Speckit planning workflow completed with no blocking findings",
+    "workflow_id": "speckit-planning",
+    "executed_commands": [
+      "speckit.specify",
+      "speckit.plan",
+      "speckit.tasks",
+      "speckit.analyze"
     ],
+    "produced_artifacts": [
+      "specs/066-agentic-framework-integration/spec.md",
+      "specs/066-agentic-framework-integration/plan.md",
+      "specs/066-agentic-framework-integration/tasks.md",
+      "specs/066-agentic-framework-integration/analysis.md"
+    ],
+    "planning_findings": {
+      "blocking": 0,
+      "non_blocking": 2,
+      "report_ref": "specs/066-agentic-framework-integration/analysis.md"
+    },
+    "remediation_status": "not_needed",
+    "analyze_pass_count": 1,
+    "remediation_cycles_used": 0,
     "next_action": null
   }
 }
 ```
 
-**Blocked response example**:
+**Plan-stage blocked response example**:
 
 ```json
 {
   "success": true,
   "data": {
     "status": "blocked",
-    "summary": "Operator input is required before the claimed stage can continue",
-    "next_action": "Update the adapter config and retry the stage"
+    "summary": "Planning readiness is still blocked after the bounded remediation budget",
+    "workflow_id": "speckit-planning",
+    "executed_commands": [
+      "speckit.specify",
+      "speckit.plan",
+      "speckit.tasks",
+      "speckit.analyze",
+      "remediation",
+      "speckit.analyze",
+      "remediation",
+      "speckit.analyze"
+    ],
+    "produced_artifacts": [
+      "specs/066-agentic-framework-integration/spec.md",
+      "specs/066-agentic-framework-integration/plan.md",
+      "specs/066-agentic-framework-integration/tasks.md",
+      "specs/066-agentic-framework-integration/analysis.md"
+    ],
+    "planning_findings": {
+      "blocking": 2,
+      "non_blocking": 1,
+      "report_ref": "specs/066-agentic-framework-integration/analysis.md"
+    },
+    "remediation_status": "limit_reached",
+    "analyze_pass_count": 3,
+    "remediation_cycles_used": 2,
+    "next_action": "Resolve the remaining blocking findings and retry `boundline plan`"
+  }
+}
+```
+
+**Run-stage response shape** (`stage_key = run`):
+
+```json
+{
+  "success": true,
+  "data": {
+    "status": "succeeded",
+    "summary": "Speckit implementation workflow completed",
+    "workflow_id": "speckit-implementation",
+    "executed_commands": [
+      "speckit.implement",
+      "implementation-validation"
+    ],
+    "produced_artifacts": [
+      "src/orchestrator/session_runtime_planning_runtime.rs",
+      ".boundline/traces/run-001-implementation.json"
+    ],
+    "implementation_status": "validated",
+    "validation_refs": [
+      ".boundline/traces/run-001-implementation.json"
+    ],
+    "next_action": null
   }
 }
 ```
@@ -275,6 +373,7 @@ boundline-adapter-speckit execute-stage
   "data": {
     "status": "failed",
     "summary": "Speckit could not complete the claimed stage",
+    "workflow_id": "speckit-implementation",
     "failure_class": "adapter_runtime",
     "next_action": "Inspect the adapter log and retry after correction"
   }
@@ -288,6 +387,12 @@ boundline-adapter-speckit execute-stage
 - `blocked` may map to existing Boundline host handoff or phase-request surfaces,
   but the stage remains incomplete and owned by the adapter until the operator
   resolves it or removes the adapter
+- when `stage_key = plan`, the host must not mark the stage complete while
+  `planning_findings.blocking > 0`; the stage remains blocked until the adapter
+  returns a succeeded outcome or the operator resolves the blocked findings
+- when `stage_key = run`, the adapter must not invoke planning commands such as
+  `speckit.specify`, `speckit.clarify`, `speckit.plan`, `speckit.tasks`, or
+  `speckit.analyze`
 
 ### 4. `emit-hook`
 
@@ -356,3 +461,10 @@ boundline-adapter-speckit emit-hook
   lines without changing the command outcome.
 - The adapter must never assume that PATH discovery equals activation; it only
   becomes active after host registration succeeds.
+- `execute-stage(plan)` responses for the known Speckit profile must report
+  workflow ID `speckit-planning`, the executed command list, planning findings,
+  remediation counts, and a planning-readiness artifact reference.
+- `execute-stage(run)` responses for the known Speckit profile must report
+  workflow ID `speckit-implementation`, the executed command list,
+  implementation status, and at least one validation or status artifact
+  reference.

@@ -119,7 +119,7 @@ independently testable while still closing one full release-aligned feature.
 ### Implementation for User Story 4
 
 - [x] T026 [US4] Bump the crate version to `0.40.0` in `Cargo.toml` and `Cargo.lock`
-- [x] T027 [US4] Update impacted docs and the changelog in `README.md`, `docs/`, `CONTRIBUTING.md`, `CHANGELOG.md`, and `assistant/README.md`
+- [x] T027 [US4] Update impacted docs and the changelog in `README.md`, `tech-docs/`, `CONTRIBUTING.md`, `CHANGELOG.md`, and `assistant/README.md`
 - [x] T028 [US4] Update `ROADMAP.md` to remove the completed context-selection-hardening work from the future roadmap and record it as delivered
 - [x] T029 [US4] Refresh assistant guidance impacted by the new context-selection story in `assistant/claude/commands/`, `assistant/codex/commands/`, `assistant/copilot/prompts/`, and `AGENTS.md`
 

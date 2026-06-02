@@ -15,7 +15,7 @@ B-level, after S10
 - First slice: Playwright-backed provider invocation that captures screenshot,
   console errors, and a normalized evidence packet for one bounded URL check.
 - Depends on: provider protocol from seed 07 and trace/event projection from
-  seed 08; sandbox/network policy from seed 12 can be added later.
+  seed 08; sandbox/network policy from seed 13 can be added later.
 - De-duplication: this seed must not define provider lifecycle, permission
   schema, route economics, or visual-diff policy beyond the first provider need.
 

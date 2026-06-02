@@ -93,7 +93,7 @@
 
 ### Implementation for User Story 3
 
-- [ ] T020 [US3] Update the clustered delivery operator story, impacted docs, and release notes in `README.md`, `docs/getting-started.md`, `docs/configuration.md`, `assistant/README.md`, `CONTRIBUTING.md`, `ROADMAP.md`, and `CHANGELOG.md`
+- [ ] T020 [US3] Update the clustered delivery operator story, impacted docs, and release notes in `README.md`, `tech-docs/getting-started.md`, `tech-docs/configuration.md`, `assistant/README.md`, `CONTRIBUTING.md`, `ROADMAP.md`, and `CHANGELOG.md`
 - [ ] T021 [US3] Refresh generated agent context for clustered delivery surfaces in `AGENTS.md`
 
 **Checkpoint**: Maintainers and assistants have one coherent `0.25.0` clustered delivery story.

@@ -8,7 +8,7 @@ feature and the checks that must fail closed on drift.
 ## Supported Release Pair
 
 - **Boundline**: `0.66.x`
-- **Canon**: `0.62.x`
+- **Canon**: `0.63.x`
 - **Shared Contract Line**: `governed_reasoning_posture_v1`
 
 ## Required Validation

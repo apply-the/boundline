@@ -1,13 +1,21 @@
 {
   "schema_version": "1.0",
   "workflows": {
-    "speckit": {
-      "name": "Full SDD Cycle",
+    "speckit-planning": {
+      "name": "Speckit Planning",
       "version": "1.0.0",
-      "description": "Runs specify \u2192 plan \u2192 tasks \u2192 implement with review gates",
+      "description": "Runs the Speckit planning entrypoint launched by the adapter bridge",
       "source": "bundled",
       "installed_at": "2026-05-30T13:08:08.693024+00:00",
-      "updated_at": "2026-05-30T13:08:08.693031+00:00"
+      "updated_at": "2026-06-01T00:00:00+00:00"
+    },
+    "speckit-implementation": {
+      "name": "Speckit Implementation",
+      "version": "1.0.0",
+      "description": "Runs the Speckit implementation entrypoint launched by the adapter bridge",
+      "source": "bundled",
+      "installed_at": "2026-05-30T13:08:08.693024+00:00",
+      "updated_at": "2026-06-01T00:00:00+00:00"
     }
   }
 }

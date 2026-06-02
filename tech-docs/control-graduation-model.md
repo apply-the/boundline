@@ -107,4 +107,4 @@ governance adds maturity and runtime follow-through without moving the source
 of runtime authority out of Boundline.
 
 For the current authority-zone matrix and stop posture details, see
-`docs/authority-zones-and-stop-semantics.md`.
+`tech-docs/authority-zones-and-stop-semantics.md`.

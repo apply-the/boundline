@@ -27,7 +27,7 @@ feature under `specs/`.
 
 | Priority | Feature Seed | Boundline Position |
 |---|---|---|
-| **02** | [agentic-framework-integration.md](features/02-agentic-framework-integration.md) | Delivered in 0.66.0: external framework-adapter runtime |
+| **02** | [agentic-framework-integration.md](features/02-agentic-framework-integration.md) | Delivered in 0.66.0: external framework-adapter runtime, corrected split-stage Speckit bridge revalidated on 2026-06-01 |
 | **03** | [plan-quality-contract.md](features/03-plan-quality-contract.md) | Planning UX - plan readiness gate |
 | **04** | [backlog-contract.md](features/04-backlog-contract.md) | Planning UX - backlog execution gate |
 | **05** | [plan-analysis-contract.md](features/05-plan-analysis-contract.md) | Planning UX - cross-artifact analysis |
@@ -37,10 +37,12 @@ feature under `specs/`.
 | **09** | [contextual-help-and-documentation-architecture.md](features/09-contextual-help-and-documentation-architecture.md) | Operator UX feature |
 | **10** | [review-councils-and-role-gated-governance.md](features/10-review-councils-and-role-gated-governance.md) | Extend delivered S3/S056 work |
 | **11** | [adaptive-governance-calibration.md](features/11-adaptive-governance-calibration.md) | Extend delivered S4/S057 work |
-| **12** | [sandboxed-execution-and-secret-inheritance.md](features/12-sandboxed-execution-and-secret-inheritance.md) | Local safety boundaries |
-| **13** | [ai-gateway-and-inference-economics.md](features/13-ai-gateway-and-inference-economics.md) | Scale and route health feature |
-| **14** | [browser-and-visual-testing-provider.md](features/14-browser-and-visual-testing-provider.md) | Provider via protocol |
-| **15** | [session-memory-and-repository-knowledge-distillation.md](features/15-session-memory-and-repository-knowledge-distillation.md) | Memory hygiene feature |
+| **12** | [recursive-stage-refinement-profiles.md](features/12-recursive-stage-refinement-profiles.md) | Later: bounded structured refinement after council and adaptive-governance hardening |
+| **13** | [sandboxed-execution-and-secret-inheritance.md](features/13-sandboxed-execution-and-secret-inheritance.md) | Local safety boundaries |
+| **14** | [ai-gateway-and-inference-economics.md](features/14-ai-gateway-and-inference-economics.md) | Scale and route health feature |
+| **15** | [browser-and-visual-testing-provider.md](features/15-browser-and-visual-testing-provider.md) | Provider via protocol |
+| **16** | [session-memory-and-repository-knowledge-distillation.md](features/16-session-memory-and-repository-knowledge-distillation.md) | Memory hygiene feature |
+| **17** | [experimental-recursivemas-provider-adapter.md](features/17-experimental-recursivemas-provider-adapter.md) | Experimental: external latent-space provider research track |
 
 ## Canon Companion Dependencies
 
@@ -233,6 +235,44 @@ The first useful output is not a marketplace. It is an auditable route matrix:
 | `open-reasoning` | planning, architecture review, complex debugging | reasoning, review quality, and governance evals |
 | `large-context-audit` | repository-wide audit and legacy discovery | context-retention, omission, latency, and evidence evals |
 
+### Recursive Stage Refinement Profiles
+
+Recursive refinement should enter Boundline as a bounded runtime profile, not
+as hidden multi-agent autonomy.
+
+The first useful slice is one opt-in sequential planning profile:
+
+```text
+planner -> critic -> planner -> finalizer
+```
+
+Each round must persist a compact structured packet, reference artifacts rather
+than copy transcripts, and expose its delta, blockers, stop reason, and final
+outcome through the normal session and trace surfaces.
+
+This feature belongs after council and adaptive-governance hardening because
+existing council, calibration, degradation, and stop semantics must govern the
+loop. It must remain useful without `sqlite-vec`; the retrieval index is not an
+agent communication bus.
+
+### Experimental RecursiveMAS Provider
+
+Real RecursiveMAS latent-state transfer may be evaluated later as an external
+provider experiment. It does not belong in Boundline core.
+
+The experiment should:
+
+- run outside core crates
+- begin with one bounded read-only capability
+- declare checkpoint, model, and hardware prerequisites
+- return only final decoded outputs, metrics, evidence, limitations, and
+  reproducibility metadata
+- compare against the simpler structured-recursion baseline before any
+  promotion decision
+
+Paper benchmark gains do not replace local eval evidence for software-delivery
+workloads.
+
 ## Features Explicitly Not Next
 
 These remain out of scope until the visible trust roadmap is credible:
@@ -242,7 +282,9 @@ These remain out of scope until the visible trust roadmap is credible:
 - autonomous background workers
 - zero-trust federation
 - full client-server platform
-- advanced multi-agent reasoning profiles beyond governed councils
+- unbounded multi-agent reasoning profiles that bypass governed councils,
+  adaptive calibration, route budgets, or trace-visible stop semantics
+- latent-state execution inside Boundline core
 - model marketplace
 
 ## Hard Rule

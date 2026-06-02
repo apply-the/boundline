@@ -90,7 +90,7 @@
 
 ### Implementation for User Story 3
 
-- [ ] T017 [US3] Ship bounded adaptive repair guidance in `README.md`, `docs/adaptive-execution.md`, `docs/getting-started.md`, `docs/configuration.md`, and `assistant/README.md`
+- [ ] T017 [US3] Ship bounded adaptive repair guidance in `README.md`, `tech-docs/adaptive-execution.md`, `tech-docs/getting-started.md`, `tech-docs/configuration.md`, and `assistant/README.md`
 - [ ] T018 [US3] Update contributor and roadmap guidance for the adaptive-repair-depth slice in `CONTRIBUTING.md` and `ROADMAP.md`
 
 **Checkpoint**: Maintainers have one coherent authored example for validation-guided adaptive repair and its route boundaries.

@@ -89,7 +89,7 @@ src/
 ├── lib.rs
 └── cli.rs
 
-docs/
+tech-docs/
 ├── configuration.md
 └── getting-started.md
 

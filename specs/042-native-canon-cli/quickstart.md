@@ -55,7 +55,7 @@ boundline run --goal "Add OAuth 2.0 authentication to the API"
 boundline run \
   --goal "Add OAuth 2.0 authentication" \
   --brief docs/prd.md \
-  --brief docs/architecture.md
+  --brief tech-docs/architecture.md
 ```
 
 **With explicit Canon mode**:

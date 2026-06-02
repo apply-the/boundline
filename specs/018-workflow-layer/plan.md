@@ -82,7 +82,7 @@ assistant/
 ├── codex/
 └── copilot/
 
-docs/
+tech-docs/
 ├── configuration.md
 └── getting-started.md
 

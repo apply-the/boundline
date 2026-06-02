@@ -50,3 +50,8 @@ Thumbs.db
 .boundline/checkpoints/
 # Boundline domain:systems defaults
 target/
+
+# VitePress and Node.js
+node_modules
+docs/.vitepress/dist
+docs/.vitepress/cache

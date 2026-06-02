@@ -1,0 +1,37 @@
+schema_version: "1.0"
+workflow:
+  id: "speckit-implementation"
+  name: "Speckit Implementation"
+  version: "1.0.0"
+  author: "GitHub"
+  description: "Runs the Speckit implementation entrypoint for a Boundline-claimed run stage; the adapter bridge adds validation or status capture around this workflow"
+
+requires:
+  speckit_version: ">=0.8.5"
+  integrations:
+    any:
+      - "claude"
+      - "copilot"
+      - "gemini"
+      - "opencode"
+
+inputs:
+  spec:
+    type: string
+    required: true
+    prompt: "Describe what you want to build"
+  integration:
+    type: string
+    default: "auto"
+    prompt: "Integration to use (e.g. claude, copilot, gemini; 'auto' uses the project's initialized integration)"
+
+steps:
+  # This workflow defines the implementation entrypoint launched through
+  # `specify workflow run`. The adapter bridge remains responsible for any
+  # validation refs or status capture that Boundline persists with the claimed
+  # run-stage outcome.
+  - id: implement
+    command: speckit.implement
+    integration: "{{ inputs.integration }}"
+    input:
+      args: "{{ inputs.spec }}"

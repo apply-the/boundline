@@ -36,11 +36,13 @@ Use the local Speckit templates as the source of truth when converting a seed:
 | Now | 06 | Large-repo safety | Refuse unsafe huge reads, add paged reads, and show omitted context in inspect. |
 | Next | 07 | Provider boundary | Implement one read-only provider lifecycle before mutation providers. |
 | Next | 09 | Operator discoverability | Start with Boundline `help-next`; keep Canon help as Canon-owned. |
-| Next | 12 | Execution isolation | Add one local test sandbox mode with artifact capture before mutation commit. |
+| Next | 13 | Execution isolation | Add one local test sandbox mode with artifact capture before mutation commit. |
 | Later | 10, 11 | Governance hardening | Treat as deltas over shipped council/adaptive docs, not greenfield systems. |
-| Later | 13 | Route economics | Add route telemetry and budgets after provider protocol and evals exist. |
-| Later | 14 | Browser validation | Implement as a concrete provider over S10, not as core runtime. |
-| Later | 15 | Memory hygiene | Start with confirmation-first trace distillation; no autonomous memory. |
+| Later | 12 | Recursive refinement | Add one bounded, inspectable sequential stage-refinement profile after council and adaptive-governance hardening. |
+| Later | 14 | Route economics | Add route telemetry and budgets after provider protocol and evals exist. |
+| Later | 15 | Browser validation | Implement as a concrete provider over S10, not as core runtime. |
+| Later | 16 | Memory hygiene | Start with confirmation-first trace distillation; no autonomous memory. |
+| Experimental | 17 | RecursiveMAS provider | Evaluate real latent-space recursion only as an external read-only provider after provider, eval, route-budget, and host-refinement boundaries exist. |
 
 Seed 02 is intentionally not revised by this pass.
 
@@ -53,17 +55,25 @@ Seed 02 is intentionally not revised by this pass.
   -> 08 evals and observability
   -> 06 large-codebase context substrate
   -> 07 provider protocol
-      -> 12 sandbox execution
-      -> 14 browser provider
-      -> 13 AI gateway economics
+      -> 13 sandbox execution
+      -> 15 browser provider
+      -> 14 AI gateway economics
 
 08 evals and observability
   -> 10 council hardening
-  -> 11 adaptive governance hardening
-  -> 13 AI gateway economics
-  -> 15 session memory
+      -> 11 adaptive governance hardening
+          -> 12 recursive stage refinement
+  -> 14 AI gateway economics
+  -> 16 session memory
 
 09 help-next can start after the probe/readiness surfaces are available.
+
+07 provider protocol
+08 evals and observability
+14 AI gateway economics
+12 recursive stage refinement
+bounded long-lived local provider lifecycle
+  -> 17 experimental RecursiveMAS provider
 ```
 
 ## Speckit Readiness Checklist
@@ -86,11 +96,12 @@ new `spec.md`:
 |---|---|---|
 | Planning gates | 03, 04, and 05 all repeat gate state, `phase_request`, and assistant routing language. | Keep the shared gate and handoff mechanics in one planning-readiness interface; each seed should add only its own validation fields and findings. |
 | Canon companion work | 04, 08, 09, and 15 all mention Canon-owned packets, help, evals, or project memory. | Boundline consumes stable Canon metadata. Canon schema, mode docs, packet-quality evals, and memory promotion need Canon Speckit features. |
-| Provider permissions | 07, 12, and 14 all describe path, network, secret, artifact, and evidence permissions. | 07 owns the request permission envelope; 12 enforces sandbox policy; 14 consumes the envelope as a browser provider. |
-| Telemetry | 08, 13, and 14 all list events, route metrics, artifacts, and latency/cost signals. | 08 owns event schema and eval fixtures; 13 owns route economics decisions; concrete providers emit events into 08. |
-| Councils and adaptive governance | 10 and 11 overlap with shipped docs under `docs/review-*`, `docs/adaptive-governance.md`, `docs/control-graduation-model.md`, and `docs/runtime-confidence-and-calibration.md`. | Future specs must name the missing delta instead of reimplementing council profiles, voting, confidence, or degradation from scratch. |
-| Memory | 15 overlaps with `docs/project-memory-and-evidence-structure.md` and Canon project memory. | 15 owns workspace-local, confirmation-first operational memory proposals. Durable governed knowledge remains docs/Canon-owned. |
+| Provider permissions | 07, 13, and 15 all describe path, network, secret, artifact, and evidence permissions. | 07 owns the request permission envelope; 13 enforces sandbox policy; 15 consumes the envelope as a browser provider. |
+| Telemetry | 08, 14, and 15 all list events, route metrics, artifacts, and latency/cost signals. | 08 owns event schema and eval fixtures; 14 owns route economics decisions; concrete providers emit events into 08. |
+| Councils and adaptive governance | 10 and 11 overlap with shipped docs under `docs/review-*`, `tech-docs/adaptive-governance.md`, `tech-docs/control-graduation-model.md`, and `tech-docs/runtime-confidence-and-calibration.md`. | Future specs must name the missing delta instead of reimplementing council profiles, voting, confidence, or degradation from scratch. |
+| Memory | 16 overlaps with `tech-docs/project-memory-and-evidence-structure.md` and Canon project memory. | 16 owns workspace-local, confirmation-first operational memory proposals. Durable governed knowledge remains docs/Canon-owned. |
 | Help and docs | 09 overlaps with README, wiki, getting-started, and Canon docs work. | Start with runtime `help-next` state diagnosis; documentation IA work should follow the command surface and avoid duplicating README prose. |
+| Recursive collaboration | 10, 11, 12, 14, and 17 all touch repeated reasoning, stop semantics, cost, and model execution. | 12 owns host-governed structured stage-refinement loops. 17 is an external latent-space provider experiment. Councils, calibration, and route economics remain owned by 10, 11, and 14. |
 
 ## Seed-to-Spec Template
 

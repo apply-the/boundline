@@ -19,6 +19,14 @@ recorded workspace version.
 
 Highlights:
 
+- Corrected the shipped Speckit adapter semantics around the split workflow
+  boundary: `plan` now routes through `speckit-planning`, `run` routes through
+  `speckit-implementation`, the planning readiness loop remains explicit and
+  bridge-owned, and the legacy combined workflow surface plus hidden fallback
+  have been retired from the active packet.
+- Recorded a 2026-06-01 post-correction validation rerun across the host,
+  template, and Speckit repos, including a passing `/speckit.analyze` result
+  for the corrected 066 packet slice.
 - Retired the unshipped terminal UI planning artifacts and removed the related
   product-line references from the active roadmap.
 - Added `boundline models auth login|status|remove` so provider-backed routes
@@ -34,7 +42,14 @@ Highlights:
   packs and repo-local Claude, Codex, and Antigravity command surfaces describe
   the same probe and follow-through behavior.
 - Realigned the active Canon compatibility boundary and related reasoning
-  contracts to Canon `0.62.0`.
+  contracts to Canon `0.63.0`.
+
+Release metadata note:
+
+- The latest published Boundline release remains `0.66.0`. The corrected Spec
+  066 semantics are recorded under `Unreleased` until a new release tag exists,
+  so published package metadata, distribution metadata, and sibling git-tag
+  dependency pins stay on the last public compatibility line.
 
 ## [0.66.0] - 2026-05-31
 

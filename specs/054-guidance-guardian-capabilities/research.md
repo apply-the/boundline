@@ -87,9 +87,9 @@
 - `tests/integration/`
 - `tests/contract/`
 - `README.md`
-- `docs/architecture.md`
-- `docs/configuration.md`
-- `docs/getting-started.md`
+- `tech-docs/architecture.md`
+- `tech-docs/configuration.md`
+- `tech-docs/getting-started.md`
 - `CHANGELOG.md`
 - `Cargo.toml`
 - `AGENTS.md`

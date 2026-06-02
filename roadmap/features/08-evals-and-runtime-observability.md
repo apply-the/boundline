@@ -16,7 +16,7 @@ Required early, before advanced autonomy
 - Depends on: existing trace surfaces; can run before provider protocol if it
   starts with runtime-owned events only.
 - De-duplication: this seed owns event vocabulary and eval fixtures; gateway
-  cost policy belongs to seed 13, and provider-specific artifacts belong to the
+  cost policy belongs to seed 14, and provider-specific artifacts belong to the
   concrete provider seeds.
 
 ## Strategic Role
