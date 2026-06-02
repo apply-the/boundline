@@ -120,9 +120,10 @@ const CANON_MAINTAINABILITY_REVIEWER_SLOT_ORDER: [RouteSlot; 4] =
     [RouteSlot::Review, RouteSlot::Planning, RouteSlot::Verification, RouteSlot::Implementation];
 
 #[cfg(test)]
-static CANON_INSTALL_STATUS_OVERRIDE: std::sync::OnceLock<
-    std::sync::Mutex<Option<CanonInstallStatus>>,
-> = std::sync::OnceLock::new();
+std::thread_local! {
+    static CANON_INSTALL_STATUS_OVERRIDE: std::cell::RefCell<Option<CanonInstallStatus>> =
+    const { std::cell::RefCell::new(None) };
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct CanonBootstrapReadiness {
@@ -3352,11 +3353,7 @@ fn evaluate_init_canon_install(executable_path: &Path) -> CanonInstallStatus {
     #[cfg(test)]
     {
         let _ = executable_path;
-        let overrides = CANON_INSTALL_STATUS_OVERRIDE.get_or_init(|| std::sync::Mutex::new(None));
-        let overridden = match overrides.lock() {
-            Ok(guard) => guard.clone(),
-            Err(poisoned) => poisoned.into_inner().clone(),
-        };
+        let overridden = CANON_INSTALL_STATUS_OVERRIDE.with(|overrides| overrides.borrow().clone());
         overridden.unwrap_or_else(default_test_canon_install_status)
     }
 
@@ -3370,14 +3367,8 @@ fn evaluate_init_canon_install(executable_path: &Path) -> CanonInstallStatus {
 fn replace_test_canon_install_status_override(
     status: Option<CanonInstallStatus>,
 ) -> Option<CanonInstallStatus> {
-    let overrides = CANON_INSTALL_STATUS_OVERRIDE.get_or_init(|| std::sync::Mutex::new(None));
-    match overrides.lock() {
-        Ok(mut guard) => std::mem::replace(&mut *guard, status),
-        Err(poisoned) => {
-            let mut guard = poisoned.into_inner();
-            std::mem::replace(&mut *guard, status)
-        }
-    }
+    CANON_INSTALL_STATUS_OVERRIDE
+        .with(|overrides| std::mem::replace(&mut *overrides.borrow_mut(), status))
 }
 
 #[cfg(test)]

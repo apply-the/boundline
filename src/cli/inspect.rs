@@ -1643,6 +1643,48 @@ mod tests {
     }
 
     #[test]
+    fn load_trace_resolves_relative_session_trace_ref_against_workspace() {
+        let workspace = temp_workspace("boundline-inspect-relative-session-trace");
+        let relative_trace_ref = PathBuf::from("relative/trace.json");
+        let persisted_trace_path = workspace.join(&relative_trace_ref);
+        fs::create_dir_all(persisted_trace_path.parent().unwrap()).unwrap();
+        fs::write(&persisted_trace_path, serde_json::to_vec_pretty(&terminal_trace()).unwrap())
+            .unwrap();
+
+        let store = FileSessionStore::for_workspace(&workspace);
+        let record = ActiveSessionRecord {
+            session_id: "relative-session".to_string(),
+            workspace_ref: workspace.to_string_lossy().into_owned(),
+            goal: None,
+            authored_brief: None,
+            negotiation_packet: None,
+            active_flow: None,
+            active_task: None,
+            goal_plan: None,
+            workflow_progress: None,
+            decisions: Vec::new(),
+            active_flow_policy: None,
+            latest_status: SessionStatus::Initialized,
+            latest_terminal_reason: None,
+            latest_trace_ref: Some(relative_trace_ref.to_string_lossy().into_owned()),
+            created_at: 1,
+            updated_at: 1,
+            governance_lifecycle: None,
+            project_scale: None,
+            latest_voting: None,
+            delight_feedback: None,
+        };
+        store.persist(&record).unwrap();
+
+        let (target, loaded_path, loaded_trace) =
+            super::load_trace(None, Some(&workspace), None).unwrap();
+
+        assert_eq!(target, TraceResolutionTarget::SessionTraceRef);
+        assert_eq!(loaded_path, persisted_trace_path);
+        assert_eq!(loaded_trace.goal, "Inspect trace");
+    }
+
+    #[test]
     fn resolve_session_trace_ref_prefers_selected_session_without_switching_active_pointer()
     -> Result<(), String> {
         let workspace = temp_workspace("boundline-inspect-selected-session");

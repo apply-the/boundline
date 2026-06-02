@@ -268,7 +268,7 @@ fn write_guided_plan_adapter_script(
     ))?;
 
     let script = format!(
-        "#!/bin/sh\nset -eu\ncase \"$1\" in\n  describe)\n    cat <<'BOUNDLINE_JSON'\n{describe}\nBOUNDLINE_JSON\n    ;;\n  preflight)\n    cat <<'BOUNDLINE_JSON'\n{preflight}\nBOUNDLINE_JSON\n    ;;\n  execute-stage)\n    : > \"{}\"\n    cat <<'BOUNDLINE_JSON'\n{execute_stage}\nBOUNDLINE_JSON\n    ;;\n  *)\n    echo \"unsupported command: $1\" >&2\n    exit 64\n    ;;\nesac\n",
+        "#!/bin/sh\nset -eu\nconsume_stdin() {{\n  stdin_line=''\n  while IFS= read -r stdin_line || [ -n \"$stdin_line\" ]; do\n    stdin_line=''\n  done\n}}\nprint_json() {{\n  while IFS= read -r line; do\n    printf '%s\\n' \"$line\"\n  done\n}}\ncase \"$1\" in\n  describe)\n    print_json <<'BOUNDLINE_JSON'\n{describe}\nBOUNDLINE_JSON\n    ;;\n  preflight)\n    consume_stdin\n    print_json <<'BOUNDLINE_JSON'\n{preflight}\nBOUNDLINE_JSON\n    ;;\n  execute-stage)\n    consume_stdin\n    : > \"{}\"\n    print_json <<'BOUNDLINE_JSON'\n{execute_stage}\nBOUNDLINE_JSON\n    ;;\n  *)\n    echo \"unsupported command: $1\" >&2\n    exit 64\n    ;;\nesac\n",
         stage_marker.display()
     );
 

@@ -774,7 +774,7 @@ fn write_protocol_script_with_describe_and_preflight_value(
     let describe = serde_json::to_string(&sample_framework_adapter_success_envelope(describe))?;
     let preflight = serde_json::to_string(&sample_framework_adapter_success_envelope(preflight))?;
     let script_body = format!(
-        "#!/bin/sh\ncase \"$1\" in\n  describe)\n    cat <<'BOUNDLINE_JSON'\n{describe}\nBOUNDLINE_JSON\n    ;;\n  preflight)\n    cat <<'BOUNDLINE_JSON'\n{preflight}\nBOUNDLINE_JSON\n    ;;\n  *)\n    echo \"unsupported command: $1\" >&2\n    exit 64\n    ;;\nesac\n"
+        "#!/bin/sh\ncase \"$1\" in\n  describe)\n    while IFS= read -r line; do\n      printf '%s\\n' \"$line\"\n    done <<'BOUNDLINE_JSON'\n{describe}\nBOUNDLINE_JSON\n    ;;\n  preflight)\n    while IFS= read -r stdin_line || [ -n \"$stdin_line\" ]; do\n      :\n      stdin_line=''\n    done\n    while IFS= read -r line; do\n      printf '%s\\n' \"$line\"\n    done <<'BOUNDLINE_JSON'\n{preflight}\nBOUNDLINE_JSON\n    ;;\n  *)\n    echo \"unsupported command: $1\" >&2\n    exit 64\n    ;;\nesac\n"
     );
 
     fs::create_dir_all(workspace)?;
@@ -813,7 +813,7 @@ fn write_required_field_protocol_script(
             "recovery": null
         })))?;
     let script_body = format!(
-        "#!/bin/sh\ncase \"$1\" in\n  describe)\n    cat <<'BOUNDLINE_JSON'\n{describe}\nBOUNDLINE_JSON\n    ;;\n  preflight)\n    cat <<'BOUNDLINE_JSON'\n{preflight}\nBOUNDLINE_JSON\n    ;;\n  *)\n    echo \"unsupported command: $1\" >&2\n    exit 64\n    ;;\nesac\n"
+        "#!/bin/sh\ncase \"$1\" in\n  describe)\n    while IFS= read -r line; do\n      printf '%s\\n' \"$line\"\n    done <<'BOUNDLINE_JSON'\n{describe}\nBOUNDLINE_JSON\n    ;;\n  preflight)\n    while IFS= read -r stdin_line || [ -n \"$stdin_line\" ]; do\n      :\n      stdin_line=''\n    done\n    while IFS= read -r line; do\n      printf '%s\\n' \"$line\"\n    done <<'BOUNDLINE_JSON'\n{preflight}\nBOUNDLINE_JSON\n    ;;\n  *)\n    echo \"unsupported command: $1\" >&2\n    exit 64\n    ;;\nesac\n"
     );
 
     fs::create_dir_all(workspace)?;

@@ -833,7 +833,7 @@ fn write_fixture_adapter_with_execute_json(
     let binary_path = adapter_dir.join(SPECKIT_BINARY_NAME);
     let stage_marker_path = stage_marker.to_string_lossy();
     let script = format!(
-        "#!/bin/sh\nset -eu\ncase \"$1\" in\n  describe)\n    cat <<'BOUNDLINE_JSON'\n{describe_json}\nBOUNDLINE_JSON\n    ;;\n  preflight)\n    cat <<'BOUNDLINE_JSON'\n{preflight_json}\nBOUNDLINE_JSON\n    ;;\n  execute-stage)\n    : > \"{stage_marker_path}\"\n    cat <<'BOUNDLINE_JSON'\n{execute_stage_json}\nBOUNDLINE_JSON\n    ;;\n  emit-hook)\n    cat <<'BOUNDLINE_JSON'\n{emit_hook_json}\nBOUNDLINE_JSON\n    ;;\n  *)\n    echo \"unsupported command: $1\" >&2\n    exit 64\n    ;;\nesac\n"
+        "#!/bin/sh\nset -eu\nconsume_stdin() {{\n  stdin_line=''\n  while IFS= read -r stdin_line || [ -n \"$stdin_line\" ]; do\n    stdin_line=''\n  done\n}}\nprint_json() {{\n  while IFS= read -r line; do\n    printf '%s\\n' \"$line\"\n  done\n}}\ncase \"$1\" in\n  describe)\n    print_json <<'BOUNDLINE_JSON'\n{describe_json}\nBOUNDLINE_JSON\n    ;;\n  preflight)\n    consume_stdin\n    print_json <<'BOUNDLINE_JSON'\n{preflight_json}\nBOUNDLINE_JSON\n    ;;\n  execute-stage)\n    consume_stdin\n    : > \"{stage_marker_path}\"\n    print_json <<'BOUNDLINE_JSON'\n{execute_stage_json}\nBOUNDLINE_JSON\n    ;;\n  emit-hook)\n    consume_stdin\n    print_json <<'BOUNDLINE_JSON'\n{emit_hook_json}\nBOUNDLINE_JSON\n    ;;\n  *)\n    echo \"unsupported command: $1\" >&2\n    exit 64\n    ;;\nesac\n"
     );
     fs::write(&binary_path, script)?;
     let mut permissions = fs::metadata(&binary_path)?.permissions();
