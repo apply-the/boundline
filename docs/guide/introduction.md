@@ -68,8 +68,8 @@ Current public repositories for this adapter line:
 ## <i class="fa-solid fa-book"></i> Deep Dive Documentation
 
 Explore the wiki sidebar for details on architecture, configuration, and scaling:
-- [Getting Started](Getting-Started)
-- [Configuration and Precedence](Configuration-Reference)
-- [Architecture and Decisions](Architecture-And-Decisions)
-- [Project Scale Delivery Model](Project-Scale-Delivery)
-- [Assistant Integrations](Assistant-Integrations)
+- [Getting Started](/guide/getting-started)
+- [Configuration Reference](/reference/configuration)
+- [Architecture](/architecture/runtime-model)
+- [Daily Operating Guide](/guide/common-workflows)
+- [Core Concepts](/guide/core-concepts)

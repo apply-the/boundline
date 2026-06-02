@@ -68,7 +68,7 @@ If context is insufficient, Boundline should stop and ask for clarification or b
 
 Expert packs provide reusable expertise for languages, frameworks, domains, review profiles, and delivery roles. Boundline can select packs from built-in sources, bundled assistant packs, workspace overrides, or compatible governed inputs.
 
-See [Expert Packs](Expert-Packs).
+See [Shared Expert Packs](/governance/guardians#shared-expert-packs).
 
 ## Guidance
 
@@ -76,7 +76,7 @@ Guidance shapes work before and during action. It can describe architecture expe
 
 Guidance answers: "What should the worker know before acting?"
 
-See [Guidance And Guardians](Guidance-And-Guardians).
+See [Guidance And Guardians](/governance/guardians).
 
 ## Guardians
 
@@ -145,7 +145,7 @@ They are not a second telemetry runtime. Current examples include time to first
 useful answer, explanation attribution rate, next-action acceptance rate, and
 the latest next-action outcome.
 
-See [Traces And Inspectability](Traces-And-Inspectability).
+See [Traces And Inspectability](/runtime/trace).
 
 ## Recovery
 

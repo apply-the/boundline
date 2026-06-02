@@ -88,7 +88,7 @@ Examples:
 
 Bundled packs provide reusable guidance by language, stack, and delivery role. They keep common expectations available even when a workspace has no custom rules.
 
-See [Expert Packs](Expert-Packs).
+See [Core Concepts](/guide/core-concepts#expert-packs).
 
 ## Canon-Governed Standards
 
