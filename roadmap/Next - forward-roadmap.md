@@ -28,11 +28,11 @@ feature under `specs/`.
 | Priority | Feature Seed | Boundline Position |
 |---|---|---|
 | **02** | [agentic-framework-integration.md](features/02-agentic-framework-integration.md) | Delivered in 0.66.0: external framework-adapter runtime, corrected split-stage Speckit bridge revalidated on 2026-06-01 |
-| **03** | [plan-quality-contract.md](features/03-plan-quality-contract.md) | Planning UX - plan readiness gate |
+| **03** | plan-quality-contract.md | Delivered in 0.67.0: first plan-readiness gate, one-question recovery, additive plan-quality projections |
 | **04** | [backlog-contract.md](features/04-backlog-contract.md) | Planning UX - backlog execution gate |
 | **05** | [plan-analysis-contract.md](features/05-plan-analysis-contract.md) | Planning UX - cross-artifact analysis |
 | **06** | [large-codebase-context-substrate.md](features/06-large-codebase-context-substrate.md) | Long-term context handling limits |
-| **07** | [external-capability-provider-protocol.md](features/07-external-capability-provider-protocol.md) | Native provider contract (replaces MCP) |
+| **07** | [external-capability-provider-protocol.md](features/07-external-capability-provider-protocol.md) | Native provider contract, setup, and activation surface (replaces MCP) |
 | **08** | [evals-and-runtime-observability.md](features/08-evals-and-runtime-observability.md) | Local quality and regression layer |
 | **09** | [contextual-help-and-documentation-architecture.md](features/09-contextual-help-and-documentation-architecture.md) | Operator UX feature |
 | **10** | [review-councils-and-role-gated-governance.md](features/10-review-councils-and-role-gated-governance.md) | Extend delivered S3/S056 work |
@@ -43,6 +43,8 @@ feature under `specs/`.
 | **15** | [browser-and-visual-testing-provider.md](features/15-browser-and-visual-testing-provider.md) | Provider via protocol |
 | **16** | [session-memory-and-repository-knowledge-distillation.md](features/16-session-memory-and-repository-knowledge-distillation.md) | Memory hygiene feature |
 | **17** | [experimental-recursivemas-provider-adapter.md](features/17-experimental-recursivemas-provider-adapter.md) | Experimental: external latent-space provider research track |
+| **18** | [completion-verification-runtime.md](features/18-completion-verification-runtime.md) | Next: fresh-proof gate before task or stage completion |
+| **19** | [plan-execution-orchestration.md](features/19-plan-execution-orchestration.md) | Later: sequential execution control plane with checkpoint and resume |
 
 ## Canon Companion Dependencies
 
@@ -57,6 +59,7 @@ Boundline should consume those surfaces only through stable, versioned metadata:
 - packet readiness state
 - required document list
 - evidence refs
+- progress or handoff packet schemas when Canon provides them
 - lineage refs
 - approval state
 - project-memory promotion status
@@ -91,6 +94,20 @@ V1 should define:
 - `collect_evidence`
 - explicit permissions: read files, write files, run commands, network,
   read secrets, write artifacts, allowed paths, runtime limit, output limit
+
+#### Operator Setup And Activation
+
+Boundline should own the provider onboarding runtime that Canon intentionally
+does not own:
+
+- explicit operator registration and activation
+- setup requirement projection before first use
+- health or connectivity dry-runs before a provider is marked ready
+- no auto-enable from local executable discovery
+- secret-handle routing rather than prompt-visible secret capture
+
+Canon may later record local routing intent, but provider health, permissions,
+and activation remain Boundline-owned.
 
 #### Open Model Provider Support
 
@@ -163,6 +180,44 @@ Open-model promotion requires targeted evals before a route can be recommended:
 
 Canon packet-quality evals belong to Canon. Boundline should only carry
 consumer-side regression checks for the Canon metadata it relies on.
+
+### Completion Verification Runtime
+
+Boundline should own claim-matched proof execution before work is allowed to
+close.
+
+V1 should support:
+
+- concrete claim derivation from runtime closeout
+- narrowest proof-command selection
+- fresh execution in the current working state
+- blocked completion when proof is missing, stale, or failing
+- `claim -> proof -> evidence_ref` projection for Canon consumption
+
+Hard boundaries:
+
+- Boundline must not report task or stage success before the proof is ready
+- Canon may govern the meaning of approval or readiness, but it must not own
+  proof execution
+
+### Plan Execution Orchestration
+
+Boundline should own the execution control plane for accepted task registries.
+
+V1 should support:
+
+- one sequential execution profile
+- active task locking
+- task-local validation and completion-proof gating
+- explicit checkpoint persistence and resume command projection
+- progress and handoff projection that Canon can consume later
+
+Hard boundaries:
+
+- this feature is distinct from seed 12 recursive refinement
+- no autonomous replanning in the first slice
+- blocked, skipped, and deferred states must remain visible rather than being
+  collapsed into complete
 
 ### Help-Next And Documentation Architecture
 

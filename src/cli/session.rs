@@ -1096,6 +1096,7 @@ pub fn execute_run_with_target(
         record.latest_status = SessionStatus::Blocked;
         record.latest_terminal_reason = None;
         record.updated_at = current_timestamp_millis();
+        runtime.persist_blocked_plan_quality_trace(&mut record).map_err(map_runtime_error)?;
         runtime.persist_session(&record).map_err(map_runtime_error)?;
         let view = build_status_view(&record, suggested_next_command(&record), explanation);
         return Ok(report_with_session_status(exit_status_for_session(record.latest_status), view));

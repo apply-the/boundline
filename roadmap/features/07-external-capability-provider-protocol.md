@@ -11,8 +11,9 @@ High-priority architecture feature
 ## Speckit Seed Notes
 
 - Seed role: native capability boundary for external systems.
-- First slice: implement discovery, `health`, `prepare`, and one read-only
-  `execute` path for a provider that returns findings and evidence only.
+- First slice: implement discovery, explicit operator registration,
+  `health`, setup-requirement projection, and one read-only `execute` path for
+  a provider that returns findings and evidence only.
 - Depends on: event/trace schema from evals and observability, or a deliberately
   minimal trace projection if this seed lands first.
 - De-duplication: permission envelope lives here; sandbox enforcement lives in
@@ -22,7 +23,7 @@ High-priority architecture feature
 
 This feature makes Boundline framework-agnostic without turning it into an uncontrolled plugin runner.
 
-External systems may provide bounded capabilities. Boundline keeps session state, permissions, trace, evidence validation, and admission control.
+External systems may provide bounded capabilities. Boundline keeps session state, permissions, trace, evidence validation, admission control, and setup flow.
 
 ## Problem
 
@@ -34,6 +35,8 @@ Without a generic provider protocol, Boundline will accumulate one-off adapters:
 - custom sandbox adapter
 - custom MCP adapter
 - custom research adapter
+- unsafe one-off setup prompts for provider configuration
+- accidental activation of locally discoverable executables
 
 That creates adapter sprawl and inconsistent trust boundaries.
 
@@ -166,6 +169,25 @@ Later adapters:
 - sandbox provider
 - browser provider
 
+## Operator Setup And Activation
+
+Provider onboarding is a Boundline runtime concern, not Canon setup logic.
+
+V1 should support:
+
+- explicit operator registration and activation of a provider
+- setup requirement projection before first use
+- non-secret configuration capture through interactive or config-driven flows
+- secret-handle references rather than prompt-visible secret values
+- connectivity or health dry-run before activation is marked ready
+- atomic setup so an interrupted flow leaves the previous active config intact
+
+Hard boundaries:
+
+- a locally discoverable executable must not auto-enable itself as a provider
+- setup must not persist raw secrets in traces or tracked files
+- provider activation must remain visible in status and inspect
+
 ## Provider Types
 
 - read-only context provider
@@ -202,6 +224,12 @@ Suggested shape:
 
 - Boundline can discover a provider's capabilities.
 - Boundline can reject an unavailable provider before run.
+- Boundline requires explicit operator registration before a provider can be
+  activated.
+- Boundline can project required setup fields and block activation until they
+  are satisfied.
+- Boundline can run a health or connectivity check before marking the provider
+  ready.
 - Provider execution is permission-scoped.
 - Provider output cannot directly mutate Boundline state without validation.
 - Evidence packets are trace-linked.
@@ -211,6 +239,8 @@ Suggested shape:
 ## Risks
 
 - External providers become trusted implicitly.
+- Local executables become active accidentally.
+- Setup leaks secrets into prompts or traces.
 - Hidden provider state makes runs non-reproducible.
 - Permissions are too broad.
 - Protocol is too generic to validate.
@@ -218,3 +248,4 @@ Suggested shape:
 ## Hard Rule
 
 Boundline owns admission control. Providers never approve themselves.
+Discoverability is not activation.

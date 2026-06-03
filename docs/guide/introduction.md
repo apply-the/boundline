@@ -1,7 +1,7 @@
 # Boundline
 
 > [!TIP]
-> This wiki is aligned with **Boundline 0.66.0**. For older versions, refer to the repository tags.
+> This wiki is aligned with **Boundline 0.67.0**. For older versions, refer to the repository tags.
 
 ![Boundline - Bounded Delivery Runtime](https://github.com/apply-the/boundline/blob/main/tech-docs/images/boundline-banner.jpg)
 
@@ -22,6 +22,11 @@ Boundline forces an explicit, inspectable workflow:
 2. `plan` → Draft the bounded work from the repository evidence.
 3. `run` → Execute the next approved step.
 4. `inspect` → Report the authoritative runtime state.
+
+In the 0.67.0 release, `plan` also evaluates plan quality before execution
+handoff. If the active plan is missing a credible validation strategy or
+another blocking planning input, Boundline stops on one `phase_request` and
+keeps the session non-terminal until you answer.
 
 ## <i class="fa-solid fa-bolt"></i> Quick Start
 

@@ -21,7 +21,7 @@ use boundline::cli::output::{
     render_cluster_init, render_cluster_inspect, render_cluster_status, render_diagnostics,
     render_goal_plan_flow_state, render_host_command_json, render_inspect_failure,
     render_route_outcome, render_run_trace, render_session_status, render_session_status_brief,
-    render_trace_summary, validation_error_message,
+    render_trace_summary, render_trace_summary_brief, validation_error_message,
 };
 use boundline::cli::session::{
     SessionCommandError, execute_next, execute_status, render_error as render_session_error,
@@ -595,6 +595,43 @@ fn trace_summary_renderer_surfaces_why_and_risk_summaries() {
 }
 
 #[test]
+fn trace_summary_brief_surfaces_plan_quality_projection() {
+    let summary = TraceSummaryView {
+        trace_ref: "/tmp/workspace/.boundline/traces/task-plan-quality.json".to_string(),
+        goal: "Inspect a plan-quality trace".to_string(),
+        plan_quality_state: Some("clarification_required".to_string()),
+        plan_quality_findings: vec![
+            "planning_rationale".to_string(),
+            "verification_strategy".to_string(),
+        ],
+        plan_quality_assumptions: vec![
+            "no explicit route override is required for this plan".to_string(),
+        ],
+        terminal_status: TaskStatus::Succeeded,
+        terminal_reason: TerminalReason::new(
+            TerminalCondition::GoalSatisfied,
+            "goal satisfied after trace inspection",
+            None,
+        ),
+        ..Default::default()
+    };
+
+    let rendered = render_trace_summary_brief(&summary, Some("explicit-trace"), "/boundline-next");
+
+    assert!(rendered.contains("plan_quality_state: clarification_required"), "{rendered}");
+    assert!(
+        rendered.contains("plan_quality_findings: planning_rationale, verification_strategy"),
+        "{rendered}"
+    );
+    assert!(
+        rendered.contains(
+            "plan_quality_assumptions: no explicit route override is required for this plan"
+        ),
+        "{rendered}"
+    );
+}
+
+#[test]
 fn session_status_renderer_surfaces_cognitive_lenses() {
     let view = SessionStatusView {
         session_id: "session-cognitive-lenses".to_string(),
@@ -839,6 +876,41 @@ fn render_run_trace_surfaces_goal_plan_negotiation_projection() {
     assert!(
         rendered.contains(
             "negotiation_acceptance_boundary: deliver the bounded outcome: Stabilize the failing add flow"
+        ),
+        "{rendered}"
+    );
+}
+
+#[test]
+fn render_run_trace_surfaces_plan_quality_projection() {
+    let mut trace = succeeded_trace("task-plan-quality", "Plan quality goal", "done");
+    trace.events.push(TraceEvent {
+        event_id: "e1".to_string(),
+        event_type: TraceEventType::GoalPlanCreated,
+        step_id: None,
+        plan_revision: 0,
+        payload: json!({
+            "plan_id": "plan-1",
+            "goal": "Plan quality goal",
+            "task_count": 1,
+            "plan_quality_state": "clarification_required",
+            "plan_quality_findings": ["planning_rationale", "verification_strategy"],
+            "plan_quality_assumptions": ["no explicit route override is required for this plan"]
+        }),
+        recorded_at: 0,
+    });
+
+    let response = minimal_response(TaskStatus::Succeeded, "done");
+    let rendered = render_run_trace("run", Some(&trace), &response, "/boundline-status");
+
+    assert!(rendered.contains("plan_quality_state: clarification_required"), "{rendered}");
+    assert!(
+        rendered.contains("plan_quality_findings: planning_rationale, verification_strategy"),
+        "{rendered}"
+    );
+    assert!(
+        rendered.contains(
+            "plan_quality_assumptions: no explicit route override is required for this plan"
         ),
         "{rendered}"
     );

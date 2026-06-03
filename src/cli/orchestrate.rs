@@ -482,6 +482,35 @@ pub enum OrchestrateCommandError {
     Session(#[from] SessionCommandError),
 }
 
+fn execute_plan_for_orchestration(
+    workspace: Option<&Path>,
+    cluster: Option<&Path>,
+    flow: Option<&str>,
+    no_canon: bool,
+    planning_input: Option<&Path>,
+) -> Result<session::SessionCommandReport, SessionCommandError> {
+    match session::execute_plan_with_target_input(
+        workspace,
+        cluster,
+        flow,
+        false,
+        no_canon,
+        planning_input,
+    ) {
+        Ok(report) => Ok(report),
+        Err(SessionCommandError::ClarificationRequired { headline, prompt }) => {
+            let mut report = session::execute_status_with_target(workspace, cluster, None)?;
+            if let Some(view) = report.session_status.as_mut() {
+                view.clarification_headline = Some(headline);
+                view.clarification_prompt = Some(prompt);
+                report.terminal_output = crate::cli::output::render_session_status(view);
+            }
+            Ok(report)
+        }
+        Err(error) => Err(error),
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn execute_orchestrate(
     workspace: Option<&Path>,
@@ -1039,14 +1068,8 @@ pub fn execute_orchestrate(
             latest_trace_summary.clone(),
         );
 
-        let plan_report = session::execute_plan_with_target_input(
-            workspace,
-            cluster,
-            flow,
-            false,
-            no_canon,
-            planning_input,
-        )?;
+        let plan_report =
+            execute_plan_for_orchestration(workspace, cluster, flow, no_canon, planning_input)?;
         latest_terminal_output = plan_report.terminal_output.clone();
         latest_trace_location = plan_report.trace_location.clone();
         latest_session_status = plan_report.session_status.clone();
@@ -2603,12 +2626,17 @@ fn parse_slot_binding_entry(entry: &str) -> Option<(String, String)> {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use serde_json::json;
+    use uuid::Uuid;
 
     use super::{
         OrchestrateIntent, OrchestratePhaseRequestExpectedAnswer, PHASE_KIND_EXECUTION,
-        PhaseRequestOption, event_metadata, planning_stage_question_options,
+        PhaseRequestOption, event_metadata, execute_plan_for_orchestration,
+        planning_stage_question_options,
     };
+    use crate::cli::session::execute_goal_with_target;
     use crate::domain::audit::{
         SessionAuditActor, SessionAuditActorKind, SessionAuditAlgorithm, SessionAuditEntry,
         SessionAuditEntryKind, SessionAuditIdentity, SessionAuditOutcome,
@@ -2707,6 +2735,38 @@ mod tests {
             options.iter().any(|o| o.label.contains("domain model approved")),
             "expected 'domain model approved' option in: {options:?}"
         );
+    }
+
+    #[test]
+    fn execute_plan_for_orchestration_surfaces_clarification_into_session_status()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let workspace = std::env::temp_dir()
+            .join(format!("boundline-orchestrate-plan-clarification-{}", Uuid::new_v4()));
+        fs::create_dir_all(&workspace)?;
+
+        execute_goal_with_target(
+            Some(workspace.as_path()),
+            None,
+            Some("build a service"),
+            &[],
+            None,
+            None,
+            None,
+            None,
+            None,
+        )?;
+
+        let report =
+            execute_plan_for_orchestration(Some(workspace.as_path()), None, None, false, None)?;
+        let Some(view) = report.session_status.as_ref() else {
+            return Err("expected session status after planning clarification".into());
+        };
+
+        assert!(view.clarification_headline.is_some(), "{view:?}");
+        assert!(view.clarification_prompt.is_some(), "{view:?}");
+        assert!(report.terminal_output.contains("clarification"), "{report:?}");
+
+        Ok(())
     }
 
     #[test]

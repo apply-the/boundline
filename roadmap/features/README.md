@@ -31,12 +31,15 @@ Use the local Speckit templates as the source of truth when converting a seed:
 
 | Lane | Seeds | Purpose | First Speckit Slice |
 |---|---|---|---|
-| Now | 03, 04, 05 | Planning readiness gates | Surface one runtime gate at a time and block invalid execution handoff. |
+| Delivered | 03 | Planning readiness gate | Shipped in 0.67.0; preserves one-question `phase_request` recovery and additive plan-quality projections. |
+| Now | 04, 05 | Planning readiness gates | Surface one runtime gate at a time and block invalid execution handoff. |
 | Now | 08 | Measurement substrate | Add local event schema plus a tiny golden eval corpus before expanding AI behavior. |
 | Now | 06 | Large-repo safety | Refuse unsafe huge reads, add paged reads, and show omitted context in inspect. |
-| Next | 07 | Provider boundary | Implement one read-only provider lifecycle before mutation providers. |
+| Next | 07 | Provider boundary and setup | Implement discovery, explicit operator registration, health, and one read-only provider lifecycle before mutation providers. |
+| Next | 18 | Completion proof gate | Block task or stage closeout until a claim-matched proof command runs freshly. |
 | Next | 09 | Operator discoverability | Start with Boundline `help-next`; keep Canon help as Canon-owned. |
 | Next | 13 | Execution isolation | Add one local test sandbox mode with artifact capture before mutation commit. |
+| Later | 19 | Execution control plane | Add one sequential task runner with checkpoint and resume after proof gating is stable. |
 | Later | 10, 11 | Governance hardening | Treat as deltas over shipped council/adaptive docs, not greenfield systems. |
 | Later | 12 | Recursive refinement | Add one bounded, inspectable sequential stage-refinement profile after council and adaptive-governance hardening. |
 | Later | 14 | Route economics | Add route telemetry and budgets after provider protocol and evals exist. |
@@ -52,6 +55,8 @@ Seed 02 is intentionally not revised by this pass.
 03 plan gate
   -> 04 backlog gate
   -> 05 planning analysis
+   -> 18 completion verification runtime
+         -> 19 plan execution orchestration
   -> 08 evals and observability
   -> 06 large-codebase context substrate
   -> 07 provider protocol
@@ -68,11 +73,13 @@ Seed 02 is intentionally not revised by this pass.
 
 09 help-next can start after the probe/readiness surfaces are available.
 
+18 completion verification runtime
+   -> 19 plan execution orchestration
+
 07 provider protocol
-08 evals and observability
-14 AI gateway economics
-12 recursive stage refinement
-bounded long-lived local provider lifecycle
+13 sandbox execution
+19 plan execution orchestration
+bounded execution backends and operator setup
   -> 17 experimental RecursiveMAS provider
 ```
 
@@ -94,9 +101,10 @@ new `spec.md`:
 
 | Cluster | Overlap | Ownership Decision |
 |---|---|---|
-| Planning gates | 03, 04, and 05 all repeat gate state, `phase_request`, and assistant routing language. | Keep the shared gate and handoff mechanics in one planning-readiness interface; each seed should add only its own validation fields and findings. |
+| Planning gates | 03, 04, and 05 all repeat gate state, `phase_request`, and assistant routing language. | Keep the shared gate and handoff mechanics in one planning-readiness interface; 03 is now shipped, and 04/05 should add only their own validation fields and findings. |
 | Canon companion work | 04, 08, 09, and 15 all mention Canon-owned packets, help, evals, or project memory. | Boundline consumes stable Canon metadata. Canon schema, mode docs, packet-quality evals, and memory promotion need Canon Speckit features. |
-| Provider permissions | 07, 13, and 15 all describe path, network, secret, artifact, and evidence permissions. | 07 owns the request permission envelope; 13 enforces sandbox policy; 15 consumes the envelope as a browser provider. |
+| Provider permissions | 07, 13, and 15 all describe path, network, secret, artifact, and evidence permissions. | 07 owns the request permission envelope and provider setup or activation surface; 13 enforces sandbox policy and secret-handle execution rules; 15 consumes the envelope as a browser provider. |
+| Execution ownership | 18, 19, Canon completion or handoff seeds, and provider or sandbox execution surfaces all mention proof, task state, checkpointing, or blocked execution. | 18 owns proof execution and completion blocking; 19 owns task ordering, checkpoint, and resume; 07 and 13 provide provider and sandbox backends; Canon owns packet semantics and evidence consumption only. |
 | Telemetry | 08, 14, and 15 all list events, route metrics, artifacts, and latency/cost signals. | 08 owns event schema and eval fixtures; 14 owns route economics decisions; concrete providers emit events into 08. |
 | Councils and adaptive governance | 10 and 11 overlap with shipped docs under `docs/review-*`, `tech-docs/adaptive-governance.md`, `tech-docs/control-graduation-model.md`, and `tech-docs/runtime-confidence-and-calibration.md`. | Future specs must name the missing delta instead of reimplementing council profiles, voting, confidence, or degradation from scratch. |
 | Memory | 16 overlaps with `tech-docs/project-memory-and-evidence-structure.md` and Canon project memory. | 16 owns workspace-local, confirmation-first operational memory proposals. Durable governed knowledge remains docs/Canon-owned. |

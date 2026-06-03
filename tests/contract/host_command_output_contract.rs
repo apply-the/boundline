@@ -2,7 +2,15 @@ use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Output;
+use std::thread;
+use std::time::Duration;
 
+use boundline::FileConfigStore;
+use boundline::domain::configuration::{ConfigFile, RoutingConfig};
+use boundline::domain::domain_templates::{
+    DomainFamily, DomainTemplateSettings, ExternalContextBinding, ExternalContextKind,
+};
+use boundline::domain::session::SessionStatus;
 use serde_json::{Value, json};
 
 use crate::workspace_fixture::{
@@ -79,6 +87,44 @@ fn governed_planning_workspace(prefix: &str) -> PathBuf {
     )
     .unwrap();
 
+    workspace
+}
+
+fn stale_plan_quality_workspace(prefix: &str) -> PathBuf {
+    let workspace = temp_fixture_workspace(prefix);
+    fs::write(workspace.join("package.json"), r#"{"dependencies":{"react":"18.0.0"}}"#).unwrap();
+    fs::create_dir_all(workspace.join("src/components")).unwrap();
+    fs::create_dir_all(workspace.join("design")).unwrap();
+    fs::write(workspace.join("design/reference.md"), "button guidance\n").unwrap();
+    thread::sleep(Duration::from_millis(20));
+    fs::write(
+        workspace.join("src/components/App.tsx"),
+        "export function App() { return <button>Save</button>; }\n",
+    )
+    .unwrap();
+    FileConfigStore::for_workspace(&workspace)
+        .save_local(&ConfigFile {
+            version: 1,
+            routing: RoutingConfig {
+                domain_templates: std::collections::BTreeMap::from([(
+                    DomainFamily::React,
+                    DomainTemplateSettings {
+                        enabled: Some(true),
+                        standards: Some("workspace react standards".to_string()),
+                        external_context_bindings: vec![ExternalContextBinding {
+                            kind: ExternalContextKind::DesignReference,
+                            reference: "design/reference.md".to_string(),
+                            required: true,
+                            notes: None,
+                        }],
+                    },
+                )]),
+                ..RoutingConfig::default()
+            },
+            canon: None,
+            adapter: None,
+        })
+        .unwrap();
     workspace
 }
 
@@ -379,6 +425,47 @@ fn orchestrate_resume_stream_uses_session_resumed_event() {
     let resume_frames = stdout_json_lines(&resume);
     assert!(!resume_frames.is_empty(), "{resume_text}");
     assert_eq!(resume_frames[0]["event_kind"], "session_resumed", "{resume_text}");
+}
+
+#[test]
+fn orchestrate_plan_quality_block_emits_one_phase_request_and_withholds_execution() {
+    let workspace = stale_plan_quality_workspace("boundline-host-command-contract-plan-quality");
+
+    let orchestrate = run_boundline_in(
+        &workspace,
+        &[
+            "orchestrate",
+            "--goal",
+            "Refresh src/components/App.tsx against the latest design guidance",
+            "--intent",
+            "continue-until-phase-request",
+            "--json-stream",
+        ],
+    );
+    let orchestrate_text = terminal_text(&orchestrate);
+    assert_eq!(orchestrate.status.code(), Some(0), "{orchestrate_text}");
+
+    let frames = stdout_json_lines(&orchestrate);
+    let phase_requests =
+        frames.iter().filter(|frame| frame["event_kind"] == "phase_request").collect::<Vec<_>>();
+    assert_eq!(phase_requests.len(), 1, "{orchestrate_text}");
+    assert_eq!(phase_requests[0]["stage_key"], "plan", "{orchestrate_text}");
+    assert_eq!(
+        phase_requests[0]["session_status"]["latest_status"],
+        serde_json::to_value(SessionStatus::Blocked).unwrap(),
+        "{orchestrate_text}"
+    );
+    assert_eq!(
+        phase_requests[0]["session_status"]["plan_quality_state"], "blocked",
+        "{orchestrate_text}"
+    );
+    assert!(
+        !frames
+            .iter()
+            .any(|frame| frame["event_kind"] == "phase_started"
+                && frame["phase_kind"] == "execution"),
+        "{orchestrate_text}"
+    );
 }
 
 #[test]

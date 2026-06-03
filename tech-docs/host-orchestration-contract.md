@@ -93,6 +93,19 @@ Goal clarification gates are runtime objects, not prompt etiquette. When `contin
 
 If clarification is still missing after the answer is applied, Boundline may emit another goal `phase_request`; hosts should continue one structured question at a time until the runtime advances to planning or another terminal boundary.
 
+## Plan Quality Requests
+
+When plan quality stops progress, the host must treat the emitted `phase_request` as the runtime quality gate, not as a planning-stage artifact request. The common case in the first shipped slice is a missing validation strategy, but the host should preserve the same handling for any plan-quality finding that keeps execution handoff blocked.
+
+For a plan-quality `phase_request`, the host must:
+
+- surface `phase_request.reason` and ask exactly `phase_request.question`
+- preserve `phase_request.request_id`
+- keep `plan_quality_state`, `plan_quality_findings`, and `plan_quality_assumptions` visible in any status snapshot
+- resume with the emitted `resume_command` or an equivalent orchestrator call that includes `--request-id <request_id>` and `--answer "<answer>"`
+
+Hosts must not synthesize execution continuation from chat-only assumptions while plan quality remains `clarification_required` or `blocked`.
+
 ## Planning Stage Requests
 
 When governed planning selects delivery-stage briefs, `continue-until-phase-request` emits one `phase_request` at a time for the next planning stage Boundline wants the host to help author:

@@ -2,12 +2,12 @@
 
 ## Purpose
 
-Define the first supported release pair for the bilateral reasoning-profile
+Define the current supported release pair for the bilateral reasoning-profile
 feature and the checks that must fail closed on drift.
 
 ## Supported Release Pair
 
-- **Boundline**: `0.66.x`
+- **Boundline**: `0.67.x`
 - **Canon**: `0.63.x`
 - **Shared Contract Line**: `governed_reasoning_posture_v1`
 
@@ -18,7 +18,7 @@ feature and the checks that must fail closed on drift.
 - Boundline contract tests MUST assert that the provider's compatibility window
   admits the active Boundline version.
 - Canon contract tests or docs checks MUST assert that the published posture
-  contract names Boundline `0.66.x` as a supported consumer window.
+  contract names Boundline `0.67.x` as a supported consumer window.
 - Release-facing docs, changelogs, and compatibility guidance in both repos
   MUST agree on the supported pair.
 

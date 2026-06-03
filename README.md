@@ -27,6 +27,11 @@ Boundline forces an explicit, inspectable workflow:
 3. `run` -> Execute the next approved step.
 4. `inspect` -> Report the authoritative runtime state.
 
+In the 0.67.0 release, `plan` also evaluates plan quality before execution
+handoff. If the active plan is missing a credible validation strategy or
+another blocking planning input, Boundline stops on one `phase_request` and
+keeps the session non-terminal until you answer.
+
 ## Quick Start
 
 ```bash

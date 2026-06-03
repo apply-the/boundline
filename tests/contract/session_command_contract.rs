@@ -26,5 +26,9 @@ fn goal_and_plan_persist_the_active_goal_and_native_goal_plan() {
     let flow = goal_plan.flow.as_ref().expect("bug-fix flow proposal should be persisted");
     assert_eq!(flow.flow_name, "bug-fix");
     assert!(!flow.confirmed);
-    assert_eq!(record.latest_trace_ref, None);
+    let latest_trace_ref = record
+        .latest_trace_ref
+        .as_deref()
+        .expect("plan-quality trace should be persisted after native planning");
+    assert!(latest_trace_ref.contains("/traces/"), "{latest_trace_ref}");
 }

@@ -14,7 +14,7 @@ use crate::domain::configuration::{
     EffortFallbackPolicy, RouteSlot, RoutingOverrides, resolve_effective_routing,
     resolve_effective_runtime_capabilities, resolve_effective_slot_effort_policies,
 };
-use crate::domain::goal_plan::GoalPlan;
+use crate::domain::goal_plan::{GoalPlan, PlanQualityState};
 use crate::domain::limits::{RunLimits, TerminalCondition};
 use crate::domain::routing_decision::RoutingDecisionProjection;
 use crate::domain::session::{
@@ -254,6 +254,41 @@ impl SessionRuntime {
             self.goal_plan_trace_payload(goal_plan),
         );
         trace
+    }
+
+    pub(super) fn persist_goal_plan_trace(
+        &self,
+        session_id: &str,
+        goal_plan: &GoalPlan,
+    ) -> Result<String, SessionRuntimeError> {
+        let mut trace = self.build_goal_plan_trace(session_id, goal_plan);
+        self.persist_trace(session_id, &mut trace)
+    }
+
+    /// Persists the blocked plan-quality assessment for a resumed session.
+    ///
+    /// Planning normally records this transition while building the goal plan.
+    /// This fallback covers older snapshots or externally supplied session
+    /// records that reach execution admission without that trace.
+    pub fn persist_blocked_plan_quality_trace(
+        &self,
+        session: &mut ActiveSessionRecord,
+    ) -> Result<(), SessionRuntimeError> {
+        let Some(goal_plan) = session.goal_plan.as_ref() else {
+            return Ok(());
+        };
+        if matches!(goal_plan.plan_quality_assessment().state, PlanQualityState::Ready) {
+            return Ok(());
+        }
+
+        let trace_ref = if self.workspace_ref == Path::new(&session.workspace_ref) {
+            self.persist_goal_plan_trace(&session.session_id, goal_plan)?
+        } else {
+            Self::for_workspace(&session.workspace_ref)
+                .persist_goal_plan_trace(&session.session_id, goal_plan)?
+        };
+        session.latest_trace_ref = Some(trace_ref);
+        Ok(())
     }
 
     fn goal_plan_trace_payload(&self, goal_plan: &GoalPlan) -> Value {

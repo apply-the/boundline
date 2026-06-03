@@ -380,6 +380,9 @@ struct GoalPlanTracePayload {
     advanced_context: Option<AdvancedContextProjection>,
     planning_rationale: Option<String>,
     verification_strategy: Option<String>,
+    plan_quality_state: String,
+    plan_quality_findings: Vec<String>,
+    plan_quality_assumptions: Vec<String>,
     negotiation_goal_summary: Option<String>,
     negotiation_resolution: Option<String>,
     negotiation_acceptance_boundary: Option<String>,
@@ -403,6 +406,7 @@ impl GoalPlanTracePayload {
         routing_projection: RoutingDecisionProjection,
         delegation: Option<DelegationStatusView>,
     ) -> Self {
+        let plan_quality = goal_plan.plan_quality_assessment();
         Self {
             plan_id: goal_plan.plan_id.clone(),
             goal: goal_plan.goal_text.clone(),
@@ -416,6 +420,9 @@ impl GoalPlanTracePayload {
                 .and_then(|context_pack| context_pack.advanced_context.clone()),
             planning_rationale: goal_plan.planning_rationale.clone(),
             verification_strategy: goal_plan.verification_strategy.clone(),
+            plan_quality_state: plan_quality.state.as_str().to_string(),
+            plan_quality_findings: plan_quality.findings,
+            plan_quality_assumptions: plan_quality.assumptions,
             negotiation_goal_summary: goal_plan.negotiation_goal_summary.clone(),
             negotiation_resolution: goal_plan.negotiation_resolution.clone(),
             negotiation_acceptance_boundary: goal_plan.negotiation_acceptance_boundary.clone(),

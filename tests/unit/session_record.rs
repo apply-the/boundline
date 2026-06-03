@@ -552,3 +552,49 @@ fn planned_session_with_goal_plan_and_no_active_task_is_valid() {
 
     record.validate().unwrap();
 }
+
+#[test]
+fn session_record_deserializes_plan_quality_fields() {
+    let mut record = ActiveSessionRecord {
+        session_id: "session-quality".to_string(),
+        workspace_ref: "/tmp/boundline-session-record".to_string(),
+        goal: Some("Deliver a session-backed CLI".to_string()),
+        authored_brief: None,
+        negotiation_packet: None,
+        active_flow: None,
+        active_task: None,
+        goal_plan: Some(build_goal_plan()),
+        workflow_progress: None,
+        decisions: Vec::new(),
+        active_flow_policy: None,
+        latest_status: SessionStatus::Planned,
+        latest_terminal_reason: None,
+        latest_trace_ref: None,
+        created_at: 10,
+        updated_at: 20,
+        governance_lifecycle: None,
+        project_scale: None,
+        latest_voting: None,
+        delight_feedback: None,
+    };
+
+    let mut plan = build_goal_plan();
+    plan.plan_quality = boundline::domain::goal_plan::PlanQualityAssessment {
+        state: boundline::domain::goal_plan::PlanQualityState::ClarificationRequired,
+        findings: vec!["missing verification_strategy".to_string()],
+        assumptions: vec!["routing_policy_summary omitted".to_string()],
+    };
+    record.goal_plan = Some(plan);
+
+    let encoded = serde_json::to_value(&record).unwrap();
+    let quality_json = &encoded["goal_plan"]["plan_quality"];
+    assert_eq!(quality_json["state"], json!("clarification_required"));
+    assert_eq!(quality_json["findings"][0], json!("missing verification_strategy"));
+    assert_eq!(quality_json["assumptions"][0], json!("routing_policy_summary omitted"));
+
+    let decoded: ActiveSessionRecord = serde_json::from_value(encoded).unwrap();
+    assert_eq!(
+        decoded.goal_plan.unwrap().plan_quality.state,
+        boundline::domain::goal_plan::PlanQualityState::ClarificationRequired
+    );
+}
