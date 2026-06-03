@@ -3,19 +3,19 @@
 > [!TIP]
 > This wiki is aligned with **Boundline 0.67.0**. For older versions, refer to the repository tags.
 
-![Boundline - Bounded Delivery Runtime](https://github.com/apply-the/boundline/blob/main/tech-docs/images/boundline-banner.jpg)
+![Boundline - Bounded Delivery Runtime](https://github.com/apply-the/boundline/blob/0.67.0/tech-docs/images/boundline-banner.jpg?raw=true)
 
 **The local delivery orchestrator for bounded engineering work.** Turn goals into executed plans safely, without losing control to an opaque AI loop.
 
-## <i class="fa-solid fa-rocket"></i> Why Boundline?
+## <i class="fa-solid fa-rocket" style="color: #38c7ff;"></i> Why Boundline?
 
-- <i class="fa-solid fa-bullseye"></i> **Goal-Driven Execution:** Translates high-level objectives into concrete, step-by-step technical plans.
-- <i class="fa-solid fa-floppy-disk"></i> **Session-Based State:** Maintains explicit, resumable session state locally on disk. You are never hostage to ephemeral chat memory.
-- <i class="fa-solid fa-hand"></i> **Safe Delivery:** Executes steps safely using your repository's existing constraints and Canon governance rules.
-- <i class="fa-solid fa-file-signature"></i> **Explicit Traces:** Never lose context. Every execution step is recorded in local, auditable traces.
-- <i class="fa-solid fa-plug"></i> **Agnostic Architecture:** Seamlessly plugs into external frameworks and capability providers.
+- <i class="fa-solid fa-bullseye" style="color: #22b8ff;"></i> **Goal-Driven Execution:** Translates high-level objectives into concrete, step-by-step technical plans.
+- <i class="fa-solid fa-floppy-disk" style="color: #0898ff;"></i> **Session-Based State:** Maintains explicit, resumable session state locally on disk. You are never hostage to ephemeral chat memory.
+- <i class="fa-solid fa-hand" style="color: #0787f5;"></i> **Safe Delivery:** Executes steps safely using your repository's existing constraints and Canon governance rules.
+- <i class="fa-solid fa-file-signature" style="color: #0068e8;"></i> **Explicit Traces:** Never lose context. Every execution step is recorded in local, auditable traces.
+- <i class="fa-solid fa-plug" style="color: #004ccf;"></i> **Agnostic Architecture:** Seamlessly plugs into external frameworks and capability providers.
 
-## <i class="fa-solid fa-brain"></i> How it Works
+## <i class="fa-solid fa-brain" style="color: #38c7ff;"></i> How it Works
 
 Boundline forces an explicit, inspectable workflow:
 1. `goal` → Record the objective for the active session.
@@ -28,7 +28,7 @@ handoff. If the active plan is missing a credible validation strategy or
 another blocking planning input, Boundline stops on one `phase_request` and
 keeps the session non-terminal until you answer.
 
-## <i class="fa-solid fa-bolt"></i> Quick Start
+## <i class="fa-solid fa-bolt" style="color: #22b8ff;"></i> Quick Start
 
 ```bash
 boundline doctor --install
@@ -57,7 +57,7 @@ Current public repositories for this adapter line:
 - [boundline-framework-template](https://github.com/apply-the/boundline-framework-template): starter scaffold for a compatible framework adapter that speaks the host-owned V1 subprocess contract.
 - [boundline-adapter-speckit](https://github.com/apply-the/boundline-adapter-speckit): concrete Speckit-backed adapter implementation that can claim `plan` and `run` when preflight succeeds.
 
-## <i class="fa-solid fa-hammer"></i> Key Commands
+## <i class="fa-solid fa-hammer" style="color: #0898ff;"></i> Key Commands
 
 | Command | What it does |
 |---|---|
@@ -70,7 +70,7 @@ Current public repositories for this adapter line:
 | `boundline index status` | Report derived-index lifecycle state for local semantic retrieval. |
 | `boundline index doctor` | Diagnose tracked, stale, corrupt, or degraded derived-index state. |
 
-## <i class="fa-solid fa-book"></i> Deep Dive Documentation
+## <i class="fa-solid fa-book" style="color: #0787f5;"></i> Deep Dive Documentation
 
 Explore the wiki sidebar for details on architecture, configuration, and scaling:
 - [Getting Started](/guide/getting-started)

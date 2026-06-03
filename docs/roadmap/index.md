@@ -14,7 +14,7 @@ The goal of Boundline is to transform non-deterministic AI iterations into predi
   orchestration surfaces project the additive plan-quality state, findings,
   assumptions, and recovery route.
 
-## <i class="fa-solid fa-rocket"></i> Upcoming Features & Topics
+## <i class="fa-solid fa-rocket" style="color: #38c7ff;"></i> Upcoming Features & Topics
 
 ### Context Handling & Execution
 - **Large Codebase Context Substrate**: Handling long-term context limits, lazy hash references for huge files, and anchored hunks for large-file edits.

@@ -4666,6 +4666,42 @@ fn native_goal_plan_confirms_and_short_circuits_for_existing_delegation_view() {
 }
 
 #[test]
+fn native_goal_plan_rejects_invalid_delegation_view() {
+    let goal_plan = GoalPlan::new(
+        "Inspect an invalid delegation boundary",
+        vec![PlannedTask {
+            task_id: "planned-task-1".to_string(),
+            description: "Inspect the invalid boundary".to_string(),
+            target: "src/lib.rs".to_string(),
+            expected_outcome: Some("status explains the invalid continuity".to_string()),
+            decision_type_hint: None,
+        }],
+    )
+    .unwrap();
+    let err = goal_plan
+        .clone()
+        .with_delegation_state(
+            Vec::new(),
+            DelegationContinuityState {
+                active_packet_id: Some("missing-packet".to_string()),
+                mode: DelegationContinuityMode::Resolved,
+                authority_source: ContinuityAuthority::NativeSession,
+                next_command: "boundline status".to_string(),
+                headline: "invalid continuity should not render".to_string(),
+                evidence_summary: "the packet history does not contain the referenced packet"
+                    .to_string(),
+            },
+        )
+        .unwrap_err();
+
+    assert!(
+        err.to_string().contains("delegation mode resolved must not keep an active_packet_id"),
+        "{err}"
+    );
+    assert!(goal_plan.delegation_continuity().is_none());
+}
+
+#[test]
 fn native_goal_plan_short_circuits_for_new_delegation_packet_and_error_edges() {
     let workspace = temp_workspace("boundline-runtime-native-goal-plan-short-circuit");
     let runtime = SessionRuntime::for_workspace(&workspace);

@@ -647,3 +647,107 @@ impl SessionRuntime {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use std::fs;
+    use std::path::PathBuf;
+
+    use crate::domain::goal_plan::{GoalPlan, PlannedTask};
+    use crate::domain::session::{
+        DelegationContinuityMode, DelegationContinuityState, DelegationPacket,
+        DelegationPacketKind, DelegationPacketState,
+    };
+    use crate::domain::task::TaskStatus;
+
+    fn temp_workspace(label: &str) -> Result<PathBuf, Box<dyn std::error::Error>> {
+        let path = std::env::temp_dir().join(format!("boundline-{label}-{}", Uuid::new_v4()));
+        fs::create_dir_all(&path)?;
+        Ok(path)
+    }
+
+    fn sample_goal_plan() -> Result<GoalPlan, Box<dyn std::error::Error>> {
+        Ok(GoalPlan::new(
+            "Inspect a delegation boundary",
+            vec![PlannedTask {
+                task_id: "planned-task-1".to_string(),
+                description: "Inspect the boundary".to_string(),
+                target: "src/lib.rs".to_string(),
+                expected_outcome: Some("status reflects the boundary".to_string()),
+                decision_type_hint: None,
+            }],
+        )?)
+    }
+
+    #[test]
+    fn goal_plan_delegation_view_returns_none_for_invalid_continuity()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let workspace = temp_workspace("native-goal-plan-view-invalid")?;
+        let runtime = SessionRuntime::for_workspace(&workspace);
+        let mut goal_plan = sample_goal_plan()?;
+        goal_plan.delegation_continuity = Some(DelegationContinuityState {
+            active_packet_id: Some("missing-packet".to_string()),
+            mode: DelegationContinuityMode::Resolved,
+            authority_source: crate::domain::session::ContinuityAuthority::NativeSession,
+            next_command: "boundline status".to_string(),
+            headline: "invalid continuity".to_string(),
+            evidence_summary: "packet history is missing the referenced packet".to_string(),
+        });
+
+        assert!(runtime.goal_plan_delegation_view(&goal_plan).is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn goal_plan_delegation_view_returns_some_for_resolved_continuity()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let workspace = temp_workspace("native-goal-plan-view-resolved")?;
+        let runtime = SessionRuntime::for_workspace(&workspace);
+        let goal_plan = sample_goal_plan()?.with_delegation_state(
+            vec![DelegationPacket {
+                packet_id: "packet-1".to_string(),
+                kind: DelegationPacketKind::Escalation,
+                state: DelegationPacketState::Resolved,
+                created_at: 10,
+                resolved_at: Some(20),
+                source_route_owner: "codex".to_string(),
+                target_owner: "operator".to_string(),
+                continuity_reason: "resolved continuity".to_string(),
+                recommended_next_action: "boundline status".to_string(),
+                evidence_refs: Vec::new(),
+                capability_summary: Some("resolved packet".to_string()),
+                stuck_marker: None,
+                superseded_by_packet_id: None,
+            }],
+            DelegationContinuityState {
+                active_packet_id: None,
+                mode: DelegationContinuityMode::Resolved,
+                authority_source: crate::domain::session::ContinuityAuthority::NativeSession,
+                next_command: "boundline status".to_string(),
+                headline: "resolved continuity".to_string(),
+                evidence_summary: "the boundary is resolved".to_string(),
+            },
+        )?;
+
+        let view = runtime.goal_plan_delegation_view(&goal_plan);
+        assert_eq!(view.as_ref().map(|view| view.mode), Some(DelegationContinuityMode::Resolved));
+        assert_eq!(
+            view.as_ref().and_then(|view| view.packet_kind),
+            Some(DelegationPacketKind::Escalation)
+        );
+        assert!(matches!(
+            view.as_ref().and_then(|view| view.packet_state),
+            Some(DelegationPacketState::Resolved)
+        ));
+        assert_eq!(view.as_ref().and_then(|view| view.packet_id.as_deref()), Some("packet-1"));
+        assert_eq!(view.as_ref().map(|view| view.headline.as_str()), Some("resolved continuity"));
+        assert_eq!(
+            view.as_ref().map(|view| view.evidence_summary.as_str()),
+            Some("the boundary is resolved")
+        );
+        let _ = TaskStatus::Succeeded;
+        Ok(())
+    }
+}
