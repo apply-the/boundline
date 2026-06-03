@@ -103,7 +103,7 @@ See [[Project Memory Structure|Project-Memory-Structure]].
 - Canon remains an external governed-knowledge boundary, not Boundline's
     orchestrator.
 
-The current Boundline `0.67.0` line documents Canon `0.63.0` support for
+The current Boundline `0.68.0` line documents Canon `0.63.0` support for
 `canon governance start|refresh|capabilities --json` `v1`.
 
 The same runtime now owns the derived semantic index lifecycle under
@@ -111,7 +111,7 @@ The same runtime now owns the derived semantic index lifecycle under
 `manifest.json`, explicit `boundline index ...` commands, and lightweight
 stale-mark hook behavior when the operator opts in.
 
-The 0.67.0 release also ships the first plan-quality readiness gate. It runs
+The 0.68.0 release also ships the first plan-quality readiness gate. It runs
 after goal quality, records `plan_quality_state`, `plan_quality_findings`, and
 `plan_quality_assumptions`, and emits one `phase_request` when a plan needs a
 credible validation strategy or another blocking planning input before

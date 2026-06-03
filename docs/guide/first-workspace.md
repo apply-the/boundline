@@ -24,6 +24,19 @@ boundline index status --workspace .
 That bootstraps `.boundline/` and, when requested, the repo-local assistant
 surface for the selected host.
 
+For local Ollama routing on an Apple Silicon machine with 16 GB unified memory,
+pull the small preset models and initialize with the preset:
+
+```bash
+ollama pull qwen2.5:7b
+ollama pull qwen2.5-coder:7b
+boundline init --ollama-profile small
+```
+
+Use `medium` for a 64 GB local workstation and `large` for a 96/128 GB machine.
+Each preset pins planning, implementation, verification, and review routes in
+workspace config while keeping the Ollama endpoint in provider env settings.
+
 ## 3. Optional Provider Auth
 
 Use this only when the chosen runtime needs a stored provider credential:

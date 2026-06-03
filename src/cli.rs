@@ -22,6 +22,7 @@ use super::{
     inspect, models_auth, orchestrate, output, probe, run, session, workflow,
     workspace as cli_workspace,
 };
+use init::OllamaProfile;
 
 /// Top-level CLI parser for the Boundline executable.
 #[derive(Debug, Parser)]
@@ -347,7 +348,7 @@ pub enum DeveloperCommand {
     },
     #[command(
         about = "Bootstrap install-global defaults, workspace files, and default routing",
-        after_long_help = "Guided mode tips:\n  - leave --assistant unset to skip repository-local assistant packs\n  - leave guided routes blank to let selected assistants seed defaults for planning, implementation, verification, and review\n\nScope selection:\n  - --scope workspace keeps the existing repo bootstrap behavior\n  - --scope global writes install-wide defaults under the global Boundline config directory\n  - --scope both writes install-wide defaults first and then repo-local overrides\n\nWorkspace selection:\n  - omit --workspace to target the nearest initialized .boundline/ root\n  - if no .boundline/ exists, Boundline falls back to the nearest .git root\n  - use --workspace <path> only when you need to bootstrap another repository explicitly\n\nDocs export policy:\n  - --export-docs is create-only by default; existing target files stop the command\n  - use --refresh to update generated docs in place\n  - use --diff to preview docs changes without writing\n  - use --to <path> to export generated docs under another root\n\nExamples:\n  boundline init --assistant copilot\n  boundline init --scope global --assistant copilot\n  boundline init --scope both --assistant codex --assistant copilot\n  boundline init --assistant copilot --route planning=copilot:gpt-4o\n  boundline init --assistant codex --assistant copilot --route review=claude:sonnet-4\n  boundline init --export-docs\n  boundline init --export-docs --refresh\n  boundline init --workspace ../other-repo --export-docs --to docs/reference/boundline"
+        after_long_help = "Guided mode tips:\n  - leave --assistant unset to skip repository-local assistant packs\n  - leave guided routes blank to let selected assistants seed defaults for planning, implementation, verification, and review\n  - use --ollama-profile small|medium|large to pin local Ollama routes for every delivery slot\n\nScope selection:\n  - --scope workspace keeps the existing repo bootstrap behavior\n  - --scope global writes install-wide defaults under the global Boundline config directory\n  - --scope both writes install-wide defaults first and then repo-local overrides\n\nWorkspace selection:\n  - omit --workspace to target the nearest initialized .boundline/ root\n  - if no .boundline/ exists, Boundline falls back to the nearest .git root\n  - use --workspace <path> only when you need to bootstrap another repository explicitly\n\nDocs export policy:\n  - --export-docs is create-only by default; existing target files stop the command\n  - use --refresh to update generated docs in place\n  - use --diff to preview docs changes without writing\n  - use --to <path> to export generated docs under another root\n\nExamples:\n  boundline init --assistant copilot\n  boundline init --scope global --assistant copilot\n  boundline init --scope both --assistant codex --assistant copilot\n  boundline init --ollama-profile small\n  boundline init --assistant copilot --route planning=copilot:gpt-4o\n  boundline init --assistant codex --assistant copilot --route review=claude:sonnet-4\n  boundline init --export-docs\n  boundline init --export-docs --refresh\n  boundline init --workspace ../other-repo --export-docs --to docs/reference/boundline"
     )]
     Init {
         /// Configuration scope to bootstrap. `workspace` preserves existing behavior, `global` writes install-wide defaults, and `both` writes both layers.
@@ -362,6 +363,9 @@ pub enum DeveloperCommand {
         /// Optional starting template for the generated execution profile. Defaults to bug-fix.
         #[arg(long)]
         template: Option<InitTemplate>,
+        /// Local Ollama model-routing preset for planning, implementation, verification, and review.
+        #[arg(long = "ollama-profile", value_enum, conflicts_with = "route")]
+        ollama_profile: Option<OllamaProfile>,
         /// Assistant package hosts to scaffold locally. Supported values: claude, codex, copilot, antigravity. Provider-backed hosts can also seed default routes.
         #[arg(long = "assistant")]
         assistant: Vec<AssistantHostKind>,
@@ -2451,6 +2455,7 @@ fn dispatch_init_command(command: &DeveloperCommand) -> DispatchOutcome {
         workspace,
         non_interactive,
         template,
+        ollama_profile,
         assistant,
         adapter,
         route,
@@ -2489,6 +2494,7 @@ fn dispatch_init_command(command: &DeveloperCommand) -> DispatchOutcome {
         interactive_terminal_override: None,
         interactor: None,
         template: *template,
+        ollama_profile: *ollama_profile,
         assistants: assistant,
         routes: route,
         domains: domain,
@@ -4123,6 +4129,7 @@ fn red_to_green_addition() {
                     workspace: workspace.clone(),
                     non_interactive: false,
                     template: None,
+                    ollama_profile: None,
                     assistant: Vec::new(),
                     adapter: None,
                     ide: Vec::new(),
@@ -4350,6 +4357,7 @@ fn red_to_green_addition() {
             workspace: file_workspace,
             non_interactive: false,
             template: None,
+            ollama_profile: None,
             assistant: Vec::new(),
             adapter: None,
             ide: Vec::new(),
@@ -4396,6 +4404,7 @@ fn red_to_green_addition() {
             workspace: init_success_workspace.clone(),
             non_interactive: true,
             template: Some(InitTemplate::Change),
+            ollama_profile: None,
             assistant: vec![crate::domain::configuration::AssistantHostKind::Copilot],
             adapter: None,
             ide: Vec::new(),
@@ -5798,6 +5807,7 @@ fn red_to_green_addition() {
 
         let init_global = DeveloperCommand::Init {
             template: None,
+            ollama_profile: None,
             assistant: Vec::new(),
             adapter: None,
             route: Vec::new(),
@@ -6186,6 +6196,7 @@ fn red_to_green_addition() {
 
         let init_scope_error = super::dispatch_init_command(&DeveloperCommand::Init {
             template: None,
+            ollama_profile: None,
             assistant: Vec::new(),
             adapter: Some("__missing_profile__".to_string()),
             route: Vec::new(),

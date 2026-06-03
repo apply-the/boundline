@@ -1,6 +1,6 @@
 # Inspect
 
-`inspect` explains why the Boundline 0.67.0 runtime chose the current plan or blocked
+`inspect` explains why the Boundline 0.68.0 runtime chose the current plan or blocked
 handoff.
 
 ## What To Read

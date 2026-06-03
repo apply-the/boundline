@@ -27,7 +27,7 @@ Boundline forces an explicit, inspectable workflow:
 3. `run` -> Execute the next approved step.
 4. `inspect` -> Report the authoritative runtime state.
 
-In the 0.67.0 release, `plan` also evaluates plan quality before execution
+In the 0.68.0 release, `plan` also evaluates plan quality before execution
 handoff. If the active plan is missing a credible validation strategy or
 another blocking planning input, Boundline stops on one `phase_request` and
 keeps the session non-terminal until you answer.
@@ -42,6 +42,23 @@ boundline goal --goal "Fix the failing add test"
 boundline plan
 boundline run
 ```
+
+For a local Ollama-first workspace, install Ollama, pull the preset models,
+then let init pin every delivery slot:
+
+```bash
+ollama pull qwen2.5:7b
+ollama pull qwen2.5-coder:7b
+boundline init --ollama-profile small
+```
+
+The built-in Ollama profiles are:
+
+| Profile | Target machine | Planning and run | Verification and review |
+|---|---|---|---|
+| `small` | Apple Silicon with 16 GB unified memory | `qwen2.5-coder:7b` | `qwen2.5:7b` |
+| `medium` | local workstation with 64 GB memory | `qwen2.5-coder:14b` | `qwen2.5:14b` |
+| `large` | local workstation with 96/128 GB memory | `qwen2.5-coder:32b` | `qwen2.5:72b` |
 
 ## Use Boundline from chat
 

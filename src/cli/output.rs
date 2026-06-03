@@ -856,6 +856,7 @@ mod tests {
                     workspace: "/tmp/workspace".into(),
                     non_interactive: false,
                     template: None,
+                    ollama_profile: None,
                     assistant: Vec::new(),
                     adapter: None,
                     ide: Vec::new(),

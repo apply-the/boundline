@@ -4,6 +4,7 @@ These scripts are the repository-local helpers for LCOV inspection and patch cov
 
 ## Scripts
 
+- `coverage.sh`: generate the workspace LCOV, per-crate lib LCOVs, and the merged `lcov.info` artifact used by CI.
 - `parse_lcov.py`: print per-file coverage for selected repository files.
 - `aggregate_lcov.py`: merge one or more LCOV reports and summarize coverage for selected files.
 - `intersect_patch_coverage.py`: intersect changed diff lines with uncovered LCOV lines.
@@ -11,6 +12,12 @@ These scripts are the repository-local helpers for LCOV inspection and patch cov
 ## Usage
 
 Run commands from the repository root.
+
+To reproduce the CI coverage layout locally:
+
+```bash
+bash scripts/coverage.sh
+```
 
 ```bash
 python3 scripts/common/coverage/parse_lcov.py lcov.info src/orchestrator/session_runtime.rs

@@ -46,10 +46,27 @@ Highlights:
 
 Release metadata note:
 
-- The latest published Boundline release remains `0.67.0`. The next release
-  work is recorded under `Unreleased`, so published package metadata,
-  distribution metadata, and sibling git-tag dependency pins stay on the last
-  public compatibility line.
+- The current Boundline release line is `0.68.0`; published package metadata,
+  distribution metadata, assistant plugin manifests, and docs are aligned to
+  that version while Canon compatibility remains `0.63.0`.
+
+## [0.68.0] - 2026-06-03
+
+Delivered specs:
+
+- Ollama-ready init presets
+
+Highlights:
+
+- Added `boundline init --ollama-profile small|medium|large` to seed local
+  Ollama model routes for planning, implementation, verification, and review.
+- Tuned `ollama-small` for Apple Silicon with 16 GB unified memory using
+  Qwen2.5 7B models.
+- Tuned `ollama-medium` for 64 GB local workstations using Qwen2.5 14B models.
+- Tuned `ollama-large` for 96/128 GB unified-memory or workstation hosts using
+  Qwen2.5 Coder 32B and Qwen2.5 72B.
+- Released aligned Boundline `0.68.0` workspace, docs, assistant metadata,
+  Homebrew, and WinGet metadata.
 
 ## [0.67.0] - 2026-06-02
 

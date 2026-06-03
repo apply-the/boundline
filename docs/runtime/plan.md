@@ -1,6 +1,6 @@
 # Plan
 
-Boundline 0.67.0 makes plan quality a runtime gate, not a chat convention.
+Boundline 0.68.0 makes plan quality a runtime gate, not a chat convention.
 
 ## What `plan` Does
 
