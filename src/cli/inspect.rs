@@ -54,6 +54,17 @@ const UNKNOWN_DECISION_ID: &str = "unknown-decision";
 const UNKNOWN_TARGET: &str = "unknown";
 const KEY_ACTION_RESULT: &str = "action_result";
 const KEY_FAILURE_REASON: &str = "failure_reason";
+const KEY_PLAN_QUALITY_ASSUMPTIONS: &str = "plan_quality_assumptions";
+const KEY_PLAN_QUALITY_FINDINGS: &str = "plan_quality_findings";
+const KEY_PLAN_QUALITY_STATE: &str = "plan_quality_state";
+
+fn string_list_from_payload(payload: &Value, key: &str) -> Vec<String> {
+    payload
+        .get(key)
+        .and_then(Value::as_array)
+        .map(|items| items.iter().filter_map(Value::as_str).map(str::to_string).collect())
+        .unwrap_or_default()
+}
 
 fn advanced_context_from_payload(payload: &Value) -> Option<AdvancedContextProjection> {
     payload.get("advanced_context").cloned().and_then(|value| serde_json::from_value(value).ok())
@@ -243,6 +254,9 @@ struct TraceSummaryFold {
     routing_summary: Option<String>,
     routing_projection: RoutingDecisionProjection,
     goal_plan_summary: Option<String>,
+    plan_quality_state: Option<String>,
+    plan_quality_findings: Vec<String>,
+    plan_quality_assumptions: Vec<String>,
     advanced_context: Option<AdvancedContextProjection>,
     context_projection: TraceContextProjection,
     guidance_guardian: GuidanceGuardianProjection,
@@ -507,6 +521,20 @@ impl TraceSummaryFold {
                 }
             }
             TraceEventType::GoalPlanCreated => {
+                self.plan_quality_state = event
+                    .payload
+                    .get(KEY_PLAN_QUALITY_STATE)
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+                    .or(self.plan_quality_state.take());
+                if self.plan_quality_findings.is_empty() {
+                    self.plan_quality_findings =
+                        string_list_from_payload(&event.payload, KEY_PLAN_QUALITY_FINDINGS);
+                }
+                if self.plan_quality_assumptions.is_empty() {
+                    self.plan_quality_assumptions =
+                        string_list_from_payload(&event.payload, KEY_PLAN_QUALITY_ASSUMPTIONS);
+                }
                 if self.routing_summary.is_none() {
                     self.routing_summary = Some(output::render_route_outcome(&RoutingOutcome {
                         mode: RoutingMode::Native,
@@ -638,6 +666,9 @@ pub fn summarize_trace(
         mut routing_summary,
         routing_projection,
         goal_plan_summary,
+        plan_quality_state,
+        plan_quality_findings,
+        plan_quality_assumptions,
         advanced_context,
         context_projection,
         guidance_guardian,
@@ -727,6 +758,9 @@ pub fn summarize_trace(
         routing_summary,
         routing_projection,
         goal_plan_summary,
+        plan_quality_state,
+        plan_quality_findings,
+        plan_quality_assumptions,
         authored_input_summary: input_projection.authored_input_summary,
         authored_input_sources: input_projection.authored_input_sources,
         authored_input_deduplicated_sources: input_projection.authored_input_deduplicated_sources,

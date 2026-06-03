@@ -22,10 +22,34 @@ use super::{
 };
 use crate::domain::session::FrameworkAdapterStageFailureDetails;
 
+const KEY_PLAN_QUALITY_ASSUMPTIONS: &str = "plan_quality_assumptions";
+const KEY_PLAN_QUALITY_FINDINGS: &str = "plan_quality_findings";
+const KEY_PLAN_QUALITY_STATE: &str = "plan_quality_state";
+
 fn value_as_string_list(value: &Value) -> Option<Vec<String>> {
     value.as_array().map(|items| {
         items.iter().filter_map(|item| item.as_str().map(str::to_string)).collect::<Vec<_>>()
     })
+}
+
+fn push_plan_quality_lines(lines: &mut Vec<String>, payload: &Value) {
+    if let Some(plan_quality_state) = payload.get(KEY_PLAN_QUALITY_STATE).and_then(Value::as_str) {
+        lines.push(format!("plan_quality_state: {plan_quality_state}"));
+    }
+    if let Some(findings) = payload
+        .get(KEY_PLAN_QUALITY_FINDINGS)
+        .and_then(value_as_string_list)
+        .filter(|findings| !findings.is_empty())
+    {
+        lines.push(format!("plan_quality_findings: {}", findings.join(", ")));
+    }
+    if let Some(assumptions) = payload
+        .get(KEY_PLAN_QUALITY_ASSUMPTIONS)
+        .and_then(value_as_string_list)
+        .filter(|assumptions| !assumptions.is_empty())
+    {
+        lines.push(format!("plan_quality_assumptions: {}", assumptions.join(", ")));
+    }
 }
 
 pub fn render_run_trace(
@@ -133,6 +157,7 @@ pub fn render_run_trace(
         if let Some(goal_plan_created) =
             trace.events.iter().find(|event| event.event_type == TraceEventType::GoalPlanCreated)
         {
+            push_plan_quality_lines(&mut lines, &goal_plan_created.payload);
             if let Some(negotiation_goal_summary) =
                 goal_plan_created.payload.get("negotiation_goal_summary").and_then(Value::as_str)
             {

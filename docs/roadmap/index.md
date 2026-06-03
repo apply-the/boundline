@@ -6,7 +6,15 @@ Welcome to the official **Boundline** Roadmap. Here we track the evolution of ou
 The goal of Boundline is to transform non-deterministic AI iterations into predictable, traceable, and governable software delivery processes.
 :::
 
-## <i class="fa-solid fa-rocket"></i> Upcoming Features & Topics
+## Recently Delivered
+
+- `067` - Plan Quality Contract: shipped the first planning-readiness gate in
+  Boundline `0.67.0`. The runtime now stops on one focused `phase_request`
+  when a plan lacks a credible validation strategy, and status, inspect, and
+  orchestration surfaces project the additive plan-quality state, findings,
+  assumptions, and recovery route.
+
+## <i class="fa-solid fa-rocket" style="color: #38c7ff;"></i> Upcoming Features & Topics
 
 ### Context Handling & Execution
 - **Large Codebase Context Substrate**: Handling long-term context limits, lazy hash references for huge files, and anchored hunks for large-file edits.
@@ -18,7 +26,7 @@ The goal of Boundline is to transform non-deterministic AI iterations into predi
 - **AI Gateway & Inference Economics**: Managing route health, local vs remote transmission decisions, route budgets, and latency telemetry.
 
 ### Governance & Planning
-- **Plan Quality & Backlog Contracts**: Strict execution gates for planning UX and backlog execution.
+- **Backlog Contracts**: Strict execution gates for backlog execution.
 - **Evals & Runtime Observability**: Local quality layers, JSONL trace exports, deterministic scoring, and provider evaluations.
 - **Recursive Stage Refinement Profiles**: Sequential planning profiles (planner -> critic -> finalizer) tightly governed by councils and stop semantics.
 

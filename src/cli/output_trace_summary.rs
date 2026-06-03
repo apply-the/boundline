@@ -31,6 +31,7 @@ pub fn render_trace_summary_brief(
     push_trace_overview_brief_lines(&mut lines, summary, inspection_target);
 
     lines.extend(trace_input_brief_lines(summary));
+    push_trace_plan_quality_lines(&mut lines, summary);
 
     if let Some(routing_summary) = &summary.routing_summary {
         lines.push(routing_summary.clone());
@@ -85,6 +86,24 @@ pub fn render_trace_summary_brief(
 
     push_trace_footer_brief_lines(&mut lines, summary, next_command);
     lines.join("\n")
+}
+
+fn push_trace_plan_quality_lines(lines: &mut Vec<String>, summary: &TraceSummaryView) {
+    if let Some(plan_quality_state) = &summary.plan_quality_state {
+        lines.push(format!("plan_quality_state: {plan_quality_state}"));
+    }
+    if !summary.plan_quality_findings.is_empty() {
+        lines.push(format!(
+            "plan_quality_findings: {}",
+            preview_trace_brief_items(&summary.plan_quality_findings)
+        ));
+    }
+    if !summary.plan_quality_assumptions.is_empty() {
+        lines.push(format!(
+            "plan_quality_assumptions: {}",
+            preview_trace_brief_items(&summary.plan_quality_assumptions)
+        ));
+    }
 }
 
 fn push_trace_overview_brief_lines(

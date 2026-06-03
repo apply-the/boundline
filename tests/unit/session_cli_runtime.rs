@@ -6,6 +6,7 @@ use std::sync::{Mutex, MutexGuard, OnceLock};
 use boundline::adapters::config_store::FileConfigStore;
 use boundline::adapters::env_layer::{OPENAI_API_KEY_ENV, OPENAI_BASE_URL_ENV};
 use boundline::adapters::session_store::{FileSessionStore, SessionStore, SessionStoreError};
+use boundline::adapters::trace_store::TraceStore;
 use boundline::cli::diagnostics::{diagnose_native_direct_run_workspace, diagnose_workspace};
 use boundline::cli::inspect::{TraceSummaryError, summarize_trace};
 use boundline::cli::run::{RunCommandError, execute_native_direct_run};
@@ -47,9 +48,9 @@ use boundline::domain::framework_adapter::{
     StoredAdapterConfigValueState,
 };
 use boundline::domain::goal_plan::{
-    GoalPlan, PlannedTask, PlanningAnalysisCoverage, PlanningAnalysisFinding,
-    PlanningAnalysisProjection, PlanningAnalysisSeverity, PlanningAnalysisSource,
-    PlanningAnalysisState,
+    ContextInput, ContextInputKind, ContextPack, ContextPackCredibility, GoalPlan, PlannedTask,
+    PlanningAnalysisCoverage, PlanningAnalysisFinding, PlanningAnalysisProjection,
+    PlanningAnalysisSeverity, PlanningAnalysisSource, PlanningAnalysisState,
 };
 use boundline::domain::governance::{
     CanonModeSelectionPreference, CanonSemanticProvenanceBoundary, GovernanceLifecycleState,
@@ -1593,6 +1594,120 @@ fn execute_run_blocks_when_plan_quality_requires_clarification()
     assert_eq!(session_status.latest_status, SessionStatus::Blocked);
     assert_eq!(session_status.plan_quality_state.as_deref(), Some("clarification_required"));
     assert!(report.terminal_output.contains("current goal plan is not ready for execution"));
+
+    let persisted = FileSessionStore::for_workspace(&workspace)
+        .load()?
+        .ok_or_else(|| std::io::Error::other("run block must persist the active session"))?;
+    let trace_ref = persisted
+        .latest_trace_ref
+        .as_deref()
+        .ok_or_else(|| std::io::Error::other("run block must persist a plan-quality trace"))?;
+    let trace =
+        SessionRuntime::for_workspace(&workspace).trace_store().load(Path::new(trace_ref))?;
+    let goal_plan_event = trace
+        .events
+        .iter()
+        .find(|event| event.event_type == TraceEventType::GoalPlanCreated)
+        .ok_or_else(|| std::io::Error::other("plan-quality trace missing goal plan event"))?;
+    assert_eq!(goal_plan_event.payload["plan_quality_state"], "clarification_required");
+    assert_eq!(goal_plan_event.payload["plan_quality_findings"], json!(["verification_strategy"]));
+
+    Ok(())
+}
+
+#[test]
+fn summarize_trace_surfaces_plan_quality_projection() -> Result<(), Box<dyn std::error::Error>> {
+    let mut trace = ExecutionTrace::new("plan-quality-trace", "session-quality", "Deliver safely");
+    trace.record_event(
+        TraceEventType::GoalPlanCreated,
+        None,
+        0,
+        json!({
+            "goal": "Deliver safely",
+            "task_count": 1,
+            "goal_plan_state": "proposed",
+            "goal_plan_revision": 0,
+            "plan_quality_state": "clarification_required",
+            "plan_quality_findings": ["verification_strategy"],
+            "plan_quality_assumptions": ["no explicit route override is required for this plan"]
+        }),
+    );
+    trace.finalize(
+        TaskStatus::Failed,
+        TerminalReason::new(
+            TerminalCondition::NoCredibleNextStep,
+            "plan quality requires clarification",
+            None,
+        ),
+    );
+
+    let summary = summarize_trace("/tmp/trace.json", &trace)?;
+    assert_eq!(summary.plan_quality_state.as_deref(), Some("clarification_required"));
+    assert_eq!(summary.plan_quality_findings, vec!["verification_strategy".to_string()]);
+    assert_eq!(
+        summary.plan_quality_assumptions,
+        vec!["no explicit route override is required for this plan".to_string()]
+    );
+
+    Ok(())
+}
+
+#[test]
+fn persist_blocked_plan_quality_trace_records_blocked_and_ignores_ready_plans()
+-> Result<(), Box<dyn std::error::Error>> {
+    let workspace = temp_workspace("boundline-cli-plan-quality-trace");
+    let runtime = SessionRuntime::for_workspace(&workspace);
+    let mut session = build_planned_record(workspace.to_string_lossy().as_ref());
+    session.latest_trace_ref = None;
+    session.goal_plan = None;
+
+    runtime.persist_blocked_plan_quality_trace(&mut session)?;
+    assert!(session.latest_trace_ref.is_none());
+
+    let ready_goal_plan = build_ready_goal_plan()?;
+    assert_eq!(ready_goal_plan.plan_quality_state().as_deref(), Some("ready"));
+    session.goal_plan = Some(ready_goal_plan.clone());
+    session.latest_trace_ref = Some("ready-trace".to_string());
+    runtime.persist_blocked_plan_quality_trace(&mut session)?;
+    assert_eq!(session.latest_trace_ref.as_deref(), Some("ready-trace"));
+
+    let blocked_goal_plan = ready_goal_plan.with_context_pack(ContextPack {
+        pack_id: "cp-blocked".to_string(),
+        summary: "stale context".to_string(),
+        credibility: ContextPackCredibility::Stale,
+        inputs: vec![ContextInput {
+            kind: ContextInputKind::RecentTrace,
+            reference: ".boundline/traces/old.json".to_string(),
+            rationale: "was the last authoritative trace".to_string(),
+            source: "latest_trace".to_string(),
+            primary: false,
+        }],
+        selected_targets: Vec::new(),
+        advanced_context: None,
+        staleness_reason: Some("refresh the context before continuing".to_string()),
+    });
+    assert_eq!(blocked_goal_plan.plan_quality_state().as_deref(), Some("blocked"));
+
+    session.goal_plan = Some(blocked_goal_plan);
+    session.latest_trace_ref = None;
+    runtime.persist_blocked_plan_quality_trace(&mut session)?;
+
+    let trace_ref = session
+        .latest_trace_ref
+        .as_deref()
+        .ok_or_else(|| std::io::Error::other("blocked plan quality must persist a trace"))?;
+    let trace = runtime.trace_store().load(Path::new(trace_ref))?;
+    let goal_plan_event = trace
+        .events
+        .iter()
+        .find(|event| event.event_type == TraceEventType::GoalPlanCreated)
+        .ok_or_else(|| std::io::Error::other("plan-quality trace missing goal plan event"))?;
+    assert_eq!(goal_plan_event.payload["plan_quality_state"], "blocked");
+    assert_eq!(goal_plan_event.payload["plan_quality_findings"], json!(["context_pack_stale"]));
+    assert_eq!(
+        goal_plan_event.payload["plan_quality_assumptions"],
+        json!(["no explicit route override is required for this plan"])
+    );
 
     Ok(())
 }

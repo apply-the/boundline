@@ -43,7 +43,10 @@ use crate::domain::execution::{
 };
 use crate::domain::flow::{attach_stage_metadata, built_in_flow};
 use crate::domain::flow_policy::FlowPolicy;
-use crate::domain::goal_plan::{GoalPlan, InferredFlow, PlannedTask};
+use crate::domain::goal_plan::{
+    ContextInput, ContextInputKind, ContextPack, ContextPackCredibility, GoalPlan, InferredFlow,
+    PlannedTask,
+};
 use crate::domain::governance::{
     ApprovalState, CanonMode, CanonModeSelectionPreference, CanonRuntimeConfig,
     GovernanceLifecycleState, GovernanceProfile, GovernanceRuntimeKind, GovernedSessionLifecycle,
@@ -2524,7 +2527,7 @@ fn broad_goal_planning_persists_project_scale_state_when_context_is_insufficient
 }
 
 #[test]
-fn plan_task_blocks_when_plan_quality_detects_stale_context() {
+fn plan_task_blocks_when_plan_quality_detects_stale_context() -> Result<(), Box<dyn Error>> {
     let workspace = temp_workspace("boundline-runtime-plan-quality-stale-context");
     fs::write(workspace.join("package.json"), r#"{"dependencies":{"react":"18.0.0"}}"#).unwrap();
     fs::create_dir_all(workspace.join("src/components")).unwrap();
@@ -2597,6 +2600,125 @@ fn plan_task_blocks_when_plan_quality_detects_stale_context() {
         session.goal_plan.as_ref().expect("blocked planning should persist the goal plan");
     assert_eq!(goal_plan.plan_quality_state().as_deref(), Some("blocked"));
     assert_eq!(goal_plan.plan_quality_findings().unwrap(), vec!["context_pack_stale".to_string()]);
+
+    let trace_ref = session
+        .latest_trace_ref
+        .as_deref()
+        .ok_or_else(|| std::io::Error::other("blocked plan quality must persist a trace"))?;
+    let trace = runtime.trace_store().load(Path::new(trace_ref))?;
+    let goal_plan_event = trace
+        .events
+        .iter()
+        .find(|event| event.event_type == TraceEventType::GoalPlanCreated)
+        .ok_or_else(|| std::io::Error::other("plan-quality trace missing goal plan event"))?;
+    assert_eq!(goal_plan_event.payload["plan_quality_state"], "blocked");
+    assert_eq!(goal_plan_event.payload["plan_quality_findings"], json!(["context_pack_stale"]));
+    assert_eq!(goal_plan_event.payload["plan_quality_assumptions"], json!([]));
+
+    Ok(())
+}
+
+#[test]
+fn persist_blocked_plan_quality_trace_records_blocked_and_ignores_ready_plans()
+-> Result<(), Box<dyn Error>> {
+    let workspace = temp_workspace("boundline-runtime-plan-quality-trace");
+    let runtime = SessionRuntime::for_workspace(&workspace);
+    let mut session = ActiveSessionRecord {
+        session_id: "session-runtime-plan-quality-trace".to_string(),
+        workspace_ref: workspace.to_string_lossy().into_owned(),
+        goal: None,
+        authored_brief: None,
+        negotiation_packet: None,
+        active_flow: None,
+        active_task: None,
+        goal_plan: None,
+        workflow_progress: None,
+        decisions: Vec::new(),
+        active_flow_policy: None,
+        latest_status: SessionStatus::Initialized,
+        latest_terminal_reason: None,
+        latest_trace_ref: None,
+        created_at: 10,
+        updated_at: 10,
+        governance_lifecycle: None,
+        project_scale: None,
+        delight_feedback: None,
+        latest_voting: None,
+    };
+
+    runtime.persist_blocked_plan_quality_trace(&mut session)?;
+    assert!(session.latest_trace_ref.is_none());
+
+    let ready_goal_plan = GoalPlan::new(
+        "Deliver a bounded change",
+        vec![PlannedTask {
+            task_id: "T001".to_string(),
+            description: "Update the bounded implementation".to_string(),
+            target: "src/lib.rs".to_string(),
+            expected_outcome: Some("bounded change delivered".to_string()),
+            decision_type_hint: None,
+        }],
+    )?
+    .with_planning_rationale("workspace evidence supports this bounded change")
+    .with_verification_strategy("run the focused regression checks after editing");
+    assert_eq!(ready_goal_plan.plan_quality_state().as_deref(), Some("ready"));
+
+    session.goal_plan = Some(ready_goal_plan);
+    session.latest_trace_ref = Some("ready-trace".to_string());
+    runtime.persist_blocked_plan_quality_trace(&mut session)?;
+    assert_eq!(session.latest_trace_ref.as_deref(), Some("ready-trace"));
+
+    let blocked_goal_plan = GoalPlan::new(
+        "Deliver a blocked bounded change",
+        vec![PlannedTask {
+            task_id: "T002".to_string(),
+            description: "Update the blocked implementation".to_string(),
+            target: "src/blocked.rs".to_string(),
+            expected_outcome: Some("blocked plan quality persisted".to_string()),
+            decision_type_hint: None,
+        }],
+    )?
+    .with_context_pack(ContextPack {
+        pack_id: "cp-blocked".to_string(),
+        summary: "stale context".to_string(),
+        credibility: ContextPackCredibility::Stale,
+        inputs: vec![ContextInput {
+            kind: ContextInputKind::RecentTrace,
+            reference: ".boundline/traces/old.json".to_string(),
+            rationale: "was the last authoritative trace".to_string(),
+            source: "latest_trace".to_string(),
+            primary: false,
+        }],
+        selected_targets: Vec::new(),
+        advanced_context: None,
+        staleness_reason: Some("refresh the context before continuing".to_string()),
+    })
+    .with_planning_rationale("workspace evidence supports this bounded change")
+    .with_verification_strategy("run the focused regression checks after editing");
+    assert_eq!(blocked_goal_plan.plan_quality_state().as_deref(), Some("blocked"));
+
+    session.goal_plan = Some(blocked_goal_plan);
+    session.latest_trace_ref = None;
+    runtime.persist_blocked_plan_quality_trace(&mut session)?;
+
+    let trace_ref = session
+        .latest_trace_ref
+        .as_deref()
+        .ok_or_else(|| std::io::Error::other("blocked plan quality must persist a trace"))?;
+    let trace = runtime.trace_store().load(Path::new(trace_ref))?;
+    let goal_plan_event = trace
+        .events
+        .iter()
+        .find(|event| event.event_type == TraceEventType::GoalPlanCreated)
+        .ok_or_else(|| std::io::Error::other("plan-quality trace missing goal plan event"))?;
+    assert_eq!(goal_plan_event.payload["plan_quality_state"], "blocked");
+    assert_eq!(goal_plan_event.payload["plan_quality_findings"], json!(["context_pack_stale"]));
+    assert_eq!(
+        goal_plan_event.payload["plan_quality_assumptions"],
+        json!(["no explicit route override is required for this plan"])
+    );
+
+    Ok(())
 }
 
 #[test]
@@ -4541,6 +4663,42 @@ fn native_goal_plan_confirms_and_short_circuits_for_existing_delegation_view() {
     assert!(!session.goal_plan.as_ref().unwrap().requires_confirmation());
     assert!(session.goal_plan.as_ref().unwrap().delegation_continuity().is_some());
     assert!(session.active_task.is_none());
+}
+
+#[test]
+fn native_goal_plan_rejects_invalid_delegation_view() {
+    let goal_plan = GoalPlan::new(
+        "Inspect an invalid delegation boundary",
+        vec![PlannedTask {
+            task_id: "planned-task-1".to_string(),
+            description: "Inspect the invalid boundary".to_string(),
+            target: "src/lib.rs".to_string(),
+            expected_outcome: Some("status explains the invalid continuity".to_string()),
+            decision_type_hint: None,
+        }],
+    )
+    .unwrap();
+    let err = goal_plan
+        .clone()
+        .with_delegation_state(
+            Vec::new(),
+            DelegationContinuityState {
+                active_packet_id: Some("missing-packet".to_string()),
+                mode: DelegationContinuityMode::Resolved,
+                authority_source: ContinuityAuthority::NativeSession,
+                next_command: "boundline status".to_string(),
+                headline: "invalid continuity should not render".to_string(),
+                evidence_summary: "the packet history does not contain the referenced packet"
+                    .to_string(),
+            },
+        )
+        .unwrap_err();
+
+    assert!(
+        err.to_string().contains("delegation mode resolved must not keep an active_packet_id"),
+        "{err}"
+    );
+    assert!(goal_plan.delegation_continuity().is_none());
 }
 
 #[test]

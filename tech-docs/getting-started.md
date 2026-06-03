@@ -63,7 +63,7 @@ Read the output literally:
   ready, already satisfied, blocked, or repair-needed.
 - `actions` tells you the next repair or follow-up step.
 
-The current release documents Canon `0.63.0` support for the machine-facing
+The current 0.67.0 release documents Canon `0.63.0` support for the machine-facing
 `canon governance start|refresh|capabilities --json` `v1` surface.
 
 ## 3. Initialize The Workspace
@@ -208,6 +208,10 @@ When semantic acceleration is enabled, `status` and `inspect` also show
 `retrieval_index_state`, `semantic_capability_state`,
 `semantic_fallback_reason`, and `retrieval_recovery_guidance` so local vector
 health stays explicit.
+
+When plan quality stops progress, `plan` emits one `phase_request` instead of
+guessing. Answer the question about the missing validation strategy or other
+blocking plan input, then resume the same session rather than forcing `run`.
 
 Planning and execution may stop instead of guessing. In particular, the runtime
 can surface planning-gate outcomes such as `goal_quality_state`,

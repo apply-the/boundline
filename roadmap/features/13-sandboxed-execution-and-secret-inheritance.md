@@ -79,6 +79,8 @@ Use:
 - scoped secret access
 - redacted trace output
 - provider permission checks
+- setup and health-check flows that consume handles instead of prompt-visible
+  secret values
 - no secret persistence in sandbox artifacts unless approved
 
 ## Algorithms And Techniques
@@ -124,6 +126,8 @@ Canon or Boundline governance can require sandboxing for:
 - Boundline can execute a command in local sandbox.
 - Sandbox mutation does not affect workspace until commit.
 - Secrets are never written to prompt or plain trace.
+- Provider setup and connectivity flows can consume secret handles without
+  surfacing raw values in prompt-visible context.
 - Artifacts are captured and trace-linked.
 - Sandbox failures preserve evidence.
 - Red-zone work can require sandbox mode.

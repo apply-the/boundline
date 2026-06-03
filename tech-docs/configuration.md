@@ -1,4 +1,4 @@
-# Configuration in Boundline 0.66.0
+# Configuration in Boundline 0.67.0
 
 This page covers the operator-facing configuration surface. Keep one rule in
 mind: configuration declares defaults and policy; the runtime still owns
@@ -68,6 +68,11 @@ These surfaces are not configuration keys:
 - read-only readiness output from `boundline probe`
 
 If those fields change, the runtime decided something from current evidence.
+
+The 0.67.0 release keeps plan-quality evaluation runtime-owned as well: the
+new `plan_quality_state`, `plan_quality_findings`, and
+`plan_quality_assumptions` projections are additive output from the
+planning-readiness gate, not configuration keys.
 
 ## Workspace Bootstrap
 
@@ -200,7 +205,7 @@ boundline config show --scope workspace
 boundline config set-canon --workspace . --mode-selection auto-confirm
 ```
 
-The current release documents Canon `0.63.0` support for the machine-facing
+The current 0.67.0 release documents Canon `0.63.0` support for the machine-facing
 `canon governance start|refresh|capabilities --json` `v1` surface.
 
 ## Workflow Registry Boundaries

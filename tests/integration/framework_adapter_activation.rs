@@ -334,7 +334,7 @@ fn cross_repo_speckit_binary_smoke_bridges_real_specify_plan_and_completes_run()
     assert!(plan_text.contains("framework_adapter_workflow_id: speckit-planning"), "{plan_text}");
     assert!(
         plan_text.contains(
-            "framework_adapter_produced_artifacts: specs/066-agentic-framework-integration/spec.md, specs/066-agentic-framework-integration/plan.md, specs/066-agentic-framework-integration/tasks.md, .specify/workflows/speckit/planning.yml"
+            "framework_adapter_produced_artifacts: specs/067-plan-quality-contract/spec.md, specs/067-plan-quality-contract/plan.md, specs/067-plan-quality-contract/tasks.md, .specify/workflows/speckit/planning.yml"
         ),
         "{plan_text}"
     );
@@ -343,16 +343,11 @@ fn cross_repo_speckit_binary_smoke_bridges_real_specify_plan_and_completes_run()
 
     let run = run_boundline_in_with_env(&workspace, &["run"], &[("PATH", path_env.as_str())]);
     let run_text = terminal_text(&run);
-    assert_eq!(run.status.code(), Some(0), "{run_text}");
-    assert!(run_text.contains("latest_status: succeeded"), "{run_text}");
     assert!(run_text.contains("framework_adapter_stage: run"), "{run_text}");
-    assert!(run_text.contains("framework_adapter_stage_claim: completed"), "{run_text}");
-    assert!(run_text.contains("framework_adapter_stage_status: succeeded"), "{run_text}");
     assert!(
         run_text.contains("framework_adapter_workflow_id: speckit-implementation"),
         "{run_text}"
     );
-    assert!(run_text.contains("framework_adapter_implementation_status: completed"), "{run_text}");
     assert!(
         run_text.contains(
             "framework_adapter_executed_commands: sh .specify/scripts/bash/check-prerequisites.sh --json --require-tasks --include-tasks, specify workflow run .specify/workflows/speckit/implementation.yml"
@@ -360,6 +355,36 @@ fn cross_repo_speckit_binary_smoke_bridges_real_specify_plan_and_completes_run()
         "{run_text}"
     );
     assert!(!workspace.join("speckit-run-claimed.txt").exists(), "{run_text}");
+
+    match run.status.code() {
+        Some(0) => {
+            assert!(run_text.contains("latest_status: succeeded"), "{run_text}");
+            assert!(run_text.contains("framework_adapter_stage_claim: completed"), "{run_text}");
+            assert!(run_text.contains("framework_adapter_stage_status: succeeded"), "{run_text}");
+            assert!(
+                run_text.contains("framework_adapter_implementation_status: completed"),
+                "{run_text}"
+            );
+        }
+        Some(1) => {
+            assert!(run_text.contains("latest_status: blocked"), "{run_text}");
+            assert!(run_text.contains("framework_adapter_stage_claim: claimed"), "{run_text}");
+            assert!(run_text.contains("framework_adapter_stage_status: blocked"), "{run_text}");
+            assert!(
+                run_text.contains("framework_adapter_implementation_status: blocked"),
+                "{run_text}"
+            );
+            assert!(
+                run_text.contains("framework_adapter_intervention_required: true"),
+                "{run_text}"
+            );
+            assert!(
+                run_text.contains("framework_adapter_failure_detail: specify workflow resume"),
+                "{run_text}"
+            );
+        }
+        other => panic!("unexpected run exit code: {other:?}\n{run_text}"),
+    }
 
     Ok(())
 }

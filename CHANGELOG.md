@@ -46,10 +46,28 @@ Highlights:
 
 Release metadata note:
 
-- The latest published Boundline release remains `0.66.0`. The corrected Spec
-  066 semantics are recorded under `Unreleased` until a new release tag exists,
-  so published package metadata, distribution metadata, and sibling git-tag
-  dependency pins stay on the last public compatibility line.
+- The latest published Boundline release remains `0.67.0`. The next release
+  work is recorded under `Unreleased`, so published package metadata,
+  distribution metadata, and sibling git-tag dependency pins stay on the last
+  public compatibility line.
+
+## [0.67.0] - 2026-06-02
+
+Delivered specs:
+
+- `067` - Plan Quality Contract
+
+Highlights:
+
+- Added the first planning-readiness gate so plans without a credible
+  validation strategy stop before execution handoff.
+- Persisted additive `plan_quality_state`, `plan_quality_findings`, and
+  `plan_quality_assumptions` through status, orchestration, inspect, and trace
+  projections.
+- Preserved the one-question `phase_request` recovery path across the CLI and
+  assistant surfaces.
+- Released aligned metadata, docs, roadmap entries, and bundled manifests for
+  the 0.67.0 line.
 
 ## [0.66.0] - 2026-05-31
 

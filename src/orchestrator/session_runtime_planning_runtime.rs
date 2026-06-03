@@ -12,6 +12,8 @@ use std::fs;
 use serde_json::json;
 use uuid::Uuid;
 
+use crate::domain::flow::SessionFlowState;
+
 use super::{
     ActiveSessionRecord, BacklogQualityAssessment, BacklogQualityState, CanonMode,
     CanonModeSelectionPreference, ContextPackCredibility, CouncilProfile, FileConfigStore,
@@ -204,6 +206,7 @@ impl SessionRuntime {
                 if no_flow {
                     goal_plan.mark_flow_skipped();
                 }
+                let trace_ref = self.persist_goal_plan_trace(&session.session_id, &goal_plan)?;
 
                 session.active_flow = native_flow_state.clone();
                 session.active_task = None;
@@ -214,7 +217,7 @@ impl SessionRuntime {
                 session.active_flow_policy = preserved_flow_policy.clone();
                 session.latest_status = SessionStatus::Blocked;
                 session.latest_terminal_reason = None;
-                session.latest_trace_ref = None;
+                session.latest_trace_ref = Some(trace_ref);
                 session.updated_at = current_timestamp_millis();
 
                 return Err(SessionRuntimeError::ClarificationRequired {
@@ -233,6 +236,7 @@ impl SessionRuntime {
             if no_flow {
                 goal_plan.mark_flow_skipped();
             }
+            let trace_ref = self.persist_goal_plan_trace(&session.session_id, &goal_plan)?;
 
             session.active_flow = native_flow_state.clone();
             session.active_task = None;
@@ -243,7 +247,7 @@ impl SessionRuntime {
             session.active_flow_policy = preserved_flow_policy.clone();
             session.latest_status = SessionStatus::Blocked;
             session.latest_terminal_reason = None;
-            session.latest_trace_ref = None;
+            session.latest_trace_ref = Some(trace_ref);
             session.updated_at = current_timestamp_millis();
 
             return Err(SessionRuntimeError::ClarificationRequired {
@@ -278,24 +282,12 @@ impl SessionRuntime {
         if no_flow {
             goal_plan.mark_flow_skipped();
         }
-        let plan_quality = goal_plan.plan_quality_assessment();
-        if !matches!(plan_quality.state, PlanQualityState::Ready) {
-            let (headline, prompt) = Self::plan_quality_gate_details(&goal_plan, &plan_quality);
-
-            session.active_flow = native_flow_state.clone();
-            session.active_task = None;
-            session.goal_plan = Some(goal_plan);
-            session.project_scale =
-                project_scale_state_for_goal(&goal, PROJECT_SCALE_REPAIR_CONTEXT_PATH);
-            session.decisions.clear();
-            session.active_flow_policy = preserved_flow_policy.clone();
-            session.latest_status = SessionStatus::Blocked;
-            session.latest_terminal_reason = None;
-            session.latest_trace_ref = None;
-            session.updated_at = current_timestamp_millis();
-
-            return Err(SessionRuntimeError::ClarificationRequired { headline, prompt });
-        }
+        let mut goal_plan = self.persist_plan_quality_trace_if_needed(
+            session,
+            goal_plan,
+            &native_flow_state,
+            &preserved_flow_policy,
+        )?;
         let should_confirm_goal_plan =
             requested_flow.is_some() || session.active_flow.is_some() || no_flow;
 
@@ -448,6 +440,12 @@ impl SessionRuntime {
             }
         }
 
+        let plan_quality_trace_ref = if framework_adapter_trace_ref.is_none() {
+            Some(self.persist_goal_plan_trace(&session.session_id, &goal_plan)?)
+        } else {
+            None
+        };
+
         session.active_flow = native_flow_state;
         session.active_task = None;
         session.goal_plan = Some(goal_plan);
@@ -463,10 +461,43 @@ impl SessionRuntime {
             SessionStatus::Planned
         };
         session.latest_terminal_reason = framework_adapter_blocked_reason;
-        session.latest_trace_ref = framework_adapter_trace_ref;
+        session.latest_trace_ref = framework_adapter_trace_ref.or(plan_quality_trace_ref);
         session.updated_at = current_timestamp_millis();
 
         Ok(())
+    }
+
+    /// Persists the blocked plan-quality snapshot when a newly built goal plan
+    /// still needs clarification before planning can continue.
+    fn persist_plan_quality_trace_if_needed(
+        &self,
+        session: &mut ActiveSessionRecord,
+        goal_plan: GoalPlan,
+        native_flow_state: &Option<SessionFlowState>,
+        preserved_flow_policy: &Option<FlowPolicy>,
+    ) -> Result<GoalPlan, SessionRuntimeError> {
+        let plan_quality = goal_plan.plan_quality_assessment();
+        if matches!(plan_quality.state, PlanQualityState::Ready) {
+            return Ok(goal_plan);
+        }
+
+        let (headline, prompt) = Self::plan_quality_gate_details(&goal_plan, &plan_quality);
+        let trace_ref = self.persist_goal_plan_trace(&session.session_id, &goal_plan)?;
+        let goal_text = goal_plan.goal_text.clone();
+
+        session.active_flow = native_flow_state.clone();
+        session.active_task = None;
+        session.goal_plan = Some(goal_plan);
+        session.project_scale =
+            project_scale_state_for_goal(goal_text.as_str(), PROJECT_SCALE_REPAIR_CONTEXT_PATH);
+        session.decisions.clear();
+        session.active_flow_policy = preserved_flow_policy.clone();
+        session.latest_status = SessionStatus::Blocked;
+        session.latest_terminal_reason = None;
+        session.latest_trace_ref = Some(trace_ref);
+        session.updated_at = current_timestamp_millis();
+
+        Err(SessionRuntimeError::ClarificationRequired { headline, prompt })
     }
 
     fn plan_quality_gate_details(
@@ -1579,7 +1610,7 @@ mod tests {
         AdapterRegistrationSource, AdapterSelectionMode, LifecycleStageExecutionStatus,
         StageClaimState, StageRoutingDecisionReason,
     };
-    use crate::domain::goal_plan::{GoalPlan, PlannedTask};
+    use crate::domain::goal_plan::{GoalPlan, PlanQualityState, PlannedTask};
     use crate::domain::limits::TerminalCondition;
     use crate::domain::session::{ActiveSessionRecord, SessionStatus};
     use crate::domain::trace::TraceEventType;
@@ -1596,7 +1627,7 @@ mod tests {
     use super::{
         ADAPTER_FALLBACK_REASON_PREFLIGHT_BLOCKED, ADAPTER_FALLBACK_REASON_UNAVAILABLE_BINARY,
         ADAPTER_FALLBACK_REASON_UNSUPPORTED_TRANSPORT, FrameworkAdapterPlanStageOutcome,
-        SessionRuntime,
+        SessionRuntime, SessionRuntimeError,
     };
 
     const ADAPTER_COMMAND_MISSING: &str = "definitely-missing-boundline-adapter";
@@ -2004,6 +2035,84 @@ mod tests {
             .find(|event| event.event_type == TraceEventType::TerminalRecorded)
             .ok_or("missing terminal event")?;
         assert_eq!(terminal_event.payload["terminal_status"], serde_json::json!("failed"));
+
+        Ok(())
+    }
+
+    #[test]
+    fn planning_runtime_plan_task_no_flow_marks_skipped_for_early_clarifications()
+    -> Result<(), Box<dyn Error>> {
+        let insufficient_workspace = temp_workspace("boundline-plan-task-no-flow-insufficient")?;
+        fs::create_dir_all(insufficient_workspace.as_path().join("src"))?;
+        fs::write(
+            insufficient_workspace.as_path().join("src/add.rs"),
+            "pub fn add() -> i32 { 2 }\n",
+        )?;
+        let insufficient_runtime = SessionRuntime::for_workspace(insufficient_workspace.as_path());
+        let mut insufficient_session = sample_planning_session(insufficient_workspace.as_path());
+
+        insufficient_runtime.capture_goal(&mut insufficient_session, "fix add behavior")?;
+        let insufficient_error =
+            insufficient_runtime.plan_task(&mut insufficient_session, None, true).unwrap_err();
+        assert!(matches!(insufficient_error, SessionRuntimeError::ClarificationRequired { .. }));
+        assert_eq!(insufficient_session.latest_status, SessionStatus::Blocked);
+        assert!(insufficient_session.goal_plan.as_ref().is_some_and(|plan| plan.flow_skipped));
+        assert!(insufficient_session.latest_trace_ref.is_some());
+
+        let broad_workspace = temp_workspace("boundline-plan-task-no-flow-broad")?;
+        fs::write(broad_workspace.as_path().join("README.md"), "# service\n")?;
+        let broad_runtime = SessionRuntime::for_workspace(broad_workspace.as_path());
+        let mut broad_session = sample_planning_session(broad_workspace.as_path());
+
+        broad_runtime.capture_goal(&mut broad_session, "build a service")?;
+        let broad_error = broad_runtime.plan_task(&mut broad_session, None, true).unwrap_err();
+        assert!(matches!(broad_error, SessionRuntimeError::ClarificationRequired { .. }));
+        assert_eq!(broad_session.latest_status, SessionStatus::Blocked);
+        assert!(broad_session.goal_plan.as_ref().is_some_and(|plan| plan.flow_skipped));
+        assert!(broad_session.latest_trace_ref.is_some());
+
+        Ok(())
+    }
+
+    #[test]
+    fn persist_plan_quality_trace_if_needed_records_blocked_goal_plans()
+    -> Result<(), Box<dyn Error>> {
+        let workspace = temp_workspace("boundline-plan-quality-trace-helper")?;
+        let runtime = SessionRuntime::for_workspace(workspace.as_path());
+        let mut session = sample_planning_session(workspace.as_path());
+        let goal_plan = sample_goal_plan()?;
+
+        let error = runtime
+            .persist_plan_quality_trace_if_needed(&mut session, goal_plan, &None, &None)
+            .unwrap_err();
+
+        assert!(matches!(error, SessionRuntimeError::ClarificationRequired { .. }));
+        assert_eq!(session.latest_status, SessionStatus::Blocked);
+        assert!(session.goal_plan.as_ref().is_some_and(|plan| {
+            matches!(plan.plan_quality_assessment().state, PlanQualityState::ClarificationRequired)
+        }));
+        let trace_ref = session
+            .latest_trace_ref
+            .as_deref()
+            .ok_or_else(|| std::io::Error::other("missing blocked plan-quality trace ref"))?;
+        let trace = runtime.trace_store().load(Path::new(trace_ref))?;
+        let goal_plan_event = trace
+            .events
+            .iter()
+            .find(|event| event.event_type == TraceEventType::GoalPlanCreated)
+            .ok_or_else(|| std::io::Error::other("missing goal plan event"))?;
+        assert_eq!(
+            goal_plan_event.payload["plan_quality_state"],
+            serde_json::json!("clarification_required")
+        );
+        assert_eq!(
+            goal_plan_event.payload["plan_quality_findings"],
+            serde_json::json!(["planning_rationale", "verification_strategy"])
+        );
+        assert_eq!(
+            goal_plan_event.payload["plan_quality_assumptions"],
+            serde_json::json!(["no explicit route override is required for this plan"])
+        );
 
         Ok(())
     }

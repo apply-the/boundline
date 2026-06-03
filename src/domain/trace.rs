@@ -256,6 +256,15 @@ pub struct TraceSummaryView {
     pub routing_projection: RoutingDecisionProjection,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub goal_plan_summary: Option<String>,
+    /// Latest persisted plan-readiness state recorded during planning.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plan_quality_state: Option<String>,
+    /// Blocking or advisory plan-readiness findings retained for inspection.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub plan_quality_findings: Vec<String>,
+    /// Accepted low-impact planning defaults retained for inspection.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub plan_quality_assumptions: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub authored_input_summary: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -362,6 +371,9 @@ impl Default for TraceSummaryView {
             routing_summary: None,
             routing_projection: RoutingDecisionProjection::default(),
             goal_plan_summary: None,
+            plan_quality_state: None,
+            plan_quality_findings: Vec::new(),
+            plan_quality_assumptions: Vec::new(),
             authored_input_summary: None,
             authored_input_sources: Vec::new(),
             authored_input_deduplicated_sources: Vec::new(),

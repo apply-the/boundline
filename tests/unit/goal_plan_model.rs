@@ -192,6 +192,34 @@ fn plan_quality_reports_missing_rationale_and_verification_strategy() {
 }
 
 #[test]
+fn plan_quality_reports_missing_verification_strategy_when_only_rationale_is_present() {
+    let plan = GoalPlan::new("Goal", vec![sample_task("t1")])
+        .unwrap()
+        .with_planning_rationale("target selected from evidence");
+
+    assert_eq!(plan.plan_quality_state().as_deref(), Some("clarification_required"));
+    assert_eq!(plan.plan_quality_findings().unwrap(), vec!["verification_strategy".to_string()]);
+    assert_eq!(
+        plan.plan_quality_assumptions().unwrap(),
+        vec!["no explicit route override is required for this plan".to_string()]
+    );
+}
+
+#[test]
+fn plan_quality_reports_missing_rationale_when_only_verification_strategy_is_present() {
+    let plan = GoalPlan::new("Goal", vec![sample_task("t1")])
+        .unwrap()
+        .with_verification_strategy("run the relevant focused test command after implementation");
+
+    assert_eq!(plan.plan_quality_state().as_deref(), Some("clarification_required"));
+    assert_eq!(plan.plan_quality_findings().unwrap(), vec!["planning_rationale".to_string()]);
+    assert_eq!(
+        plan.plan_quality_assumptions().unwrap(),
+        vec!["no explicit route override is required for this plan".to_string()]
+    );
+}
+
+#[test]
 fn plan_quality_is_ready_when_rationale_and_verification_strategy_are_present() {
     let plan = GoalPlan::new("Goal", vec![sample_task("t1")])
         .unwrap()
