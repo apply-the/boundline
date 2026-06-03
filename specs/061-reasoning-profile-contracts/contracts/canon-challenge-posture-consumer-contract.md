@@ -5,7 +5,7 @@
   `docs/integration/governed-reasoning-posture-contract.md`
 - **Canonical Source Identifier**: `canon:docs/integration/governed-reasoning-posture-contract.md`
 - **Supported Contract Line**: `governed_reasoning_posture_v1`
-- **Supported Compatibility Window**: Boundline `0.67.x` consuming Canon
+- **Supported Compatibility Window**: Boundline `0.68.x` consuming Canon
   `0.63.x` posture inputs only
 
 ## Boundline Consumes
@@ -46,7 +46,7 @@
 
 ```toml
 contract_line = "governed_reasoning_posture_v1"
-boundline_min = "0.67.0"
+boundline_min = "0.68.0"
 boundline_max_exclusive = "0.68.0"
 canon_min = "0.63.0"
 canon_max_exclusive = "0.64.0"

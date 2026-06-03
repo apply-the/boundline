@@ -91,6 +91,25 @@ Assistant setup has two parts:
 Package folders expose commands. Routing decides which runtime or model owns a
 delivery slot. They are related but not the same.
 
+## Ollama Routing Presets
+
+Use `boundline init --ollama-profile <profile>` when the workspace should run
+against local Ollama models instead of remote provider defaults.
+
+```bash
+boundline init --ollama-profile small
+```
+
+The preset writes `codex:ollama/<model>` routes for the four delivery slots and
+uses `OLLAMA_BASE_URL` from the provider env layer. The default endpoint is
+`http://localhost:11434`.
+
+| Profile | Target | Planning and implementation | Verification and review |
+|---|---|---|---|
+| `small` | Apple Silicon with 16 GB unified memory | `qwen2.5-coder:7b` | `qwen2.5:7b` |
+| `medium` | 64 GB local workstation | `qwen2.5-coder:14b` | `qwen2.5:14b` |
+| `large` | 96/128 GB local workstation | `qwen2.5-coder:32b` | `qwen2.5:72b` |
+
 ## Framework Adapter Selection
 
 Framework adapter selection is workspace-local config, but operators should

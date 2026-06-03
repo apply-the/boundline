@@ -63,7 +63,7 @@ Read the output literally:
   ready, already satisfied, blocked, or repair-needed.
 - `actions` tells you the next repair or follow-up step.
 
-The current 0.67.0 release documents Canon `0.63.0` support for the machine-facing
+The current 0.68.0 release documents Canon `0.63.0` support for the machine-facing
 `canon governance start|refresh|capabilities --json` `v1` surface.
 
 ## 3. Initialize The Workspace
@@ -91,6 +91,21 @@ If you do not need a repo-local assistant surface yet, you can still run:
 ```bash
 boundline init
 ```
+
+If you want a local Ollama route profile, start Ollama first, pull the models
+for the hardware class, and initialize with one preset:
+
+```bash
+ollama pull qwen2.5:7b
+ollama pull qwen2.5-coder:7b
+boundline init --ollama-profile small
+```
+
+Use `small` for Apple Silicon with 16 GB unified memory, `medium` for a local
+64 GB workstation, and `large` for 96/128 GB unified-memory or workstation
+hosts. The preset writes `codex:ollama/<model>` routes for planning,
+implementation, verification, and review while keeping endpoint configuration
+in the provider env template through `OLLAMA_BASE_URL`.
 
 If you want local semantic expansion plus explicit derived-index lifecycle
 management in the same workspace, enable it deliberately after init:

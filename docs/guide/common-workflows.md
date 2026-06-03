@@ -2,7 +2,7 @@
 
 Use this page while operating the main session-native Boundline loop.
 
-Boundline 0.67.0 ships the first plan-quality gate. When the plan needs a
+Boundline 0.68.0 ships the first plan-quality gate. When the plan needs a
 missing validation strategy or another blocking planning input, the runtime
 stops on one `phase_request` and keeps the same session alive for recovery.
 

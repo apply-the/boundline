@@ -1,4 +1,4 @@
-# Configuration in Boundline 0.67.0
+# Configuration in Boundline 0.68.0
 
 This page covers the operator-facing configuration surface. Keep one rule in
 mind: configuration declares defaults and policy; the runtime still owns
@@ -69,7 +69,7 @@ These surfaces are not configuration keys:
 
 If those fields change, the runtime decided something from current evidence.
 
-The 0.67.0 release keeps plan-quality evaluation runtime-owned as well: the
+The 0.68.0 release keeps plan-quality evaluation runtime-owned as well: the
 new `plan_quality_state`, `plan_quality_findings`, and
 `plan_quality_assumptions` projections are additive output from the
 planning-readiness gate, not configuration keys.
@@ -90,6 +90,23 @@ boundline init \
   --route planning=copilot:gpt-4o \
   --route implementation=codex:o3
 ```
+
+For a local Ollama workspace, use one preset instead of spelling out all four
+delivery-slot routes:
+
+```bash
+boundline init --ollama-profile small
+```
+
+The presets write `codex:ollama/<model>` routes into `.boundline/config.toml`
+and rely on the existing `OLLAMA_BASE_URL` provider env default
+`http://localhost:11434`. They do not store credentials.
+
+| Profile | Hardware assumption | Planning | Implementation | Verification | Review |
+|---|---|---|---|---|---|
+| `small` | Apple Silicon with 16 GB unified memory | `qwen2.5-coder:7b` | `qwen2.5-coder:7b` | `qwen2.5:7b` | `qwen2.5:7b` |
+| `medium` | local workstation with 64 GB memory | `qwen2.5-coder:14b` | `qwen2.5-coder:14b` | `qwen2.5:14b` | `qwen2.5:14b` |
+| `large` | local workstation with 96/128 GB memory | `qwen2.5-coder:32b` | `qwen2.5-coder:32b` | `qwen2.5:72b` | `qwen2.5:72b` |
 
 `init` can also:
 
@@ -205,7 +222,7 @@ boundline config show --scope workspace
 boundline config set-canon --workspace . --mode-selection auto-confirm
 ```
 
-The current 0.67.0 release documents Canon `0.63.0` support for the machine-facing
+The current 0.68.0 release documents Canon `0.63.0` support for the machine-facing
 `canon governance start|refresh|capabilities --json` `v1` surface.
 
 ## Workflow Registry Boundaries

@@ -6,11 +6,11 @@ use std::path::Path;
 use super::{
     AssistantHostKind, BundledModelCatalog, CANON_BOOTSTRAP_NOTE_LABEL, CanonBootstrapReadiness,
     CanonModeSelectionPreference, CommandExitStatus, GuidedRouteSelection, InitCommandReport,
-    InitRequest, InitSuccessReportInputs, InitTemplate, ScaffoldFileStatus, ScaffoldManifest,
-    UpdatePlan, UpdatePlanAction, UpdatePlanEntry, UpdateTarget, WRITE_CONFIGURATION_PROMPT,
-    assistant_host_capability_line, docs_export_root_display, format_assistant_host_list,
-    init_doctor_command, init_global_inspect_command, init_inspect_command,
-    init_install_doctor_command, route_setup_lines, scope_includes_global,
+    InitRequest, InitSuccessReportInputs, InitTemplate, RouteSetupLineInput, ScaffoldFileStatus,
+    ScaffoldManifest, UpdatePlan, UpdatePlanAction, UpdatePlanEntry, UpdateTarget,
+    WRITE_CONFIGURATION_PROMPT, assistant_host_capability_line, docs_export_root_display,
+    format_assistant_host_list, init_doctor_command, init_global_inspect_command,
+    init_inspect_command, init_install_doctor_command, route_setup_lines, scope_includes_global,
     scope_includes_workspace, template_label,
 };
 
@@ -495,18 +495,20 @@ pub(super) fn render_successful_init_report(
     }
 
     lines.push("route_setup:".to_string());
-    lines.extend(route_setup_lines(
-        &resolved.catalog,
-        &resolved.effective_assistants,
-        resolved.guided_answers.as_ref(),
-        &resolved.explicit_routes,
-        &resolved.guided_routes,
-        &resolved.seeded_routes,
-        scope_includes_workspace(scope)
+    lines.extend(route_setup_lines(RouteSetupLineInput {
+        catalog: &resolved.catalog,
+        ollama_profile: resolved.ollama_profile,
+        ollama_profile_routes: &resolved.ollama_profile_routes,
+        effective_assistants: &resolved.effective_assistants,
+        guided_answers: resolved.guided_answers.as_ref(),
+        explicit_routes: &resolved.explicit_routes,
+        guided_routes: &resolved.guided_routes,
+        seeded_routes: &resolved.seeded_routes,
+        inspect_command: scope_includes_workspace(scope)
             .then(|| workspace.map(init_inspect_command))
             .flatten()
             .unwrap_or_else(init_global_inspect_command),
-    ));
+    }));
 
     if let Some(canon) = local_config
         .and_then(|config| config.canon.as_ref())

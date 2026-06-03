@@ -77,7 +77,7 @@ planning gates such as `goal_quality_state`, `plan_quality_state`,
 handoffs such as `phase_request`, `assistant_resume_command`, and
 `assistant_next_command`.
 
-Plan quality is now the first planning-readiness gate in the 0.67.0 line. If
+Plan quality is now the first planning-readiness gate in the 0.68.0 line. If
 the active plan lacks a credible validation strategy or another blocking
 planning input, the runtime keeps planning non-terminal, emits one
 `phase_request`, and preserves the blocked assessment in status, inspect, and

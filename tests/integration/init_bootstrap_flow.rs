@@ -107,6 +107,31 @@ fn init_scaffolds_execution_and_config_files() {
 }
 
 #[test]
+fn init_ollama_small_profile_scaffolds_local_model_routes() {
+    let workspace = empty_workspace("boundline-init-ollama-small");
+
+    let init = run_init_in(
+        &workspace,
+        &[
+            "init",
+            "--workspace",
+            workspace.to_string_lossy().as_ref(),
+            "--template",
+            "bug-fix",
+            "--ollama-profile",
+            "small",
+        ],
+    );
+    let init_text = terminal_text(&init);
+    assert_eq!(init.status.code(), Some(0), "{init_text}");
+    assert!(init_text.contains("ollama_profile: ollama-small"), "{init_text}");
+
+    let config = fs::read_to_string(workspace.join(".boundline/config.toml")).unwrap();
+    assert!(config.contains("model = \"ollama/qwen2.5-coder:7b\""), "{config}");
+    assert!(config.contains("model = \"ollama/qwen2.5:7b\""), "{config}");
+}
+
+#[test]
 fn init_vscode_read_only_auto_approve_merges_existing_settings() {
     let workspace = empty_workspace("boundline-init-vscode-auto-approve-read-only");
     fs::create_dir_all(workspace.join(".vscode")).unwrap();
