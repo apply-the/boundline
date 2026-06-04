@@ -58,7 +58,7 @@ use boundline::domain::framework_adapter::{
 };
 use boundline::domain::goal_plan::{
     GoalPlanFlowMode, GoalPlanFlowState, PlanningAnalysisCoverage, PlanningAnalysisFinding,
-    PlanningAnalysisSeverity, PlanningAnalysisSource,
+    PlanningAnalysisSeverity, PlanningAnalysisSource, PlanningAnalysisSourceRef,
 };
 use boundline::domain::governance::GovernanceRuntimeKind;
 use boundline::domain::limits::{RunLimits, TerminalCondition};
@@ -1617,14 +1617,27 @@ fn render_session_status_surfaces_planning_analysis_projection() {
         planning_analysis_state: Some("blocked".to_string()),
         planning_analysis_findings: Some(vec![PlanningAnalysisFinding {
             severity: PlanningAnalysisSeverity::Critical,
-            source: PlanningAnalysisSource::Backlog,
-            message: "backlog reports unmapped success criteria: acceptance target".to_string(),
+            source: PlanningAnalysisSource::Validation,
+            code: "validation_coverage_missing".to_string(),
+            message: "selected slice is missing a matching acceptance anchor".to_string(),
+            source_refs: vec![PlanningAnalysisSourceRef {
+                artifact_kind: "backlog_document".to_string(),
+                artifact_ref: "acceptance-anchors.md".to_string(),
+                anchor: Some("slice_id=SLICE-SESSION-001".to_string()),
+            }],
         }]),
         planning_analysis_coverage: Some(PlanningAnalysisCoverage {
             success_criteria_total: 2,
             success_criteria_covered: 2,
-            backlog_task_count: Some(2),
-            mapped_plan_task_count: None,
+            backlog_slice_total: Some(2),
+            backlog_slice_covered: Some(1),
+            validation_anchor_total: Some(2),
+            validation_anchor_covered: Some(1),
+            risk_total: Some(1),
+            risk_covered: Some(1),
+            constraint_total: Some(1),
+            constraint_covered: Some(1),
+            governed_evidence_ready: false,
         }),
         ..SessionStatusView::default()
     });
@@ -1632,12 +1645,14 @@ fn render_session_status_surfaces_planning_analysis_projection() {
     assert!(rendered.contains("planning_analysis_state: blocked"), "{rendered}");
     assert!(
         rendered.contains(
-            "planning_analysis_findings: critical:backlog:backlog reports unmapped success criteria: acceptance target"
+            "planning_analysis_findings: critical:validation:validation_coverage_missing:selected slice is missing a matching acceptance anchor"
         ),
         "{rendered}"
     );
     assert!(
-        rendered.contains("planning_analysis_coverage: success_criteria=2/2, backlog_tasks=2"),
+        rendered.contains(
+            "planning_analysis_coverage: success_criteria=2/2, backlog_slices=1/2, validation_anchors=1/2, risks=1/1, constraints=1/1, governed_evidence_ready=false"
+        ),
         "{rendered}"
     );
 }

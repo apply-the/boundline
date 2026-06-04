@@ -559,18 +559,18 @@ impl SessionRuntime {
                 return None;
             }
 
-            return Some(
-                goal_plan
-                    .planning_analysis_projection(&snapshot.assessment, &snapshot.document_bodies),
-            );
+            return Some(goal_plan.planning_analysis_projection(
+                &snapshot.assessment,
+                &snapshot.document_refs,
+                &snapshot.document_bodies,
+            ));
         }
 
-        Some(
-            goal_plan.planning_analysis_projection(
-                &Self::default_planning_analysis_backlog_quality(),
-                &[],
-            ),
-        )
+        Some(goal_plan.planning_analysis_projection(
+            &Self::default_planning_analysis_backlog_quality(),
+            &[],
+            &[],
+        ))
     }
 
     fn default_planning_analysis_backlog_quality() -> BacklogQualityAssessment {
@@ -1611,6 +1611,11 @@ mod tests {
         StageClaimState, StageRoutingDecisionReason,
     };
     use crate::domain::goal_plan::{GoalPlan, PlanQualityState, PlannedTask};
+    use crate::domain::governance::{
+        ApprovalState, CanonMode, CanonModeSelectionPreference, GovernanceLifecycleState,
+        GovernanceRuntimeKind, GovernedDocumentRef, GovernedSessionLifecycle, GovernedStageRecord,
+        PacketReadiness,
+    };
     use crate::domain::limits::TerminalCondition;
     use crate::domain::session::{ActiveSessionRecord, SessionStatus};
     use crate::domain::trace::TraceEventType;
@@ -1643,6 +1648,7 @@ mod tests {
     const SCHEMA_FINGERPRINT: &str = "schema-v1";
     const SUCCESS_ARTIFACT: &str = "specs/066-agentic-framework-integration/plan.md";
     const UPDATED_AT: u64 = 42;
+    const BACKLOG_PACKET_REF: &str = ".canon/artifacts/run/backlog";
 
     #[test]
     fn planning_runtime_framework_adapter_not_claimed_paths_cover_binding_and_preflight()
@@ -2117,6 +2123,135 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn planning_analysis_projection_returns_none_when_backlog_snapshot_is_not_ready()
+    -> Result<(), Box<dyn Error>> {
+        let workspace = temp_workspace("boundline-plan-analysis-backlog-blocked")?;
+        let runtime = SessionRuntime::for_workspace(workspace.as_path());
+        let mut session = sample_planning_session(workspace.as_path());
+        let stage_key = crate::domain::governance::planning_stage_key_for_mode(CanonMode::Backlog)
+            .ok_or("missing backlog stage key")?;
+        session.governance_lifecycle = Some(GovernedSessionLifecycle {
+            governance_runtime: GovernanceRuntimeKind::Canon,
+            explicit_opt_out: false,
+            mode_selection_preference: CanonModeSelectionPreference::default(),
+            selected_mode: Some(CanonMode::Backlog),
+            selected_mode_sequence: vec![CanonMode::Backlog],
+            latest_reasoning_profile: None,
+            current_stage_index: 2,
+            stage_records: vec![GovernedStageRecord {
+                stage_key: stage_key.to_string(),
+                runtime: GovernanceRuntimeKind::Canon,
+                lifecycle_state: GovernanceLifecycleState::Blocked,
+                required: false,
+                autopilot_enabled: false,
+                approval_state: ApprovalState::NotNeeded,
+                canon_run_ref: Some("canon-run-backlog".to_string()),
+                governance_attempt_id: "attempt-1".to_string(),
+                previous_governance_attempt_id: None,
+                packet_ref: Some(".canon/runs/canon-run-backlog".to_string()),
+                decision_ref: None,
+                stage_council: None,
+                blocked_reason: Some("missing_execution_handoff".to_string()),
+            }],
+            accumulated_context: Vec::new(),
+            terminal_reason: None,
+            planning_input_fingerprint: None,
+        });
+
+        assert!(runtime.planning_analysis_projection(&session, &sample_goal_plan()?).is_none());
+        Ok(())
+    }
+
+    #[test]
+    fn planning_analysis_projection_uses_ready_backlog_snapshot_when_present()
+    -> Result<(), Box<dyn Error>> {
+        let workspace = temp_workspace("boundline-plan-analysis-backlog-ready")?;
+        write_backlog_packet(workspace.as_path())?;
+        let runtime = SessionRuntime::for_workspace(workspace.as_path());
+        let mut session = sample_planning_session(workspace.as_path());
+        let stage_key = crate::domain::governance::planning_stage_key_for_mode(CanonMode::Backlog)
+            .ok_or("missing backlog stage key")?;
+        session.governance_lifecycle = Some(GovernedSessionLifecycle {
+            governance_runtime: GovernanceRuntimeKind::Canon,
+            explicit_opt_out: false,
+            mode_selection_preference: CanonModeSelectionPreference::default(),
+            selected_mode: Some(CanonMode::Backlog),
+            selected_mode_sequence: vec![CanonMode::Backlog],
+            latest_reasoning_profile: None,
+            current_stage_index: 2,
+            stage_records: vec![GovernedStageRecord {
+                stage_key: stage_key.to_string(),
+                runtime: GovernanceRuntimeKind::Canon,
+                lifecycle_state: GovernanceLifecycleState::GovernedReady,
+                required: false,
+                autopilot_enabled: false,
+                approval_state: ApprovalState::NotNeeded,
+                canon_run_ref: Some("canon-run-backlog".to_string()),
+                governance_attempt_id: "attempt-1".to_string(),
+                previous_governance_attempt_id: None,
+                packet_ref: Some(BACKLOG_PACKET_REF.to_string()),
+                decision_ref: None,
+                stage_council: None,
+                blocked_reason: None,
+            }],
+            accumulated_context: vec![GovernedDocumentRef {
+                stage_key: stage_key.to_string(),
+                canon_mode: CanonMode::Backlog,
+                packet_ref: BACKLOG_PACKET_REF.to_string(),
+                document_path: None,
+                readiness: PacketReadiness::Reusable,
+            }],
+            terminal_reason: None,
+            planning_input_fingerprint: None,
+        });
+
+        let goal_plan = sample_goal_plan()?
+            .with_planning_rationale("selected the governed backlog slice")
+            .with_verification_strategy("run the independent verification anchor");
+        let projection = runtime
+            .planning_analysis_projection(&session, &goal_plan)
+            .ok_or("missing planning analysis projection")?;
+
+        assert_eq!(projection.state.as_str(), "clean");
+        assert!(projection.findings.is_empty());
+        assert_eq!(
+            projection.coverage.as_ref().and_then(|coverage| coverage.backlog_slice_covered),
+            Some(1)
+        );
+        assert_eq!(
+            projection.coverage.as_ref().map(|coverage| coverage.governed_evidence_ready),
+            Some(true)
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn planning_analysis_projection_uses_default_backlog_quality_without_lifecycle()
+    -> Result<(), Box<dyn Error>> {
+        let workspace = temp_workspace("boundline-plan-analysis-backlog-default")?;
+        let runtime = SessionRuntime::for_workspace(workspace.as_path());
+        let session = sample_planning_session(workspace.as_path());
+
+        let projection = runtime
+            .planning_analysis_projection(&session, &sample_goal_plan()?)
+            .ok_or("missing planning analysis projection")?;
+
+        assert_eq!(projection.state.as_str(), "clean");
+        assert!(projection.findings.is_empty());
+        assert_eq!(
+            projection.coverage.as_ref().map(|coverage| coverage.success_criteria_total),
+            Some(1)
+        );
+        assert_eq!(
+            projection.coverage.as_ref().and_then(|coverage| coverage.backlog_slice_total),
+            None
+        );
+
+        Ok(())
+    }
+
     #[derive(Clone)]
     enum PreflightMode {
         Response(FrameworkAdapterPreflightResponse),
@@ -2247,6 +2382,53 @@ mod tests {
             }],
         )
         .map_err(Into::into)
+    }
+
+    fn write_backlog_packet(workspace: &Path) -> Result<(), Box<dyn Error>> {
+        let backlog_dir = workspace.join(BACKLOG_PACKET_REF);
+        let documents = [
+            (
+                "backlog-overview.md",
+                "# Backlog Overview\n\n## Decomposition Posture\n\nfull-packet\n\n## Execution Handoff\n\ngoverned execution handoff is available\n",
+            ),
+            ("epic-tree.md", "# Epic Tree\n\n- Epic AUTH-SESSION: harden revocation boundaries.\n"),
+            (
+                "capability-to-epic-map.md",
+                "# Capability To Epic Map\n\n- Auth session revocation -> AUTH-SESSION\n",
+            ),
+            (
+                "dependency-map.md",
+                "# Dependency Map\n\n- [SLICE-SESSION-001] depends on bounded prerequisites.\n",
+            ),
+            (
+                "delivery-slices.md",
+                "# Delivery Slices\n\n- [SLICE-SESSION-001] First bounded execution slice.\n",
+            ),
+            ("sequencing-plan.md", "# Sequencing Plan\n\n1. [SLICE-SESSION-001] first\n"),
+            (
+                "acceptance-anchors.md",
+                "# Acceptance Anchors\n\n- [SLICE-SESSION-001] Acceptance proof captured.\n",
+            ),
+            ("planning-risks.md", "# Planning Risks\n\n- mitigate flaky dependency\n"),
+            (
+                "execution-handoff.md",
+                concat!(
+                    "# Execution Handoff\n\n",
+                    "## Selected Slice\n\nSLICE-SESSION-001\n\n",
+                    "## Implementation Artifact References\n\n",
+                    "- src/lib.rs\n\n",
+                    "## Dependency Prerequisites\n\n",
+                    "- upstream review completed\n\n",
+                    "## Independent Verification Anchors\n\n",
+                    "- cargo test --lib\n"
+                ),
+            ),
+        ];
+        fs::create_dir_all(&backlog_dir)?;
+        for (file_name, contents) in documents {
+            fs::write(backlog_dir.join(file_name), contents)?;
+        }
+        Ok(())
     }
 
     fn sample_authored_brief(

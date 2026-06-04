@@ -46,9 +46,31 @@ Highlights:
 
 Release metadata note:
 
-- The current Boundline release line is `0.69.0`; published package metadata,
+- The current Boundline release line is `0.70.0`; published package metadata,
   distribution metadata, assistant plugin manifests, and docs are aligned to
   that version while Canon compatibility remains `0.67.0`.
+
+## [0.70.0] - 2026-06-04
+
+Delivered specs:
+
+- `069` - Plan Analysis Contract
+
+Highlights:
+
+- Added the first read-only planning-analysis gate after plan quality and
+  backlog quality, so execution handoff now depends on end-to-end planning
+  coherence rather than backlog readiness alone.
+- Persisted additive `planning_analysis_state`,
+  `planning_analysis_findings`, and `planning_analysis_coverage` through
+  status, inspect, traces, orchestration, and assistant-facing runtime
+  projections.
+- Blocked execution handoff on uncovered success criteria, missing validation
+  coverage, selected-slice sequencing contradictions, missing execution-handoff
+  inputs, and explicit governed producer contract gaps.
+- Kept Canon compatibility aligned to `0.67.0` while updating release
+  metadata, docs, roadmap surfaces, Homebrew, WinGet, and assistant manifests
+  to Boundline `0.70.0`.
 
 ## [0.69.0] - 2026-06-04
 

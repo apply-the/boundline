@@ -1,4 +1,4 @@
-# S22 - Recursive Stage Refinement Profiles
+# S12 - Recursive Stage Refinement Profiles
 
 ## Owner
 
@@ -190,6 +190,119 @@ boundaries.
 - Compact packets hide context that reviewers need.
 - A loop duplicates council or adaptive-governance behavior.
 - Providers leak opaque state into authoritative runtime decisions.
+
+## Hard Rule
+
+Every recursive round must earn its existence through an inspectable delta.
+
+
+
+# Note
+
+## Decision
+
+S12 should not absorb the DS4-inspired context/cache/trace/router/adapter ideas as its own scope.
+
+S12 should benefit from those foundations, but remain focused on bounded recursive stage movement.
+
+## S12 owns
+
+- bounded stage refinement loops
+- compact structured round packets
+- planner -> critic -> planner -> finalizer profile
+- hard round limits
+- no-progress detection
+- blocker stops
+- trace-visible refinement outcomes
+
+## S12 does not own
+
+- context indexing
+- context fidelity policy
+- cache invalidation
+- trace retention
+- provider protocol
+- route economics
+- council voting
+- adaptive governance calibration
+- hidden-state ML execution
+
+## Dependency alignment
+
+S12 should depend on:
+
+- S11 event/eval substrate
+- S15 council hardening
+- S16 adaptive governance calibration
+- S9 context substrate where Context Packs are needed
+
+## Hard rule
+
+Every recursive round must earn its existence through an inspectable delta.
+
+
+# Note
+# Recursive Stage Refinement Profiles Note
+
+## Purpose
+
+This note clarifies the relationship between recursive stage refinement, RecursiveMAS, and the DS4-inspired ideas.
+
+## Decision
+
+`12-recursive-stage-refinement-profiles.md` should not absorb the DS4-inspired context, cache, trace, router, or adapter ideas as its own scope.
+
+It should benefit from those foundations, but remain focused on bounded recursive stage movement.
+
+## This Roadmap Item Owns
+
+- bounded stage refinement loops
+- compact structured round packets
+- planner -> critic -> planner -> finalizer profile
+- hard round limits
+- no-progress detection
+- blocker stops
+- trace-visible refinement outcomes
+
+## This Roadmap Item Does Not Own
+
+- context indexing
+- context fidelity policy
+- cache invalidation
+- trace retention
+- provider protocol
+- route economics
+- council voting
+- adaptive governance calibration
+- hidden-state ML execution
+
+## Dependency Alignment
+
+This item should depend on:
+
+- `08-evals-and-runtime-observability.md`
+- `10-review-councils-and-role-gated-governance.md`
+- `11-adaptive-governance-calibration.md`
+- `06-large-codebase-context-substrate.md` where Context Packs are needed
+
+## RecursiveMAS Boundary
+
+RecursiveMAS is inspiration only for this feature.
+
+Boundline should adopt:
+
+- structured collaboration loops
+- compact intermediate state
+- final authoritative output
+- bounded rounds
+
+Boundline should not adopt in core:
+
+- model hidden-state transfer
+- trained RecursiveLink modules
+- gradient training
+- local checkpoint serving
+- sqlite-vec as agent hidden-state storage
 
 ## Hard Rule
 

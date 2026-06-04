@@ -1,9 +1,9 @@
 # Boundline
 
 > [!TIP]
-> This wiki is aligned with **Boundline 0.69.0**. For older versions, refer to the repository tags.
+> This wiki is aligned with **Boundline 0.70.0**. For older versions, refer to the repository tags.
 
-![Boundline - Bounded Delivery Runtime](https://github.com/apply-the/boundline/blob/0.69.0/tech-docs/images/boundline-banner.jpg?raw=true)
+![Boundline - Bounded Delivery Runtime](https://github.com/apply-the/boundline/blob/0.70.0/tech-docs/images/boundline-banner.jpg?raw=true)
 
 **The local delivery orchestrator for bounded engineering work.** Turn goals into executed plans safely, without losing control to an opaque AI loop.
 
@@ -23,11 +23,12 @@ Boundline forces an explicit, inspectable workflow:
 3. `run` → Execute the next approved step.
 4. `inspect` → Report the authoritative runtime state.
 
-In the 0.69.0 release, `plan` enforces the full planning-readiness chain
+In the 0.70.0 release, `plan` enforces the full planning-readiness chain
 before execution handoff. If the active plan is weak, if the Canon backlog
-packet is closure-limited, or if the full packet still lacks execution-handoff
-evidence, Boundline stops on one explicit planning gate and keeps the session
-non-terminal until you answer.
+packet is closure-limited, if the full packet still lacks execution-handoff
+evidence, or if planning analysis finds a contradiction between selected slice,
+validation coverage, and execution inputs, Boundline stops on one explicit
+planning gate and keeps the session non-terminal until you answer.
 
 ## <i class="fa-solid fa-bolt" style="color: #22b8ff;"></i> Quick Start
 

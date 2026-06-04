@@ -27,12 +27,15 @@ Boundline forces an explicit, inspectable workflow:
 3. `run` -> Execute the next approved step.
 4. `inspect` -> Report the authoritative runtime state.
 
-In the 0.69.0 release, `plan` enforces the full planning-readiness chain before
+In the 0.70.0 release, `plan` enforces the full planning-readiness chain before
 execution handoff: goal quality, plan quality, backlog quality, then planning
-analysis. If Canon only produced a closure-limited backlog packet, or if the
-full packet still lacks an execution handoff, Boundline stops on one explicit
-planning gate and keeps the session non-terminal until the missing evidence is
-repaired.
+analysis. Planning analysis is a read-only coherence gate across the active
+goal, plan outcomes, validation strategy, Canon backlog packet, execution
+handoff, and governed evidence already present in the session. If Canon only
+produced a closure-limited backlog packet, if a selected slice contradicts the
+sequencing plan, or if execution readiness still depends on missing governed
+evidence, Boundline stops on one explicit planning gate and keeps the session
+non-terminal until the missing evidence is repaired.
 
 ## Installation
 

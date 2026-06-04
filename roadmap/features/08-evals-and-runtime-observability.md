@@ -1,173 +1,186 @@
-# S11 - Evals And Runtime Observability
+# Evals And Runtime Observability
 
-## Owner
+## Integration Update
 
-Boundline and Canon
+This roadmap item should absorb **Trace Compaction Policy**.
 
-## Status
+Trace compaction belongs here because this file owns event vocabulary, JSONL export, trace export, runtime metrics, eval fixtures, and observability.
 
-Required early, before advanced autonomy
+Trace compaction does not belong to `16-session-memory-and-repository-knowledge-distillation.md`. Memory proposals are reviewed knowledge; compaction is trace hygiene.
 
-## Speckit Seed Notes
+## Relationship To Other Roadmap Files
 
-- Seed role: measurement and trace substrate for later AI behavior changes.
-- First slice: add a stable local event schema, JSONL export, and a tiny golden
-  eval corpus for planning gates and context selection.
-- Depends on: existing trace surfaces; can run before provider protocol if it
-  starts with runtime-owned events only.
-- De-duplication: this seed owns event vocabulary and eval fixtures; gateway
-  cost policy belongs to seed 14, and provider-specific artifacts belong to the
-  concrete provider seeds.
+| Related file | Relationship |
+|---|---|
+| `05-plan-analysis-contract.md` | Should be covered by planning-quality evals |
+| `06-large-codebase-context-substrate.md` | Needs context-selection evals and context-pack metrics |
+| `07-external-capability-provider-protocol.md` | Needs provider-call events and provider eval fixtures |
+| `10-review-councils-and-role-gated-governance.md` | Needs council and guardian-finding evals |
+| `14-ai-gateway-and-inference-economics.md` | Owns cost policy but depends on event and route telemetry |
+| `16-session-memory-and-repository-knowledge-distillation.md` | Consumes trace refs for memory proposals; does not own trace compaction |
 
-## Strategic Role
+## Added Scope
 
-This feature makes quality measurable.
+Add trace retention and compaction classes:
 
-Without evals and observability, every model change, prompt change, council change, and guardian change is a blind release.
+- lossless
+- structured
+- summary
+- index-only
+- discardable
 
-## Problem
+## Trace Compaction Classes
 
-Canon and Boundline aspire to excellence, but excellence needs measurement.
+### Lossless
 
-Current risks:
+Must remain exact.
 
-- no regression suite for plan quality
-- no evals for context selection
-- no evals for guardian findings
-- no evals for Canon packet quality
-- no runtime metrics for costs, stops, findings, latency
-- no structured trace export for dashboards or analysis
+Examples:
 
-## Scope Split
+- accepted decisions
+- approvals
+- final stage outputs
+- rejection reasons
+- operator answers
+- contract validation results
+- evidence references
+- release validation results
 
-### Boundline Owns
+Rules:
 
-- runtime trace metrics
-- plan-quality evals
-- context-selection evals
-- guardian-finding evals
-- stop-semantics evals
-- council-decision evals
-- provider protocol evals
-- dashboard metrics
+- never destructively compact
+- never replace with summary only
+- may be indexed, but exact record remains available
 
-### Canon Owns
+### Structured
 
-- packet quality evals
-- mode document completeness evals
-- evidence quality evals
-- approval/readiness consistency evals
-- lineage validation evals
-- project memory promotion evals
+Can be normalized into structured event records.
 
-## Minimal Evals
+Examples:
 
-### Boundline
+- guardian findings
+- provider findings
+- test summaries
+- lint summaries
+- phase requests
+- route decisions
+- context selection records
 
-- Can the system classify task risk?
-- Can it build a Context Pack without overloading the model?
-- Can it reject missing context when needed?
-- Can guardians catch known bad patterns?
-- Can review councils reject unsafe plans?
-- Can stop semantics trigger correctly?
+Rules:
 
-### Canon
+- store as structured event records
+- preserve source references
+- include reproducibility metadata where relevant
 
-- Can each mode produce required ordered documents?
-- Does the packet separate claims from evidence?
-- Does readiness match evidence?
-- Is lineage complete?
-- Are approval states consistent?
-- Is promoted project memory traceable?
+### Summary
 
-## Observability Events
+Can be summarized with source references.
 
-Required event families:
+Examples:
 
-- session lifecycle
-- context retrieval
-- plan generation
-- confirmation
-- run execution
-- guardian execution
-- finding emission
-- stop rule trigger
-- provider call
-- council review
-- Canon packet generation
-- Canon promotion
-- error and recovery
+- long assistant transcripts
+- repeated troubleshooting attempts
+- old implementation attempts
+- verbose command logs after key evidence is extracted
 
-## Metrics
+Rules:
 
-### Runtime Metrics
+- source references must remain available
+- summary must not become authority for completion
+- lossy summaries must be marked as lossy
 
-- run duration
-- step duration
-- model/provider route
+### Index-Only
+
+Can be represented by searchable metadata.
+
+Examples:
+
+- old context packets
+- stale trace fragments
+- obsolete intermediate drafts
+
+Rules:
+
+- usable for retrieval/navigation only
+- not sufficient for edit, approval, or completion decisions
+
+### Discardable
+
+Can be removed under retention policy.
+
+Examples:
+
+- duplicate generated output
+- temporary debug dumps
+- abandoned local diagnostics without decisions
+
+Rules:
+
+- never discard active stage evidence
+- never discard rejection reasons
+- record compaction action
+
+## Required Event
+
+Every compaction should emit an event:
+
+```json
+{
+  "event_type": "trace.compacted",
+  "policy": "trace-compaction-v1",
+  "source_trace": "trace://abc",
+  "actions": [
+    {
+      "item_ref": "assistant-transcript-1",
+      "from": "raw",
+      "to": "summary",
+      "lossy": true
+    }
+  ],
+  "preserved_refs": ["decision-12", "finding-22"]
+}
+```
+
+## Minimal Evals Additions
+
+Add evals for:
+
+- context selection quality
+- critical-context omission
+- guardian finding quality
+- council rejection behavior
+- provider call failure handling
+- trace compaction survival of accepted decisions
+- trace compaction survival of rejection reasons
+
+## Metrics Additions
+
+Record:
+
+- compaction count
+- compaction class distribution
+- trace size before/after compaction
+- lossy compaction count
+- preserved decision count
+- preserved rejection count
 - context size
 - context item count
-- tokens/cost when available
-- stop reason
-- findings count
-- guardian outcomes
-- review outcomes
 - provider latency
-- recovery count
+- stop reason
+- finding count
 
-### Governance Metrics
-
-- packet completeness
-- evidence count
-- unresolved uncertainty count
-- approval state
-- lineage completeness
-- promotion state
-- project memory update count
-
-## Suggested Technology
-
-Start simple:
-
-- JSONL trace export
-- stable event schema
-- local eval fixtures
-- snapshot tests
-- golden output comparison
-- deterministic scoring rules where possible
-
-Then add:
-
-- OpenTelemetry-compatible export
-- Langfuse or similar optional sink
-- promptfoo or custom eval runner for LLM-as-judge
-- dashboard aggregation
-- CI regression jobs
-
-## Eval Corpus
-
-Create a small but high-value golden corpus:
-
-- tiny implementation
-- unsafe auth change
-- migration without rollback
-- API breaking change
-- large file edit
-- missing tests
-- domain-language drift
-- Canon architecture packet
-- Canon verification packet
-- review council rejection case
-
-## Acceptance Criteria
+## Acceptance Criteria Additions
 
 - Evals can run locally.
 - Evals can run in CI.
-- Each eval has expected outcome and failure explanation.
 - Runtime emits structured events.
-- Trace export can feed S8.
-- Model/provider changes can be compared.
-- Canon packet quality can regress visibly.
+- Trace export can feed dashboards and analysis.
+- Trace compaction policy exists with lossless, structured, summary, index-only, and discardable classes.
+- Accepted decisions and rejection reasons survive compaction.
+- Lossy summaries are marked as lossy.
+- Source references remain available.
+- Compaction emits trace-visible events.
+- Active stage evidence is never destructively compacted.
 
 ## Risks
 
@@ -175,7 +188,9 @@ Create a small but high-value golden corpus:
 - Metrics become vanity dashboards.
 - Eval corpus is too small or too clean.
 - Observability leaks sensitive data.
+- Compaction hides forensic detail.
 
-## Hard Rule
+## Hard Rules
 
-If a feature changes AI behavior, it must have an eval path.
+- If a feature changes AI behavior, it must have an eval path.
+- Compaction must never destroy accepted decisions, rejection reasons, or required evidence.

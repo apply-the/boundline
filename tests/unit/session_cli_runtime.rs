@@ -50,7 +50,8 @@ use boundline::domain::framework_adapter::{
 use boundline::domain::goal_plan::{
     ContextInput, ContextInputKind, ContextPack, ContextPackCredibility, GoalPlan, PlannedTask,
     PlanningAnalysisCoverage, PlanningAnalysisFinding, PlanningAnalysisProjection,
-    PlanningAnalysisSeverity, PlanningAnalysisSource, PlanningAnalysisState,
+    PlanningAnalysisSeverity, PlanningAnalysisSource, PlanningAnalysisSourceRef,
+    PlanningAnalysisState,
 };
 use boundline::domain::governance::{
     CanonModeSelectionPreference, CanonSemanticProvenanceBoundary, GovernanceLifecycleState,
@@ -1776,14 +1777,27 @@ fn execute_run_blocks_when_planning_analysis_is_blocked() -> Result<(), Box<dyn 
         state: PlanningAnalysisState::Blocked,
         findings: vec![PlanningAnalysisFinding {
             severity: PlanningAnalysisSeverity::Critical,
-            source: PlanningAnalysisSource::Backlog,
-            message: "backlog reports unmapped success criteria: acceptance target".to_string(),
+            source: PlanningAnalysisSource::Goal,
+            code: "success_criterion_uncovered".to_string(),
+            message: "acceptance target is not covered by the active plan".to_string(),
+            source_refs: vec![PlanningAnalysisSourceRef {
+                artifact_kind: "goal_plan".to_string(),
+                artifact_ref: "T001".to_string(),
+                anchor: Some("acceptance target".to_string()),
+            }],
         }],
         coverage: Some(PlanningAnalysisCoverage {
             success_criteria_total: 1,
-            success_criteria_covered: 1,
-            backlog_task_count: Some(1),
-            mapped_plan_task_count: None,
+            success_criteria_covered: 0,
+            backlog_slice_total: Some(1),
+            backlog_slice_covered: Some(0),
+            validation_anchor_total: None,
+            validation_anchor_covered: None,
+            risk_total: None,
+            risk_covered: None,
+            constraint_total: None,
+            constraint_covered: None,
+            governed_evidence_ready: false,
         }),
     });
     record.goal_plan = Some(goal_plan);
@@ -1813,14 +1827,27 @@ fn execute_run_prefers_backlog_quality_before_planning_analysis()
         state: PlanningAnalysisState::Blocked,
         findings: vec![PlanningAnalysisFinding {
             severity: PlanningAnalysisSeverity::Critical,
-            source: PlanningAnalysisSource::Backlog,
-            message: "backlog reports unmapped success criteria: acceptance target".to_string(),
+            source: PlanningAnalysisSource::Goal,
+            code: "success_criterion_uncovered".to_string(),
+            message: "acceptance target is not covered by the active plan".to_string(),
+            source_refs: vec![PlanningAnalysisSourceRef {
+                artifact_kind: "goal_plan".to_string(),
+                artifact_ref: "T001".to_string(),
+                anchor: Some("acceptance target".to_string()),
+            }],
         }],
         coverage: Some(PlanningAnalysisCoverage {
             success_criteria_total: 1,
-            success_criteria_covered: 1,
-            backlog_task_count: Some(1),
-            mapped_plan_task_count: None,
+            success_criteria_covered: 0,
+            backlog_slice_total: Some(1),
+            backlog_slice_covered: Some(0),
+            validation_anchor_total: None,
+            validation_anchor_covered: None,
+            risk_total: None,
+            risk_covered: None,
+            constraint_total: None,
+            constraint_covered: None,
+            governed_evidence_ready: false,
         }),
     });
     record.goal_plan = Some(goal_plan);

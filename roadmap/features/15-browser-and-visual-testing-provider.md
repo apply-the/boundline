@@ -1,12 +1,9 @@
-# S20 - Browser And Visual Testing Provider
+# Browser And Visual Testing Provider
 
 ## Owner
 
 Boundline via External Capability Provider Protocol
 
-## Status
-
-B-level, after S10
 
 ## Speckit Seed Notes
 

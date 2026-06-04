@@ -1,6 +1,6 @@
 # boundline Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2026-06-02
+Auto-generated from all feature plans. Last updated: 2026-06-04
 
 ## Active Technologies
 - Rust 1.96.0, edition 2024 + existing workspace dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, `rusqlite` with bundled SQLite support), existing workspace crates (`boundline-core`, `boundline-adapters`, `boundline-cli`), and one optional trusted `sqlite-vec` extension-loading path for local vector tables (065-activate-sqlite-vec)
@@ -9,6 +9,8 @@ Auto-generated from all feature plans. Last updated: 2026-06-02
 - workspace-local `.boundline/config.toml`, `.boundline/session.json`, `.boundline/traces/`, `.boundline/execution.json`, and `.boundline/workflows.toml`, extended with an optional adapter selection block and adapter audit fields, while the sibling template and Speckit repos persist only their own Cargo manifests, README docs, and protocol fixtures (066-agentic-framework-integration)
 - Rust 1.96.0, edition 2024 + existing workspace crates and dependencies only; no new runtime dependency planned (067-plan-quality-contract)
 - existing workspace-local session and trace files, extended with additive plan-quality fields and trace-visible projections (067-plan-quality-contract)
+- Rust 1.96.0, edition 2024 + Existing workspace crates and dependencies only; (069-plan-analysis-contract)
+- Existing workspace-local session and trace files plus governed (069-plan-analysis-contract)
 
 - Rust 1.96.0, edition 2024 + `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, `rusqlite`, `dialoguer`
 - Workspace-local config and traces: `.boundline/session.json`, `.boundline/traces/`, `.boundline/config.toml`, `.boundline/execution.json`, `.boundline/workflows.toml`
@@ -41,9 +43,9 @@ Crate versioning follows Semantic Versioning.
 Before 1.0.0, breaking changes MAY occur in minor versions.
 
 ## Recent Changes
+- 069-plan-analysis-contract: Added Rust 1.96.0, edition 2024 + Existing workspace crates and dependencies only;
 - 067-plan-quality-contract: Added Rust 1.96.0, edition 2024 + existing workspace crates and dependencies only; no new runtime dependency planned
 - 066-agentic-framework-integration: Added Rust 1.96.0, edition 2024 across the Boundline workspace, the sibling template repo, and the sibling Speckit adapter repo for the initial compatibility line + existing workspace crates and dependencies (`clap`, `dialoguer`, `serde`, `serde_json`, `thiserror`, `tracing`, `toml`, `uuid`, `boundline-core`, `boundline-adapters`, `boundline-cli`) plus a shared framework-adapter protocol surface owned by `boundline-adapters` and consumed by sibling repos through versioned git-tag dependencies rather than committed path-based copies
-- 065-activate-sqlite-vec: Added Rust 1.96.0, edition 2024 + existing workspace dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, `rusqlite` with bundled SQLite support), existing workspace crates (`boundline-core`, `boundline-adapters`, `boundline-cli`), and one optional trusted `sqlite-vec` extension-loading path for local vector tables
 
 
 <!-- MANUAL ADDITIONS START -->

@@ -1,44 +1,49 @@
-# S10 - External Capability Provider Protocol
+# External Capability Provider Protocol
 
-## Owner
+## Integration Update
 
-Boundline
+This roadmap item remains the generic capability boundary for external systems.
 
-## Status
+**Adapter-Specialized Execution Profiles** should be added as a follow-up profile layer on top of this protocol, not as a replacement for it.
 
-High-priority architecture feature
+Canon must not become an adapter. Canon remains a first-class governed producer and semantic governance authority consumed by Boundline through stable contracts.
 
-## Speckit Seed Notes
+## Relationship To Other Roadmap Files
 
-- Seed role: native capability boundary for external systems.
-- First slice: implement discovery, explicit operator registration,
-  `health`, setup-requirement projection, and one read-only `execute` path for
-  a provider that returns findings and evidence only.
-- Depends on: event/trace schema from evals and observability, or a deliberately
-  minimal trace projection if this seed lands first.
-- De-duplication: permission envelope lives here; sandbox enforcement lives in
-  seed 13; browser behavior lives in seed 15; route economics lives in seed 14.
+| Related file | Relationship |
+|---|---|
+| `06-large-codebase-context-substrate.md` | Owns local context substrate; provider-supplied context uses this protocol |
+| `08-evals-and-runtime-observability.md` | Owns event schema and provider-call observability |
+| `13-sandboxed-execution-and-secret-inheritance.md` | Enforces sandboxing, path, network, and secret policy |
+| `14-ai-gateway-and-inference-economics.md` | Owns route economics and provider/model cost policy |
+| `15-browser-and-visual-testing-provider.md` | Should be implemented as a concrete provider using this protocol |
+| `17-experimental-recursivemas-provider-adapter.md` | Should remain an experimental external provider using this protocol |
 
-## Strategic Role
+## Canon Boundary
 
-This feature makes Boundline framework-agnostic without turning it into an uncontrolled plugin runner.
+Canon is not an external provider for Boundline stage execution.
 
-External systems may provide bounded capabilities. Boundline keeps session state, permissions, trace, evidence validation, admission control, and setup flow.
+Canon owns:
 
-## Problem
+- governed packets
+- evidence and approval semantics
+- lineage and provenance
+- posture contracts
+- project memory
+- policy semantics
 
-Without a generic provider protocol, Boundline will accumulate one-off adapters:
+Boundline consumes Canon outputs through stable contracts and uses them for validation, gating, and traceability.
 
-- custom harness adapter
-- custom browser adapter
-- custom static-analysis adapter
-- custom sandbox adapter
-- custom MCP adapter
-- custom research adapter
-- unsafe one-off setup prompts for provider configuration
-- accidental activation of locally discoverable executables
+Adapters and providers are for external capabilities and execution support.
 
-That creates adapter sprawl and inconsistent trust boundaries.
+Examples:
+
+- Speckit provider
+- browser provider
+- sandbox provider
+- static-analysis provider
+- RecursiveMAS experimental provider
+- company harness provider
 
 ## Core Principle
 
@@ -101,13 +106,13 @@ Provider executes a bounded request.
 Must include in request:
 
 - request ID
-- session ref
+- session reference
 - step ID
 - capability
 - goal
 - lifecycle phase
 - authority zone
-- Context Pack refs
+- Context Pack references
 - permissions
 - limits
 - expected outputs
@@ -118,7 +123,7 @@ Must include in response:
 - observations
 - findings
 - artifacts
-- evidence refs
+- evidence references
 - state patch proposals
 - limitations
 - next actions
@@ -130,11 +135,11 @@ Provider normalizes evidence after execution.
 Must include:
 
 - claims
-- evidence refs
+- evidence references
 - artifacts
 - findings
 - limitations
-- reproducibility info
+- reproducibility information
 
 ## Permission Model
 
@@ -154,33 +159,50 @@ max_output_bytes
 
 Default should be least privilege.
 
-## Transport Options
+## Adapter-Specialized Execution Profiles
 
-V1 should support:
+A later profile layer may define known framework semantics on top of the provider protocol.
 
-- JSON over stdio
-- CLI process adapter
-- JSON-RPC compatible envelope where practical
+Example: Speckit specialized profile.
 
-Later adapters:
+```text
+Boundline goal
+  -> native Boundline
 
-- MCP client bridge
-- HTTP local provider
-- sandbox provider
-- browser provider
+Boundline plan
+  -> speckit.specify
+  -> speckit.clarify when required
+  -> speckit.plan
+  -> speckit.tasks
+  -> speckit.analyze
+  -> remediation for blocking findings
+
+Boundline run
+  -> speckit.implement
+```
+
+Rules:
+
+- profile is versioned
+- profile maps framework operations to Boundline stage ownership
+- provider still obeys protocol permissions and trace boundaries
+- Boundline still owns stage state, stop semantics, and final acceptance
+- provider failure after stage claim fails the stage
+- profile output is structured and inspectable
+- Canon remains outside provider profile semantics
 
 ## Operator Setup And Activation
 
 Provider onboarding is a Boundline runtime concern, not Canon setup logic.
 
-V1 should support:
+The protocol should support:
 
-- explicit operator registration and activation of a provider
+- explicit operator registration and activation
 - setup requirement projection before first use
 - non-secret configuration capture through interactive or config-driven flows
-- secret-handle references rather than prompt-visible secret values
+- secret-handle references instead of prompt-visible secret values
 - connectivity or health dry-run before activation is marked ready
-- atomic setup so an interrupted flow leaves the previous active config intact
+- atomic setup so an interrupted flow leaves previous active config intact
 
 Hard boundaries:
 
@@ -188,53 +210,17 @@ Hard boundaries:
 - setup must not persist raw secrets in traces or tracked files
 - provider activation must remain visible in status and inspect
 
-## Provider Types
+## Acceptance Criteria Additions
 
-- read-only context provider
-- planning provider
-- review provider
-- guardian provider
-- verification provider
-- mutation provider
-- browser provider
-- sandbox provider
-- research provider
-- code analysis provider
-
-## Evidence Packet
-
-Evidence should be Boundline-owned and Canon-compatible, not Canon-specific.
-
-Suggested shape:
-
-```json
-{
-  "kind": "boundline-provider-evidence",
-  "provider_id": "string",
-  "capability": "string",
-  "claims": [],
-  "findings": [],
-  "artifacts": [],
-  "limitations": [],
-  "reproducibility": {}
-}
-```
-
-## Acceptance Criteria
-
-- Boundline can discover a provider's capabilities.
-- Boundline can reject an unavailable provider before run.
-- Boundline requires explicit operator registration before a provider can be
-  activated.
-- Boundline can project required setup fields and block activation until they
-  are satisfied.
-- Boundline can run a health or connectivity check before marking the provider
-  ready.
+- Boundline can discover provider capabilities.
+- Boundline can reject unavailable providers before run.
+- Boundline requires explicit operator registration before activation.
 - Provider execution is permission-scoped.
 - Provider output cannot directly mutate Boundline state without validation.
 - Evidence packets are trace-linked.
 - Provider limitations are visible in inspect.
-- MCP can later be implemented as an adapter, not the core architecture.
+- Specialized profiles can be layered over this protocol without making Canon an adapter.
+- Generic provider protocol remains intact when profiles are absent.
 
 ## Risks
 
@@ -244,8 +230,10 @@ Suggested shape:
 - Hidden provider state makes runs non-reproducible.
 - Permissions are too broad.
 - Protocol is too generic to validate.
+- Specialized profiles bypass generic safety rules.
 
-## Hard Rule
+## Hard Rules
 
-Boundline owns admission control. Providers never approve themselves.
-Discoverability is not activation.
+- Boundline owns admission control. Providers never approve themselves.
+- Discoverability is not activation.
+- Canon is not an adapter.

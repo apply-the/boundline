@@ -7,7 +7,10 @@ use uuid::Uuid;
 use crate::domain::cluster::{ClusterDeliveryStory, ClusterSessionProjection};
 use crate::domain::context_intelligence::AdvancedContextProjection;
 use crate::domain::decision::{DecisionType, EvidenceRef};
-use crate::domain::governance::{BacklogQualityAssessment, CompactedCanonMemory};
+use crate::domain::governance::{
+    BacklogQualityAssessment, CompactedCanonMemory, PlanningAnalysisBacklogEvidence,
+    planning_analysis_backlog_evidence,
+};
 use crate::domain::guidance::GuidanceGuardianProjection;
 use crate::domain::session::{
     ContinuityAuthority, DelegationContinuityMode, DelegationContinuityState, DelegationPacket,
@@ -434,9 +437,35 @@ const PLAN_QUALITY_FINDING_CONTEXT_PACK_INSUFFICIENT: &str = "context_pack_insuf
 const PLAN_QUALITY_FINDING_CONTEXT_PACK_STALE: &str = "context_pack_stale";
 const PLAN_QUALITY_ASSUMPTION_DEFAULT_ROUTE_OVERRIDE: &str =
     "no explicit route override is required for this plan";
-const PLANNING_ANALYSIS_MESSAGE_UNMAPPED_ITEMS: &str = "backlog reports unmapped success criteria";
+const PLANNING_ANALYSIS_CODE_SUCCESS_CRITERION_UNCOVERED: &str = "success_criterion_uncovered";
+const PLANNING_ANALYSIS_CODE_VALIDATION_COVERAGE_MISSING: &str = "validation_coverage_missing";
+const PLANNING_ANALYSIS_CODE_ARTIFACT_CONTRADICTION: &str = "artifact_contradiction";
+const PLANNING_ANALYSIS_CODE_EXECUTION_INPUT_MISSING: &str = "execution_input_missing";
+const PLANNING_ANALYSIS_CODE_PRODUCER_CONTRACT_GAP: &str = "producer_contract_gap";
+const PLANNING_ANALYSIS_CODE_EXPECTED_OUTCOME_MISSING: &str = "expected_outcome_missing";
+const PLANNING_ANALYSIS_CODE_COVERAGE_SIGNAL_PARTIAL: &str = "coverage_signal_partial";
+const PLANNING_ANALYSIS_MESSAGE_UNMAPPED_ITEMS: &str =
+    "required success criteria are not covered by the active planning packet";
 const PLANNING_ANALYSIS_MESSAGE_MISSING_EXPECTED_OUTCOMES: &str =
     "planned tasks are missing measurable expected outcomes";
+const PLANNING_ANALYSIS_MESSAGE_VALIDATION_COVERAGE_MISSING: &str =
+    "selected slice is missing a matching acceptance anchor";
+const PLANNING_ANALYSIS_MESSAGE_ARTIFACT_CONTRADICTION: &str =
+    "execution handoff conflicts with the sequenced backlog slice order";
+const PLANNING_ANALYSIS_MESSAGE_EXECUTION_INPUT_MISSING: &str =
+    "execution handoff is missing implementation artifact references";
+const PLANNING_ANALYSIS_MESSAGE_PRODUCER_CONTRACT_GAP: &str =
+    "execution handoff requires Canon-authored dependency prerequisites";
+const PLANNING_ANALYSIS_ARTIFACT_KIND_BACKLOG_DOCUMENT: &str = "backlog_document";
+const PLANNING_ANALYSIS_ARTIFACT_KIND_GOAL_PLAN: &str = "goal_plan";
+const PLANNING_ANALYSIS_ARTIFACT_KIND_VERIFICATION_STRATEGY: &str = "verification_strategy";
+const PLANNING_ANALYSIS_ARTIFACT_REF_SUCCESS_CRITERIA: &str = "success_criteria";
+const PLANNING_ANALYSIS_ARTIFACT_REF_VERIFICATION_STRATEGY: &str = "verification_strategy";
+const BACKLOG_DOCUMENT_ACCEPTANCE_ANCHORS: &str = "acceptance-anchors.md";
+const BACKLOG_DOCUMENT_EXECUTION_HANDOFF: &str = "execution-handoff.md";
+const BACKLOG_DOCUMENT_SEQUENCING_PLAN: &str = "sequencing-plan.md";
+const BACKLOG_DOCUMENT_PLANNING_RISKS: &str = "planning-risks.md";
+const PLANNING_ANALYSIS_ANCHOR_DEPENDENCY_PREREQUISITES: &str = "Dependency Prerequisites";
 
 impl PlanQualityState {
     pub const fn as_str(self) -> &'static str {
@@ -505,26 +534,47 @@ impl PlanningAnalysisSeverity {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PlanningAnalysisSource {
+    Goal,
     Plan,
     Backlog,
-    Governance,
+    Validation,
+    Risk,
+    Constraint,
+    ExecutionReadiness,
+    GovernedEvidence,
 }
 
 impl PlanningAnalysisSource {
     pub const fn as_str(self) -> &'static str {
         match self {
+            Self::Goal => "goal",
             Self::Plan => "plan",
             Self::Backlog => "backlog",
-            Self::Governance => "governance",
+            Self::Validation => "validation",
+            Self::Risk => "risk",
+            Self::Constraint => "constraint",
+            Self::ExecutionReadiness => "execution_readiness",
+            Self::GovernedEvidence => "governed_evidence",
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlanningAnalysisSourceRef {
+    pub artifact_kind: String,
+    pub artifact_ref: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub anchor: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PlanningAnalysisFinding {
     pub severity: PlanningAnalysisSeverity,
     pub source: PlanningAnalysisSource,
+    pub code: String,
     pub message: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub source_refs: Vec<PlanningAnalysisSourceRef>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -532,9 +582,23 @@ pub struct PlanningAnalysisCoverage {
     pub success_criteria_total: usize,
     pub success_criteria_covered: usize,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub backlog_task_count: Option<usize>,
+    pub backlog_slice_total: Option<usize>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub mapped_plan_task_count: Option<usize>,
+    pub backlog_slice_covered: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub validation_anchor_total: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub validation_anchor_covered: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub risk_total: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub risk_covered: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub constraint_total: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub constraint_covered: Option<usize>,
+    #[serde(default)]
+    pub governed_evidence_ready: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -830,32 +894,144 @@ impl GoalPlan {
     pub fn planning_analysis_projection(
         &self,
         backlog_quality: &BacklogQualityAssessment,
-        _backlog_documents: &[String],
+        backlog_document_refs: &[String],
+        backlog_documents: &[String],
     ) -> PlanningAnalysisProjection {
+        let backlog_evidence =
+            planning_analysis_backlog_evidence(backlog_document_refs, backlog_documents);
         let success_criteria_total = self.tasks.len();
-        let success_criteria_covered = self
-            .tasks
-            .iter()
-            .filter(|task| {
-                task.expected_outcome.as_deref().is_some_and(|outcome| !outcome.trim().is_empty())
-            })
-            .count();
+        let uncovered_success_criteria = deduplicated_items(&backlog_quality.unmapped_items);
+        let success_criteria_covered =
+            success_criteria_total.saturating_sub(uncovered_success_criteria.len());
+        let explicit_constraint_total = self.explicit_constraint_count();
+        let validation_anchor_total =
+            planning_analysis_validation_anchor_total(&backlog_evidence, backlog_document_refs);
+        let validation_anchor_covered = planning_analysis_validation_anchor_covered(
+            self,
+            &backlog_evidence,
+            validation_anchor_total,
+        );
+        let risk_covered = planning_analysis_risk_covered(self, &backlog_evidence);
+        let constraint_covered =
+            (explicit_constraint_total > 0).then_some(explicit_constraint_total);
+        let governed_evidence_ready =
+            planning_analysis_governed_evidence_ready(backlog_document_refs, &backlog_evidence);
         let coverage = PlanningAnalysisCoverage {
             success_criteria_total,
             success_criteria_covered,
-            backlog_task_count: backlog_quality.task_count,
-            mapped_plan_task_count: None,
+            backlog_slice_total: (!backlog_evidence.slice_ids.is_empty())
+                .then_some(backlog_evidence.slice_ids.len()),
+            backlog_slice_covered: planning_analysis_backlog_slice_covered(&backlog_evidence),
+            validation_anchor_total,
+            validation_anchor_covered,
+            risk_total: (backlog_evidence.planning_risk_count > 0)
+                .then_some(backlog_evidence.planning_risk_count),
+            risk_covered,
+            constraint_total: (explicit_constraint_total > 0).then_some(explicit_constraint_total),
+            constraint_covered,
+            governed_evidence_ready,
         };
         let mut findings = Vec::new();
 
-        if !backlog_quality.unmapped_items.is_empty() {
+        if !uncovered_success_criteria.is_empty() {
+            findings.push(PlanningAnalysisFinding {
+                severity: PlanningAnalysisSeverity::Critical,
+                source: PlanningAnalysisSource::Goal,
+                code: PLANNING_ANALYSIS_CODE_SUCCESS_CRITERION_UNCOVERED.to_string(),
+                message: format!(
+                    "{PLANNING_ANALYSIS_MESSAGE_UNMAPPED_ITEMS}: {}",
+                    uncovered_success_criteria.join(", ")
+                ),
+                source_refs: vec![PlanningAnalysisSourceRef {
+                    artifact_kind: PLANNING_ANALYSIS_ARTIFACT_KIND_GOAL_PLAN.to_string(),
+                    artifact_ref: PLANNING_ANALYSIS_ARTIFACT_REF_SUCCESS_CRITERIA.to_string(),
+                    anchor: uncovered_success_criteria.first().cloned(),
+                }],
+            });
+        }
+
+        if let Some(selected_slice_id) = backlog_evidence.selected_slice_id.as_ref()
+            && validation_anchor_total == Some(1)
+            && validation_anchor_covered == Some(0)
+        {
+            findings.push(PlanningAnalysisFinding {
+                severity: PlanningAnalysisSeverity::Critical,
+                source: PlanningAnalysisSource::Validation,
+                code: PLANNING_ANALYSIS_CODE_VALIDATION_COVERAGE_MISSING.to_string(),
+                message: PLANNING_ANALYSIS_MESSAGE_VALIDATION_COVERAGE_MISSING.to_string(),
+                source_refs: vec![
+                    PlanningAnalysisSourceRef {
+                        artifact_kind: PLANNING_ANALYSIS_ARTIFACT_KIND_VERIFICATION_STRATEGY
+                            .to_string(),
+                        artifact_ref: PLANNING_ANALYSIS_ARTIFACT_REF_VERIFICATION_STRATEGY
+                            .to_string(),
+                        anchor: None,
+                    },
+                    PlanningAnalysisSourceRef {
+                        artifact_kind: PLANNING_ANALYSIS_ARTIFACT_KIND_BACKLOG_DOCUMENT.to_string(),
+                        artifact_ref: BACKLOG_DOCUMENT_ACCEPTANCE_ANCHORS.to_string(),
+                        anchor: Some(format!("slice_id={selected_slice_id}")),
+                    },
+                ],
+            });
+        }
+
+        if let (Some(first_sequenced_slice_id), Some(selected_slice_id)) = (
+            backlog_evidence.first_sequenced_slice_id.as_ref(),
+            backlog_evidence.selected_slice_id.as_ref(),
+        ) && first_sequenced_slice_id != selected_slice_id
+        {
             findings.push(PlanningAnalysisFinding {
                 severity: PlanningAnalysisSeverity::Critical,
                 source: PlanningAnalysisSource::Backlog,
-                message: format!(
-                    "{PLANNING_ANALYSIS_MESSAGE_UNMAPPED_ITEMS}: {}",
-                    backlog_quality.unmapped_items.join(", ")
-                ),
+                code: PLANNING_ANALYSIS_CODE_ARTIFACT_CONTRADICTION.to_string(),
+                message: PLANNING_ANALYSIS_MESSAGE_ARTIFACT_CONTRADICTION.to_string(),
+                source_refs: vec![
+                    PlanningAnalysisSourceRef {
+                        artifact_kind: PLANNING_ANALYSIS_ARTIFACT_KIND_BACKLOG_DOCUMENT.to_string(),
+                        artifact_ref: BACKLOG_DOCUMENT_SEQUENCING_PLAN.to_string(),
+                        anchor: Some(format!("slice_id={first_sequenced_slice_id}")),
+                    },
+                    PlanningAnalysisSourceRef {
+                        artifact_kind: PLANNING_ANALYSIS_ARTIFACT_KIND_BACKLOG_DOCUMENT.to_string(),
+                        artifact_ref: BACKLOG_DOCUMENT_EXECUTION_HANDOFF.to_string(),
+                        anchor: Some(format!("slice_id={selected_slice_id}")),
+                    },
+                ],
+            });
+        }
+
+        if !backlog_document_refs.is_empty()
+            && backlog_evidence.selected_slice_id.is_some()
+            && backlog_evidence.dependency_prerequisite_count == 0
+        {
+            findings.push(PlanningAnalysisFinding {
+                severity: PlanningAnalysisSeverity::Critical,
+                source: PlanningAnalysisSource::GovernedEvidence,
+                code: PLANNING_ANALYSIS_CODE_PRODUCER_CONTRACT_GAP.to_string(),
+                message: PLANNING_ANALYSIS_MESSAGE_PRODUCER_CONTRACT_GAP.to_string(),
+                source_refs: vec![PlanningAnalysisSourceRef {
+                    artifact_kind: PLANNING_ANALYSIS_ARTIFACT_KIND_BACKLOG_DOCUMENT.to_string(),
+                    artifact_ref: BACKLOG_DOCUMENT_EXECUTION_HANDOFF.to_string(),
+                    anchor: Some(PLANNING_ANALYSIS_ANCHOR_DEPENDENCY_PREREQUISITES.to_string()),
+                }],
+            });
+        }
+
+        if !backlog_document_refs.is_empty()
+            && backlog_evidence.selected_slice_id.is_some()
+            && backlog_evidence.implementation_artifact_ref_count == 0
+        {
+            findings.push(PlanningAnalysisFinding {
+                severity: PlanningAnalysisSeverity::Critical,
+                source: PlanningAnalysisSource::ExecutionReadiness,
+                code: PLANNING_ANALYSIS_CODE_EXECUTION_INPUT_MISSING.to_string(),
+                message: PLANNING_ANALYSIS_MESSAGE_EXECUTION_INPUT_MISSING.to_string(),
+                source_refs: vec![PlanningAnalysisSourceRef {
+                    artifact_kind: PLANNING_ANALYSIS_ARTIFACT_KIND_BACKLOG_DOCUMENT.to_string(),
+                    artifact_ref: BACKLOG_DOCUMENT_EXECUTION_HANDOFF.to_string(),
+                    anchor: Some("Implementation Artifact References".to_string()),
+                }],
             });
         }
 
@@ -871,24 +1047,42 @@ impl GoalPlan {
             findings.push(PlanningAnalysisFinding {
                 severity: PlanningAnalysisSeverity::Medium,
                 source: PlanningAnalysisSource::Plan,
+                code: PLANNING_ANALYSIS_CODE_EXPECTED_OUTCOME_MISSING.to_string(),
                 message: format!(
                     "{PLANNING_ANALYSIS_MESSAGE_MISSING_EXPECTED_OUTCOMES}: {}",
                     tasks_missing_expected_outcomes.join(", ")
                 ),
+                source_refs: tasks_missing_expected_outcomes
+                    .iter()
+                    .map(|task_id| PlanningAnalysisSourceRef {
+                        artifact_kind: PLANNING_ANALYSIS_ARTIFACT_KIND_GOAL_PLAN.to_string(),
+                        artifact_ref: task_id.clone(),
+                        anchor: None,
+                    })
+                    .collect(),
             });
         }
 
+        if let (Some(risk_total), Some(risk_covered)) = (coverage.risk_total, coverage.risk_covered)
+            && risk_covered < risk_total
+        {
+            findings.push(PlanningAnalysisFinding {
+                severity: PlanningAnalysisSeverity::Medium,
+                source: PlanningAnalysisSource::Risk,
+                code: PLANNING_ANALYSIS_CODE_COVERAGE_SIGNAL_PARTIAL.to_string(),
+                message: "planning risk coverage remains partial for execution readiness"
+                    .to_string(),
+                source_refs: vec![PlanningAnalysisSourceRef {
+                    artifact_kind: PLANNING_ANALYSIS_ARTIFACT_KIND_BACKLOG_DOCUMENT.to_string(),
+                    artifact_ref: BACKLOG_DOCUMENT_PLANNING_RISKS.to_string(),
+                    anchor: None,
+                }],
+            });
+        }
+
+        let findings = deduplicate_planning_analysis_findings(findings);
         PlanningAnalysisProjection {
-            state: if findings
-                .iter()
-                .any(|finding| matches!(finding.severity, PlanningAnalysisSeverity::Critical))
-            {
-                PlanningAnalysisState::Blocked
-            } else if findings.is_empty() {
-                PlanningAnalysisState::Clean
-            } else {
-                PlanningAnalysisState::Findings
-            },
+            state: planning_analysis_state_for_findings(&findings),
             findings,
             coverage: Some(coverage),
         }
@@ -955,6 +1149,14 @@ impl GoalPlan {
             findings,
             assumptions,
         }
+    }
+
+    fn explicit_constraint_count(&self) -> usize {
+        [self.negotiation_acceptance_boundary.as_deref(), self.routing_policy_summary.as_deref()]
+            .into_iter()
+            .filter_map(|value| value.map(str::trim))
+            .filter(|value| !value.is_empty())
+            .count()
     }
 
     /// Returns the next monotonically increasing proposal revision number.
@@ -1241,6 +1443,133 @@ impl GoalPlan {
     }
 }
 
+fn planning_analysis_validation_anchor_total(
+    backlog_evidence: &PlanningAnalysisBacklogEvidence,
+    backlog_document_refs: &[String],
+) -> Option<usize> {
+    if backlog_document_refs.is_empty() || backlog_evidence.selected_slice_id.is_none() {
+        None
+    } else {
+        Some(1)
+    }
+}
+
+fn planning_analysis_validation_anchor_covered(
+    goal_plan: &GoalPlan,
+    backlog_evidence: &PlanningAnalysisBacklogEvidence,
+    validation_anchor_total: Option<usize>,
+) -> Option<usize> {
+    let verification_strategy_present = goal_plan
+        .verification_strategy
+        .as_deref()
+        .map(str::trim)
+        .is_some_and(|value| !value.is_empty());
+    let selected_slice_is_anchored =
+        backlog_evidence.selected_slice_id.as_ref().is_some_and(|selected_slice_id| {
+            backlog_evidence
+                .acceptance_anchor_slice_ids
+                .iter()
+                .any(|slice_id| slice_id == selected_slice_id)
+        });
+    match validation_anchor_total {
+        Some(1) if verification_strategy_present && selected_slice_is_anchored => Some(1),
+        Some(1) => Some(0),
+        _ => None,
+    }
+}
+
+fn planning_analysis_risk_covered(
+    goal_plan: &GoalPlan,
+    backlog_evidence: &PlanningAnalysisBacklogEvidence,
+) -> Option<usize> {
+    (backlog_evidence.planning_risk_count > 0).then(|| {
+        if goal_plan
+            .verification_strategy
+            .as_deref()
+            .map(str::trim)
+            .is_some_and(|value| !value.is_empty())
+        {
+            backlog_evidence.planning_risk_count
+        } else {
+            0
+        }
+    })
+}
+
+fn planning_analysis_governed_evidence_ready(
+    backlog_document_refs: &[String],
+    backlog_evidence: &PlanningAnalysisBacklogEvidence,
+) -> bool {
+    if backlog_document_refs.is_empty() || backlog_evidence.closure_limited {
+        return true;
+    }
+    backlog_evidence.selected_slice_id.is_some()
+        && backlog_evidence.implementation_artifact_ref_count > 0
+        && backlog_evidence.dependency_prerequisite_count > 0
+        && backlog_evidence.independent_verification_anchor_count > 0
+}
+
+fn planning_analysis_backlog_slice_covered(
+    backlog_evidence: &PlanningAnalysisBacklogEvidence,
+) -> Option<usize> {
+    (!backlog_evidence.slice_ids.is_empty()).then_some(usize::from(
+        backlog_evidence.selected_slice_id.is_some()
+            && backlog_evidence.implementation_artifact_ref_count > 0
+            && backlog_evidence.dependency_prerequisite_count > 0
+            && backlog_evidence.independent_verification_anchor_count > 0,
+    ))
+}
+
+fn planning_analysis_state_for_findings(
+    findings: &[PlanningAnalysisFinding],
+) -> PlanningAnalysisState {
+    if findings.iter().any(|finding| matches!(finding.severity, PlanningAnalysisSeverity::Critical))
+    {
+        PlanningAnalysisState::Blocked
+    } else if findings.is_empty() {
+        PlanningAnalysisState::Clean
+    } else {
+        PlanningAnalysisState::Findings
+    }
+}
+
+fn deduplicated_items(items: &[String]) -> Vec<String> {
+    let mut deduplicated = Vec::new();
+    for item in items {
+        let normalized = item.trim();
+        if normalized.is_empty() || deduplicated.iter().any(|existing| existing == normalized) {
+            continue;
+        }
+        deduplicated.push(normalized.to_string());
+    }
+    deduplicated
+}
+
+fn deduplicate_planning_analysis_findings(
+    findings: Vec<PlanningAnalysisFinding>,
+) -> Vec<PlanningAnalysisFinding> {
+    let mut deduplicated = Vec::<PlanningAnalysisFinding>::new();
+
+    for mut finding in findings {
+        if let Some(existing) = deduplicated.iter_mut().find(|existing| {
+            existing.severity == finding.severity
+                && existing.source == finding.source
+                && existing.code == finding.code
+                && existing.message == finding.message
+        }) {
+            for source_ref in finding.source_refs.drain(..) {
+                if !existing.source_refs.iter().any(|existing_ref| existing_ref == &source_ref) {
+                    existing.source_refs.push(source_ref);
+                }
+            }
+            continue;
+        }
+        deduplicated.push(finding);
+    }
+
+    deduplicated
+}
+
 /// Validation failures for persisted goal-plan state.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum GoalPlanError {
@@ -1289,14 +1618,28 @@ pub enum GoalPlanError {
 #[cfg(test)]
 mod tests {
     use super::{
-        CanonExpertiseInputConsideration, CanonExpertiseInputDisposition, ContextInput,
-        ContextInputKind, ContextPack, ContextPackCredibility, ExpertPackSelectionOutcome,
-        ExpertPackSelectionState, ExpertPackSignal, ExpertPackSignalStatus, GoalPlan,
-        GoalPlanError, PlannedTask, RejectedExpertCandidate,
+        BACKLOG_DOCUMENT_ACCEPTANCE_ANCHORS, CanonExpertiseInputConsideration,
+        CanonExpertiseInputDisposition, ContextInput, ContextInputKind, ContextPack,
+        ContextPackCredibility, ExpertPackSelectionOutcome, ExpertPackSelectionState,
+        ExpertPackSignal, ExpertPackSignalStatus, GoalPlan, GoalPlanError,
+        PLANNING_ANALYSIS_ARTIFACT_KIND_BACKLOG_DOCUMENT,
+        PLANNING_ANALYSIS_ARTIFACT_KIND_GOAL_PLAN, PLANNING_ANALYSIS_ARTIFACT_REF_SUCCESS_CRITERIA,
+        PLANNING_ANALYSIS_CODE_ARTIFACT_CONTRADICTION,
+        PLANNING_ANALYSIS_CODE_COVERAGE_SIGNAL_PARTIAL,
+        PLANNING_ANALYSIS_CODE_EXECUTION_INPUT_MISSING,
+        PLANNING_ANALYSIS_CODE_EXPECTED_OUTCOME_MISSING,
+        PLANNING_ANALYSIS_CODE_PRODUCER_CONTRACT_GAP,
+        PLANNING_ANALYSIS_CODE_SUCCESS_CRITERION_UNCOVERED,
+        PLANNING_ANALYSIS_CODE_VALIDATION_COVERAGE_MISSING,
+        PLANNING_ANALYSIS_MESSAGE_VALIDATION_COVERAGE_MISSING, PlannedTask,
+        PlanningAnalysisFinding, PlanningAnalysisSeverity, PlanningAnalysisSource,
+        PlanningAnalysisSourceRef, PlanningAnalysisState, RejectedExpertCandidate,
+        deduplicate_planning_analysis_findings, deduplicated_items,
+        planning_analysis_state_for_findings,
     };
     use crate::domain::governance::{
-        CanonEvidenceInspectSummary, CanonModeSummary, CanonResultActionSummary,
-        CompactedCanonMemory, MemoryCredibilityState,
+        BacklogQualityAssessment, BacklogQualityState, CanonEvidenceInspectSummary,
+        CanonModeSummary, CanonResultActionSummary, CompactedCanonMemory, MemoryCredibilityState,
     };
     use crate::domain::guidance::GuidanceGuardianProjection;
     use crate::domain::session::{
@@ -1338,6 +1681,24 @@ mod tests {
             ),
             stuck_marker: None,
             superseded_by_packet_id: None,
+        }
+    }
+
+    fn backlog_document_ref(file_name: &str) -> String {
+        format!(".canon/backlog/{file_name}")
+    }
+
+    fn backlog_document_refs(file_names: &[&str]) -> Vec<String> {
+        file_names.iter().map(|file_name| backlog_document_ref(file_name)).collect()
+    }
+
+    fn ready_backlog_quality() -> BacklogQualityAssessment {
+        BacklogQualityAssessment {
+            state: BacklogQualityState::Ready,
+            findings: Vec::new(),
+            task_count: Some(1),
+            mvp_scope: Some("SLICE-SESSION-001".to_string()),
+            unmapped_items: Vec::new(),
         }
     }
 
@@ -1781,5 +2142,237 @@ mod tests {
             plan.delegation_packet_history()[0].capability_summary.as_deref(),
             Some("replacement packet state")
         );
+    }
+
+    #[test]
+    fn planning_analysis_projection_reports_blocking_findings_and_coverage()
+    -> Result<(), GoalPlanError> {
+        let plan = GoalPlan::new(
+            "Goal",
+            vec![
+                PlannedTask {
+                    task_id: "T001".to_string(),
+                    description: "Implement T001".to_string(),
+                    target: "src/T001.rs".to_string(),
+                    expected_outcome: Some("first slice verified".to_string()),
+                    decision_type_hint: None,
+                },
+                PlannedTask {
+                    task_id: "T002".to_string(),
+                    description: "Implement T002".to_string(),
+                    target: "src/T002.rs".to_string(),
+                    expected_outcome: None,
+                    decision_type_hint: None,
+                },
+            ],
+        )?
+        .with_planning_rationale("execution must honor the selected delivery slice order")
+        .with_verification_strategy(
+            "run acceptance and sequencing verification after implementation",
+        );
+        let document_refs = backlog_document_refs(&[
+            "delivery-slices.md",
+            "sequencing-plan.md",
+            "acceptance-anchors.md",
+            "planning-risks.md",
+            "execution-handoff.md",
+        ]);
+        let projection = plan.planning_analysis_projection(
+            &BacklogQualityAssessment {
+                unmapped_items: vec![
+                    "acceptance target".to_string(),
+                    "acceptance target".to_string(),
+                ],
+                ..ready_backlog_quality()
+            },
+            &document_refs,
+            &[
+                "- [SLICE-SESSION-001] First bounded execution slice.\n- [SLICE-SESSION-002] Follow-up slice.\n".to_string(),
+                "1. [SLICE-SESSION-001] first\n2. [SLICE-SESSION-002] second\n".to_string(),
+                "- [SLICE-SESSION-001] Different slice owns the acceptance proof.\n".to_string(),
+                "- mitigate flaky dependency\n- confirm migration constraint\n".to_string(),
+                concat!(
+                    "## Selected Slice\n\nSLICE-SESSION-002\n\n",
+                    "## Implementation Artifact References\n\n\n",
+                    "## Independent Verification Anchors\n\n",
+                    "- integration coverage exists\n"
+                )
+                .to_string(),
+            ],
+        );
+
+        assert_eq!(projection.state, PlanningAnalysisState::Blocked);
+        assert!(projection.findings.len() >= 4);
+        let coverage = projection.coverage.ok_or(GoalPlanError::MissingGoalText)?;
+        assert_eq!(coverage.success_criteria_total, 2);
+        assert_eq!(coverage.success_criteria_covered, 1);
+        assert_eq!(coverage.backlog_slice_total, Some(2));
+        assert_eq!(coverage.backlog_slice_covered, Some(0));
+        assert_eq!(coverage.validation_anchor_total, Some(1));
+        assert_eq!(coverage.validation_anchor_covered, Some(0));
+        assert_eq!(coverage.risk_total, Some(2));
+        assert_eq!(coverage.risk_covered, Some(2));
+        assert_eq!(coverage.constraint_total, None);
+        assert_eq!(coverage.constraint_covered, None);
+        assert!(!coverage.governed_evidence_ready);
+        assert!(projection.findings.iter().any(|finding| {
+            finding.severity == PlanningAnalysisSeverity::Critical
+                && finding.source == PlanningAnalysisSource::Goal
+                && finding.code == PLANNING_ANALYSIS_CODE_SUCCESS_CRITERION_UNCOVERED
+        }));
+        assert!(projection.findings.iter().any(|finding| {
+            finding.severity == PlanningAnalysisSeverity::Critical
+                && finding.source == PlanningAnalysisSource::Validation
+                && finding.code == PLANNING_ANALYSIS_CODE_VALIDATION_COVERAGE_MISSING
+        }));
+        assert!(projection.findings.iter().any(|finding| {
+            finding.severity == PlanningAnalysisSeverity::Critical
+                && finding.source == PlanningAnalysisSource::Backlog
+                && finding.code == PLANNING_ANALYSIS_CODE_ARTIFACT_CONTRADICTION
+        }));
+        assert!(projection.findings.iter().any(|finding| {
+            finding.severity == PlanningAnalysisSeverity::Critical
+                && finding.source == PlanningAnalysisSource::GovernedEvidence
+                && finding.code == PLANNING_ANALYSIS_CODE_PRODUCER_CONTRACT_GAP
+        }));
+        assert!(projection.findings.iter().any(|finding| {
+            finding.severity == PlanningAnalysisSeverity::Critical
+                && finding.source == PlanningAnalysisSource::ExecutionReadiness
+                && finding.code == PLANNING_ANALYSIS_CODE_EXECUTION_INPUT_MISSING
+        }));
+        assert!(projection.findings.iter().any(|finding| {
+            finding.severity == PlanningAnalysisSeverity::Medium
+                && finding.source == PlanningAnalysisSource::Plan
+                && finding.code == PLANNING_ANALYSIS_CODE_EXPECTED_OUTCOME_MISSING
+        }));
+
+        Ok(())
+    }
+
+    #[test]
+    fn planning_analysis_projection_reports_clean_governed_evidence_when_inputs_align()
+    -> Result<(), GoalPlanError> {
+        let plan = GoalPlan::new(
+            "Goal",
+            vec![PlannedTask {
+                task_id: "T001".to_string(),
+                description: "Implement the first slice".to_string(),
+                target: "src/lib.rs".to_string(),
+                expected_outcome: Some("first slice shipped".to_string()),
+                decision_type_hint: None,
+            }],
+        )?
+        .with_planning_rationale("execute the first slice with governed evidence")
+        .with_verification_strategy("run the independent verification anchors")
+        .with_negotiation_projection(
+            "ship the selected slice",
+            "confirmed",
+            "must preserve the bounded acceptance scope",
+        )
+        .with_routing_policy_summary("runtime=canon/backlog");
+        let document_refs = backlog_document_refs(&[
+            "delivery-slices.md",
+            "sequencing-plan.md",
+            "acceptance-anchors.md",
+            "planning-risks.md",
+            "execution-handoff.md",
+        ]);
+        let projection = plan.planning_analysis_projection(
+            &ready_backlog_quality(),
+            &document_refs,
+            &[
+                "- [SLICE-SESSION-001] First bounded execution slice.\n".to_string(),
+                "1. [SLICE-SESSION-001] first\n".to_string(),
+                "- [SLICE-SESSION-001] Acceptance proof captured.\n".to_string(),
+                "- mitigate flaky dependency\n".to_string(),
+                concat!(
+                    "## Selected Slice\n\nSLICE-SESSION-001\n\n",
+                    "## Implementation Artifact References\n\n",
+                    "- src/lib.rs\n\n",
+                    "## Dependency Prerequisites\n\n",
+                    "- upstream review completed\n\n",
+                    "## Independent Verification Anchors\n\n",
+                    "- cargo test --lib\n"
+                )
+                .to_string(),
+            ],
+        );
+
+        assert_eq!(projection.state, PlanningAnalysisState::Clean);
+        assert!(projection.findings.is_empty());
+        let coverage = projection.coverage.ok_or(GoalPlanError::MissingGoalText)?;
+        assert_eq!(coverage.success_criteria_total, 1);
+        assert_eq!(coverage.success_criteria_covered, 1);
+        assert_eq!(coverage.backlog_slice_total, Some(1));
+        assert_eq!(coverage.backlog_slice_covered, Some(1));
+        assert_eq!(coverage.validation_anchor_total, Some(1));
+        assert_eq!(coverage.validation_anchor_covered, Some(1));
+        assert_eq!(coverage.risk_total, Some(1));
+        assert_eq!(coverage.risk_covered, Some(1));
+        assert_eq!(coverage.constraint_total, Some(2));
+        assert_eq!(coverage.constraint_covered, Some(2));
+        assert!(coverage.governed_evidence_ready);
+
+        Ok(())
+    }
+
+    #[test]
+    fn planning_analysis_helpers_cover_new_sources_and_deduplication_paths() {
+        let finding = PlanningAnalysisFinding {
+            severity: PlanningAnalysisSeverity::Critical,
+            source: PlanningAnalysisSource::Validation,
+            code: PLANNING_ANALYSIS_CODE_VALIDATION_COVERAGE_MISSING.to_string(),
+            message: PLANNING_ANALYSIS_MESSAGE_VALIDATION_COVERAGE_MISSING.to_string(),
+            source_refs: vec![PlanningAnalysisSourceRef {
+                artifact_kind: PLANNING_ANALYSIS_ARTIFACT_KIND_BACKLOG_DOCUMENT.to_string(),
+                artifact_ref: BACKLOG_DOCUMENT_ACCEPTANCE_ANCHORS.to_string(),
+                anchor: Some("slice_id=SLICE-SESSION-001".to_string()),
+            }],
+        };
+        let deduplicated = deduplicate_planning_analysis_findings(vec![
+            finding.clone(),
+            finding.clone(),
+            PlanningAnalysisFinding {
+                source_refs: vec![PlanningAnalysisSourceRef {
+                    artifact_kind: PLANNING_ANALYSIS_ARTIFACT_KIND_GOAL_PLAN.to_string(),
+                    artifact_ref: PLANNING_ANALYSIS_ARTIFACT_REF_SUCCESS_CRITERIA.to_string(),
+                    anchor: Some("criterion-1".to_string()),
+                }],
+                ..finding.clone()
+            },
+        ]);
+
+        assert_eq!(PlanningAnalysisSource::Goal.as_str(), "goal");
+        assert_eq!(PlanningAnalysisSource::Validation.as_str(), "validation");
+        assert_eq!(PlanningAnalysisSource::Risk.as_str(), "risk");
+        assert_eq!(PlanningAnalysisSource::Constraint.as_str(), "constraint");
+        assert_eq!(PlanningAnalysisSource::ExecutionReadiness.as_str(), "execution_readiness");
+        assert_eq!(PlanningAnalysisSource::GovernedEvidence.as_str(), "governed_evidence");
+        assert_eq!(planning_analysis_state_for_findings(&[]), PlanningAnalysisState::Clean);
+        assert_eq!(
+            planning_analysis_state_for_findings(&[PlanningAnalysisFinding {
+                severity: PlanningAnalysisSeverity::Medium,
+                source: PlanningAnalysisSource::Risk,
+                code: PLANNING_ANALYSIS_CODE_COVERAGE_SIGNAL_PARTIAL.to_string(),
+                message: "warning".to_string(),
+                source_refs: Vec::new(),
+            }]),
+            PlanningAnalysisState::Findings
+        );
+        assert_eq!(
+            planning_analysis_state_for_findings(std::slice::from_ref(&finding)),
+            PlanningAnalysisState::Blocked
+        );
+        assert_eq!(
+            deduplicated_items(&[
+                "criterion-a".to_string(),
+                "criterion-a".to_string(),
+                " ".to_string(),
+                "criterion-b".to_string(),
+            ]),
+            vec!["criterion-a".to_string(), "criterion-b".to_string()]
+        );
+        assert_eq!(deduplicated.len(), 1);
+        assert_eq!(deduplicated[0].source_refs.len(), 2);
     }
 }

@@ -1,4 +1,4 @@
-# S23 - Experimental RecursiveMAS Provider Adapter
+# Experimental RecursiveMAS Provider Adapter
 
 ## Owner
 
@@ -184,3 +184,112 @@ No paper benchmark result substitutes for these checks.
 
 Latent-space execution is an optional provider experiment, never a Boundline
 control plane.
+
+# Note
+## Decision
+
+The real RecursiveMAS runtime must remain an external experimental provider.
+
+It should not enter Boundline core and should not be confused with S22 Recursive Stage Refinement Profiles.
+
+## Placement
+
+S17 is the right place for:
+
+- external RecursiveMAS provider
+- benchmark-oriented read-only capability
+- local hardware/resource requirement checks
+- provider metrics
+- limitations
+- reproducibility metadata
+- comparison against simpler Boundline-native refinement
+
+## Dependency alignment
+
+S17 should depend on:
+
+- S10 provider protocol
+- S11 event and eval substrate
+- S19 route telemetry and budget policy
+- S22 recursive stage refinement boundaries
+- persistent provider lifecycle if checkpoint loading makes one-shot execution impractical
+
+## Hard boundary
+
+Hidden state may exist inside the provider. It is never authoritative Boundline state.
+
+Boundline sends a bounded request and receives:
+
+- final decoded output
+- metrics
+- limitations
+- reproducibility metadata
+- evidence refs
+
+Boundline then validates, traces, accepts, rejects, or escalates.
+
+## Hard rule
+
+Latent-space execution is an optional provider experiment, never a Boundline control plane.
+
+# Note
+# Experimental RecursiveMAS Provider Adapter Note
+
+## Purpose
+
+This note clarifies how the RecursiveMAS experiment relates to the DS4-inspired roadmap additions.
+
+## Decision
+
+The real RecursiveMAS runtime must remain an external experimental provider.
+
+It should not enter Boundline core and should not be confused with `12-recursive-stage-refinement-profiles.md`.
+
+## Placement
+
+`17-experimental-recursivemas-provider-adapter.md` remains the right place for:
+
+- external RecursiveMAS provider
+- benchmark-oriented read-only capability
+- local hardware/resource requirement checks
+- provider metrics
+- limitations
+- reproducibility metadata
+- comparison against simpler Boundline-native refinement
+
+## Dependency Alignment
+
+This item should depend on:
+
+- `07-external-capability-provider-protocol.md`
+- `08-evals-and-runtime-observability.md`
+- `14-ai-gateway-and-inference-economics.md`
+- `12-recursive-stage-refinement-profiles.md`
+- a proven bounded lifecycle for long-lived local providers when checkpoint loading makes one-shot execution impractical
+
+## Hard Boundary
+
+Hidden state may exist inside the provider. It is never authoritative Boundline state.
+
+Boundline sends a bounded request and receives:
+
+- final decoded output
+- metrics
+- limitations
+- reproducibility metadata
+- evidence references
+
+Boundline then validates, traces, accepts, rejects, or escalates.
+
+## Explicit Non-Goals
+
+- no hidden-state storage in Boundline retrieval index
+- no RecursiveLink implementation in core Rust crates
+- no checkpoint bundling in Boundline releases
+- no default enablement
+- no code mutation in first slice
+- no replacement of `12-recursive-stage-refinement-profiles.md`
+
+## Hard Rule
+
+Latent-space execution is an optional provider experiment, never a Boundline control plane.

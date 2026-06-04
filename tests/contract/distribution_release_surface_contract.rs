@@ -20,7 +20,7 @@ fn release_surface_tracks_current_workspace_version_without_stale_status_heading
     assert!(changelog.contains(&changelog_heading));
     assert!(
         roadmap.contains(&format!(
-            "Delivered in {version}: Canon backlog packet gate, closure-limited blocking, and additive backlog-quality projections"
+            "Delivered in {version}: read-only planning-coherence gate, source-attributed findings, and withheld execution handoff on contradictions or producer gaps"
         ))
     );
     assert!(!roadmap.contains("## Current Status:"));

@@ -1,60 +1,60 @@
-# S21 - Session Memory And Repository Knowledge Distillation
+# Session Memory And Repository Knowledge Distillation
 
-## Owner
+## Integration Update
 
-Boundline, with Canon project memory integration
+This roadmap item must stay separate from:
 
-## Status
+- Persistent Context Snapshot Cache from `06-large-codebase-context-substrate.md`
+- Trace Compaction Policy from `08-evals-and-runtime-observability.md`
 
-B-level, after traces and project memory are stable
+Cache is not memory.
 
-## Speckit Seed Notes
+Trace compaction is not memory.
 
-- Seed role: confirmation-first memory hygiene for repeated delivery work.
-- First slice: propose one trace-linked operational memory entry, let the user
-  accept/reject/edit it, and show provenance in `inspect`.
-- Depends on: stable trace export from seed 08 and existing project-memory roots
-  documented under `tech-docs/project-memory-and-evidence-structure.md`.
-- De-duplication: this seed owns workspace-local memory proposals; durable
-  project memory, Canon promotion, and governed knowledge remain outside the
-  first Boundline slice.
+Memory is reviewed, accepted, trace-linked knowledge that may influence future work.
 
-## Strategic Role
+## Relationship To Other Roadmap Files
 
-This feature prevents repeated rediscovery without creating ungoverned memory blobs.
+| Related file | Relationship |
+|---|---|
+| `06-large-codebase-context-substrate.md` | May provide local cache and repo map, but those are not memory |
+| `08-evals-and-runtime-observability.md` | Provides trace refs and compaction, but compaction summaries are not memory |
+| `18-completion-verification-runtime.md` | May produce evidence refs that support future memory proposals |
+| `19-plan-execution-orchestration.md` | May generate repeated operational patterns worth proposing as memory |
 
-Memory should be trace-linked, reviewable, and scoped.
+## Explicit Non-Memory
 
-## Problem
+### Persistent Context Cache
 
-Long-running AI work loses knowledge across sessions:
+Examples:
 
-- build commands
-- test commands
-- repo conventions
-- known pitfalls
-- accepted patterns
-- previous failures
-- environment assumptions
-- useful trace conclusions
+- repo map
+- active spec snapshot
+- adapter capability cache
+- retrieval index state
+- last planning context
 
-But uncontrolled memory is dangerous:
+Reason: derived and rebuildable.
 
-- transient errors become permanent lore
-- stale assumptions persist
-- secrets may be stored
-- incorrect conclusions get reused
+### Trace Compaction Summaries
 
-## Core Scope
+Examples:
 
-- Confirmation-first memory writes
-- Trace-linked memory entries
-- Workspace-local repository knowledge notes
-- No transient error logs as memory
-- Memory classification
-- Expiry or review status
-- Canon promotion path for governed knowledge
-- Inspect memory source and confidence
+- summarized assistant transcript
+- compacted command output
+- archived trace fragments
+
+Reason: trace hygiene, not reusable knowledge.
+
+### Raw Logs
+
+Examples:
+
+- test logs
+- build logs
+- debug dumps
+
+Reason: evidence or diagnostics, not memory.
 
 ## Memory Types
 
@@ -93,69 +93,37 @@ Examples:
 - architecture decision
 - project standard
 
-## Write Protocol
+## Memory Protocol Reminder
 
 Before saving memory:
 
-1. Summarize proposed memory.
-2. Cite trace or evidence source.
-3. Ask for confirmation unless policy allows auto-capture.
-4. Classify memory type.
-5. Set authority and expiry/review status.
-6. Redact secrets.
-7. Store with stable ID.
+1. summarize proposed memory
+2. cite trace or evidence source
+3. ask for confirmation unless policy allows auto-capture
+4. classify memory type
+5. set authority and expiry/review status
+6. redact secrets
+7. store with stable ID
 
-## Algorithms And Techniques
+## Acceptance Criteria Additions
 
-### Distillation
-
-Use bounded summarization over traces:
-
-- decisions
-- commands
-- failures
-- fixes
-- unresolved findings
-- next actions
-
-### Memory Hygiene
-
-Reject:
-
-- raw logs
-- raw secrets
-- one-off transient errors
-- unverified assumptions
-- emotional or conversational context
-
-### Retrieval
-
-Retrieve memory by:
-
-- command intent
-- lifecycle phase
-- file path
-- guidance pillar
-- previous finding
-- Canon project memory link
-
-## Acceptance Criteria
-
-- Boundline can propose memory entries from trace.
-- User can accept/reject/edit before write.
-- Memory entries cite trace refs.
-- Memory does not store raw transient logs by default.
-- Memory can be promoted or linked to Canon when governed.
+- Cache entries are not promoted to memory without source evidence and review.
+- Trace summaries are not treated as memory.
+- Raw logs are not saved as memory.
+- Memory entries cite trace references.
 - Inspect shows memory provenance and authority.
 - Stale memory can be marked deprecated.
 
 ## Risks
 
 - Memory becomes stale.
-- Incorrect heuristics become "truth".
+- Incorrect heuristics become truth.
 - Users skip review.
 - Memory overlaps poorly with Canon project memory.
+- Cache or trace summaries are mistaken for governed knowledge.
 
-## Hard Rule
+## Hard Rules
 
-Memory is not governance. Canon governs knowledge.
+- Memory is not governance. Canon governs knowledge.
+- Cache is not memory.
+- Trace compaction is not memory.

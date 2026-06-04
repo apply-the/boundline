@@ -1,6 +1,6 @@
 # Plan
 
-Boundline 0.69.0 makes planning readiness a runtime gate, not a chat
+Boundline 0.70.0 makes planning readiness a runtime gate, not a chat
 convention.
 
 ## What `plan` Does
@@ -14,6 +14,10 @@ convention.
 - records `backlog_quality_state`, `backlog_quality_findings`,
   `backlog_task_count`, `backlog_mvp_scope`, and `backlog_unmapped_items` when
   a Canon backlog packet is expected or available
+- records `planning_analysis_state`, `planning_analysis_findings`, and
+  `planning_analysis_coverage` after the runtime checks goal outcomes,
+  validation anchors, execution handoff inputs, backlog sequencing, and any
+  governed evidence already present in the session
 - stops on one `phase_request` when a planning gate needs missing validation,
   missing backlog handoff evidence, or another blocking planning input
 - keeps execution handoff withheld until the gate clears
@@ -21,4 +25,6 @@ convention.
 ## What To Read When It Blocks
 
 Use `status`, `next`, and `inspect` to see the same runtime decision from
-different surfaces. Do not invent execution from chat history.
+different surfaces. Do not invent execution from chat history, and do not
+treat `planning_analysis_findings` as permission to rewrite Canon or the plan
+outside the runtime repair path.

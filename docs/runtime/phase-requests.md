@@ -1,6 +1,6 @@
 # Phase Requests
 
-Boundline 0.69.0 uses `phase_request` as the single recovery handoff for goal
+Boundline 0.70.0 uses `phase_request` as the single recovery handoff for goal
 clarification, plan-quality clarification, backlog-quality clarification, and
 planning-stage artifact requests.
 
@@ -25,3 +25,12 @@ When a full Canon backlog packet is present but still lacks a governed
 execution handoff or equivalent downstream-ready evidence, the runtime keeps
 planning non-terminal, preserves the additive backlog-quality fields, and asks
 exactly one focused follow-up instead of inventing executable work.
+
+## Planning-Analysis Recovery
+
+When planning analysis blocks execution, Boundline preserves
+`planning_analysis_state`, `planning_analysis_findings`, and
+`planning_analysis_coverage` in the session and routes back through the same
+planning continuation model. The runtime may ask for one missing authored input
+or require a regenerated Canon packet, but it must not fabricate Canon-owned
+evidence or skip directly to execution.
