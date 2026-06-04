@@ -334,7 +334,7 @@ fn cross_repo_speckit_binary_smoke_bridges_real_specify_plan_and_completes_run()
     assert!(plan_text.contains("framework_adapter_workflow_id: speckit-planning"), "{plan_text}");
     assert!(
         plan_text.contains(
-            "framework_adapter_produced_artifacts: specs/067-plan-quality-contract/spec.md, specs/067-plan-quality-contract/plan.md, specs/067-plan-quality-contract/tasks.md, .specify/workflows/speckit/planning.yml"
+            "framework_adapter_produced_artifacts: specs/068-backlog-contract/spec.md, specs/068-backlog-contract/plan.md, specs/068-backlog-contract/tasks.md, .specify/workflows/speckit/planning.yml"
         ),
         "{plan_text}"
     );

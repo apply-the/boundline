@@ -1,217 +1,89 @@
 # Getting Started
 
-This page gets you from no local Boundline run to one inspected bounded
-session. [[Quick Start|Quick-Start]] is the shortest path; this page is the
-guided walkthrough.
+This guide walks you through the mental model and your first serious workflow with Boundline. 
 
-## Quick Start
+If you prefer a recipe to just get something running in 5 minutes without any theory, head over to the [Quickstart](./Quickstart).
 
-For the absolute shortest route, see [[Quick Start|Quick-Start]]. The minimum
-sequence is:
+## What Boundline Does
 
-```bash
-boundline doctor --install
-cd <workspace>
-boundline init --assistant codex
-boundline goal --goal "Fix the failing add test"
-boundline plan
-boundline run
-boundline config show --workspace <workspace>
-```
+Boundline transforms non-deterministic AI chat loops into predictable, traceable, and governable software delivery processes.
 
-The sections below explain each step in detail.
+Instead of keeping track of "what the AI just did" in an ephemeral chat window, Boundline forces an explicit workflow backed by local state. Every objective is tracked as a session, every step is verified against a drafted plan, and every outcome is durably recorded in local traces.
 
-## 1. Install Or Build Boundline
+## Before You Start
 
-Use a release channel when you want the supported product path:
+Boundline assumes you are operating inside a Git repository. It leverages your existing codebase context, so you get the best results when running it inside an initialized project rather than an empty folder.
 
-```bash
-brew tap apply-the/boundline
-brew install boundline
-```
+## Install
 
-On Windows, use the published winget package when the release manifest is
-available:
+First, you need the Boundline CLI. Refer to the [Installation](./Installation) page for instructions on setting up the official packages for Linux, macOS, or Windows.
 
-```powershell
-winget install ApplyThe.Boundline
-```
-
-For source validation or unreleased branches:
-
-```bash
-git clone https://github.com/apply-the/boundline.git
-cd boundline
-cargo install --path .
-```
-
-## 2. Verify The Install
-
-Run the install diagnostic command before changing a workspace:
-
+Once installed, verify it's working:
 ```bash
 boundline doctor --install
 ```
 
-Read the grouped output literally. The important fields are:
+## Initialize Your First Workspace
 
-- `boundline_version`
-- `supported_canon_version`
-- `companion_state`
-- `actions`
-
-The current Boundline line documents Canon `0.63.0` support for the
-machine-facing `canon governance start|refresh|capabilities --json` `v1`
-surface.
-
-## 3. Initialize The Workspace
-
-From the target repository:
+Boundline keeps state local to your repository. Before you can start a session, you must initialize the workspace:
 
 ```bash
-cd <workspace>
+cd your-repository
 boundline init --assistant codex
 ```
 
-Initialize only when you want Boundline to write workspace-local state, route
-defaults, assistant packages, or setup metadata.
+This creates the default directories (`docs/project/`, `docs/evidence/`), writes a workspace-level configuration, and scaffolds any requested assistant plugins.
 
-The active session state remains `.boundline/session.json`.
+*For a deep dive on how to perfectly tune a repository for Boundline, read [First Workspace](./first-workspace).*
 
-Init also creates `docs/project/` and `docs/evidence/` as the default
-repo-visible document roots. Use `docs/project/` for stable reusable inputs and
-`docs/evidence/` for durable feature outputs. See
-[[Project Memory Structure|Project-Memory-Structure]].
+## Understand goal, plan, run, status
 
-If you want local semantic expansion plus explicit derived-index lifecycle
-management in the same workspace, enable it deliberately after init:
+Boundline breaks work into explicit, discrete stages:
 
-```bash
-boundline config set-semantic-acceleration --scope workspace --policy local
-boundline index status --workspace <workspace>
-boundline index refresh --workspace <workspace>
-```
+1. **`goal`**: Records the objective for the current session. What are we trying to achieve?
+2. **`plan`**: Drafts bounded work. Boundline analyzes the codebase and outputs a concrete, step-by-step plan.
+3. **`run`**: Executes the next approved step in the plan.
+4. **`status`**: Inspects the current state of the session and tells you what happens next.
 
-If you also want Git freshness hooks to mark the derived index stale, rerun
-init with:
+## Your First Workflow
 
-```bash
-boundline init --workspace <workspace> --semantic-index-hook-action mark-stale
-```
+Let's execute a real session end-to-end.
 
-## 4. Optional Provider Auth
+1. **Start the session**:
+   ```bash
+   boundline goal --goal "Refactor the authentication logic into a new module"
+   ```
+2. **Generate the plan**:
+   ```bash
+   boundline plan
+   ```
+   *Boundline will scan the repository and build an execution plan. If the plan
+   lacks credibility, if the Canon backlog packet is closure-limited, or if the
+   full backlog packet still lacks execution-handoff evidence, Boundline will
+   stop and prompt you with a `phase_request`.*
+3. **Execute the work**:
+   ```bash
+   boundline run
+   ```
+   *This executes the first step. Run it again for subsequent steps.*
+4. **Verify the outcome**:
+   ```bash
+   boundline status
+   boundline inspect
+   ```
+   *`status` tells you if the goal is complete, while `inspect` provides the trace-backed explanation of everything that occurred.*
 
-If the chosen runtime needs a stored credential, authenticate before the first
-session:
+## Common Next Steps
 
-```bash
-boundline models auth login --provider github-copilot
-boundline models auth status
-```
+Once you are comfortable with the basic lifecycle, explore these advanced topics:
 
-In the current public slice, the login surface supports `github-copilot`.
-These credentials are user-scoped, so they can be reused across repositories.
+- Learn how to interact with Boundline via chat interfaces using [Assistant Command Packs](../../assistant/README).
+- Explore [Common Workflows](./common-workflows) to handle complex tasks, large refactors, or debugging sessions.
+- Read about [Core Concepts](./core-concepts) to understand how Boundline integrates with Canon governance rules.
 
-## 5. Optional Readiness Probe
+## Troubleshooting
 
-Use `probe` when you want a read-only readiness answer before session work:
-
-```bash
-boundline probe
-```
-
-`probe` tells you whether the workspace still needs bootstrap, needs repair, or
-is ready for `goal`, `plan`, or `run`.
-
-When local semantic acceleration is enabled, `probe` also surfaces derived-
-index health and hook state so assistants can distinguish bootstrap gaps from a
-degraded local vector surface.
-
-## 5a. Optional Framework Adapter Setup
-
-If the workspace should use one explicit framework adapter, register it after
-init instead of editing `.boundline/config.toml` directly:
-
-```bash
-boundline adapter add speckit --workspace <workspace>
-boundline adapter show --workspace <workspace> --json
-```
-
-Read the adapter JSON report literally:
-
-- `compatibility_line` is the host-owned protocol line the adapter claims
-- `supported_transports` must include V1 JSON over stdin/stdout
-- `declared_stage_overrides` and `declared_hook_subscriptions` tell you what
-	the adapter may own or observe
-- `config_state`, `interactive_resolution`, and `value_count` tell you whether
-	setup is complete and how it was resolved
-
-Current public repositories for this boundary:
-
-- [boundline-framework-template](https://github.com/apply-the/boundline-framework-template): use this as the starting scaffold for a custom compatible adapter.
-- [boundline-adapter-speckit](https://github.com/apply-the/boundline-adapter-speckit): use this when the workspace should bridge into the Speckit implementation rather than the native planner or runner.
-
-The V1 adapter boundary is intentionally narrow: one-shot subprocess commands,
-standard success or error envelopes on stdout, optional structured stderr for
-trace enrichment only, and no graceful shutdown or resident daemon lifecycle.
-
-## 6. Run One Minimal Session
-
-Use the explicit session-native flow when you want the normal operator path:
-
-```bash
-boundline goal --goal "Fix the failing add test"
-boundline plan
-boundline run
-boundline status
-boundline inspect
-```
-
-Plain English version:
-
-- `goal` records the current bounded objective.
-- `plan` assembles context and drafts bounded work.
-- `run` executes the next approved step.
-- `status` shows the current state and next command.
-- `inspect` shows the trace-backed explanation.
-
-When semantic acceleration is enabled, `status` and `inspect` also surface the
-derived-index state, semantic capability, fallback disclosure, and recovery
-guidance.
-
-Planning and execution can stop explicitly when quality or context is not yet
-credible. When you see gate fields such as `goal_quality_state`,
-`plan_quality_state`, `backlog_quality_state`, or `planning_analysis_state`,
-follow the printed continuation instead of forcing the run.
-
-If you want a shorter path after init, use the fast path deliberately:
-
-```bash
-boundline run --goal "Fix the failing add test"
-```
-
-If a selected adapter is active, `status` and `inspect` also surface the stage
-execution source, adapter ID, routing reason, and hook-delivery outcomes.
-
-## 7. Check That Setup Worked
-
-After the first run, verify:
-
-```bash
-boundline status
-boundline inspect
-```
-
-Look for:
-
-- a clear session status
-- a next command or explicit terminal state
-- trace location
-- blocked, degraded, or clarification-required follow-up when present
-- context credibility and validation posture
-
-## Next Pages
-
-- [[Daily Operating Guide|Daily-Operating-Guide]] for the command loop
-- [[Installation And Setup|Installation-And-Setup]] for setup variants
-- [[Troubleshooting]] when diagnostics, planning, or provider setup fails
+If you encounter issues during installation, initialization, or session execution:
+- Run `boundline doctor` to verify system health.
+- Run `boundline probe` to check workspace readiness.
+- See the [Troubleshooting](../adapters/troubleshooting) guide for recovery paths.

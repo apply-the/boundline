@@ -18,7 +18,11 @@ fn release_surface_tracks_current_workspace_version_without_stale_status_heading
     let changelog_heading = format!("## [{version}] - ");
     assert!(cargo_toml.contains(&format!("version = \"{version}\"")));
     assert!(changelog.contains(&changelog_heading));
-    assert!(roadmap.contains(&format!("Delivered in {version}: first plan-readiness gate")));
+    assert!(
+        roadmap.contains(&format!(
+            "Delivered in {version}: Canon backlog packet gate, closure-limited blocking, and additive backlog-quality projections"
+        ))
+    );
     assert!(!roadmap.contains("## Current Status:"));
     assert!(windows_release_workflow.contains(
         "git clone --depth 1 --branch \"$canonVersion\" https://github.com/apply-the/canon canon-source"

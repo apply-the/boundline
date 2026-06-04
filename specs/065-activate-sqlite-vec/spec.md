@@ -3,7 +3,7 @@
 **Feature Branch**: `065-activate-sqlite-vec`  
 **Created**: 2026-05-30  
 **Status**: Draft  
-**Input**: User description: "Create a feature spec from roadmap/features/01-sqlite-vec-activation-and-db-merge-strategy.md"
+**Input**: User description: "Create a feature spec from feat-sqlite-vec-activation-and-db-merge-strategy.md"
 
 ## Clarifications
 

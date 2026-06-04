@@ -8,11 +8,12 @@ members = [
 resolver = "3"
 
 [workspace.package]
-# Published release metadata tracks the current public tag; Ollama-ready init
-# presets are tracked under CHANGELOG 0.68.0.
-version = "0.68.0"
+# Published release metadata tracks the current public tag; backlog-readiness
+# gate closure is tracked under CHANGELOG 0.69.0.
+version = "0.69.0"
 edition = "2024"
 license = "MIT"
+description = "Bounded cognitive runtime for AI-assisted software delivery."
 
 [workspace.dependencies]
 clap = { version = "4", features = ["derive"] }
@@ -36,6 +37,7 @@ name = "boundline"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+description.workspace = true
 
 [features]
 default = []
@@ -58,3 +60,16 @@ reqwest = { workspace = true, features = ["blocking"] }
 
 [dev-dependencies]
 rusqlite.workspace = true
+
+[package.metadata.deb]
+name = "boundline"
+maintainer = "Apply The"
+copyright = "2026, Apply The"
+license-file = ["LICENSE", "4"]
+depends = "$auto"
+extended-description = "Bounded cognitive runtime for AI-assisted software delivery."
+section = "utility"
+priority = "optional"
+assets = [
+    ["target/release/boundline", "usr/bin/boundline", "755"]
+]

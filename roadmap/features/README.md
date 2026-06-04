@@ -31,8 +31,9 @@ Use the local Speckit templates as the source of truth when converting a seed:
 
 | Lane | Seeds | Purpose | First Speckit Slice |
 |---|---|---|---|
-| Delivered | 03 | Planning readiness gate | Shipped in 0.68.0; preserves one-question `phase_request` recovery and additive plan-quality projections. |
-| Now | 04, 05 | Planning readiness gates | Surface one runtime gate at a time and block invalid execution handoff. |
+| Delivered | 03 | Planning readiness gate | Shipped in 0.67.0; preserves one-question `phase_request` recovery and additive plan-quality projections. |
+| Delivered | 04 | Backlog readiness gate | Shipped in 0.69.0; validates Canon backlog packets before execution handoff and preserves additive backlog-quality projections. |
+| Now | 05 | Planning readiness gates | Surface one runtime gate at a time and block invalid execution handoff. |
 | Now | 08 | Measurement substrate | Add local event schema plus a tiny golden eval corpus before expanding AI behavior. |
 | Now | 06 | Large-repo safety | Refuse unsafe huge reads, add paged reads, and show omitted context in inspect. |
 | Next | 07 | Provider boundary and setup | Implement discovery, explicit operator registration, health, and one read-only provider lifecycle before mutation providers. |

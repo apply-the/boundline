@@ -6,7 +6,7 @@
 
 **Status**: Draft
 
-**Input**: User description from `roadmap/features/02-agentic-framework-integration.md`
+**Input**: User description from `spec-agentic-framework-integration.md`
 
 ## Clarifications
 

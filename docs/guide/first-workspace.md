@@ -1,107 +1,126 @@
-# Quick Start
+# First Workspace
 
-Use this page for the shortest credible path. If you want the guided version,
-read [[Getting Started|Getting-Started]].
+This guide explains how to properly prepare a repository for Boundline, what files are created, how to choose an assistant host, and how to avoid common setup errors.
 
-## 1. Verify The Install
+## Workspace Initialization
 
-```bash
-boundline doctor --install
-```
-
-Do not skip this. It tells you whether the installed Boundline binary and the
-documented Canon pairing are ready.
-
-## 2. Initialize The Workspace
+Workspace setup is local to the repository you operate on:
 
 ```bash
 cd <workspace>
 boundline init --assistant codex
-boundline config set-semantic-acceleration --scope workspace --policy local
-boundline index status --workspace .
 ```
 
-That bootstraps `.boundline/` and, when requested, the repo-local assistant
-surface for the selected host.
+Use `init` when you want Boundline to create local state, default directories, and optional setup
+surfaces. Depending on flags, it writes:
 
-For local Ollama routing on an Apple Silicon machine with 16 GB unified memory,
-pull the small preset models and initialize with the preset:
+- `.boundline/config.toml` (workspace-level configuration)
+- `docs/project/` (default root for stable reusable inputs)
+- `docs/evidence/` (default root for durable feature outputs)
+- repo-local assistant package folders such as `.codex-plugin/` or `.claude-plugin/`
 
-```bash
-ollama pull qwen2.5:7b
-ollama pull qwen2.5-coder:7b
-boundline init --ollama-profile small
-```
+> [!NOTE]
+> `init` does not write `.boundline/session.json` or `.boundline/traces/`. Those are created automatically when you start an active session via the `boundline goal` command.
 
-Use `medium` for a 64 GB local workstation and `large` for a 96/128 GB machine.
-Each preset pins planning, implementation, verification, and review routes in
-workspace config while keeping the Ollama endpoint in provider env settings.
+If you only need the runtime state and not a host package yet, `boundline init`
+without `--assistant` is still valid.
 
-## 3. Optional Provider Auth
+## Optional Provider Auth
 
-Use this only when the chosen runtime needs a stored provider credential:
+Use provider auth when a selected runtime needs a stored credential:
 
 ```bash
 boundline models auth login --provider github-copilot
 boundline models auth status
 ```
 
-These credentials are user-scoped, not repository-scoped.
+These credentials are user-scoped. They are stored outside the repository so a
+single login can be reused across multiple workspaces.
 
-## 4. Optional Readiness Probe
+Use removal when you want to clear a stored profile explicitly:
 
-Use `probe` when you want a read-only answer before starting or resuming:
+```bash
+boundline models auth remove --provider github-copilot
+```
+
+## Optional Readiness Probe
+
+Use `probe` as a read-only setup check before the first bounded session:
 
 ```bash
 boundline probe
 ```
 
-If `probe` says bootstrap is still required, go back to `init`. If it says
-repair is needed, follow the printed action. If it says the session is ready,
-continue with the normal loop.
+If probe reports bootstrap is still required, return to `init`. If it reports a
+repair-needed state, follow the printed action. If it reports the session path
+is ready, continue with `goal`, `plan`, and `run`.
 
-If the workspace uses local semantic retrieval, add:
+When local semantic acceleration is enabled, `probe` also surfaces derived-index health and hook state so assistants can distinguish bootstrap gaps from a degraded local vector surface.
 
-```bash
-boundline index refresh --workspace .
-boundline index doctor --workspace .
-```
+## Optional Framework Adapter Setup
 
-Use `refresh` to rebuild bounded local evidence and `doctor` when the manifest,
-tracked-file hygiene, or vector capability looks wrong.
-
-## 5. Run One Bounded Session
+If the workspace should use one explicit framework adapter, register it after init instead of editing `.boundline/config.toml` directly:
 
 ```bash
-boundline goal --goal "Fix the failing add test"
-boundline plan
-boundline run
-boundline status
-boundline inspect
+boundline adapter add speckit --workspace <workspace>
+boundline adapter show --workspace <workspace> --json
 ```
 
-This is the primary product path.
+## Global Assistant Package Setup
 
-If you want the shortest path after init, you can use:
+Global assistant packages are user-scoped and available before workspace init
+when the host supports them:
 
 ```bash
-boundline run --goal "Fix the failing add test"
+boundline assistant install --host codex --scope user
+boundline assistant install --host claude --scope user
+boundline assistant install --host cursor --scope user
 ```
 
-Treat that as a fast path, not the default mental model.
+Global commands are intentionally limited to readiness and bootstrap surfaces
+such as `/boundline:init`, `/boundline:doctor`, `/boundline:help`,
+`/boundline:status`, and `/boundline:continue`.
 
-For an explicit planning seed during bootstrap, use `planning=copilot:gpt-4o`:
+## Repository-Local Assistant Setup
+
+Repository-local packages are generated into a workspace by `boundline init
+--assistant <host>`.
+
+Typical package folders:
+
+- Claude Code: `.claude-plugin/`
+- Codex: `.codex-plugin/`
+- Cursor: `.cursor-plugin/`
+- Copilot prompt environments: `.copilot-prompts/` plus `.github/prompts/`
+
+The CLI remains authoritative even when commands are exposed through a chat
+host.
+
+## Canon-Default Setup
+
+Use Canon options during init only when governed delivery is expected:
 
 ```bash
-boundline init --assistant copilot --route planning=copilot:gpt-4o
+boundline init \
+  --assistant codex \
+  --canon-mode-selection auto-confirm \
+  --risk medium \
+  --zone engineering \
+  --owner platform
 ```
 
-## What This Path Gives You
+The current release documents Canon `0.61.0` support for the machine-facing
+`canon governance start|refresh|capabilities --json` `v1` surface.
 
-- explicit session state under `.boundline/`
-- a bounded plan built from repository evidence
-- read-side status and trace inspection
-- explicit stop conditions when context, validation, or governance is not ready
+## Troubleshooting Setup Failures
 
-Next step: read [[Daily Operating Guide|Daily-Operating-Guide]] when you want
-the normal loop, follow-through, and recovery behavior in more detail.
+Use the printed command from `doctor`, `probe`, or `status` first. Common setup
+failures include:
+
+- blocked install diagnostics
+- workspace not writable
+- assistant package generated but not registered by the host
+- missing provider authentication
+- trying to use repo-local commands before `init`
+
+See [Troubleshooting](../adapters/troubleshooting) for recovery paths.

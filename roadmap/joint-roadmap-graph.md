@@ -11,9 +11,6 @@ flowchart TD
     classDef boundline fill:#1f6b4e,stroke:#333,stroke-width:2px,color:#fff
 
     subgraph Core Foundations
-        B02["Boundline 02<br/>(Framework Integration)"]:::boundline
-        B03["Boundline 03<br/>(Plan Quality)"]:::boundline
-        B04["Boundline 04<br/>(Backlog Contract)"]:::boundline
         B05["Boundline 05<br/>(Plan Analysis)"]:::boundline
         B06["Boundline 06<br/>(Context Substrate)"]:::boundline
     end
@@ -47,7 +44,6 @@ flowchart TD
     end
 
     subgraph Advanced Workflows & Policy
-        C01["Canon 01<br/>(Systematic Debugging)"]:::canon
         C04["Canon 04<br/>(Brainstorming Ideation)"]:::canon
         C05["Canon 05<br/>(Policy Shaping)"]:::canon
         B09["Boundline 09<br/>(Contextual Help)"]:::boundline
@@ -67,15 +63,13 @@ flowchart TD
     B07 -.-> B17
     
     C06 -.->|Design for| B08
-    C02 -.->|Inherits rules| C01
-    B18 -.->|Enhances| C01
     C05 -.->|Pairs well| C06
 ```
 
 ## Execution Order and Dependencies
 
-1. **Core Foundations (Boundline 02-06)**
-   - The foundational components for repository structure, configuration, basic backlog/plan logic, and context ingestion. These are largely independent precursors to execution engines.
+1. **Core Foundations (Boundline 04-06)**
+   - The next foundational components for backlog gating, cross-artifact plan analysis, and large-repository context handling. These are the remaining precursors before deeper execution-engine work.
 2. **Canon 02 + Boundline 18 (Verification Pair)**
    - The first crucial execution juncture. Canon defines the `claim -> proof -> evidence_ref` contract, while Boundline implements the runtime that executes the proof and blocks task completion.
 3. **Boundline 19 (Execution Orchestrator)**
@@ -86,6 +80,5 @@ flowchart TD
    - The actual external provider setup (MCP, setup, activation, health). `Boundline 07` comes first, followed by the security layer `Boundline 13` (secret inheritance and sandbox). It establishes the plugin layer that powers B14, B15, and B17.
 6. **Canon 07 (After provider setup)**
    - Arrives at the end to close the loop on the CLI side (Canon init) by gathering local routing choices, delegating execution back to Boundline.
-7. **Independent Features (Canon 01, 04, 05, 06 & Boundline 08-12, 16)**
+7. **Independent Features (Canon 04, 05, 06 & Boundline 08-12, 16)**
    - These features cover autonomous workflows, policy, observability, and advanced orchestrator additions. They do not block the core engine loop and can be parallelized based on priority. 
-   - *(Note on Canon 01: It has a soft dependency on Canon 02. While it can start immediately without hard blockers, once Canon 02 lands, Canon 01 will automatically inherit its rigid verification gates).*

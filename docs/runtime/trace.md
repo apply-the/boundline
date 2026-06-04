@@ -1,6 +1,6 @@
 # Traces And Inspectability
 
-Boundline 0.68.0 traces make delivery explainable. They preserve what the runtime decided, what it used as evidence, what it ran, what it skipped, what failed, and what should happen next.
+Boundline 0.69.0 traces make delivery explainable. They preserve what the runtime decided, what it used as evidence, what it ran, what it skipped, what failed, and what should happen next.
 
 ## Where Traces Live
 
@@ -30,6 +30,8 @@ Depending on the command and lifecycle phase, traces can include:
 - plan state and planning rationale
 - verification strategy
 - plan-quality state, findings, assumptions, and the emitted `phase_request`
+- backlog-quality state, findings, task count, MVP scope, unmapped items, and
+  any withheld execution handoff
 - route owner and route config projection
 - selected guidance and guardian sources
 - loaded and skipped packs

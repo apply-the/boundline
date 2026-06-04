@@ -18,7 +18,7 @@ Keep this boundary explicit:
 Canon is not the orchestrator and not the product entrypoint. A Boundline
 install can stay fully usable without Canon on the default local path.
 
-The current Boundline adapter documents Canon `0.63.0` support for the
+The current Boundline adapter documents Canon `0.67.0` support for the
 `canon governance start|refresh|capabilities --json` `v1` surface. That is a
 bounded compatibility target, not a claim of total Canon feature parity.
 
@@ -77,11 +77,13 @@ planning gates such as `goal_quality_state`, `plan_quality_state`,
 handoffs such as `phase_request`, `assistant_resume_command`, and
 `assistant_next_command`.
 
-Plan quality is now the first planning-readiness gate in the 0.68.0 line. If
-the active plan lacks a credible validation strategy or another blocking
-planning input, the runtime keeps planning non-terminal, emits one
-`phase_request`, and preserves the blocked assessment in status, inspect, and
-orchestration snapshots until the operator answers.
+The 0.69.0 line keeps plan quality as the first planning-readiness gate and
+adds backlog quality immediately after it. If the active plan lacks a credible
+validation strategy, or if the Canon backlog packet is closure-limited or
+still lacks execution-handoff evidence, the runtime keeps planning
+non-terminal, emits one `phase_request` when recovery is possible, and
+preserves the blocked assessment in status, inspect, and orchestration
+snapshots until the operator answers or regenerates Canon output.
 
 ## Host Surface Boundary
 

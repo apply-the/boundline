@@ -1,10 +1,13 @@
+use std::fs;
 use std::path::Path;
 
 use boundline::domain::brief::{AuthoredBriefResolutionState, GoalQualityAssessment};
 use boundline::domain::flow::FlowStepMetadata;
 use boundline::domain::governance::{
-    CanonCapabilitySnapshot, CanonModeSummary, CanonResultActionSummary, CompactedCanonMemory,
-    MemoryCredibilityState, PacketReuseBindingReason,
+    CanonCapabilitySnapshot, CanonModeSelectionPreference, CanonModeSummary,
+    CanonResultActionSummary, CompactedCanonMemory, GovernedDocumentRef, GovernedSessionLifecycle,
+    MemoryCredibilityState, PacketReuseBindingReason, backlog_quality_snapshot_for_lifecycle,
+    planning_stage_key_for_mode,
 };
 use boundline::domain::limits::RunLimits;
 use boundline::domain::reasoning::{
@@ -36,6 +39,7 @@ use boundline::{
     selected_stage_policy, supported_canon_modes_for_stage,
 };
 use serde_json::json;
+use uuid::Uuid;
 
 fn sample_record() -> GovernedStageRecord {
     GovernedStageRecord {
@@ -454,63 +458,411 @@ fn packet_readiness_defaults_to_incomplete_without_expected_documents() {
 }
 
 #[test]
-fn backlog_quality_blocks_reusable_packet_without_stable_task_ids() {
+fn backlog_quality_blocks_closure_limited_backlog_packets() {
     let assessment = assess_backlog_quality(
         Some(PacketReadiness::Reusable),
-        &[".canon/runs/backlog/backlog.md".to_string()],
+        &[
+            ".canon/artifacts/run/backlog/01-backlog-overview.md".to_string(),
+            ".canon/artifacts/run/backlog/08-planning-risks.md".to_string(),
+        ],
         &[],
-        &["# Backlog\n\n- Implement the session store in src/session.rs".to_string()],
+        &[
+            concat!(
+                "# Backlog Overview\n\n",
+                "## Decomposition Posture\n\nrisk-only-packet\n\n",
+                "## Execution Handoff\n\nhandoff withheld for closure reasons\n"
+            )
+            .to_string(),
+            "# Planning Risks\n\n- Closure evidence is incomplete.\n".to_string(),
+        ],
     );
 
     assert_eq!(assessment.state.as_str(), "blocked");
-    assert_eq!(assessment.findings, vec!["missing_stable_task_ids".to_string()]);
+    assert_eq!(assessment.findings, vec!["closure_limited_backlog_packet".to_string()]);
     assert_eq!(assessment.task_count, None);
 }
 
 #[test]
-fn backlog_quality_requires_dependency_order_and_mvp_scope() {
+fn backlog_quality_requires_execution_handoff_for_full_packets() {
     let assessment = assess_backlog_quality(
         Some(PacketReadiness::Reusable),
-        &[".canon/runs/backlog/backlog.md".to_string()],
+        &[
+            ".canon/artifacts/run/backlog/01-backlog-overview.md".to_string(),
+            ".canon/artifacts/run/backlog/02-epic-tree.md".to_string(),
+            ".canon/artifacts/run/backlog/03-capability-to-epic-map.md".to_string(),
+            ".canon/artifacts/run/backlog/04-dependency-map.md".to_string(),
+            ".canon/artifacts/run/backlog/05-delivery-slices.md".to_string(),
+            ".canon/artifacts/run/backlog/06-sequencing-plan.md".to_string(),
+            ".canon/artifacts/run/backlog/07-acceptance-anchors.md".to_string(),
+            ".canon/artifacts/run/backlog/08-planning-risks.md".to_string(),
+        ],
         &[],
-        &[concat!(
-            "# Backlog\n\n",
-            "- [ ] T001 [US1] Implement session model in src/domain/session.rs\n",
-            "- [ ] T002 [US1] Render status in src/cli/output.rs\n"
-        )
-        .to_string()],
+        &[
+            concat!(
+                "# Backlog Overview\n\n",
+                "## Decomposition Posture\n\nfull-packet\n\n",
+                "## Execution Handoff\n\nhandoff unavailable\n"
+            )
+            .to_string(),
+            "# Epic Tree\n\n- Epic AUTH-SESSION: harden revocation boundaries.\n".to_string(),
+            "# Capability To Epic Map\n\n- Auth session revocation -> AUTH-SESSION\n".to_string(),
+            "# Dependency Map\n\n- [SLICE-AUTH-001] depends on rollback guard rails.\n".to_string(),
+            concat!(
+                "# Delivery Slices\n\n",
+                "- [SLICE-AUTH-001] Harden rollback-safe session revocation.\n",
+                "- [SLICE-AUTH-002] Surface revocation evidence for operators.\n"
+            )
+            .to_string(),
+            concat!(
+                "# Sequencing Plan\n\n",
+                "1. [SLICE-AUTH-001] first because it hardens the mutation boundary.\n",
+                "2. [SLICE-AUTH-002] after the revoke path is stable.\n"
+            )
+            .to_string(),
+            concat!(
+                "# Acceptance Anchors\n\n",
+                "- [SLICE-AUTH-001] Revocation stays rollback-safe.\n",
+                "- [SLICE-AUTH-002] Evidence is externally reviewable.\n"
+            )
+            .to_string(),
+            "# Planning Risks\n\n- Verification posture is still underspecified.\n".to_string(),
+        ],
     );
 
     assert_eq!(assessment.state.as_str(), "clarification_required");
-    assert_eq!(
-        assessment.findings,
-        vec!["missing_dependency_order".to_string(), "missing_mvp_scope".to_string()]
-    );
+    assert_eq!(assessment.findings, vec!["missing_execution_handoff".to_string()]);
     assert_eq!(assessment.task_count, Some(2));
+    assert_eq!(assessment.mvp_scope.as_deref(), Some("SLICE-AUTH-001"));
 }
 
 #[test]
 fn backlog_quality_accepts_valid_backlog_document() {
     let assessment = assess_backlog_quality(
         Some(PacketReadiness::Reusable),
-        &[".canon/runs/backlog/backlog.md".to_string()],
+        &[
+            ".canon/artifacts/run/backlog/01-backlog-overview.md".to_string(),
+            ".canon/artifacts/run/backlog/02-epic-tree.md".to_string(),
+            ".canon/artifacts/run/backlog/03-capability-to-epic-map.md".to_string(),
+            ".canon/artifacts/run/backlog/04-dependency-map.md".to_string(),
+            ".canon/artifacts/run/backlog/05-delivery-slices.md".to_string(),
+            ".canon/artifacts/run/backlog/06-sequencing-plan.md".to_string(),
+            ".canon/artifacts/run/backlog/07-acceptance-anchors.md".to_string(),
+            ".canon/artifacts/run/backlog/08-planning-risks.md".to_string(),
+            ".canon/artifacts/run/backlog/09-execution-handoff.md".to_string(),
+        ],
         &[],
-        &[concat!(
-            "# Backlog\n\n",
-            "MVP: US1 session status projection\n\n",
-            "Dependencies: T001 before T002\n\n",
-            "- [ ] T001 [US1] Implement session model in src/domain/session.rs\n",
-            "- [ ] T002 [US1] Render status in src/cli/output.rs\n",
-            "Unmapped: post-launch adoption metric\n"
-        )
-        .to_string()],
+        &[
+            concat!(
+                "# Backlog Overview\n\n",
+                "## Decomposition Posture\n\nfull-packet\n\n",
+                "## Execution Handoff\n\ngoverned execution handoff is available\n",
+            )
+            .to_string(),
+            "# Epic Tree\n\n- Epic AUTH-SESSION: harden revocation boundaries.\n".to_string(),
+            "# Capability To Epic Map\n\n- Auth session revocation -> AUTH-SESSION\n".to_string(),
+            "# Dependency Map\n\n- [SLICE-AUTH-002] depends on [SLICE-AUTH-001].\n".to_string(),
+            concat!(
+                "# Delivery Slices\n\n",
+                "- [SLICE-AUTH-001] Harden rollback-safe session revocation.\n",
+                "- [SLICE-AUTH-002] Surface revocation evidence for operators.\n",
+            )
+            .to_string(),
+            concat!(
+                "# Sequencing Plan\n\n",
+                "1. [SLICE-AUTH-001] first because it hardens the mutation boundary.\n",
+                "2. [SLICE-AUTH-002] after the revoke path is stable.\n"
+            )
+            .to_string(),
+            concat!(
+                "# Acceptance Anchors\n\n",
+                "- [SLICE-AUTH-001] Revocation stays rollback-safe.\n",
+                "- [SLICE-AUTH-002] Evidence is externally reviewable.\n",
+                "Unmapped: post-launch adoption metric\n"
+            )
+            .to_string(),
+            "# Planning Risks\n\n- Hidden coupling can widen rollback scope.\n".to_string(),
+            concat!(
+                "# Execution Handoff\n\n",
+                "## Selected Slice\n\nSLICE-AUTH-001\n\n",
+                "## Implementation Artifact References\n\n",
+                "- src/auth/session.rs\n",
+                "- tech-docs/changes/auth-session.md\n\n",
+                "## Dependency Prerequisites\n\n",
+                "- rollback guard rails remain intact.\n\n",
+                "## Independent Verification Anchors\n\n",
+                "- contract test proves session revoke remains bounded.\n",
+            )
+            .to_string(),
+        ],
     );
 
     assert_eq!(assessment.state.as_str(), "ready");
     assert_eq!(assessment.findings, Vec::<String>::new());
     assert_eq!(assessment.task_count, Some(2));
-    assert_eq!(assessment.mvp_scope.as_deref(), Some("US1 session status projection"));
+    assert_eq!(assessment.mvp_scope.as_deref(), Some("SLICE-AUTH-001"));
     assert_eq!(assessment.unmapped_items, vec!["post-launch adoption metric".to_string()]);
+}
+
+#[test]
+fn backlog_quality_reports_rejected_packet_missing_sections_and_handoff_content_gaps() {
+    let assessment = assess_backlog_quality(
+        Some(PacketReadiness::Rejected),
+        &[
+            ".canon/artifacts/run/backlog/01-backlog-overview.md".to_string(),
+            ".canon/artifacts/run/backlog/02-epic-tree.md".to_string(),
+            ".canon/artifacts/run/backlog/03-capability-to-epic-map.md".to_string(),
+            ".canon/artifacts/run/backlog/05-delivery-slices.md".to_string(),
+            ".canon/artifacts/run/backlog/06-sequencing-plan.md".to_string(),
+            ".canon/artifacts/run/backlog/07-acceptance-anchors.md".to_string(),
+            ".canon/artifacts/run/backlog/08-planning-risks.md".to_string(),
+            ".canon/artifacts/run/backlog/09-execution-handoff.md".to_string(),
+        ],
+        &["Dependency Map".to_string()],
+        &[
+            concat!(
+                "# Backlog Overview\n\n",
+                "## Decomposition Posture\n\nfull-packet\n\n",
+                "## Execution Handoff\n\ngoverned execution handoff is available\n",
+            )
+            .to_string(),
+            "# Epic Tree\n\n- Epic AUTH-SESSION: harden revocation boundaries.\n".to_string(),
+            "# Capability To Epic Map\n\n- Auth session revocation -> AUTH-SESSION\n".to_string(),
+            concat!(
+                "# Delivery Slices\n\n",
+                "- [SLICE-AUTH-001] Harden rollback-safe session revocation.\n",
+                "- [SLICE-AUTH-002] Surface revocation evidence for operators.\n",
+            )
+            .to_string(),
+            concat!(
+                "# Sequencing Plan\n\n",
+                "1. [SLICE-AUTH-001] first because it hardens the mutation boundary.\n",
+                "2. [SLICE-AUTH-002] after the revoke path is stable.\n"
+            )
+            .to_string(),
+            concat!(
+                "# Acceptance Anchors\n\n",
+                "- [SLICE-AUTH-001] Revocation stays rollback-safe.\n",
+                "- [SLICE-AUTH-002] Evidence is externally reviewable.\n",
+            )
+            .to_string(),
+            "# Planning Risks\n\n- Hidden coupling can widen rollback scope.\n".to_string(),
+            concat!(
+                "# Execution Handoff\n\n",
+                "## Dependency Prerequisites\n\n",
+                "- rollback guard rails remain intact.\n"
+            )
+            .to_string(),
+        ],
+    );
+
+    assert_eq!(assessment.state.as_str(), "blocked");
+    assert!(assessment.findings.contains(&"backlog_packet_not_reusable".to_string()));
+    assert!(assessment.findings.contains(&"missing_section:dependency_map".to_string()));
+    assert!(assessment.findings.contains(&"missing_dependency_order".to_string()));
+    assert!(assessment.findings.contains(&"invalid_selected_slice_id".to_string()));
+    assert!(assessment.findings.contains(&"missing_implementation_artifact_refs".to_string()));
+    assert!(assessment.findings.contains(&"missing_independent_verification_anchors".to_string()));
+}
+
+#[test]
+fn backlog_quality_reports_invalid_selected_slice_when_handoff_points_outside_packet() {
+    let assessment = assess_backlog_quality(
+        Some(PacketReadiness::Reusable),
+        &[
+            ".canon/artifacts/run/backlog/01-backlog-overview.md".to_string(),
+            ".canon/artifacts/run/backlog/02-epic-tree.md".to_string(),
+            ".canon/artifacts/run/backlog/03-capability-to-epic-map.md".to_string(),
+            ".canon/artifacts/run/backlog/04-dependency-map.md".to_string(),
+            ".canon/artifacts/run/backlog/05-delivery-slices.md".to_string(),
+            ".canon/artifacts/run/backlog/06-sequencing-plan.md".to_string(),
+            ".canon/artifacts/run/backlog/07-acceptance-anchors.md".to_string(),
+            ".canon/artifacts/run/backlog/08-planning-risks.md".to_string(),
+            ".canon/artifacts/run/backlog/09-execution-handoff.md".to_string(),
+        ],
+        &[],
+        &[
+            concat!(
+                "# Backlog Overview\n\n",
+                "## Decomposition Posture\n\nfull-packet\n\n",
+                "## Execution Handoff\n\ngoverned execution handoff is available\n",
+            )
+            .to_string(),
+            "# Epic Tree\n\n- Epic AUTH-SESSION: harden revocation boundaries.\n".to_string(),
+            "# Capability To Epic Map\n\n- Auth session revocation -> AUTH-SESSION\n".to_string(),
+            "# Dependency Map\n\n- [SLICE-AUTH-002] depends on [SLICE-AUTH-001].\n".to_string(),
+            concat!(
+                "# Delivery Slices\n\n",
+                "- [SLICE-AUTH-001] Harden rollback-safe session revocation.\n",
+                "- [SLICE-AUTH-002] Surface revocation evidence for operators.\n",
+            )
+            .to_string(),
+            concat!(
+                "# Sequencing Plan\n\n",
+                "1. [SLICE-AUTH-001] first because it hardens the mutation boundary.\n",
+                "2. [SLICE-AUTH-002] after the revoke path is stable.\n"
+            )
+            .to_string(),
+            concat!(
+                "# Acceptance Anchors\n\n",
+                "- [SLICE-AUTH-001] Revocation stays rollback-safe.\n",
+                "- [SLICE-AUTH-002] Evidence is externally reviewable.\n",
+            )
+            .to_string(),
+            "# Planning Risks\n\n- Hidden coupling can widen rollback scope.\n".to_string(),
+            concat!(
+                "# Execution Handoff\n\n",
+                "## Selected Slice\n\nSLICE-AUTH-999\n\n",
+                "## Implementation Artifact References\n\n",
+                "- src/auth/session.rs\n\n",
+                "## Independent Verification Anchors\n\n",
+                "- contract test proves session revoke remains bounded.\n",
+            )
+            .to_string(),
+        ],
+    );
+
+    assert_eq!(assessment.state.as_str(), "blocked");
+    assert_eq!(assessment.findings, vec!["invalid_selected_slice_id".to_string()]);
+}
+
+#[test]
+fn backlog_quality_closure_limited_packet_skips_missing_execution_handoff() {
+    let assessment = assess_backlog_quality(
+        Some(PacketReadiness::Pending),
+        &[
+            ".canon/artifacts/run/backlog/01-backlog-overview.md".to_string(),
+            ".canon/artifacts/run/backlog/05-delivery-slices.md".to_string(),
+            ".canon/artifacts/run/backlog/08-planning-risks.md".to_string(),
+        ],
+        &[],
+        &[
+            concat!(
+                "# Backlog Overview\n\n",
+                "## Decomposition Posture\n\nrisk-only-packet\n\n",
+                "## Execution Handoff\n\nhandoff withheld for closure reasons\n"
+            )
+            .to_string(),
+            "# Delivery Slices\n\n- [SLICE-AUTH-001] Harden rollback-safe session revocation.\n"
+                .to_string(),
+            "# Planning Risks\n\n- Closure evidence is incomplete.\n".to_string(),
+        ],
+    );
+
+    assert_eq!(assessment.state.as_str(), "blocked");
+    assert!(assessment.findings.contains(&"backlog_packet_pending".to_string()));
+    assert!(assessment.findings.contains(&"closure_limited_backlog_packet".to_string()));
+    assert!(!assessment.findings.contains(&"missing_execution_handoff".to_string()));
+}
+
+#[test]
+fn backlog_quality_snapshot_expands_expected_packet_refs_from_workspace()
+-> Result<(), Box<dyn std::error::Error>> {
+    let workspace =
+        std::env::temp_dir().join(format!("boundline-backlog-snapshot-{}", Uuid::new_v4()));
+    let packet_ref = ".canon/artifacts/run/backlog";
+    let packet_dir = workspace.join(packet_ref);
+    fs::create_dir_all(&packet_dir)?;
+    fs::write(
+        packet_dir.join("backlog-overview.md"),
+        "# Backlog Overview\n\n## Decomposition Posture\n\nfull-packet\n\n## Execution Handoff\n\ngoverned execution handoff is available\n",
+    )?;
+    fs::write(
+        packet_dir.join("epic-tree.md"),
+        "# Epic Tree\n\n- Epic AUTH-SESSION: harden revocation boundaries.\n",
+    )?;
+    fs::write(
+        packet_dir.join("capability-to-epic-map.md"),
+        "# Capability To Epic Map\n\n- Auth session revocation -> AUTH-SESSION\n",
+    )?;
+    fs::write(
+        packet_dir.join("dependency-map.md"),
+        "# Dependency Map\n\n- [SLICE-AUTH-002] depends on [SLICE-AUTH-001].\n",
+    )?;
+    fs::write(
+        packet_dir.join("delivery-slices.md"),
+        concat!(
+            "# Delivery Slices\n\n",
+            "- [SLICE-AUTH-001] Harden rollback-safe session revocation.\n",
+            "- [SLICE-AUTH-002] Surface revocation evidence for operators.\n",
+        ),
+    )?;
+    fs::write(
+        packet_dir.join("sequencing-plan.md"),
+        concat!(
+            "# Sequencing Plan\n\n",
+            "1. [SLICE-AUTH-001] first because it hardens the mutation boundary.\n",
+            "2. [SLICE-AUTH-002] after the revoke path is stable.\n",
+        ),
+    )?;
+    fs::write(
+        packet_dir.join("acceptance-anchors.md"),
+        concat!(
+            "# Acceptance Anchors\n\n",
+            "- [SLICE-AUTH-001] Revocation stays rollback-safe.\n",
+            "- [SLICE-AUTH-002] Evidence is externally reviewable.\n",
+        ),
+    )?;
+    fs::write(
+        packet_dir.join("planning-risks.md"),
+        "# Planning Risks\n\n- Hidden coupling can widen rollback scope.\n",
+    )?;
+    fs::write(
+        packet_dir.join("execution-handoff.md"),
+        concat!(
+            "# Execution Handoff\n\n",
+            "## Selected Slice\n\nSLICE-AUTH-001\n\n",
+            "## Implementation Artifact References\n\n",
+            "- src/auth/session.rs\n\n",
+            "## Independent Verification Anchors\n\n",
+            "- contract test proves session revoke remains bounded.\n",
+        ),
+    )?;
+
+    let backlog_stage_key = planning_stage_key_for_mode(CanonMode::Backlog)
+        .ok_or("backlog mode should map to a planning stage")?;
+    let lifecycle = GovernedSessionLifecycle {
+        governance_runtime: GovernanceRuntimeKind::Canon,
+        explicit_opt_out: false,
+        mode_selection_preference: CanonModeSelectionPreference::Auto,
+        selected_mode: Some(CanonMode::Backlog),
+        selected_mode_sequence: vec![CanonMode::Backlog],
+        latest_reasoning_profile: None,
+        current_stage_index: 0,
+        stage_records: vec![GovernedStageRecord {
+            stage_key: backlog_stage_key.to_string(),
+            runtime: GovernanceRuntimeKind::Canon,
+            lifecycle_state: GovernanceLifecycleState::GovernedReady,
+            required: false,
+            autopilot_enabled: false,
+            approval_state: ApprovalState::NotNeeded,
+            canon_run_ref: Some("run-1".to_string()),
+            governance_attempt_id: "attempt-1".to_string(),
+            previous_governance_attempt_id: None,
+            packet_ref: Some(packet_ref.to_string()),
+            decision_ref: None,
+            stage_council: None,
+            blocked_reason: None,
+        }],
+        accumulated_context: vec![GovernedDocumentRef {
+            stage_key: backlog_stage_key.to_string(),
+            canon_mode: CanonMode::Backlog,
+            packet_ref: packet_ref.to_string(),
+            document_path: None,
+            readiness: PacketReadiness::Reusable,
+        }],
+        terminal_reason: None,
+        planning_input_fingerprint: None,
+    };
+
+    let snapshot = backlog_quality_snapshot_for_lifecycle(&lifecycle, &workspace)
+        .ok_or("expected backlog quality snapshot to exist")?;
+
+    assert_eq!(snapshot.assessment.state.as_str(), "ready");
+    assert_eq!(snapshot.document_bodies.len(), 9);
+    assert_eq!(snapshot.assessment.task_count, Some(2));
+
+    fs::remove_dir_all(&workspace)?;
+    Ok(())
 }
 
 #[test]
@@ -812,7 +1164,7 @@ fn canon_mode_helpers_expose_primary_documents_and_context_requirements() {
     let expectations = [
         (CanonMode::Requirements, "requirements.md", false),
         (CanonMode::Architecture, "architecture.md", false),
-        (CanonMode::Backlog, "backlog.md", true),
+        (CanonMode::Backlog, "backlog-overview.md", true),
         (CanonMode::Change, "change.md", true),
         (CanonMode::Discovery, "discovery.md", false),
         (CanonMode::Implementation, "implementation.md", true),
@@ -829,6 +1181,19 @@ fn canon_mode_helpers_expose_primary_documents_and_context_requirements() {
     assert_eq!(
         CanonMode::Verification.expected_document_refs(".canon/packets/verify-1"),
         vec![".canon/packets/verify-1/verification.md".to_string()]
+    );
+    assert_eq!(
+        CanonMode::Backlog.expected_document_refs(".canon/packets/backlog-1"),
+        vec![
+            ".canon/packets/backlog-1/backlog-overview.md".to_string(),
+            ".canon/packets/backlog-1/epic-tree.md".to_string(),
+            ".canon/packets/backlog-1/capability-to-epic-map.md".to_string(),
+            ".canon/packets/backlog-1/dependency-map.md".to_string(),
+            ".canon/packets/backlog-1/delivery-slices.md".to_string(),
+            ".canon/packets/backlog-1/sequencing-plan.md".to_string(),
+            ".canon/packets/backlog-1/acceptance-anchors.md".to_string(),
+            ".canon/packets/backlog-1/planning-risks.md".to_string(),
+        ]
     );
     assert_eq!(
         CanonMode::SecurityAssessment.expected_document_refs(".canon/packets/security-1"),

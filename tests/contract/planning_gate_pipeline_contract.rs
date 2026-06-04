@@ -88,13 +88,13 @@ fn blocked_planning_analysis() -> PlanningAnalysisProjection {
         findings: vec![PlanningAnalysisFinding {
             severity: PlanningAnalysisSeverity::Critical,
             source: PlanningAnalysisSource::Backlog,
-            message: "backlog does not map any goal-plan task ids".to_string(),
+            message: "backlog reports unmapped success criteria: acceptance target".to_string(),
         }],
         coverage: Some(PlanningAnalysisCoverage {
             success_criteria_total: 1,
             success_criteria_covered: 1,
             backlog_task_count: Some(1),
-            mapped_plan_task_count: Some(0),
+            mapped_plan_task_count: None,
         }),
     }
 }

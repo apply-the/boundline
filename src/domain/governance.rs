@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -112,7 +112,7 @@ impl CanonMode {
             Self::Discovery => "discovery.md",
             Self::SystemShaping => "system-shaping.md",
             Self::Architecture => "architecture.md",
-            Self::Backlog => "backlog.md",
+            Self::Backlog => "backlog-overview.md",
             Self::Change => "change.md",
             Self::Implementation => "implementation.md",
             Self::Refactor => "refactor.md",
@@ -146,6 +146,10 @@ impl CanonMode {
     }
 
     pub fn expected_document_refs(self, packet_ref: &str) -> Vec<String> {
+        if self == Self::Backlog {
+            return backlog_expected_document_refs(packet_ref);
+        }
+
         vec![format!("{}/{}", packet_ref.trim_end_matches('/'), self.primary_document_name())]
     }
 
@@ -169,6 +173,34 @@ impl CanonMode {
             | Self::SupplyChainAnalysis => CanonAuthorityZone::Red,
         }
     }
+}
+
+const BACKLOG_OVERVIEW_FILE_NAME: &str = "backlog-overview.md";
+const BACKLOG_EPIC_TREE_FILE_NAME: &str = "epic-tree.md";
+const BACKLOG_CAPABILITY_MAP_FILE_NAME: &str = "capability-to-epic-map.md";
+const BACKLOG_DEPENDENCY_MAP_FILE_NAME: &str = "dependency-map.md";
+const BACKLOG_DELIVERY_SLICES_FILE_NAME: &str = "delivery-slices.md";
+const BACKLOG_SEQUENCING_PLAN_FILE_NAME: &str = "sequencing-plan.md";
+const BACKLOG_ACCEPTANCE_ANCHORS_FILE_NAME: &str = "acceptance-anchors.md";
+const BACKLOG_PLANNING_RISKS_FILE_NAME: &str = "planning-risks.md";
+const BACKLOG_EXECUTION_HANDOFF_FILE_NAME: &str = "execution-handoff.md";
+
+const BACKLOG_FULL_PACKET_FILE_NAMES: [&str; 8] = [
+    BACKLOG_OVERVIEW_FILE_NAME,
+    BACKLOG_EPIC_TREE_FILE_NAME,
+    BACKLOG_CAPABILITY_MAP_FILE_NAME,
+    BACKLOG_DEPENDENCY_MAP_FILE_NAME,
+    BACKLOG_DELIVERY_SLICES_FILE_NAME,
+    BACKLOG_SEQUENCING_PLAN_FILE_NAME,
+    BACKLOG_ACCEPTANCE_ANCHORS_FILE_NAME,
+    BACKLOG_PLANNING_RISKS_FILE_NAME,
+];
+
+fn backlog_expected_document_refs(packet_ref: &str) -> Vec<String> {
+    BACKLOG_FULL_PACKET_FILE_NAMES
+        .iter()
+        .map(|file_name| format!("{}/{}", packet_ref.trim_end_matches('/'), file_name))
+        .collect()
 }
 
 impl std::fmt::Display for CanonMode {
@@ -2201,57 +2233,47 @@ pub struct BacklogQualitySnapshot {
     pub document_bodies: Vec<String>,
 }
 
+const FINDING_BACKLOG_PACKET_NOT_REUSABLE: &str = "backlog_packet_not_reusable";
+const FINDING_BACKLOG_PACKET_PENDING: &str = "backlog_packet_pending";
+const FINDING_MISSING_BACKLOG_DOCUMENT: &str = "missing_backlog_document";
+const FINDING_CLOSURE_LIMITED_BACKLOG_PACKET: &str = "closure_limited_backlog_packet";
+const FINDING_MISSING_STABLE_SLICE_IDS: &str = "missing_stable_slice_ids";
+const FINDING_MISSING_DEPENDENCY_ORDER: &str = "missing_dependency_order";
+const FINDING_MISSING_EXECUTION_HANDOFF: &str = "missing_execution_handoff";
+const FINDING_INVALID_SELECTED_SLICE_ID: &str = "invalid_selected_slice_id";
+const FINDING_MISSING_IMPLEMENTATION_ARTIFACT_REFS: &str = "missing_implementation_artifact_refs";
+const FINDING_MISSING_INDEPENDENT_VERIFICATION_ANCHORS: &str =
+    "missing_independent_verification_anchors";
+const FINDING_PREFIX_MISSING_SECTION: &str = "missing_section:";
+const BACKLOG_DECOMPOSITION_POSTURE_RISK_ONLY: &str = "risk-only-packet";
+const BACKLOG_CLOSURE_LIMITED_LABEL: &str = "closure-limited";
+const BACKLOG_HANDOFF_WITHHELD_LABEL: &str = "handoff withheld for closure reasons";
+const MARKDOWN_SECTION_LEVEL_TWO_PREFIX: &str = "## ";
+const MARKDOWN_LIST_ITEM_PREFIX: &str = "- ";
+
 pub fn assess_backlog_quality(
     readiness: Option<PacketReadiness>,
     document_refs: &[String],
     missing_sections: &[String],
     document_bodies: &[String],
 ) -> BacklogQualityAssessment {
-    let mut findings = Vec::new();
-
-    if matches!(readiness, Some(PacketReadiness::Incomplete | PacketReadiness::Rejected)) {
-        findings.push("backlog_packet_not_reusable".to_string());
-    }
-    if matches!(readiness, Some(PacketReadiness::Pending)) {
-        findings.push("backlog_packet_pending".to_string());
-    }
-    findings.extend(
-        missing_sections
-            .iter()
-            .filter(|section| !section.trim().is_empty())
-            .map(|section| format!("missing_section:{}", normalize_backlog_label(section))),
-    );
-    if document_refs.is_empty() {
-        findings.push("missing_backlog_document".to_string());
-    }
-
+    let backlog_documents = backlog_documents_by_slug(document_refs, document_bodies);
     let combined = document_bodies.join("\n");
-    let task_count = count_backlog_tasks(&combined);
-    if !combined.trim().is_empty() && task_count == 0 {
-        findings.push("missing_stable_task_ids".to_string());
-    }
-    if task_count > 0 && !backlog_mentions_dependency_order(&combined) {
-        findings.push("missing_dependency_order".to_string());
-    }
-    let mvp_scope = extract_backlog_mvp_scope(&combined);
-    if task_count > 0 && mvp_scope.is_none() {
-        findings.push("missing_mvp_scope".to_string());
-    }
-
-    let state = if findings.iter().any(|finding| {
-        finding == "backlog_packet_not_reusable" || finding == "missing_stable_task_ids"
-    }) {
-        BacklogQualityState::Blocked
-    } else if findings.is_empty() {
-        BacklogQualityState::Ready
-    } else {
-        BacklogQualityState::ClarificationRequired
-    };
+    let slice_ids = backlog_slice_ids(&backlog_documents);
+    let findings = backlog_quality_findings(
+        readiness,
+        document_refs,
+        missing_sections,
+        &backlog_documents,
+        &slice_ids,
+    );
+    let task_count = backlog_quality_task_count(&slice_ids);
+    let mvp_scope = backlog_quality_mvp_scope(&backlog_documents, &slice_ids);
 
     BacklogQualityAssessment {
-        state,
+        state: backlog_quality_state(&findings),
         findings,
-        task_count: (task_count > 0).then_some(task_count),
+        task_count,
         mvp_scope,
         unmapped_items: extract_backlog_unmapped_items(&combined),
     }
@@ -2307,10 +2329,30 @@ pub fn backlog_quality_snapshot_for_lifecycle(
         });
     }
 
-    let document_refs = backlog_documents
+    let mut document_refs = backlog_documents
         .iter()
         .filter_map(|document| document.document_path.clone())
         .collect::<Vec<_>>();
+    if backlog_documents.iter().any(|document| document.canon_mode == CanonMode::Backlog)
+        && let Some(packet_ref) =
+            backlog_documents.iter().map(|document| document.packet_ref.clone()).next()
+    {
+        let mut expanded_refs = CanonMode::Backlog
+            .expected_document_refs(&packet_ref)
+            .into_iter()
+            .filter(|document_ref| {
+                resolve_backlog_document_path(workspace_path, document_ref).is_file()
+            })
+            .collect::<Vec<_>>();
+        let execution_handoff_ref =
+            format!("{}/{}", packet_ref.trim_end_matches('/'), BACKLOG_EXECUTION_HANDOFF_FILE_NAME);
+        if resolve_backlog_document_path(workspace_path, &execution_handoff_ref).is_file() {
+            expanded_refs.push(execution_handoff_ref);
+        }
+        if !expanded_refs.is_empty() {
+            document_refs = expanded_refs;
+        }
+    }
     let document_bodies = document_refs
         .iter()
         .filter_map(|document_ref| {
@@ -2333,24 +2375,6 @@ pub fn backlog_quality_snapshot_for_lifecycle(
     })
 }
 
-fn count_backlog_tasks(content: &str) -> usize {
-    content
-        .lines()
-        .filter(|line| {
-            let trimmed = line.trim_start();
-            trimmed.starts_with("- [ ]")
-                || trimmed.starts_with("- [x]")
-                || trimmed.starts_with("- [X]")
-        })
-        .flat_map(|line| line.split_whitespace())
-        .filter(|token| {
-            is_stable_backlog_task_id(
-                token.trim_matches(|c: char| matches!(c, '[' | ']' | '(' | ')' | ',' | ':' | ';')),
-            )
-        })
-        .count()
-}
-
 const fn backlog_stage_sequence_index() -> usize {
     2
 }
@@ -2360,33 +2384,265 @@ fn resolve_backlog_document_path(workspace_path: &Path, document_ref: &str) -> P
     if path.is_absolute() { path.to_path_buf() } else { workspace_path.join(path) }
 }
 
-fn is_stable_backlog_task_id(token: &str) -> bool {
-    let Some(digits) = token.strip_prefix('T') else {
+fn backlog_documents_by_slug<'a>(
+    document_refs: &'a [String],
+    document_bodies: &'a [String],
+) -> BTreeMap<String, &'a str> {
+    document_refs
+        .iter()
+        .zip(document_bodies.iter())
+        .filter_map(|(document_ref, document_body)| {
+            backlog_document_slug(document_ref).map(|slug| (slug, document_body.as_str()))
+        })
+        .collect()
+}
+
+fn backlog_quality_findings(
+    readiness: Option<PacketReadiness>,
+    document_refs: &[String],
+    missing_sections: &[String],
+    backlog_documents: &BTreeMap<String, &str>,
+    slice_ids: &[String],
+) -> Vec<String> {
+    let mut findings = Vec::new();
+
+    if matches!(readiness, Some(PacketReadiness::Incomplete | PacketReadiness::Rejected)) {
+        findings.push(FINDING_BACKLOG_PACKET_NOT_REUSABLE.to_string());
+    }
+    if matches!(readiness, Some(PacketReadiness::Pending)) {
+        findings.push(FINDING_BACKLOG_PACKET_PENDING.to_string());
+    }
+    findings.extend(missing_sections.iter().filter(|section| !section.trim().is_empty()).map(
+        |section| format!("{FINDING_PREFIX_MISSING_SECTION}{}", normalize_backlog_label(section)),
+    ));
+    if document_refs.is_empty() {
+        findings.push(FINDING_MISSING_BACKLOG_DOCUMENT.to_string());
+    }
+
+    if backlog_packet_is_closure_limited(backlog_documents) {
+        findings.push(FINDING_CLOSURE_LIMITED_BACKLOG_PACKET.to_string());
+    }
+
+    findings.extend(missing_backlog_packet_sections(backlog_documents));
+    findings.extend(backlog_quality_slice_findings(backlog_documents, slice_ids));
+    findings
+}
+
+fn backlog_quality_slice_findings(
+    backlog_documents: &BTreeMap<String, &str>,
+    slice_ids: &[String],
+) -> Vec<String> {
+    let mut findings = Vec::new();
+
+    if !backlog_documents.is_empty()
+        && !backlog_packet_is_closure_limited(backlog_documents)
+        && slice_ids.is_empty()
+    {
+        findings.push(FINDING_MISSING_STABLE_SLICE_IDS.to_string());
+    }
+
+    if slice_ids.len() > 1 && !backlog_has_dependency_order(backlog_documents) {
+        findings.push(FINDING_MISSING_DEPENDENCY_ORDER.to_string());
+    }
+
+    findings.extend(backlog_quality_handoff_findings(backlog_documents, slice_ids));
+    findings
+}
+
+fn backlog_quality_handoff_findings(
+    backlog_documents: &BTreeMap<String, &str>,
+    slice_ids: &[String],
+) -> Vec<String> {
+    let Some(execution_handoff) =
+        backlog_document_body(backlog_documents, BACKLOG_EXECUTION_HANDOFF_FILE_NAME)
+    else {
+        return if !slice_ids.is_empty() && !backlog_packet_is_closure_limited(backlog_documents) {
+            vec![FINDING_MISSING_EXECUTION_HANDOFF.to_string()]
+        } else {
+            Vec::new()
+        };
+    };
+
+    if slice_ids.is_empty() {
+        return Vec::new();
+    }
+
+    let mut findings = Vec::new();
+    if let Some(selected_slice_id) = extract_first_slice_id(execution_handoff) {
+        if !slice_ids.iter().any(|slice_id| slice_id == &selected_slice_id) {
+            findings.push(FINDING_INVALID_SELECTED_SLICE_ID.to_string());
+        }
+    } else {
+        findings.push(FINDING_INVALID_SELECTED_SLICE_ID.to_string());
+    }
+    if markdown_section_items(execution_handoff, "Implementation Artifact References").is_empty() {
+        findings.push(FINDING_MISSING_IMPLEMENTATION_ARTIFACT_REFS.to_string());
+    }
+    if markdown_section_items(execution_handoff, "Independent Verification Anchors").is_empty() {
+        findings.push(FINDING_MISSING_INDEPENDENT_VERIFICATION_ANCHORS.to_string());
+    }
+    findings
+}
+
+fn backlog_quality_task_count(slice_ids: &[String]) -> Option<usize> {
+    (!slice_ids.is_empty()).then_some(slice_ids.len())
+}
+
+fn backlog_quality_mvp_scope(
+    backlog_documents: &BTreeMap<String, &str>,
+    slice_ids: &[String],
+) -> Option<String> {
+    backlog_selected_slice_id(backlog_documents)
+        .or_else(|| {
+            backlog_document_body(backlog_documents, BACKLOG_SEQUENCING_PLAN_FILE_NAME)
+                .and_then(extract_first_slice_id)
+        })
+        .or_else(|| slice_ids.first().cloned())
+}
+
+fn backlog_quality_state(findings: &[String]) -> BacklogQualityState {
+    if findings.iter().any(|finding| {
+        matches!(
+            finding.as_str(),
+            FINDING_BACKLOG_PACKET_NOT_REUSABLE
+                | FINDING_CLOSURE_LIMITED_BACKLOG_PACKET
+                | FINDING_MISSING_STABLE_SLICE_IDS
+                | FINDING_INVALID_SELECTED_SLICE_ID
+        )
+    }) {
+        BacklogQualityState::Blocked
+    } else if findings.is_empty() {
+        BacklogQualityState::Ready
+    } else {
+        BacklogQualityState::ClarificationRequired
+    }
+}
+
+fn backlog_document_slug(document_ref: &str) -> Option<String> {
+    Path::new(document_ref).file_name().and_then(|name| name.to_str()).map(|file_name| {
+        file_name
+            .split_once('-')
+            .and_then(|(prefix, remainder)| {
+                (prefix.len() == 2 && prefix.chars().all(|character| character.is_ascii_digit()))
+                    .then_some(remainder)
+            })
+            .unwrap_or(file_name)
+            .to_string()
+    })
+}
+
+fn backlog_packet_is_closure_limited(backlog_documents: &BTreeMap<String, &str>) -> bool {
+    let Some(overview_body) = backlog_document_body(backlog_documents, BACKLOG_OVERVIEW_FILE_NAME)
+    else {
         return false;
     };
-    digits.len() == 3 && digits.chars().all(|ch| ch.is_ascii_digit())
+    let normalized = overview_body.to_ascii_lowercase();
+    normalized.contains(BACKLOG_DECOMPOSITION_POSTURE_RISK_ONLY)
+        || normalized.contains(BACKLOG_CLOSURE_LIMITED_LABEL)
+        || normalized.contains(BACKLOG_HANDOFF_WITHHELD_LABEL)
 }
 
-fn backlog_mentions_dependency_order(content: &str) -> bool {
-    let lower = content.to_ascii_lowercase();
-    lower.contains("dependencies")
-        || lower.contains("dependency graph")
-        || lower.contains("dependency order")
-        || lower.contains("execution order")
+fn backlog_document_body<'a>(
+    backlog_documents: &'a BTreeMap<String, &'a str>,
+    file_name: &str,
+) -> Option<&'a str> {
+    backlog_documents.get(file_name).copied()
 }
 
-fn extract_backlog_mvp_scope(content: &str) -> Option<String> {
-    content.lines().find_map(|line| {
-        let trimmed = line.trim();
-        let lower = trimmed.to_ascii_lowercase();
-        if !(lower.starts_with("mvp:") || lower.starts_with("mvp scope:")) {
-            return None;
+fn missing_backlog_packet_sections(backlog_documents: &BTreeMap<String, &str>) -> Vec<String> {
+    if backlog_packet_is_closure_limited(backlog_documents) {
+        return Vec::new();
+    }
+
+    BACKLOG_FULL_PACKET_FILE_NAMES
+        .iter()
+        .filter(|file_name| !backlog_documents.contains_key(**file_name))
+        .map(|file_name| {
+            format!(
+                "{FINDING_PREFIX_MISSING_SECTION}{}",
+                backlog_section_label_from_file_name(file_name)
+            )
+        })
+        .collect()
+}
+
+fn backlog_section_label_from_file_name(file_name: &str) -> String {
+    file_name.trim_end_matches(".md").replace(['-', ' '], "_").to_ascii_lowercase()
+}
+
+fn backlog_slice_ids(backlog_documents: &BTreeMap<String, &str>) -> Vec<String> {
+    backlog_document_body(backlog_documents, BACKLOG_DELIVERY_SLICES_FILE_NAME)
+        .map(extract_slice_ids)
+        .unwrap_or_default()
+}
+
+fn backlog_has_dependency_order(backlog_documents: &BTreeMap<String, &str>) -> bool {
+    backlog_documents.contains_key(BACKLOG_DEPENDENCY_MAP_FILE_NAME)
+        && backlog_documents.contains_key(BACKLOG_SEQUENCING_PLAN_FILE_NAME)
+}
+
+fn backlog_selected_slice_id(backlog_documents: &BTreeMap<String, &str>) -> Option<String> {
+    backlog_document_body(backlog_documents, BACKLOG_EXECUTION_HANDOFF_FILE_NAME)
+        .and_then(extract_first_slice_id)
+}
+
+fn extract_slice_ids(source: &str) -> Vec<String> {
+    let mut slice_ids = Vec::new();
+
+    for token in source.split_whitespace() {
+        let Some(slice_id) = normalize_slice_id_token(token) else {
+            continue;
+        };
+        if !slice_ids.iter().any(|existing| existing == &slice_id) {
+            slice_ids.push(slice_id);
         }
-        trimmed
-            .split_once(':')
-            .map(|(_, value)| value.trim().to_string())
-            .filter(|value| !value.is_empty())
-    })
+    }
+
+    slice_ids
+}
+
+fn extract_first_slice_id(source: &str) -> Option<String> {
+    extract_slice_ids(source).into_iter().next()
+}
+
+fn normalize_slice_id_token(token: &str) -> Option<String> {
+    let trimmed = token.trim_matches(|character: char| {
+        !character.is_ascii_uppercase() && !character.is_ascii_digit() && character != '-'
+    });
+    if !trimmed.starts_with("SLICE-") || trimmed.len() <= "SLICE-".len() {
+        return None;
+    }
+    trimmed
+        .chars()
+        .all(|character| {
+            character.is_ascii_uppercase() || character.is_ascii_digit() || character == '-'
+        })
+        .then(|| trimmed.to_string())
+}
+
+fn markdown_section_items(source: &str, section_name: &str) -> Vec<String> {
+    markdown_section_body(source, section_name)
+        .map(|body| {
+            body.lines()
+                .map(str::trim)
+                .filter(|line| !line.is_empty())
+                .map(|line| line.strip_prefix(MARKDOWN_LIST_ITEM_PREFIX).unwrap_or(line))
+                .map(str::trim)
+                .filter(|line| !line.is_empty())
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn markdown_section_body<'a>(source: &'a str, section_name: &str) -> Option<&'a str> {
+    let section_header = format!("{MARKDOWN_SECTION_LEVEL_TWO_PREFIX}{section_name}");
+    let start_index = source.find(&section_header)?;
+    let after_header = &source[start_index + section_header.len()..];
+    let body = after_header.strip_prefix("\n\n").unwrap_or(after_header);
+    let end_index =
+        body.find(&format!("\n{MARKDOWN_SECTION_LEVEL_TWO_PREFIX}")).unwrap_or(body.len());
+    Some(body[..end_index].trim())
 }
 
 fn extract_backlog_unmapped_items(content: &str) -> Vec<String> {
