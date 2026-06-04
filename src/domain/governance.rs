@@ -2257,97 +2257,21 @@ pub fn assess_backlog_quality(
     missing_sections: &[String],
     document_bodies: &[String],
 ) -> BacklogQualityAssessment {
-    let mut findings = Vec::new();
     let backlog_documents = backlog_documents_by_slug(document_refs, document_bodies);
-
-    if matches!(readiness, Some(PacketReadiness::Incomplete | PacketReadiness::Rejected)) {
-        findings.push(FINDING_BACKLOG_PACKET_NOT_REUSABLE.to_string());
-    }
-    if matches!(readiness, Some(PacketReadiness::Pending)) {
-        findings.push(FINDING_BACKLOG_PACKET_PENDING.to_string());
-    }
-    findings.extend(missing_sections.iter().filter(|section| !section.trim().is_empty()).map(
-        |section| format!("{FINDING_PREFIX_MISSING_SECTION}{}", normalize_backlog_label(section)),
-    ));
-    if document_refs.is_empty() {
-        findings.push(FINDING_MISSING_BACKLOG_DOCUMENT.to_string());
-    }
-
-    if backlog_packet_is_closure_limited(&backlog_documents) {
-        findings.push(FINDING_CLOSURE_LIMITED_BACKLOG_PACKET.to_string());
-    }
-
-    findings.extend(missing_backlog_packet_sections(&backlog_documents));
-
-    let slice_ids = backlog_slice_ids(&backlog_documents);
-    if !backlog_documents.is_empty()
-        && !backlog_packet_is_closure_limited(&backlog_documents)
-        && slice_ids.is_empty()
-    {
-        findings.push(FINDING_MISSING_STABLE_SLICE_IDS.to_string());
-    }
-
-    if slice_ids.len() > 1 && !backlog_has_dependency_order(&backlog_documents) {
-        findings.push(FINDING_MISSING_DEPENDENCY_ORDER.to_string());
-    }
-
-    let execution_handoff =
-        backlog_document_body(&backlog_documents, BACKLOG_EXECUTION_HANDOFF_FILE_NAME);
-    if !slice_ids.is_empty() {
-        match execution_handoff {
-            Some(handoff_body) => {
-                if let Some(selected_slice_id) = extract_first_slice_id(handoff_body) {
-                    if !slice_ids.iter().any(|slice_id| slice_id == &selected_slice_id) {
-                        findings.push(FINDING_INVALID_SELECTED_SLICE_ID.to_string());
-                    }
-                } else {
-                    findings.push(FINDING_INVALID_SELECTED_SLICE_ID.to_string());
-                }
-                if markdown_section_items(handoff_body, "Implementation Artifact References")
-                    .is_empty()
-                {
-                    findings.push(FINDING_MISSING_IMPLEMENTATION_ARTIFACT_REFS.to_string());
-                }
-                if markdown_section_items(handoff_body, "Independent Verification Anchors")
-                    .is_empty()
-                {
-                    findings.push(FINDING_MISSING_INDEPENDENT_VERIFICATION_ANCHORS.to_string());
-                }
-            }
-            None if !backlog_packet_is_closure_limited(&backlog_documents) => {
-                findings.push(FINDING_MISSING_EXECUTION_HANDOFF.to_string());
-            }
-            None => {}
-        }
-    }
-
     let combined = document_bodies.join("\n");
-    let task_count = (!slice_ids.is_empty()).then_some(slice_ids.len());
-    let mvp_scope = backlog_selected_slice_id(&backlog_documents)
-        .or_else(|| {
-            backlog_document_body(&backlog_documents, BACKLOG_SEQUENCING_PLAN_FILE_NAME)
-                .and_then(extract_first_slice_id)
-        })
-        .or_else(|| slice_ids.first().cloned());
-
-    let state = if findings.iter().any(|finding| {
-        matches!(
-            finding.as_str(),
-            FINDING_BACKLOG_PACKET_NOT_REUSABLE
-                | FINDING_CLOSURE_LIMITED_BACKLOG_PACKET
-                | FINDING_MISSING_STABLE_SLICE_IDS
-                | FINDING_INVALID_SELECTED_SLICE_ID
-        )
-    }) {
-        BacklogQualityState::Blocked
-    } else if findings.is_empty() {
-        BacklogQualityState::Ready
-    } else {
-        BacklogQualityState::ClarificationRequired
-    };
+    let slice_ids = backlog_slice_ids(&backlog_documents);
+    let findings = backlog_quality_findings(
+        readiness,
+        document_refs,
+        missing_sections,
+        &backlog_documents,
+        &slice_ids,
+    );
+    let task_count = backlog_quality_task_count(&slice_ids);
+    let mvp_scope = backlog_quality_mvp_scope(&backlog_documents, &slice_ids);
 
     BacklogQualityAssessment {
-        state,
+        state: backlog_quality_state(&findings),
         findings,
         task_count,
         mvp_scope,
@@ -2471,6 +2395,127 @@ fn backlog_documents_by_slug<'a>(
             backlog_document_slug(document_ref).map(|slug| (slug, document_body.as_str()))
         })
         .collect()
+}
+
+fn backlog_quality_findings(
+    readiness: Option<PacketReadiness>,
+    document_refs: &[String],
+    missing_sections: &[String],
+    backlog_documents: &BTreeMap<String, &str>,
+    slice_ids: &[String],
+) -> Vec<String> {
+    let mut findings = Vec::new();
+
+    if matches!(readiness, Some(PacketReadiness::Incomplete | PacketReadiness::Rejected)) {
+        findings.push(FINDING_BACKLOG_PACKET_NOT_REUSABLE.to_string());
+    }
+    if matches!(readiness, Some(PacketReadiness::Pending)) {
+        findings.push(FINDING_BACKLOG_PACKET_PENDING.to_string());
+    }
+    findings.extend(missing_sections.iter().filter(|section| !section.trim().is_empty()).map(
+        |section| format!("{FINDING_PREFIX_MISSING_SECTION}{}", normalize_backlog_label(section)),
+    ));
+    if document_refs.is_empty() {
+        findings.push(FINDING_MISSING_BACKLOG_DOCUMENT.to_string());
+    }
+
+    if backlog_packet_is_closure_limited(backlog_documents) {
+        findings.push(FINDING_CLOSURE_LIMITED_BACKLOG_PACKET.to_string());
+    }
+
+    findings.extend(missing_backlog_packet_sections(backlog_documents));
+    findings.extend(backlog_quality_slice_findings(backlog_documents, slice_ids));
+    findings
+}
+
+fn backlog_quality_slice_findings(
+    backlog_documents: &BTreeMap<String, &str>,
+    slice_ids: &[String],
+) -> Vec<String> {
+    let mut findings = Vec::new();
+
+    if !backlog_documents.is_empty()
+        && !backlog_packet_is_closure_limited(backlog_documents)
+        && slice_ids.is_empty()
+    {
+        findings.push(FINDING_MISSING_STABLE_SLICE_IDS.to_string());
+    }
+
+    if slice_ids.len() > 1 && !backlog_has_dependency_order(backlog_documents) {
+        findings.push(FINDING_MISSING_DEPENDENCY_ORDER.to_string());
+    }
+
+    findings.extend(backlog_quality_handoff_findings(backlog_documents, slice_ids));
+    findings
+}
+
+fn backlog_quality_handoff_findings(
+    backlog_documents: &BTreeMap<String, &str>,
+    slice_ids: &[String],
+) -> Vec<String> {
+    let Some(execution_handoff) =
+        backlog_document_body(backlog_documents, BACKLOG_EXECUTION_HANDOFF_FILE_NAME)
+    else {
+        return if !slice_ids.is_empty() && !backlog_packet_is_closure_limited(backlog_documents) {
+            vec![FINDING_MISSING_EXECUTION_HANDOFF.to_string()]
+        } else {
+            Vec::new()
+        };
+    };
+
+    if slice_ids.is_empty() {
+        return Vec::new();
+    }
+
+    let mut findings = Vec::new();
+    if let Some(selected_slice_id) = extract_first_slice_id(execution_handoff) {
+        if !slice_ids.iter().any(|slice_id| slice_id == &selected_slice_id) {
+            findings.push(FINDING_INVALID_SELECTED_SLICE_ID.to_string());
+        }
+    } else {
+        findings.push(FINDING_INVALID_SELECTED_SLICE_ID.to_string());
+    }
+    if markdown_section_items(execution_handoff, "Implementation Artifact References").is_empty() {
+        findings.push(FINDING_MISSING_IMPLEMENTATION_ARTIFACT_REFS.to_string());
+    }
+    if markdown_section_items(execution_handoff, "Independent Verification Anchors").is_empty() {
+        findings.push(FINDING_MISSING_INDEPENDENT_VERIFICATION_ANCHORS.to_string());
+    }
+    findings
+}
+
+fn backlog_quality_task_count(slice_ids: &[String]) -> Option<usize> {
+    (!slice_ids.is_empty()).then_some(slice_ids.len())
+}
+
+fn backlog_quality_mvp_scope(
+    backlog_documents: &BTreeMap<String, &str>,
+    slice_ids: &[String],
+) -> Option<String> {
+    backlog_selected_slice_id(backlog_documents)
+        .or_else(|| {
+            backlog_document_body(backlog_documents, BACKLOG_SEQUENCING_PLAN_FILE_NAME)
+                .and_then(extract_first_slice_id)
+        })
+        .or_else(|| slice_ids.first().cloned())
+}
+
+fn backlog_quality_state(findings: &[String]) -> BacklogQualityState {
+    if findings.iter().any(|finding| {
+        matches!(
+            finding.as_str(),
+            FINDING_BACKLOG_PACKET_NOT_REUSABLE
+                | FINDING_CLOSURE_LIMITED_BACKLOG_PACKET
+                | FINDING_MISSING_STABLE_SLICE_IDS
+                | FINDING_INVALID_SELECTED_SLICE_ID
+        )
+    }) {
+        BacklogQualityState::Blocked
+    } else if findings.is_empty() {
+        BacklogQualityState::Ready
+    } else {
+        BacklogQualityState::ClarificationRequired
+    }
 }
 
 fn backlog_document_slug(document_ref: &str) -> Option<String> {
