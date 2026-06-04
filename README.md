@@ -27,10 +27,49 @@ Boundline forces an explicit, inspectable workflow:
 3. `run` -> Execute the next approved step.
 4. `inspect` -> Report the authoritative runtime state.
 
-In the 0.68.0 release, `plan` also evaluates plan quality before execution
-handoff. If the active plan is missing a credible validation strategy or
-another blocking planning input, Boundline stops on one `phase_request` and
-keeps the session non-terminal until you answer.
+In the 0.69.0 release, `plan` enforces the full planning-readiness chain before
+execution handoff: goal quality, plan quality, backlog quality, then planning
+analysis. If Canon only produced a closure-limited backlog packet, or if the
+full packet still lacks an execution handoff, Boundline stops on one explicit
+planning gate and keeps the session non-terminal until the missing evidence is
+repaired.
+
+## Installation
+
+### Ubuntu / Debian (APT)
+
+We provide official `.deb` packages for `amd64` and `arm64` via the Apply The APT repository. 
+
+To install or update Boundline without needing Rust, run:
+
+```bash
+curl -fsSL https://apply-the.github.io/packages/apt/gpg.key \
+  | sudo gpg --dearmor -o /usr/share/keyrings/apply-the-archive-keyring.gpg
+
+echo "deb [signed-by=/usr/share/keyrings/apply-the-archive-keyring.gpg] https://apply-the.github.io/packages/apt stable main" \
+  | sudo tee /etc/apt/sources.list.d/apply-the.list
+
+sudo apt update
+sudo apt install boundline
+```
+
+**Post-install verification:**
+```bash
+boundline --version
+boundline doctor --install
+```
+
+### GitHub Releases Fallback
+If you prefer not to use the APT repository, you can download the `.deb` files directly from the [GitHub Releases](https://github.com/apply-the/boundline/releases) page and install them manually:
+```bash
+sudo dpkg -i boundline_<version>_<arch>.deb
+```
+
+### Source Install Fallback (Requires Rust)
+If you are developing Boundline or using an unsupported architecture, you can build from source:
+```bash
+cargo install --path .
+```
 
 ## Quick Start
 

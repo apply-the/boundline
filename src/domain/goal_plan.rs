@@ -7,9 +7,7 @@ use uuid::Uuid;
 use crate::domain::cluster::{ClusterDeliveryStory, ClusterSessionProjection};
 use crate::domain::context_intelligence::AdvancedContextProjection;
 use crate::domain::decision::{DecisionType, EvidenceRef};
-use crate::domain::governance::{
-    BacklogQualityAssessment, BacklogQualityState, CompactedCanonMemory,
-};
+use crate::domain::governance::{BacklogQualityAssessment, CompactedCanonMemory};
 use crate::domain::guidance::GuidanceGuardianProjection;
 use crate::domain::session::{
     ContinuityAuthority, DelegationContinuityMode, DelegationContinuityState, DelegationPacket,
@@ -437,10 +435,6 @@ const PLAN_QUALITY_FINDING_CONTEXT_PACK_STALE: &str = "context_pack_stale";
 const PLAN_QUALITY_ASSUMPTION_DEFAULT_ROUTE_OVERRIDE: &str =
     "no explicit route override is required for this plan";
 const PLANNING_ANALYSIS_MESSAGE_UNMAPPED_ITEMS: &str = "backlog reports unmapped success criteria";
-const PLANNING_ANALYSIS_MESSAGE_NO_BACKLOG_MAPPING: &str =
-    "backlog does not map any goal-plan task ids";
-const PLANNING_ANALYSIS_MESSAGE_MISSING_BACKLOG_MAPPING: &str =
-    "backlog does not map goal-plan task ids";
 const PLANNING_ANALYSIS_MESSAGE_MISSING_EXPECTED_OUTCOMES: &str =
     "planned tasks are missing measurable expected outcomes";
 
@@ -836,7 +830,7 @@ impl GoalPlan {
     pub fn planning_analysis_projection(
         &self,
         backlog_quality: &BacklogQualityAssessment,
-        backlog_documents: &[String],
+        _backlog_documents: &[String],
     ) -> PlanningAnalysisProjection {
         let success_criteria_total = self.tasks.len();
         let success_criteria_covered = self
@@ -846,18 +840,11 @@ impl GoalPlan {
                 task.expected_outcome.as_deref().is_some_and(|outcome| !outcome.trim().is_empty())
             })
             .count();
-        let combined_backlog = backlog_documents.join("\n");
-        let mapped_task_ids = self
-            .tasks
-            .iter()
-            .filter(|task| combined_backlog.contains(task.task_id.as_str()))
-            .map(|task| task.task_id.clone())
-            .collect::<Vec<_>>();
         let coverage = PlanningAnalysisCoverage {
             success_criteria_total,
             success_criteria_covered,
             backlog_task_count: backlog_quality.task_count,
-            mapped_plan_task_count: backlog_quality.task_count.map(|_| mapped_task_ids.len()),
+            mapped_plan_task_count: None,
         };
         let mut findings = Vec::new();
 
@@ -870,33 +857,6 @@ impl GoalPlan {
                     backlog_quality.unmapped_items.join(", ")
                 ),
             });
-        }
-
-        if matches!(backlog_quality.state, BacklogQualityState::Ready)
-            && backlog_quality.task_count.is_some()
-        {
-            if mapped_task_ids.is_empty() {
-                findings.push(PlanningAnalysisFinding {
-                    severity: PlanningAnalysisSeverity::Critical,
-                    source: PlanningAnalysisSource::Backlog,
-                    message: PLANNING_ANALYSIS_MESSAGE_NO_BACKLOG_MAPPING.to_string(),
-                });
-            } else if mapped_task_ids.len() < self.tasks.len() {
-                let missing_task_ids = self
-                    .tasks
-                    .iter()
-                    .filter(|task| !mapped_task_ids.contains(&task.task_id))
-                    .map(|task| task.task_id.clone())
-                    .collect::<Vec<_>>();
-                findings.push(PlanningAnalysisFinding {
-                    severity: PlanningAnalysisSeverity::High,
-                    source: PlanningAnalysisSource::Backlog,
-                    message: format!(
-                        "{PLANNING_ANALYSIS_MESSAGE_MISSING_BACKLOG_MAPPING}: {}",
-                        missing_task_ids.join(", ")
-                    ),
-                });
-            }
         }
 
         let tasks_missing_expected_outcomes = self

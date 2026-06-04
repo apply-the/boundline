@@ -42,13 +42,33 @@ Highlights:
   packs and repo-local Claude, Codex, and Antigravity command surfaces describe
   the same probe and follow-through behavior.
 - Realigned the active Canon compatibility boundary and related reasoning
-  contracts to Canon `0.63.0`.
+  contracts to Canon `0.67.0`.
 
 Release metadata note:
 
-- The current Boundline release line is `0.68.0`; published package metadata,
+- The current Boundline release line is `0.69.0`; published package metadata,
   distribution metadata, assistant plugin manifests, and docs are aligned to
-  that version while Canon compatibility remains `0.63.0`.
+  that version while Canon compatibility remains `0.67.0`.
+
+## [0.69.0] - 2026-06-04
+
+Delivered specs:
+
+- `068` - Backlog Contract
+
+Highlights:
+
+- Added the first formal backlog-quality planning gate after plan quality and
+  before planning analysis or execution handoff.
+- Switched backlog admission from the legacy checklist-style `backlog.md`
+  heuristic to the Canon multi-document backlog packet, including
+  closure-limited packet blocking and full-packet clarification for missing
+  execution handoff evidence.
+- Preserved additive backlog-quality projections across status, inspect,
+  orchestration, traces, and assistant plan or run surfaces.
+- Aligned the workspace, assistant manifests, distribution metadata, Homebrew,
+  WinGet, and reasoning compatibility surfaces to Boundline `0.69.0` and Canon
+  `0.67.0`.
 
 ## [0.68.0] - 2026-06-03
 

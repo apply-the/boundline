@@ -7,7 +7,7 @@ hero:
   tagline: Plan, execute, review, and govern engineering work through explainable orchestration, traceable stages, and bounded runtime control.
   image:
     src: /images/boundline-icon.svg
-    alt: Boundline icon
+    alt: Boundline logo
   actions:
     - theme: brand
       text: Get Started
@@ -37,5 +37,5 @@ features:
     details: Record why each stage ran, what owned it, what changed, and what happens next.
   - icon: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#006aff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></svg>'
     title: Framework Adapters
-    details: Extend selected stages through explicit external adapters such as Speckit or custom harnesses.
+    details: Extend selected stages through explicit external adapters such as GitHub Speckit.
 ---

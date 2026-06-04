@@ -5,5 +5,5 @@ fn supported_distribution_channels_always_include_source_fallback() {
     let channels = supported_distribution_channels();
 
     assert!(channels.contains(&DistributionChannel::Source));
-    assert_eq!(SUPPORTED_CANON_VERSION, "0.63.0");
+    assert_eq!(SUPPORTED_CANON_VERSION, "0.67.0");
 }

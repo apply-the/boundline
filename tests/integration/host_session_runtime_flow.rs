@@ -117,14 +117,83 @@ fn write_reusable_backlog_packet(workspace: &Path) {
     let backlog_dir = workspace.join(".boundline/governance/planning/backlog");
     fs::create_dir_all(&backlog_dir).unwrap();
     fs::write(
-        backlog_dir.join("backlog.md"),
+        backlog_dir.join("backlog-overview.md"),
         concat!(
-            "# Backlog\n\n",
-            "MVP: hand off one governed backlog packet into terminal execution.\n",
-            "Dependencies: T001 -> T002 -> T003.\n\n",
-            "- [ ] T001 Record host planning-stage completion in the governed lifecycle.\n",
-            "- [ ] T002 Promote reusable backlog artifacts for execution gating.\n",
-            "- [ ] T003 Resume execution after the backlog handoff is complete.\n",
+            "# Backlog Overview\n\n",
+            "## Decomposition Posture\n\nfull-packet\n\n",
+            "## Execution Handoff\n\ngoverned execution handoff is available\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        backlog_dir.join("epic-tree.md"),
+        "# Epic Tree\n\n- Epic SESSION-RUNTIME: preserve governed planning continuity.\n",
+    )
+    .unwrap();
+    fs::write(
+        backlog_dir.join("capability-to-epic-map.md"),
+        concat!(
+            "# Capability To Epic Map\n\n",
+            "- Planning-stage completion continuity -> SESSION-RUNTIME\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        backlog_dir.join("dependency-map.md"),
+        concat!(
+            "# Dependency Map\n\n",
+            "- [SLICE-SESSION-001] depends on lifecycle continuity markers.\n",
+            "- [SLICE-SESSION-002] depends on [SLICE-SESSION-001].\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        backlog_dir.join("delivery-slices.md"),
+        concat!(
+            "# Delivery Slices\n\n",
+            "- [SLICE-SESSION-001] Record planning-stage completion in the governed lifecycle.\n",
+            "- [SLICE-SESSION-002] Promote reusable backlog artifacts for execution gating.\n",
+            "- [SLICE-SESSION-003] Resume execution after governed backlog handoff.\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        backlog_dir.join("sequencing-plan.md"),
+        concat!(
+            "# Sequencing Plan\n\n",
+            "1. [SLICE-SESSION-001] first to preserve continuity evidence.\n",
+            "2. [SLICE-SESSION-002] after lifecycle continuity is durable.\n",
+            "3. [SLICE-SESSION-003] once the packet is execution-admissible.\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        backlog_dir.join("acceptance-anchors.md"),
+        concat!(
+            "# Acceptance Anchors\n\n",
+            "- [SLICE-SESSION-001] Planning-stage completion remains visible in lifecycle state.\n",
+            "- [SLICE-SESSION-002] Reusable backlog artifacts remain traceable.\n",
+            "- [SLICE-SESSION-003] Execution resumes without skipping backlog gates.\n",
+        ),
+    )
+    .unwrap();
+    fs::write(
+        backlog_dir.join("planning-risks.md"),
+        "# Planning Risks\n\n- Hidden continuity drift can desynchronize planning and execution.\n",
+    )
+    .unwrap();
+    fs::write(
+        backlog_dir.join("execution-handoff.md"),
+        concat!(
+            "# Execution Handoff\n\n",
+            "## Selected Slice\n\nSLICE-SESSION-001\n\n",
+            "## Implementation Artifact References\n\n",
+            "- src/orchestrator/session_runtime_planning_runtime.rs\n",
+            "- src/cli/orchestrate.rs\n\n",
+            "## Dependency Prerequisites\n\n",
+            "- lifecycle continuity markers remain durable across stage completion.\n\n",
+            "## Independent Verification Anchors\n\n",
+            "- integration flow proves backlog stage can resume into terminal execution.\n",
         ),
     )
     .unwrap();

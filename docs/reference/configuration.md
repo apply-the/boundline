@@ -52,7 +52,7 @@ Keep major delivery behavior explicit and reviewable.
 The default repo-visible roots remain `docs/project/` for stable inputs and
 `docs/evidence/` for durable outputs. Config can remap project-memory roots,
 but it should not blur the boundary between repo-visible delivery knowledge and
-runtime-owned state. See [[Project Memory Structure|Project-Memory-Structure]].
+runtime-owned state. See [Project Memory Structure](./file-layout).
 
 ## What Config Does Not Own
 
@@ -62,6 +62,8 @@ The following remain runtime-owned rather than config-authored:
 - traces under `.boundline/traces/`
 - planning-gate outcomes such as `goal_quality_state`, `plan_quality_state`,
   `backlog_quality_state`, and `planning_analysis_state`
+- additive backlog projections such as `backlog_quality_findings`,
+  `backlog_task_count`, `backlog_mvp_scope`, and `backlog_unmapped_items`
 - `phase_request` and assistant-safe follow-up commands
 - read-only readiness answers from `boundline probe`
 

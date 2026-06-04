@@ -6,7 +6,7 @@
 
 **Status**: Released in Boundline `0.67.0`
 
-**Input**: User description from `roadmap/features/03-plan-quality-contract.md`, promoted as the next Boundline planning-readiness feature with release, documentation, clippy, and changed-file patch-coverage closure requirements.
+**Input**: User description from `feat-plan-quality-contract.md`, promoted as the next Boundline planning-readiness feature with release, documentation, clippy, and changed-file patch-coverage closure requirements.
 
 ## User Scenarios & Testing *(mandatory)*
 

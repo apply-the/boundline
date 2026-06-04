@@ -34,12 +34,13 @@ export default withMermaid(defineConfig({
           text: "Guide",
           items: [
             { text: "Introduction", link: "/guide/introduction" },
-            { text: "Constitution", link: "/guide/constitution" },
-            { text: "Getting Started", link: "/guide/getting-started" },
             { text: "Installation", link: "/guide/installation" },
+            { text: "Quickstart", link: "/guide/quickstart" },
+            { text: "Getting Started", link: "/guide/getting-started" },
             { text: "First Workspace", link: "/guide/first-workspace" },
             { text: "Core Concepts", link: "/guide/core-concepts" },
-            { text: "Common Workflows", link: "/guide/common-workflows" }
+            { text: "Common Workflows", link: "/guide/common-workflows" },
+            { text: "Constitution", link: "/guide/constitution" }
           ]
         }
       ],

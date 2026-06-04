@@ -292,7 +292,7 @@ fn plan_quality_blocks_when_context_pack_is_stale() {
 }
 
 #[test]
-fn planning_analysis_blocks_when_backlog_does_not_map_goal_plan_tasks() {
+fn planning_analysis_blocks_when_backlog_reports_unmapped_success_criteria() {
     let plan = GoalPlan::new("Goal", vec![sample_task("T001"), sample_task("T002")])
         .unwrap()
         .with_planning_rationale("workspace evidence narrowed the goal to two bounded tasks")
@@ -311,7 +311,7 @@ fn planning_analysis_blocks_when_backlog_does_not_map_goal_plan_tasks() {
     assert_eq!(projection.state, PlanningAnalysisState::Blocked);
     assert_eq!(
         projection.coverage.as_ref().map(|coverage| coverage.mapped_plan_task_count),
-        Some(Some(0))
+        Some(None)
     );
     assert!(projection.findings.iter().any(|finding| {
         finding.severity == PlanningAnalysisSeverity::Critical

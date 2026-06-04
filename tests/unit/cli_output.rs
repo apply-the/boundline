@@ -1590,22 +1590,24 @@ fn render_session_status_surfaces_backlog_quality_projection() {
     let rendered = render_session_status(&SessionStatusView {
         backlog_quality_state: Some("clarification_required".to_string()),
         backlog_quality_findings: Some(vec![
-            "missing_dependency_order".to_string(),
-            "missing_mvp_scope".to_string(),
+            "missing_execution_handoff".to_string(),
+            "missing_independent_verification_anchors".to_string(),
         ]),
         backlog_task_count: Some(2),
-        backlog_mvp_scope: Some("US1 session status projection".to_string()),
+        backlog_mvp_scope: Some("SLICE-AUTH-001".to_string()),
         backlog_unmapped_items: Some(vec!["post-launch adoption metric".to_string()]),
         ..SessionStatusView::default()
     });
 
     assert!(rendered.contains("backlog_quality_state: clarification_required"), "{rendered}");
     assert!(
-        rendered.contains("backlog_quality_findings: missing_dependency_order, missing_mvp_scope"),
+        rendered.contains(
+            "backlog_quality_findings: missing_execution_handoff, missing_independent_verification_anchors"
+        ),
         "{rendered}"
     );
     assert!(rendered.contains("backlog_task_count: 2"), "{rendered}");
-    assert!(rendered.contains("backlog_mvp_scope: US1 session status projection"), "{rendered}");
+    assert!(rendered.contains("backlog_mvp_scope: SLICE-AUTH-001"), "{rendered}");
     assert!(rendered.contains("backlog_unmapped_items: post-launch adoption metric"), "{rendered}");
 }
 
@@ -1616,13 +1618,13 @@ fn render_session_status_surfaces_planning_analysis_projection() {
         planning_analysis_findings: Some(vec![PlanningAnalysisFinding {
             severity: PlanningAnalysisSeverity::Critical,
             source: PlanningAnalysisSource::Backlog,
-            message: "backlog does not map any goal-plan task ids".to_string(),
+            message: "backlog reports unmapped success criteria: acceptance target".to_string(),
         }]),
         planning_analysis_coverage: Some(PlanningAnalysisCoverage {
             success_criteria_total: 2,
             success_criteria_covered: 2,
             backlog_task_count: Some(2),
-            mapped_plan_task_count: Some(0),
+            mapped_plan_task_count: None,
         }),
         ..SessionStatusView::default()
     });
@@ -1630,14 +1632,12 @@ fn render_session_status_surfaces_planning_analysis_projection() {
     assert!(rendered.contains("planning_analysis_state: blocked"), "{rendered}");
     assert!(
         rendered.contains(
-            "planning_analysis_findings: critical:backlog:backlog does not map any goal-plan task ids"
+            "planning_analysis_findings: critical:backlog:backlog reports unmapped success criteria: acceptance target"
         ),
         "{rendered}"
     );
     assert!(
-        rendered.contains(
-            "planning_analysis_coverage: success_criteria=2/2, backlog_tasks=2, mapped_plan_tasks=0/2"
-        ),
+        rendered.contains("planning_analysis_coverage: success_criteria=2/2, backlog_tasks=2"),
         "{rendered}"
     );
 }

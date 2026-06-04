@@ -8,11 +8,12 @@ The goal of Boundline is to transform non-deterministic AI iterations into predi
 
 ## Recently Delivered
 
-- `067` - Plan Quality Contract: shipped the first planning-readiness gate in
-  Boundline `0.68.0`. The runtime now stops on one focused `phase_request`
-  when a plan lacks a credible validation strategy, and status, inspect, and
-  orchestration surfaces project the additive plan-quality state, findings,
-  assumptions, and recovery route.
+- `068` - Backlog Contract: shipped the first formal backlog-quality gate in
+  Boundline `0.69.0`. After plan quality is ready, the runtime now blocks
+  closure-limited Canon backlog packets, requests one clarification when a full
+  packet still lacks execution-handoff evidence, and projects additive
+  backlog-quality state through status, inspect, orchestration, and assistant
+  surfaces.
 
 ## <i class="fa-solid fa-rocket" style="color: #38c7ff;"></i> Upcoming Features & Topics
 

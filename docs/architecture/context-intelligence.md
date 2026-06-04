@@ -41,7 +41,7 @@ The exact file names can vary. The stable rule is ownership:
 
 ## Related Pages
 
-- [[Getting Started|Getting-Started]]
-- [[Configuration Reference|Configuration-Reference]]
-- [[Canon Integration|Canon-Integration]]
-- [[Architecture And Decisions|Architecture-And-Decisions]]
+- [Getting Started](../guide/getting-started)
+- [Configuration Reference](../reference/configuration)
+- [Canon Integration](../governance/guardians)
+- [Architecture And Decisions](./runtime-model)

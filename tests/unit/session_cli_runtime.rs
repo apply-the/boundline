@@ -1748,7 +1748,18 @@ fn execute_run_blocks_when_backlog_quality_is_not_ready() -> Result<(), Box<dyn 
     assert_eq!(session_status.backlog_quality_state.as_deref(), Some("clarification_required"));
     assert_eq!(
         session_status.backlog_quality_findings.as_ref(),
-        Some(&vec!["backlog_packet_pending".to_string(), "missing_backlog_document".to_string(),])
+        Some(&vec![
+            "backlog_packet_pending".to_string(),
+            "missing_backlog_document".to_string(),
+            "missing_section:backlog_overview".to_string(),
+            "missing_section:epic_tree".to_string(),
+            "missing_section:capability_to_epic_map".to_string(),
+            "missing_section:dependency_map".to_string(),
+            "missing_section:delivery_slices".to_string(),
+            "missing_section:sequencing_plan".to_string(),
+            "missing_section:acceptance_anchors".to_string(),
+            "missing_section:planning_risks".to_string(),
+        ])
     );
     assert!(report.terminal_output.contains("governed backlog packet is not ready for execution"));
 
@@ -1766,13 +1777,13 @@ fn execute_run_blocks_when_planning_analysis_is_blocked() -> Result<(), Box<dyn 
         findings: vec![PlanningAnalysisFinding {
             severity: PlanningAnalysisSeverity::Critical,
             source: PlanningAnalysisSource::Backlog,
-            message: "backlog does not map any goal-plan task ids".to_string(),
+            message: "backlog reports unmapped success criteria: acceptance target".to_string(),
         }],
         coverage: Some(PlanningAnalysisCoverage {
             success_criteria_total: 1,
             success_criteria_covered: 1,
             backlog_task_count: Some(1),
-            mapped_plan_task_count: Some(0),
+            mapped_plan_task_count: None,
         }),
     });
     record.goal_plan = Some(goal_plan);
@@ -1803,13 +1814,13 @@ fn execute_run_prefers_backlog_quality_before_planning_analysis()
         findings: vec![PlanningAnalysisFinding {
             severity: PlanningAnalysisSeverity::Critical,
             source: PlanningAnalysisSource::Backlog,
-            message: "backlog does not map any goal-plan task ids".to_string(),
+            message: "backlog reports unmapped success criteria: acceptance target".to_string(),
         }],
         coverage: Some(PlanningAnalysisCoverage {
             success_criteria_total: 1,
             success_criteria_covered: 1,
             backlog_task_count: Some(1),
-            mapped_plan_task_count: Some(0),
+            mapped_plan_task_count: None,
         }),
     });
     record.goal_plan = Some(goal_plan);

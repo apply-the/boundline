@@ -2,9 +2,11 @@
 
 Use this page while operating the main session-native Boundline loop.
 
-Boundline 0.68.0 ships the first plan-quality gate. When the plan needs a
-missing validation strategy or another blocking planning input, the runtime
-stops on one `phase_request` and keeps the same session alive for recovery.
+Boundline 0.69.0 ships the current planning-readiness chain. When the plan
+needs a missing validation strategy, when Canon only produced a closure-limited
+backlog packet, or when the full packet still lacks an execution handoff, the
+runtime stops on one explicit planning gate and keeps the same session alive
+for recovery.
 
 ## The Standard Loop
 
@@ -54,10 +56,11 @@ Planning can stop explicitly. If the runtime surfaces `goal_quality_state`,
 `plan_quality_state`, `backlog_quality_state`, or `planning_analysis_state`,
 follow that output literally.
 
-If `plan_quality_state` is `clarification_required`, answer the one question in
-the emitted `phase_request` before continuing. If the output is `ready`, but a
-later gate blocks, use `status`, `next`, and `inspect` to follow the runtime's
-recovery route instead of guessing.
+If `plan_quality_state` or `backlog_quality_state` is
+`clarification_required`, answer the one question in the emitted
+`phase_request` before continuing. If the output is `ready`, but a later gate
+blocks, use `status`, `next`, and `inspect` to follow the runtime's recovery
+route instead of guessing.
 
 ## Run
 

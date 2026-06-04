@@ -174,4 +174,4 @@ Boundline should fail closed or stop when governed inputs are incompatible or mi
 
 If `boundline-dashboard` cannot render interactively, rerun with `--snapshot-json` and compare the summary to `boundline status --workspace .` and `boundline inspect --workspace .`. Follow the fallback command printed by the dashboard before attempting another mutating action.
 
-If `boundline dashboard` reports the dedicated entrypoint unavailable, build or install the `boundline-dashboard` binary for the same Boundline `0.65.0` release, or continue with the normal CLI commands.
+If `boundline dashboard` reports the dedicated entrypoint unavailable, build or install the `boundline-dashboard` binary for the same Boundline `0.69.0` release, or continue with the normal CLI commands.

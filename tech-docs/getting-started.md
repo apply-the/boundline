@@ -63,7 +63,7 @@ Read the output literally:
   ready, already satisfied, blocked, or repair-needed.
 - `actions` tells you the next repair or follow-up step.
 
-The current 0.68.0 release documents Canon `0.63.0` support for the machine-facing
+The current 0.69.0 release documents Canon `0.67.0` support for the machine-facing
 `canon governance start|refresh|capabilities --json` `v1` surface.
 
 ## 3. Initialize The Workspace
@@ -213,7 +213,8 @@ Read the runtime output literally:
 
 - `goal` records the current bounded objective.
 - `plan` assembles context and drafts bounded work from the current repository
-  evidence.
+  evidence, then enforces the same planning-readiness gates the runtime will
+  use before execution handoff.
 - `run` executes the next approved step.
 - `status` reports the active state, next command, and any blocked or degraded
   follow-up.
