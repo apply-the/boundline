@@ -1,64 +1,163 @@
-# S9 - Large Codebase Context Substrate
+# Large Codebase Context Substrate
 
-## Owner
+## Integration Update
 
-Boundline
+This roadmap item should absorb **Context Fidelity Tiers** as a core part of the local context substrate.
 
-## Status
+It should also define the boundary for a follow-up **Persistent Context Snapshot Cache**.
 
-Required before stronger autonomy
+The cache remains:
 
-## Speckit Seed Notes
+- derived
+- local
+- disposable
+- rebuildable
+- non-authoritative
 
-- Seed role: repository-scale safety substrate for context selection and edits.
-- First slice: refuse unsafe huge full-file reads, add paged reads with stable
-  digests, and show omitted context plus skip reasons in `inspect`.
-- Depends on: current local context-intelligence baseline and trace/status
-  projection surfaces.
-- De-duplication: sqlite-vec activation belongs to seed 01; provider-supplied
-  context belongs to seed 07; this seed owns local large-repository behavior.
+It must not become memory or semantic truth.
 
-## Strategic Role
+## Relationship To Other Roadmap Files
 
-This feature makes Boundline credible on real repositories.
+| Related file | Relationship |
+|---|---|
+| `05-plan-analysis-contract.md` | Consumes context packs and consistency evidence, but does not own indexing or context selection |
+| `07-external-capability-provider-protocol.md` | Provider-supplied context belongs to provider protocol, not local context substrate |
+| `08-evals-and-runtime-observability.md` | Owns evals, events, trace export, and trace compaction |
+| `16-session-memory-and-repository-knowledge-distillation.md` | Owns reviewed memory proposals; cache must not become memory |
+| `19-plan-execution-orchestration.md` | Consumes validated context and task surfaces during execution |
 
-A governed delivery runtime that cannot handle huge repositories and huge files safely becomes a toy governance wrapper.
+## Added Scope
 
-## Problem
+Add these concepts:
 
-Large codebases break naive AI workflows because they create:
+- context fidelity classification
+- context inclusion mode
+- explicit omitted-context reasons
+- critical-context blocking behavior
+- cache freshness boundaries
+- cache is not memory rule
 
-- context-window overflow
-- irrelevant token flooding
-- full-file overreads
-- hidden impact surfaces
-- unsafe full-file rewrites
-- missed callers, tests, schemas, and contracts
-- hallucinated understanding from partial context
-- expensive and slow planning
+## Context Fidelity Tiers
 
-## Core Scope
+Boundline should not treat every context item equally.
 
-### Must Cover
+Each context candidate should be classified before inclusion, summarization, digesting, or omission.
 
-- Search-before-read policy
-- Hard read limits
-- Paged file reads
-- Stable file digests
-- Snippet references
-- Symbol-aware indexing
-- Repository map
-- Context Pack budgeting
-- Lazy hash references for huge logs, diffs, CI output, generated files
-- Hybrid retrieval ranking
-- Test/evidence-guided retrieval
-- Patch-safe editing
-- Trace-visible context selection
-- Large-file risk findings
+### Tier 0: Critical Context
 
-## Algorithms And Techniques
+Critical context must remain high fidelity.
 
-### Search-Before-Read
+Examples:
+
+- active goal
+- active feature specification
+- active plan
+- tasks or backlog accepted for execution
+- contracts
+- failing tests
+- current phase request
+- accepted Canon packets
+- stage ownership contract
+- execution admission gates
+
+Rules:
+
+- Must not be silently omitted.
+- Must not be represented only by a lossy summary.
+- Must be included directly or referenced through mandatory retrieval.
+- Missing critical context is a blocking finding.
+
+### Tier 1: Supporting Context
+
+Supporting context is useful but can often be excerpted or summarized.
+
+Examples:
+
+- nearby source modules
+- relevant documentation
+- related tests
+- previous traces for the same feature
+- architecture notes
+- known examples
+
+Rules:
+
+- May be excerpted.
+- May be summarized with source references.
+- May be retrieved on demand.
+- Must keep source attribution.
+
+### Tier 2: Ambient Context
+
+Ambient context is background information.
+
+Examples:
+
+- old completed traces
+- broad documentation
+- unrelated roadmap notes
+- long historical chat logs
+- stale examples
+
+Rules:
+
+- Summary or index-only by default.
+- Included only when relevance rules activate it.
+- Must not dominate planning context.
+
+### Tier 3: Archived Or Discardable Context
+
+Archived or discardable context should not influence normal planning.
+
+Examples:
+
+- superseded drafts
+- duplicate assistant output
+- abandoned intermediate attempts
+- obsolete generated artifacts
+
+Rules:
+
+- Not included by default.
+- Available only through explicit inspect or archive lookup.
+- Must not affect execution admission.
+
+## Context Pack Budgeting
+
+Every included context item should record:
+
+- source reference
+- fidelity tier
+- inclusion mode
+- reason
+- authority
+- estimated cost
+- lifecycle relevance
+- risk relevance
+
+Supported inclusion modes:
+
+- full
+- excerpt
+- summary
+- signature
+- digest
+- omitted
+
+Example:
+
+```json
+{
+  "source_ref": "specs/070/spec.md",
+  "tier": "critical",
+  "mode": "full",
+  "reason": "active feature specification",
+  "authority": "feature_packet",
+  "budget_cost": 18400
+}
+```
+
+## Search-Before-Read
 
 Before reading a large file, Boundline should require one or more of:
 
@@ -69,7 +168,7 @@ Before reading a large file, Boundline should require one or more of:
 - test relation lookup
 - previous trace relation lookup
 
-### Symbol-Aware Indexing
+## Symbol-Aware Indexing
 
 Prefer semantic units over arbitrary token chunks:
 
@@ -77,7 +176,7 @@ Prefer semantic units over arbitrary token chunks:
 - methods
 - classes
 - structs
-- traits/interfaces
+- traits or interfaces
 - modules
 - routes
 - schemas
@@ -85,7 +184,7 @@ Prefer semantic units over arbitrary token chunks:
 - migrations
 - config blocks
 
-### Repository Map
+## Repository Map
 
 Store a compact navigation model:
 
@@ -99,19 +198,7 @@ file -> Canon refs where available
 file -> owner hints where available
 ```
 
-### Context Pack Budgeting
-
-Every included context item must carry:
-
-- reason
-- source
-- authority
-- token or byte estimate
-- lifecycle relevance
-- risk relevance
-- whether full text, summary, signature, or snippet was included
-
-### Hybrid Ranking
+## Hybrid Ranking
 
 Rank context candidates with multiple signals:
 
@@ -124,9 +211,10 @@ Rank context candidates with multiple signals:
 - changed-file proximity
 - Canon authority
 - guidance/guardian relevance
+- fidelity tier
 - optional vector similarity
 
-### Lazy Hash References
+## Lazy Hash References
 
 For huge logs and diffs:
 
@@ -136,7 +224,7 @@ include digest + summary + relevant excerpt
 resolve full content only on demand
 ```
 
-### Patch-Safe Editing
+## Patch-Safe Editing
 
 For huge files:
 
@@ -148,50 +236,38 @@ For huge files:
 - emit trace for applied hunks
 - fall back to manual review if anchors drift
 
-## Suggested Technology
+## Persistent Context Snapshot Cache Boundary
 
-Start local and embedded:
+A follow-up sub-slice may add a persistent local cache for:
 
-- SQLite
-- SQLite FTS5
-- stable JSON sidecar index files
-- ripgrep integration
-- tree-sitter where language support is practical
-- LSP integration later where available
+- workspace fingerprint
+- active spec context
+- adapter capabilities
+- repository map
+- retrieval index metadata
+- last good planning context
 
-Then add optional:
+Rules:
 
-- sqlite-vec for local vector retrieval
-- optional vector provider interface
-- optional graph export
-- Kùzu later for local graph queries if SQLite relationship tables become insufficient
+- cache is derived and rebuildable
+- cache files are ignored by Git
+- branch switch, merge, rebase, config changes, schema changes, adapter changes, and Canon packet changes are freshness events
+- full rebuild must not run automatically inside Git hooks
+- `doctor` must report accidentally tracked cache files
 
-Avoid as mandatory V1 dependencies:
+Cache is not memory. `16-session-memory-and-repository-knowledge-distillation.md` owns reviewed memory proposals and Canon promotion paths.
 
-- Neo4j
-- Qdrant
-- remote vector databases
-- mandatory cloud indexing
-
-## Data Model Sketch
-
-```text
-files(id, path, digest, size, language, modified_at)
-symbols(id, file_id, kind, name, start_line, end_line, signature, digest)
-relations(source_id, target_id, kind, confidence)
-snippets(id, file_id, start_line, end_line, digest, summary)
-context_pack_items(id, session_id, source_ref, inclusion_reason, budget_cost)
-```
-
-## Acceptance Criteria
+## Acceptance Criteria Additions
 
 - Boundline refuses huge full-file reads unless explicitly allowed.
 - Boundline can build a repo map for common language stacks.
 - Context Packs show why items were selected.
+- Context Packs show fidelity tier and inclusion mode for each item.
+- Critical context is not silently omitted or represented only by lossy summaries.
 - Large logs and diffs are compacted with hash references.
 - Patch application uses anchors and post-apply verification.
 - Inspect can show omitted context and why it was omitted.
-- Tests cover huge file, huge diff, and missing index cases.
+- Tests cover huge file, huge diff, missing index, critical-context omission, and stale cache cases.
 
 ## Risks
 
@@ -199,7 +275,10 @@ context_pack_items(id, session_id, source_ref, inclusion_reason, budget_cost)
 - Treating vector search as source of truth.
 - Hiding important code behind summaries.
 - Slowing down every session.
+- Misclassifying critical context as compressible.
 
-## Hard Rule
+## Hard Rules
 
-Summaries are for navigation. Source code is required for edits.
+- Summaries are for navigation. Source code is required for edits.
+- Critical context must not be silently lossy.
+- Cache is not memory.

@@ -97,7 +97,7 @@ fn known_speckit_profile_activates_with_prefilled_defaults_and_runs_plan()
     assert!(plan_text.contains("framework_adapter_stage_status: succeeded"), "{plan_text}");
     assert!(
         plan_text.contains(
-            "framework_adapter_produced_artifacts: specs/068-backlog-contract/spec.md, specs/068-backlog-contract/plan.md, specs/068-backlog-contract/tasks.md, .specify/workflows/speckit/planning.yml"
+            "framework_adapter_produced_artifacts: specs/069-plan-analysis-contract/spec.md, specs/069-plan-analysis-contract/plan.md, specs/069-plan-analysis-contract/tasks.md, .specify/workflows/speckit/planning.yml"
         ),
         "{plan_text}"
     );

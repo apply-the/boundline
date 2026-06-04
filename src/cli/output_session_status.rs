@@ -582,9 +582,10 @@ fn preview_planning_analysis_findings(
         .iter()
         .map(|finding| {
             format!(
-                "{}:{}:{}",
+                "{}:{}:{}:{}",
                 finding.severity.as_str(),
                 finding.source.as_str(),
+                finding.code,
                 preview_session_brief_text(&finding.message)
             )
         })
@@ -599,15 +600,27 @@ fn planning_analysis_coverage_text(
         "success_criteria={}/{}",
         coverage.success_criteria_covered, coverage.success_criteria_total
     )];
-    if let Some(backlog_task_count) = coverage.backlog_task_count {
-        parts.push(format!("backlog_tasks={backlog_task_count}"));
+    if let (Some(backlog_slice_covered), Some(backlog_slice_total)) =
+        (coverage.backlog_slice_covered, coverage.backlog_slice_total)
+    {
+        parts.push(format!("backlog_slices={backlog_slice_covered}/{backlog_slice_total}"));
     }
-    if let Some(mapped_plan_task_count) = coverage.mapped_plan_task_count {
+    if let (Some(validation_anchor_covered), Some(validation_anchor_total)) =
+        (coverage.validation_anchor_covered, coverage.validation_anchor_total)
+    {
         parts.push(format!(
-            "mapped_plan_tasks={mapped_plan_task_count}/{}",
-            coverage.success_criteria_total
+            "validation_anchors={validation_anchor_covered}/{validation_anchor_total}"
         ));
     }
+    if let (Some(risk_covered), Some(risk_total)) = (coverage.risk_covered, coverage.risk_total) {
+        parts.push(format!("risks={risk_covered}/{risk_total}"));
+    }
+    if let (Some(constraint_covered), Some(constraint_total)) =
+        (coverage.constraint_covered, coverage.constraint_total)
+    {
+        parts.push(format!("constraints={constraint_covered}/{constraint_total}"));
+    }
+    parts.push(format!("governed_evidence_ready={}", coverage.governed_evidence_ready));
     parts.join(", ")
 }
 
@@ -1168,4 +1181,50 @@ pub fn render_session_status(view: &SessionStatusView) -> String {
 
     lines.push(format!("explanation: {}", view.explanation));
     lines.join("\n")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{planning_analysis_coverage_text, preview_planning_analysis_findings};
+    use crate::domain::goal_plan::{
+        PlanningAnalysisCoverage, PlanningAnalysisFinding, PlanningAnalysisSeverity,
+        PlanningAnalysisSource, PlanningAnalysisSourceRef,
+    };
+
+    #[test]
+    fn planning_analysis_helpers_render_new_codes_and_optional_coverage_fields() {
+        let findings = vec![PlanningAnalysisFinding {
+            severity: PlanningAnalysisSeverity::Critical,
+            source: PlanningAnalysisSource::Validation,
+            code: "validation_coverage_missing".to_string(),
+            message: "selected slice is missing a matching acceptance anchor".to_string(),
+            source_refs: vec![PlanningAnalysisSourceRef {
+                artifact_kind: "backlog_document".to_string(),
+                artifact_ref: "acceptance-anchors.md".to_string(),
+                anchor: Some("slice_id=SLICE-001".to_string()),
+            }],
+        }];
+        let coverage = PlanningAnalysisCoverage {
+            success_criteria_total: 3,
+            success_criteria_covered: 2,
+            backlog_slice_total: Some(2),
+            backlog_slice_covered: Some(1),
+            validation_anchor_total: Some(1),
+            validation_anchor_covered: Some(1),
+            risk_total: Some(2),
+            risk_covered: Some(1),
+            constraint_total: Some(2),
+            constraint_covered: Some(2),
+            governed_evidence_ready: false,
+        };
+
+        assert_eq!(
+            preview_planning_analysis_findings(&findings),
+            "critical:validation:validation_coverage_missing:selected slice is missing a matching acceptance anchor"
+        );
+        assert_eq!(
+            planning_analysis_coverage_text(&coverage),
+            "success_criteria=2/3, backlog_slices=1/2, validation_anchors=1/1, risks=1/2, constraints=2/2, governed_evidence_ready=false"
+        );
+    }
 }

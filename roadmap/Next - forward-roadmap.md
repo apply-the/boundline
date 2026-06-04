@@ -30,7 +30,7 @@ feature under `specs/`.
 | **02** | [agentic-framework-integration.md](features/02-agentic-framework-integration.md) | Delivered in 0.66.0: external framework-adapter runtime, corrected split-stage Speckit bridge revalidated on 2026-06-01 |
 | **03** | plan-quality-contract.md | Delivered in 0.67.0: first plan-readiness gate, one-question recovery, additive plan-quality projections |
 | **04** | [backlog-contract.md](features/04-backlog-contract.md) | Delivered in 0.69.0: Canon backlog packet gate, closure-limited blocking, and additive backlog-quality projections |
-| **05** | [plan-analysis-contract.md](features/05-plan-analysis-contract.md) | Planning UX - cross-artifact analysis |
+| **05** | [plan-analysis-contract.md](features/05-plan-analysis-contract.md) | Delivered in 0.70.0: read-only planning-coherence gate, source-attributed findings, and withheld execution handoff on contradictions or producer gaps |
 | **06** | [large-codebase-context-substrate.md](features/06-large-codebase-context-substrate.md) | Long-term context handling limits |
 | **07** | [external-capability-provider-protocol.md](features/07-external-capability-provider-protocol.md) | Native provider contract, setup, and activation surface (replaces MCP) |
 | **08** | [evals-and-runtime-observability.md](features/08-evals-and-runtime-observability.md) | Local quality and regression layer |

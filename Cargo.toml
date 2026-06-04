@@ -9,8 +9,8 @@ resolver = "3"
 
 [workspace.package]
 # Published release metadata tracks the current public tag; backlog-readiness
-# gate closure is tracked under CHANGELOG 0.69.0.
-version = "0.69.0"
+# gate closure is tracked under CHANGELOG 0.70.0.
+version = "0.70.0"
 edition = "2024"
 license = "MIT"
 description = "Bounded cognitive runtime for AI-assisted software delivery."

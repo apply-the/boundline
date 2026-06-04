@@ -77,12 +77,14 @@ planning gates such as `goal_quality_state`, `plan_quality_state`,
 handoffs such as `phase_request`, `assistant_resume_command`, and
 `assistant_next_command`.
 
-The 0.69.0 line keeps plan quality as the first planning-readiness gate and
-adds backlog quality immediately after it. If the active plan lacks a credible
-validation strategy, or if the Canon backlog packet is closure-limited or
-still lacks execution-handoff evidence, the runtime keeps planning
+The 0.70.0 line keeps plan quality as the first planning-readiness gate,
+follows it with backlog quality, and then runs a read-only planning-analysis
+coherence pass. If the active plan lacks a credible validation strategy, if the
+Canon backlog packet is closure-limited or still lacks execution-handoff
+evidence, or if planning analysis finds a contradiction between selected slice,
+validation coverage, and governed execution inputs, the runtime keeps planning
 non-terminal, emits one `phase_request` when recovery is possible, and
-preserves the blocked assessment in status, inspect, and orchestration
+preserves the blocked assessment in status, inspect, traces, and orchestration
 snapshots until the operator answers or regenerates Canon output.
 
 ## Host Surface Boundary

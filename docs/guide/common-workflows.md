@@ -2,11 +2,12 @@
 
 Use this page while operating the main session-native Boundline loop.
 
-Boundline 0.69.0 ships the current planning-readiness chain. When the plan
+Boundline 0.70.0 ships the current planning-readiness chain. When the plan
 needs a missing validation strategy, when Canon only produced a closure-limited
-backlog packet, or when the full packet still lacks an execution handoff, the
-runtime stops on one explicit planning gate and keeps the same session alive
-for recovery.
+backlog packet, when the full packet still lacks an execution handoff, or when
+planning analysis finds a contradiction between the selected slice, validation
+anchors, and execution inputs, the runtime stops on one explicit planning gate
+and keeps the same session alive for recovery.
 
 ## The Standard Loop
 
@@ -61,6 +62,11 @@ If `plan_quality_state` or `backlog_quality_state` is
 `phase_request` before continuing. If the output is `ready`, but a later gate
 blocks, use `status`, `next`, and `inspect` to follow the runtime's recovery
 route instead of guessing.
+
+When `planning_analysis_state` is `blocked`, inspect the source-attributed
+finding before changing anything. The repair target may be the local plan, the
+verification strategy, or a Canon backlog packet that must be regenerated
+rather than guessed from chat history.
 
 ## Run
 

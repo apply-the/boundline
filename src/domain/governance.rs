@@ -2230,7 +2230,22 @@ pub struct BacklogQualityAssessment {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BacklogQualitySnapshot {
     pub assessment: BacklogQualityAssessment,
+    pub document_refs: Vec<String>,
     pub document_bodies: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub(crate) struct PlanningAnalysisBacklogEvidence {
+    pub slice_ids: Vec<String>,
+    pub first_sequenced_slice_id: Option<String>,
+    pub selected_slice_id: Option<String>,
+    pub acceptance_anchor_slice_ids: Vec<String>,
+    pub acceptance_anchor_count: usize,
+    pub planning_risk_count: usize,
+    pub dependency_prerequisite_count: usize,
+    pub implementation_artifact_ref_count: usize,
+    pub independent_verification_anchor_count: usize,
+    pub closure_limited: bool,
 }
 
 const FINDING_BACKLOG_PACKET_NOT_REUSABLE: &str = "backlog_packet_not_reusable";
@@ -2300,6 +2315,7 @@ pub fn backlog_quality_snapshot_for_lifecycle(
         {
             return Some(BacklogQualitySnapshot {
                 assessment: assess_backlog_quality(Some(PacketReadiness::Pending), &[], &[], &[]),
+                document_refs: Vec::new(),
                 document_bodies: Vec::new(),
             });
         }
@@ -2325,6 +2341,7 @@ pub fn backlog_quality_snapshot_for_lifecycle(
                 mvp_scope: None,
                 unmapped_items: Vec::new(),
             },
+            document_refs: Vec::new(),
             document_bodies: Vec::new(),
         });
     }
@@ -2371,6 +2388,7 @@ pub fn backlog_quality_snapshot_for_lifecycle(
 
     Some(BacklogQualitySnapshot {
         assessment: assess_backlog_quality(readiness, &document_refs, &[], &document_bodies),
+        document_refs,
         document_bodies,
     })
 }
@@ -2395,6 +2413,45 @@ fn backlog_documents_by_slug<'a>(
             backlog_document_slug(document_ref).map(|slug| (slug, document_body.as_str()))
         })
         .collect()
+}
+
+pub(crate) fn planning_analysis_backlog_evidence(
+    document_refs: &[String],
+    document_bodies: &[String],
+) -> PlanningAnalysisBacklogEvidence {
+    let backlog_documents = backlog_documents_by_slug(document_refs, document_bodies);
+    let acceptance_anchors =
+        backlog_document_body(&backlog_documents, BACKLOG_ACCEPTANCE_ANCHORS_FILE_NAME);
+    let planning_risks =
+        backlog_document_body(&backlog_documents, BACKLOG_PLANNING_RISKS_FILE_NAME);
+    let execution_handoff =
+        backlog_document_body(&backlog_documents, BACKLOG_EXECUTION_HANDOFF_FILE_NAME);
+
+    PlanningAnalysisBacklogEvidence {
+        slice_ids: backlog_slice_ids(&backlog_documents),
+        first_sequenced_slice_id: backlog_document_body(
+            &backlog_documents,
+            BACKLOG_SEQUENCING_PLAN_FILE_NAME,
+        )
+        .and_then(extract_first_slice_id),
+        selected_slice_id: execution_handoff.and_then(extract_first_slice_id),
+        acceptance_anchor_slice_ids: acceptance_anchors.map(extract_slice_ids).unwrap_or_default(),
+        acceptance_anchor_count: acceptance_anchors
+            .map(markdown_list_items)
+            .unwrap_or_default()
+            .len(),
+        planning_risk_count: planning_risks.map(markdown_list_items).unwrap_or_default().len(),
+        dependency_prerequisite_count: execution_handoff
+            .map(|body| markdown_section_items(body, "Dependency Prerequisites").len())
+            .unwrap_or_default(),
+        implementation_artifact_ref_count: execution_handoff
+            .map(|body| markdown_section_items(body, "Implementation Artifact References").len())
+            .unwrap_or_default(),
+        independent_verification_anchor_count: execution_handoff
+            .map(|body| markdown_section_items(body, "Independent Verification Anchors").len())
+            .unwrap_or_default(),
+        closure_limited: backlog_packet_is_closure_limited(&backlog_documents),
+    }
 }
 
 fn backlog_quality_findings(
@@ -2635,6 +2692,17 @@ fn markdown_section_items(source: &str, section_name: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
+fn markdown_list_items(source: &str) -> Vec<String> {
+    source
+        .lines()
+        .map(str::trim)
+        .filter_map(|line| line.strip_prefix(MARKDOWN_LIST_ITEM_PREFIX))
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
 fn markdown_section_body<'a>(source: &'a str, section_name: &str) -> Option<&'a str> {
     let section_header = format!("{MARKDOWN_SECTION_LEVEL_TWO_PREFIX}{section_name}");
     let start_index = source.find(&section_header)?;
@@ -2853,8 +2921,9 @@ mod tests {
         GovernanceStartupContext, GovernanceTransitionDirection, GovernedStageCategory,
         PacketReadiness, PacketReuseBindingReason, StageGovernancePolicy, StopSemantics,
         SystemContextBinding, execution_stage_key_for_mode, governance_confidence_handoff,
-        governed_stage_catalog, is_execution_canon_mode, planning_stage_brief_ref,
-        resolve_governance_startup_posture, validate_canon_capabilities_for_mode,
+        governed_stage_catalog, is_execution_canon_mode, planning_analysis_backlog_evidence,
+        planning_stage_brief_ref, resolve_governance_startup_posture,
+        validate_canon_capabilities_for_mode,
     };
     use crate::domain::reasoning::{
         ProfileActivationRecord, ReasoningAdmissionEffect, ReasoningConfidenceLevel,
@@ -3328,6 +3397,47 @@ mod tests {
         assert_eq!(handoff.confidence_level, ReasoningConfidenceLevel::Low);
         assert_eq!(handoff.admission_effect, ReasoningAdmissionEffect::Gate);
         assert_eq!(handoff.next_action.as_deref(), Some("configure distinct reviewer routes"));
+    }
+
+    #[test]
+    fn planning_analysis_backlog_evidence_extracts_selected_slice_and_handoff_counts() {
+        let document_refs = vec![
+            ".canon/backlog/delivery-slices.md".to_string(),
+            ".canon/backlog/sequencing-plan.md".to_string(),
+            ".canon/backlog/acceptance-anchors.md".to_string(),
+            ".canon/backlog/planning-risks.md".to_string(),
+            ".canon/backlog/execution-handoff.md".to_string(),
+        ];
+        let document_bodies = vec![
+            "- [SLICE-ALPHA-001] First delivery slice.\n- [SLICE-BETA-002] Follow-up slice.\n"
+                .to_string(),
+            "1. [SLICE-ALPHA-001] first\n2. [SLICE-BETA-002] second\n".to_string(),
+            "- [SLICE-ALPHA-001] acceptance proof\n- [SLICE-BETA-002] rollout proof\n".to_string(),
+            "- mitigate flaky dependency\n- confirm migration constraint\n".to_string(),
+            concat!(
+                "## Selected Slice\n\nSLICE-ALPHA-001\n\n",
+                "## Implementation Artifact References\n\n",
+                "- src/lib.rs\n- tests/lib.rs\n\n",
+                "## Dependency Prerequisites\n\n",
+                "- upstream review completed\n\n",
+                "## Independent Verification Anchors\n\n",
+                "- cargo test --lib\n"
+            )
+            .to_string(),
+        ];
+
+        let evidence = planning_analysis_backlog_evidence(&document_refs, &document_bodies);
+
+        assert_eq!(evidence.slice_ids, vec!["SLICE-ALPHA-001", "SLICE-BETA-002"]);
+        assert_eq!(evidence.first_sequenced_slice_id.as_deref(), Some("SLICE-ALPHA-001"));
+        assert_eq!(evidence.selected_slice_id.as_deref(), Some("SLICE-ALPHA-001"));
+        assert_eq!(evidence.acceptance_anchor_slice_ids, vec!["SLICE-ALPHA-001", "SLICE-BETA-002"]);
+        assert_eq!(evidence.acceptance_anchor_count, 2);
+        assert_eq!(evidence.planning_risk_count, 2);
+        assert_eq!(evidence.dependency_prerequisite_count, 1);
+        assert_eq!(evidence.implementation_artifact_ref_count, 2);
+        assert_eq!(evidence.independent_verification_anchor_count, 1);
+        assert!(!evidence.closure_limited);
     }
 
     #[test]

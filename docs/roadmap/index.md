@@ -8,6 +8,11 @@ The goal of Boundline is to transform non-deterministic AI iterations into predi
 
 ## Recently Delivered
 
+- `069` - Plan Analysis Contract: shipped the read-only planning-analysis gate
+  in Boundline `0.70.0`. After plan quality and backlog quality are ready, the
+  runtime now validates cross-artifact coherence across goal outcomes,
+  validation coverage, selected backlog slice sequencing, execution-handoff
+  inputs, and governed producer evidence before execution is offered.
 - `068` - Backlog Contract: shipped the first formal backlog-quality gate in
   Boundline `0.69.0`. After plan quality is ready, the runtime now blocks
   closure-limited Canon backlog packets, requests one clarification when a full

@@ -2,7 +2,8 @@ use boundline::domain::decision::{DecisionType, EvidenceRef};
 use boundline::domain::goal_plan::{
     ContextInput, ContextInputKind, ContextPack, ContextPackCredibility, GoalPlan, GoalPlanError,
     GoalPlanFlowMode, GoalPlanFlowState, GoalPlanStatus, InferredFlow, PlannedTask,
-    PlanningAnalysisSeverity, PlanningAnalysisSource, PlanningAnalysisState, WorkspaceSignals,
+    PlanningAnalysisSeverity, PlanningAnalysisSource, PlanningAnalysisSourceRef,
+    PlanningAnalysisState, WorkspaceSignals,
 };
 use boundline::domain::governance::{BacklogQualityAssessment, BacklogQualityState};
 
@@ -14,6 +15,14 @@ fn sample_task(id: &str) -> PlannedTask {
         expected_outcome: Some("compiles".to_string()),
         decision_type_hint: Some(DecisionType::Code),
     }
+}
+
+fn backlog_document_ref(file_name: &str) -> String {
+    format!(".canon/backlog/{file_name}")
+}
+
+fn backlog_document_refs(file_names: &[&str]) -> Vec<String> {
+    file_names.iter().map(|file_name| backlog_document_ref(file_name)).collect()
 }
 
 #[test]
@@ -303,20 +312,23 @@ fn planning_analysis_blocks_when_backlog_reports_unmapped_success_criteria() {
             findings: Vec::new(),
             task_count: Some(1),
             mvp_scope: Some("MVP".to_string()),
-            unmapped_items: vec!["acceptance target".to_string()],
+            unmapped_items: vec!["acceptance target".to_string(), "acceptance target".to_string()],
         },
+        &[],
         &["- [ ] T900 unrelated backlog item".to_string()],
     );
 
     assert_eq!(projection.state, PlanningAnalysisState::Blocked);
     assert_eq!(
-        projection.coverage.as_ref().map(|coverage| coverage.mapped_plan_task_count),
-        Some(None)
+        projection.coverage.as_ref().map(|coverage| coverage.success_criteria_covered),
+        Some(1)
     );
+    assert_eq!(projection.findings.len(), 1);
     assert!(projection.findings.iter().any(|finding| {
         finding.severity == PlanningAnalysisSeverity::Critical
-            && finding.source == PlanningAnalysisSource::Backlog
-            && finding.message.contains("unmapped success criteria")
+            && finding.source == PlanningAnalysisSource::Goal
+            && finding.code == "success_criterion_uncovered"
+            && finding.message.contains("acceptance target")
     }));
 }
 
@@ -347,14 +359,182 @@ fn planning_analysis_reports_missing_expected_outcomes_without_blocking() {
             unmapped_items: Vec::new(),
         },
         &[],
+        &[],
     );
 
     assert_eq!(projection.state, PlanningAnalysisState::Findings);
     assert!(projection.findings.iter().any(|finding| {
         finding.severity == PlanningAnalysisSeverity::Medium
             && finding.source == PlanningAnalysisSource::Plan
+            && finding.code == "expected_outcome_missing"
             && finding.message.contains("missing measurable expected outcomes")
     }));
+}
+
+#[test]
+fn planning_analysis_blocks_when_acceptance_anchors_do_not_cover_selected_slice() {
+    let plan = GoalPlan::new("Goal", vec![sample_task("T001")])
+        .unwrap()
+        .with_planning_rationale("workspace evidence narrowed the goal to one execution slice")
+        .with_verification_strategy("run slice-focused acceptance checks");
+    let document_refs = backlog_document_refs(&[
+        "delivery-slices.md",
+        "acceptance-anchors.md",
+        "execution-handoff.md",
+    ]);
+    let projection = plan.planning_analysis_projection(
+        &BacklogQualityAssessment {
+            state: BacklogQualityState::Ready,
+            findings: Vec::new(),
+            task_count: Some(1),
+            mvp_scope: Some("SLICE-SESSION-001".to_string()),
+            unmapped_items: Vec::new(),
+        },
+        &document_refs,
+        &[
+            "- [SLICE-SESSION-001] Ready for execution.".to_string(),
+            "- [SLICE-SESSION-002] Different slice owns the acceptance proof.".to_string(),
+            concat!(
+                "## Selected Slice\n\nSLICE-SESSION-001\n\n",
+                "## Implementation Artifact References\n\n",
+                "- src/lib.rs\n\n",
+                "## Dependency Prerequisites\n\n",
+                "- bounded prerequisites captured\n\n",
+                "## Independent Verification Anchors\n\n",
+                "- integration coverage exists\n"
+            )
+            .to_string(),
+        ],
+    );
+
+    assert_eq!(projection.state, PlanningAnalysisState::Blocked);
+    assert!(projection.findings.iter().any(|finding| {
+        finding.severity == PlanningAnalysisSeverity::Critical
+            && finding.source == PlanningAnalysisSource::Validation
+            && finding.code == "validation_coverage_missing"
+            && finding.source_refs.contains(&PlanningAnalysisSourceRef {
+                artifact_kind: "backlog_document".to_string(),
+                artifact_ref: "acceptance-anchors.md".to_string(),
+                anchor: Some("slice_id=SLICE-SESSION-001".to_string()),
+            })
+    }));
+    assert_eq!(
+        projection.coverage.as_ref().and_then(|coverage| coverage.validation_anchor_total),
+        Some(1)
+    );
+    assert_eq!(
+        projection.coverage.as_ref().and_then(|coverage| coverage.validation_anchor_covered),
+        Some(0)
+    );
+}
+
+#[test]
+fn planning_analysis_blocks_when_execution_handoff_conflicts_with_sequencing_plan() {
+    let plan = GoalPlan::new("Goal", vec![sample_task("T001")])
+        .unwrap()
+        .with_planning_rationale("execution must start from the first sequenced slice")
+        .with_verification_strategy("run the ordered verification flow after implementation");
+    let document_refs = backlog_document_refs(&[
+        "delivery-slices.md",
+        "sequencing-plan.md",
+        "acceptance-anchors.md",
+        "execution-handoff.md",
+    ]);
+    let projection = plan.planning_analysis_projection(
+        &BacklogQualityAssessment {
+            state: BacklogQualityState::Ready,
+            findings: Vec::new(),
+            task_count: Some(2),
+            mvp_scope: Some("SLICE-SESSION-001".to_string()),
+            unmapped_items: Vec::new(),
+        },
+        &document_refs,
+        &[
+            concat!(
+                "- [SLICE-SESSION-001] First bounded execution slice.\n",
+                "- [SLICE-SESSION-002] Follow-up slice.\n"
+            )
+            .to_string(),
+            concat!("1. [SLICE-SESSION-001] first\n", "2. [SLICE-SESSION-002] second\n")
+                .to_string(),
+            concat!(
+                "- [SLICE-SESSION-001] Verified first slice.\n",
+                "- [SLICE-SESSION-002] Verified second slice.\n"
+            )
+            .to_string(),
+            concat!(
+                "## Selected Slice\n\nSLICE-SESSION-002\n\n",
+                "## Implementation Artifact References\n\n",
+                "- src/lib.rs\n\n",
+                "## Dependency Prerequisites\n\n",
+                "- slice one finished first\n\n",
+                "## Independent Verification Anchors\n\n",
+                "- sequence-aware integration test\n"
+            )
+            .to_string(),
+        ],
+    );
+
+    assert_eq!(projection.state, PlanningAnalysisState::Blocked);
+    assert!(projection.findings.iter().any(|finding| {
+        finding.severity == PlanningAnalysisSeverity::Critical
+            && finding.source == PlanningAnalysisSource::Backlog
+            && finding.code == "artifact_contradiction"
+            && finding
+                .source_refs
+                .iter()
+                .any(|source_ref| source_ref.artifact_ref == "sequencing-plan.md")
+    }));
+}
+
+#[test]
+fn planning_analysis_blocks_on_missing_dependency_prerequisites_as_producer_gap() {
+    let plan = GoalPlan::new("Goal", vec![sample_task("T001")])
+        .unwrap()
+        .with_planning_rationale("execution depends on governed handoff prerequisites")
+        .with_verification_strategy("run the governed verification flow");
+    let document_refs = backlog_document_refs(&[
+        "delivery-slices.md",
+        "acceptance-anchors.md",
+        "execution-handoff.md",
+    ]);
+    let projection = plan.planning_analysis_projection(
+        &BacklogQualityAssessment {
+            state: BacklogQualityState::Ready,
+            findings: Vec::new(),
+            task_count: Some(1),
+            mvp_scope: Some("SLICE-SESSION-001".to_string()),
+            unmapped_items: Vec::new(),
+        },
+        &document_refs,
+        &[
+            "- [SLICE-SESSION-001] Ready for execution.".to_string(),
+            "- [SLICE-SESSION-001] Verified in acceptance anchors.".to_string(),
+            concat!(
+                "## Selected Slice\n\nSLICE-SESSION-001\n\n",
+                "## Implementation Artifact References\n\n",
+                "- src/lib.rs\n\n",
+                "## Independent Verification Anchors\n\n",
+                "- integration coverage exists\n"
+            )
+            .to_string(),
+        ],
+    );
+
+    assert_eq!(projection.state, PlanningAnalysisState::Blocked);
+    assert!(projection.findings.iter().any(|finding| {
+        finding.severity == PlanningAnalysisSeverity::Critical
+            && finding.source == PlanningAnalysisSource::GovernedEvidence
+            && finding.code == "producer_contract_gap"
+            && finding
+                .source_refs
+                .iter()
+                .any(|source_ref| source_ref.anchor.as_deref() == Some("Dependency Prerequisites"))
+    }));
+    assert_eq!(
+        projection.coverage.as_ref().map(|coverage| coverage.governed_evidence_ready),
+        Some(false)
+    );
 }
 
 #[test]
@@ -468,6 +648,12 @@ fn context_input_and_flow_state_helpers_cover_remaining_goal_plan_branches() {
     assert_eq!(ContextInputKind::AuthoredBrief.as_str(), "authored_brief");
     assert_eq!(ContextInputKind::Negotiation.as_str(), "negotiation");
     assert_eq!(ContextInputKind::CanonArtifact.as_str(), "canon_artifact");
+    assert_eq!(PlanningAnalysisSource::Goal.as_str(), "goal");
+    assert_eq!(PlanningAnalysisSource::Validation.as_str(), "validation");
+    assert_eq!(PlanningAnalysisSource::Risk.as_str(), "risk");
+    assert_eq!(PlanningAnalysisSource::Constraint.as_str(), "constraint");
+    assert_eq!(PlanningAnalysisSource::ExecutionReadiness.as_str(), "execution_readiness");
+    assert_eq!(PlanningAnalysisSource::GovernedEvidence.as_str(), "governed_evidence");
 
     let missing_reference = ContextInput {
         kind: ContextInputKind::WorkspaceFile,

@@ -64,6 +64,8 @@ The following remain runtime-owned rather than config-authored:
   `backlog_quality_state`, and `planning_analysis_state`
 - additive backlog projections such as `backlog_quality_findings`,
   `backlog_task_count`, `backlog_mvp_scope`, and `backlog_unmapped_items`
+- additive planning-analysis projections such as `planning_analysis_findings`
+  and `planning_analysis_coverage`
 - `phase_request` and assistant-safe follow-up commands
 - read-only readiness answers from `boundline probe`
 

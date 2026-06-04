@@ -1,141 +1,134 @@
-# S15 - Review Councils And Role-Gated Governance
+# Review Councils And Role-Gated Governance
 
-## Owner
+## Integration Update
 
-Boundline, using Canon governance vocabulary
+This roadmap item should absorb **Guardian Activation Router** as either a prerequisite or the first hardening slice.
 
-## Status
+The router must not become a separate governance engine. It only decides which guardians or review roles should activate for a stage.
 
-B-level, after S2.1 guidance and guardian findings are operational
+Councils decide how findings are reviewed, grouped, adjudicated, and escalated.
 
-## Speckit Seed Notes
+`11-adaptive-governance-calibration.md` decides how strongly findings enforce or degrade.
 
-- Seed role: hardening layer over the shipped authority-zoned council model.
-- First slice: choose one missing delta, such as finding deduplication or the
-  producer response protocol, and prove it through a bounded review path.
-- Depends on: existing `tech-docs/review-council-algorithms.md`,
-  `tech-docs/review-voting.md`, and authority-zone stop semantics.
-- De-duplication: do not respec council profiles, voting, or independence from
-  scratch; future specs must name the gap against the shipped council surfaces.
+## Relationship To Other Roadmap Files
 
-## Strategic Role
+| Related file | Relationship |
+|---|---|
+| `08-evals-and-runtime-observability.md` | Provides event/eval substrate for council and guardian decisions |
+| `11-adaptive-governance-calibration.md` | Consumes council/guardian findings to decide control level |
+| `14-ai-gateway-and-inference-economics.md` | Owns route cost policy for council and guardian execution |
+| `12-recursive-stage-refinement-profiles.md` | May reuse council findings but does not redefine councils |
+| `18-completion-verification-runtime.md` | Provides proof-gated completion signals councils may review |
 
-This feature makes review credible.
+## Added Scope
 
-Boundline should not copy swarms. It should implement bounded, role-gated councils that are visible, cost-bounded, and traceable.
+Add guardian activation routing:
 
-## Problem
+- activated guardians
+- skipped guardians with reasons
+- mandatory guardians
+- optional guardians
+- missing guardian capability findings
+- trace-visible activation plan
 
-A single model planning and self-approving is not enough for high-risk work.
+## Guardian Activation Router
 
-Need structured review for:
+The router determines which guardians should run for a stage based on structured runtime signals.
 
-- red/yellow authority zones
-- security-sensitive changes
-- public contracts
-- migrations
-- domain invariants
-- architecture boundaries
-- large refactors
-
-## Core Scope
-
-- Council profiles
-- Role-gated review
-- Reviewer capability matching
-- Guardian finding intake
-- Voting/adjudication
-- Human gate states
-- Council rejection reasons
-- Cost controls
-- Trace-visible decisions
-
-## Council Profiles
-
-Examples:
-
-### Green
-
-- no council by default
-- optional reviewer
-- guardians advisory
-
-### Yellow
-
-- required reviewer
-- relevant guardian checks
-- majority or adjudicator policy
-- human confirmation for blockers
-
-### Red
-
-- multiple reviewers
-- security/domain/architecture roles as needed
-- required human gate
-- no self-approval
-- strict evidence requirements
-
-## Algorithms And Techniques
-
-### Reviewer Matching
-
-Match reviewers using:
+### Inputs
 
 - lifecycle phase
 - changed files
-- guidance pillars
+- language
+- framework
 - risk classification
 - authority zone
+- active contracts
 - Canon packet references
-- previous findings
+- guidance pillars
+- touched architecture boundaries
+- test changes
+- security-sensitive files
+- public API changes
 
-### Voting Methods
+### Outputs
 
-Support several simple algorithms:
+- activated guardians
+- skipped guardians with reason
+- mandatory guardians
+- optional guardians
+- escalation recommendation
+- missing guardian capability finding
 
-- unanimous approval for red blockers
-- majority vote for normal yellow review
-- weighted vote by role authority
-- adjudicator model for tie or conflict
-- dissent preservation even when approved
+## Example Rules
 
-### Finding Aggregation
+### Rust Runtime Change
 
-Normalize:
+```text
+files: src/domain/**/*.rs, src/orchestrator/**/*.rs
+stage: run or review
+activate:
+  - rust-guardian
+  - error-handling-guardian
+  - traceability-guardian
+```
 
-- guardian findings
-- reviewer comments
-- provider findings
-- Canon evidence gaps
+### Documentation-Only Change
 
-Group by:
+```text
+files: docs/**/*.md
+stage: review
+activate:
+  - docs-consistency-guardian
+  - release-surface-guardian
+```
 
-- severity
-- affected surface
-- guidance source
-- lifecycle phase
-- required action
+### Contract Change
 
-### Producer Response Protocol
+```text
+files: specs/**/*.md, contracts/**/*.md
+stage: plan or review
+activate:
+  - contract-drift-guardian
+  - migration-guardian
+  - traceability-guardian
+```
 
-A plan or implementation author must respond to findings:
+### Security-Sensitive Change
 
-- accept
-- reject with rationale
-- defer with owner/date
-- ask for clarification
-- change plan
+```text
+files: auth, secrets, permissions, sandbox
+risk: high
+activate:
+  - security-guardian
+  - threat-model-guardian
+  - approval-gate-guardian
+```
 
-## Acceptance Criteria
+## Trace Requirements
 
-- Boundline can create council from risk/zone.
-- Council decision is inspectable.
-- Findings are grouped and deduplicated.
-- Voting/adjudication rule is trace-visible.
-- Red zone cannot self-approve.
-- Human gate state is explicit.
-- Council cost is bounded.
-- Rejected findings remain visible.
+Council traces should include:
+
+- authority zone
+- active council profile
+- guardian activation plan
+- activated guardians
+- skipped guardians with reasons
+- findings
+- voting or adjudication policy
+- dissent
+- human gate state
+- final decision
+
+## Acceptance Criteria Additions
+
+- Boundline can activate guardians based on stage and change surface.
+- Mandatory guardians cannot be silently skipped.
+- Skipped guardian reasons are inspectable.
+- Red-zone changes activate mandatory safety guardians.
+- Documentation-only changes do not run irrelevant runtime-only guardians.
+- Contract changes activate contract and migration guardians.
+- Council decisions include guardian activation context.
 
 ## Risks
 
@@ -143,7 +136,10 @@ A plan or implementation author must respond to findings:
 - Review theater without useful findings.
 - Voting hides minority dissent.
 - Too many roles for low-risk work.
+- Guardian router skips a needed guardian.
 
-## Hard Rule
+## Hard Rules
 
-Councils exist to improve judgment, not to simulate a meeting.
+- Councils exist to improve judgment, not simulate a meeting.
+- Guardian routing must be inspectable.
+- Skipped mandatory checks must become findings, not silent omissions.
