@@ -245,6 +245,40 @@ fn planning_analysis_contract_sections_are_present_in_assistant_assets() {
 }
 
 #[test]
+fn large_codebase_context_contract_sections_are_present_in_assistant_assets() {
+    let assets = [
+        asset_path("assistant/claude/commands/boundline-plan.md"),
+        asset_path("assistant/codex/commands/boundline-plan.md"),
+        asset_path("assistant/antigravity/commands/boundline-plan.md"),
+        asset_path("assistant/copilot/prompts/boundline-plan.prompt.md"),
+        asset_path("assistant/claude/commands/boundline-run.md"),
+        asset_path("assistant/codex/commands/boundline-run.md"),
+        asset_path("assistant/antigravity/commands/boundline-run.md"),
+        asset_path("assistant/copilot/prompts/boundline-run.prompt.md"),
+        asset_path("assistant/claude/commands/boundline-status.md"),
+        asset_path("assistant/codex/commands/boundline-status.md"),
+        asset_path("assistant/antigravity/commands/boundline-status.md"),
+        asset_path("assistant/copilot/prompts/boundline-status.prompt.md"),
+        asset_path("assistant/claude/commands/boundline-inspect.md"),
+        asset_path("assistant/codex/commands/boundline-inspect.md"),
+        asset_path("assistant/antigravity/commands/boundline-inspect.md"),
+        asset_path("assistant/copilot/prompts/boundline-inspect.prompt.md"),
+    ];
+    let required = [
+        "repository_map_state",
+        "snapshot_cache_state",
+        "context_pack_entries",
+        "omission_findings",
+        "patch_safe_edit_attempts",
+    ];
+
+    for path in assets {
+        let content = read_asset(&path);
+        assert_required_snippets(&path, &content, &required);
+    }
+}
+
+#[test]
 fn backlog_quality_contract_sections_are_present_in_assistant_assets() {
     let plan_and_run_assets = [
         asset_path("assistant/claude/commands/boundline-plan.md"),

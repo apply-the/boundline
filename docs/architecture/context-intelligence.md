@@ -11,6 +11,10 @@ These roots are not the same as runtime storage:
 - `.boundline/context-intelligence/` keeps the derived retrieval DB,
   `manifest.json`, and SQLite WAL/SHM sidecars used by local semantic
   retrieval.
+- The large-codebase substrate extends that same derived state with
+  repository-map readiness, digest-backed context refs, omission findings, and
+  freshness-bound snapshot-cache metadata. None of those derived artifacts are
+  reviewed memory or authoritative planning truth.
 - `.canon/` keeps raw Canon run packets and Canon-owned runtime payloads.
 
 ## Default Layout
@@ -34,6 +38,7 @@ The exact file names can vary. The stable rule is ownership:
 - durable delivery outputs belong in `docs/evidence/`
 - derived semantic index state belongs under `.boundline/`
 - transient runtime artifacts do not belong in either folder
+- large-codebase snapshot cache state must remain disposable and rebuildable
 
 ## Bootstrap Behavior
 

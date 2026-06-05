@@ -8,6 +8,7 @@ use boundline::{
     CanonCliRuntime, GovernanceRuntime, GovernanceRuntimeKind, GovernanceRuntimeRequest,
 };
 use boundline::{GovernanceBoundedContext, GovernanceRequestKind, SystemContextBinding};
+use serde_json::Value;
 use uuid::Uuid;
 
 fn request() -> GovernanceRuntimeRequest {
@@ -154,12 +155,10 @@ fn canon_runtime_contract_sends_refresh_requests_with_lineage_fields() -> Result
     })?;
 
     let request_json = fs::read_to_string(capture_path)?;
-    assert!(request_json.contains("\"request_kind\":\"refresh\""), "{request_json}");
-    assert!(request_json.contains("\"run_ref\":\"canon-run-200\""), "{request_json}");
-    assert!(
-        request_json.contains("\"packet_ref\":\".canon/runs/canon-run-200\""),
-        "{request_json}"
-    );
+    let request_value: Value = serde_json::from_str(&request_json)?;
+    assert_eq!(request_value["request_kind"].as_str(), Some("refresh"));
+    assert_eq!(request_value["run_ref"].as_str(), Some("canon-run-200"));
+    assert_eq!(request_value["packet_ref"].as_str(), Some(".canon/runs/canon-run-200"));
     assert_eq!(response.approval_state, boundline::ApprovalState::Granted);
     assert_eq!(response.run_ref.as_deref(), Some("canon-run-200"));
     Ok(())
@@ -218,8 +217,9 @@ fn canon_runtime_contract_serializes_security_assessment_mode_in_start_requests(
     })?;
 
     let request_json = fs::read_to_string(capture_path)?;
-    assert!(request_json.contains("\"stage_key\":\"bug-fix:verify\""), "{request_json}");
-    assert!(request_json.contains("\"mode\":\"security-assessment\""), "{request_json}");
+    let request_value: Value = serde_json::from_str(&request_json)?;
+    assert_eq!(request_value["stage_key"].as_str(), Some("bug-fix:verify"));
+    assert_eq!(request_value["mode"].as_str(), Some("security-assessment"));
     let packet = response.packet.ok_or_else(|| io::Error::other("packet should be present"))?;
     assert_eq!(packet.packet_ref, ".canon/runs/canon-run-security");
     assert_eq!(packet.readiness, boundline::PacketReadiness::Reusable);
@@ -268,9 +268,10 @@ fn canon_runtime_contract_preserves_security_assessment_refresh_lineage()
     })?;
 
     let request_json = fs::read_to_string(capture_path)?;
-    assert!(request_json.contains("\"request_kind\":\"refresh\""), "{request_json}");
-    assert!(request_json.contains("\"mode\":\"security-assessment\""), "{request_json}");
-    assert!(request_json.contains("\"run_ref\":\"canon-run-security-refresh\""), "{request_json}");
+    let request_value: Value = serde_json::from_str(&request_json)?;
+    assert_eq!(request_value["request_kind"].as_str(), Some("refresh"));
+    assert_eq!(request_value["mode"].as_str(), Some("security-assessment"));
+    assert_eq!(request_value["run_ref"].as_str(), Some("canon-run-security-refresh"));
     assert_eq!(response.approval_state, boundline::ApprovalState::Granted);
     assert_eq!(response.run_ref.as_deref(), Some("canon-run-security-refresh"));
     Ok(())

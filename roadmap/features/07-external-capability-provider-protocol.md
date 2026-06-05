@@ -12,7 +12,7 @@ Canon must not become an adapter. Canon remains a first-class governed producer 
 
 | Related file | Relationship |
 |---|---|
-| `06-large-codebase-context-substrate.md` | Owns local context substrate; provider-supplied context uses this protocol |
+| `specs/070-large-codebase-context-substrate/spec.md` | Owns local context substrate; provider-supplied context uses this protocol |
 | `08-evals-and-runtime-observability.md` | Owns event schema and provider-call observability |
 | `13-sandboxed-execution-and-secret-inheritance.md` | Enforces sandboxing, path, network, and secret policy |
 | `14-ai-gateway-and-inference-economics.md` | Owns route economics and provider/model cost policy |

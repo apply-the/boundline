@@ -3839,6 +3839,7 @@ fn execute_next_step_creates_a_compatibility_task_for_flow_selected_goal_plans()
 }
 
 #[test]
+#[cfg_attr(coverage, ignore = "coverage sandbox disallows loopback provider mock servers")]
 fn run_to_terminal_uses_provider_analysis_and_change_routes_for_flow_selected_goal_plans()
 -> Result<(), Box<dyn std::error::Error>> {
     with_env_test(&[OPENAI_BASE_URL_ENV, OPENAI_API_KEY_ENV], || {
@@ -3986,6 +3987,7 @@ fn run_to_terminal_uses_provider_analysis_and_change_routes_for_flow_selected_go
 }
 
 #[test]
+#[cfg_attr(coverage, ignore = "coverage sandbox disallows loopback provider mock servers")]
 fn run_to_terminal_executes_provider_review_for_native_goal_plans()
 -> Result<(), Box<dyn std::error::Error>> {
     with_env_test(&[OPENAI_BASE_URL_ENV, OPENAI_API_KEY_ENV], || {
@@ -4142,6 +4144,7 @@ fn run_to_terminal_executes_provider_review_for_native_goal_plans()
 }
 
 #[test]
+#[cfg_attr(coverage, ignore = "coverage sandbox disallows loopback provider mock servers")]
 fn run_to_terminal_executes_provider_adjudication_for_flow_selected_goal_plans()
 -> Result<(), Box<dyn std::error::Error>> {
     with_env_test(
@@ -7274,6 +7277,7 @@ fn planning_runtime_helpers_cover_governance_resolution_upstream_briefs_and_adap
 }
 
 #[test]
+#[cfg_attr(coverage, ignore = "coverage sandbox disallows loopback provider mock servers")]
 fn discovery_stage_council_revises_artifact_after_concern_adjudication()
 -> Result<(), Box<dyn Error>> {
     with_env_test(
@@ -7381,6 +7385,7 @@ fn discovery_stage_council_revises_artifact_after_concern_adjudication()
 }
 
 #[test]
+#[cfg_attr(coverage, ignore = "coverage sandbox disallows loopback provider mock servers")]
 fn discovery_stage_council_renders_blocked_markdown_when_adjudication_blocks()
 -> Result<(), Box<dyn Error>> {
     with_env_test(
@@ -7462,6 +7467,7 @@ fn discovery_stage_council_renders_blocked_markdown_when_adjudication_blocks()
 }
 
 #[test]
+#[cfg_attr(coverage, ignore = "coverage sandbox disallows loopback provider mock servers")]
 fn discovery_stage_council_blocks_when_revision_route_is_unavailable() -> Result<(), Box<dyn Error>>
 {
     with_env_test(

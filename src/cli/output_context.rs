@@ -74,6 +74,30 @@ pub(crate) fn push_advanced_context_lines(
     lines.push(format!("semantic_selected_count: {}", advanced_context.semantic_selected_count()));
     lines.push(format!("semantic_rejected_count: {}", advanced_context.semantic_rejected_count()));
     lines.push(format!("impact_finding_count: {}", advanced_context.impact_finding_count()));
+    if let Some(repository_map_state) = advanced_context.repository_map_state {
+        lines.push(format!("repository_map_state: {}", repository_map_state.as_str()));
+    }
+    if let Some(snapshot_cache_state) = advanced_context.snapshot_cache_state {
+        lines.push(format!("snapshot_cache_state: {}", snapshot_cache_state.as_str()));
+    }
+    if !advanced_context.context_pack_entries.is_empty() {
+        lines.push(format!(
+            "context_pack_entry_count: {}",
+            advanced_context.context_pack_entries.len()
+        ));
+    }
+    if !advanced_context.omission_findings.is_empty() {
+        lines.push(format!(
+            "context_omission_finding_count: {}",
+            advanced_context.omission_findings.len()
+        ));
+    }
+    if !advanced_context.patch_safe_edit_attempts.is_empty() {
+        lines.push(format!(
+            "patch_safe_edit_attempt_count: {}",
+            advanced_context.patch_safe_edit_attempts.len()
+        ));
+    }
 
     for candidate in &advanced_context.selected_evidence {
         lines.push(format_candidate_line("selected_evidence", candidate));
@@ -102,6 +126,55 @@ pub(crate) fn push_advanced_context_lines(
             finding.subject_ref,
             finding.finding_kind.as_str(),
             finding.recommended_follow_up
+        ));
+    }
+
+    for entry in &advanced_context.context_pack_entries {
+        let mut line = format!(
+            "context_entry: {} [{}] tier={} mode={} required={} {}",
+            entry.source_ref,
+            entry.source_kind.as_str(),
+            entry.fidelity_tier.as_str(),
+            entry.inclusion_mode.as_str(),
+            entry.required_for_admission,
+            entry.reason
+        );
+        if let Some(ranking_rationale) = entry.ranking_rationale.as_deref() {
+            line.push_str(&format!(" ranking={ranking_rationale}"));
+        }
+        if let Some(digest_ref) = entry.digest_ref.as_ref() {
+            line.push_str(&format!(
+                " digest={} resolve_path={}",
+                digest_ref.digest, digest_ref.resolve_path
+            ));
+        }
+        lines.push(line);
+    }
+
+    for finding in &advanced_context.omission_findings {
+        let mut line = format!(
+            "context_omission: {} [{}] {}",
+            finding.candidate_ref,
+            finding.severity.as_str(),
+            finding.message
+        );
+        line.push_str(&format!(" code={}", finding.reason_code));
+        if let Some(required_fidelity) = finding.required_fidelity {
+            line.push_str(&format!(" required_fidelity={}", required_fidelity.as_str()));
+        }
+        if let Some(observed_mode) = finding.observed_mode {
+            line.push_str(&format!(" observed_mode={}", observed_mode.as_str()));
+        }
+        lines.push(line);
+    }
+
+    for attempt in &advanced_context.patch_safe_edit_attempts {
+        lines.push(format!(
+            "patch_safe_edit: {} [{}] anchors={} verification={}",
+            attempt.target_ref,
+            attempt.result_state.as_str(),
+            attempt.anchor_refs.join(", "),
+            attempt.post_apply_verification.join(" | ")
         ));
     }
 }

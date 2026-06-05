@@ -42,6 +42,11 @@ fn assistant_readme_documents_session_native_continuity_rules() {
         "governance_next_action",
         "latest_changed_files",
         "latest_validation_status",
+        "repository_map_state",
+        "snapshot_cache_state",
+        "context_pack_entries",
+        "omission_findings",
+        "patch_safe_edit_attempts",
     ] {
         assert!(content.contains(snippet), "assistant/README.md missing {snippet}");
     }

@@ -1500,6 +1500,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(coverage, ignore = "coverage sandbox disallows loopback provider mock servers")]
     fn review_workspace_dispatches_to_openai_compatible_endpoint() {
         with_env_test(&[OPENAI_API_KEY_ENV, OPENAI_BASE_URL_ENV], || {
             let response_body = json!({
@@ -1568,6 +1569,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(coverage, ignore = "coverage sandbox disallows loopback provider mock servers")]
     fn chat_completion_dispatches_history_to_openai_compatible_endpoint() {
         with_env_test(&[OPENAI_API_KEY_ENV, OPENAI_BASE_URL_ENV], || {
             let response_body = json!({
@@ -1633,6 +1635,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(coverage, ignore = "coverage sandbox disallows loopback provider mock servers")]
     fn revise_artifact_dispatches_revision_prompt_to_openai_compatible_endpoint() {
         with_env_test(&[OPENAI_API_KEY_ENV, OPENAI_BASE_URL_ENV], || {
             let response_body = json!({
@@ -1713,6 +1716,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(coverage, ignore = "coverage sandbox disallows loopback provider mock servers")]
     fn chat_completion_uses_copilot_token_exchange_before_chat_request() {
         let exchange_response_body = json!({
             "token": "copilot-session-token"
@@ -1835,6 +1839,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(coverage, ignore = "coverage sandbox disallows loopback provider mock servers")]
     fn chat_completion_uses_direct_copilot_api_token_without_bootstrap() {
         with_env_test(
             &[
@@ -1889,6 +1894,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(coverage, ignore = "coverage sandbox disallows loopback provider mock servers")]
     fn chat_completion_bootstraps_copilot_runtime_from_user_endpoint_before_chat_request() {
         let chat_response_body = json!({
             "choices": [
@@ -1960,6 +1966,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(coverage, ignore = "coverage sandbox disallows loopback provider mock servers")]
     fn chat_completion_dispatches_to_github_models_inference_endpoint() {
         with_env_test(&[GITHUB_MODELS_TOKEN_ENV, GITHUB_MODELS_BASE_URL_ENV], || {
             let response_body = json!({

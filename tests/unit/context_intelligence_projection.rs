@@ -5,8 +5,9 @@ use std::sync::Mutex;
 
 use boundline::domain::configuration::{AdvancedContextConfig, SemanticAccelerationPolicyState};
 use boundline::domain::context_intelligence::{
-    HybridOutcome, ImpactFindingKind, RelationshipKind, RetrievalBudgets, RetrievalMode,
-    RetrievalState, SemanticCapabilityState, SemanticPolicyState,
+    ContextInclusionMode, ContextOmissionSeverity, HybridOutcome, ImpactFindingKind,
+    RelationshipKind, RepositoryMapState, RetrievalBudgets, RetrievalMode, RetrievalState,
+    SemanticCapabilityState, SemanticPolicyState, SnapshotCacheState,
 };
 use boundline::domain::goal_plan::{ContextInput, ContextInputKind};
 use boundline::orchestrator::context_intelligence::{
@@ -445,5 +446,74 @@ fn build_context_pack_handles_empty_fts_query_for_short_goal_and_path_tokens() {
             .selected_evidence
             .iter()
             .any(|candidate| candidate.source_ref == "aa/bb.c")
+    );
+}
+
+#[test]
+fn build_advanced_context_projection_surfaces_digest_compaction_and_patch_safe_guards() {
+    let workspace = temp_workspace("boundline-context-intelligence-substrate");
+    fs::create_dir_all(workspace.join("src")).unwrap();
+    fs::create_dir_all(workspace.join("logs")).unwrap();
+    fs::write(
+        workspace.join("src/lib.rs"),
+        format!("pub fn add() -> i32 {{\n{}\n0\n}}\n", "    let x = 1;\n".repeat(1200)),
+    )
+    .unwrap();
+    fs::write(
+        workspace.join("logs/failed-run.log"),
+        format!("{}\n", "validation failure".repeat(1500)),
+    )
+    .unwrap();
+
+    let advanced_context = build_advanced_context_projection(
+        "fix add validation log",
+        &workspace,
+        &[
+            ContextInput {
+                kind: ContextInputKind::WorkspaceFile,
+                reference: "src/lib.rs".to_string(),
+                rationale: "bounded implementation target".to_string(),
+                source: "workspace_scan".to_string(),
+                primary: true,
+            },
+            ContextInput {
+                kind: ContextInputKind::RecentTrace,
+                reference: "logs/failed-run.log".to_string(),
+                rationale: "latest failing validation evidence".to_string(),
+                source: "latest_trace".to_string(),
+                primary: false,
+            },
+        ],
+        &["src/lib.rs".to_string(), "logs/failed-run.log".to_string()],
+        AdvancedContextBuildState {
+            credibility: boundline::domain::goal_plan::ContextPackCredibility::Credible,
+            staleness_reason: None,
+            semantic_policy: SemanticAccelerationPolicyState::Disabled,
+        },
+        &AdvancedContextConfig {
+            budgets: RetrievalBudgets { evidence_limit: 6, ..RetrievalBudgets::default() },
+            ..AdvancedContextConfig::default()
+        },
+    );
+
+    assert_eq!(advanced_context.repository_map_state, Some(RepositoryMapState::Ready));
+    assert_eq!(advanced_context.snapshot_cache_state, Some(SnapshotCacheState::Ready));
+    assert!(advanced_context.context_pack_entries.iter().any(|entry| {
+        entry.source_ref == "src/lib.rs"
+            && entry.inclusion_mode == ContextInclusionMode::Excerpt
+            && entry.required_for_admission
+    }));
+    assert!(advanced_context.context_pack_entries.iter().any(|entry| {
+        entry.source_ref == "logs/failed-run.log"
+            && entry.inclusion_mode == ContextInclusionMode::Digest
+    }));
+    assert!(advanced_context.omission_findings.iter().any(|finding| {
+        finding.candidate_ref == "logs/failed-run.log"
+            && finding.severity == ContextOmissionSeverity::Blocking
+    }));
+    assert!(
+        advanced_context.patch_safe_edit_attempts.iter().any(|attempt| {
+            attempt.target_ref == "src/lib.rs" && !attempt.anchor_refs.is_empty()
+        })
     );
 }

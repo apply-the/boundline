@@ -1,3 +1,5 @@
+#![allow(unexpected_cfgs)]
+
 use std::fs;
 use std::io::{Read, Write};
 use std::net::TcpListener;
@@ -670,6 +672,10 @@ fn run_with_incomplete_canon_surface_stops_with_repair_guidance() {
 /// and `bounded_context` fields (mock Canon CLI).
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    coverage,
+    ignore = "coverage sandbox disallows loopback listener fixtures used by this governance flow"
+)]
 fn run_with_briefs_assembles_canon_governance_start_request() {
     with_scripted_openai_reviews(6, |openai_base_url| {
         let workspace = temp_canon_default_workspace("brief-assembly");
@@ -759,6 +765,10 @@ fn run_with_briefs_assembles_canon_governance_start_request() {
 /// as bounded-context packet reuse.
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    coverage,
+    ignore = "coverage sandbox disallows loopback listener fixtures used by this governance flow"
+)]
 fn multi_stage_canon_run_reuses_prior_governed_packet() {
     with_scripted_openai_reviews(6, |openai_base_url| {
         let workspace = temp_canon_default_workspace("multi-stage-reuse");
@@ -849,6 +859,10 @@ fn multi_stage_canon_run_reuses_prior_governed_packet() {
 
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    coverage,
+    ignore = "coverage sandbox disallows loopback listener fixtures used by this governance flow"
+)]
 fn governed_ready_packet_is_promoted_to_docs_evidence() {
     with_scripted_openai_reviews(6, |openai_base_url| {
         let workspace = temp_canon_default_workspace("evidence-promotion");
@@ -944,6 +958,10 @@ fn governed_ready_packet_is_promoted_to_docs_evidence() {
 /// Boundline surfaces a clarification prompt rather than failing silently.
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    coverage,
+    ignore = "coverage sandbox disallows loopback listener fixtures used by this governance flow"
+)]
 fn run_with_incomplete_canon_response_surfaces_clarification() {
     with_scripted_openai_reviews(6, |openai_base_url| {
         let workspace = temp_canon_default_workspace("incomplete-response");
@@ -1000,6 +1018,10 @@ fn run_with_incomplete_canon_response_surfaces_clarification() {
 /// progresses to subsequent stages after Canon returns `governed_ready`.
 #[test]
 #[cfg(unix)]
+#[cfg_attr(
+    coverage,
+    ignore = "coverage sandbox disallows loopback listener fixtures used by this governance flow"
+)]
 fn blocked_planning_stage_retries_with_refresh_and_progresses() {
     with_scripted_openai_reviews(6, |openai_base_url| {
         let workspace = temp_canon_default_workspace("blocked-retry-refresh");

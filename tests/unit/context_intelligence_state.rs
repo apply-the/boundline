@@ -155,6 +155,11 @@ fn advanced_context_projection_accepts_selected_local_evidence() {
         semantic_trace_records: Vec::new(),
         relationships: vec![projected_relationship()],
         impact_findings: vec![projected_finding()],
+        context_pack_entries: Vec::new(),
+        omission_findings: Vec::new(),
+        repository_map_state: None,
+        snapshot_cache_state: None,
+        patch_safe_edit_attempts: Vec::new(),
     };
 
     assert_eq!(projection.authority_order_text(), "structured>canon>workspace_override>semantic");
@@ -182,6 +187,11 @@ fn advanced_context_projection_requires_terminal_reason_for_non_selected_state()
         semantic_trace_records: Vec::new(),
         relationships: Vec::new(),
         impact_findings: Vec::new(),
+        context_pack_entries: Vec::new(),
+        omission_findings: Vec::new(),
+        repository_map_state: None,
+        snapshot_cache_state: None,
+        patch_safe_edit_attempts: Vec::new(),
     };
 
     let error = projection.validate().unwrap_err();
@@ -628,6 +638,11 @@ fn advanced_context_projection_rejects_invalid_runtime_state() {
         semantic_trace_records: Vec::new(),
         relationships: vec![projected_relationship()],
         impact_findings: vec![projected_finding()],
+        context_pack_entries: Vec::new(),
+        omission_findings: Vec::new(),
+        repository_map_state: None,
+        snapshot_cache_state: None,
+        patch_safe_edit_attempts: Vec::new(),
     };
 
     let mut missing_selected_evidence = projection.clone();
@@ -1165,6 +1180,11 @@ fn semantic_projection_serialization_covers_custom_candidate_and_projection_path
         semantic_trace_records: Vec::new(),
         relationships: Vec::new(),
         impact_findings: Vec::new(),
+        context_pack_entries: Vec::new(),
+        omission_findings: Vec::new(),
+        repository_map_state: None,
+        snapshot_cache_state: None,
+        patch_safe_edit_attempts: Vec::new(),
     };
 
     let serialized_projection = serde_json::to_value(&projection).unwrap();

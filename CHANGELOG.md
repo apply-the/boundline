@@ -46,9 +46,30 @@ Highlights:
 
 Release metadata note:
 
-- The current Boundline release line is `0.70.0`; published package metadata,
+- The current Boundline release line is `0.71.0`; published package metadata,
   distribution metadata, assistant plugin manifests, and docs are aligned to
   that version while Canon compatibility remains `0.67.0`.
+
+## [0.71.0] - 2026-06-05
+
+Delivered specs:
+
+- `070` - Large Codebase Context Substrate
+
+Highlights:
+
+- Added a typed large-codebase context substrate with fidelity tiers, inclusion
+  modes, omission findings, repository-map state, digest-backed artifact refs,
+  and patch-safe edit attempt projections.
+- Blocked planning when critical context is missing, downgraded, omitted, or
+  would require unsafe oversized full reads, while preserving the stop reason
+  through plan quality, status, inspect, traces, and assistant surfaces.
+- Surfaced large-repository context decisions explicitly across status and
+  inspect, including repository-map readiness, snapshot-cache freshness,
+  compacted artifacts, omission reasons, and patch-safe edit constraints.
+- Kept the snapshot cache explicitly derived and non-authoritative while
+  aligning release metadata, docs, assistant assets, Homebrew, and WinGet to
+  Boundline `0.71.0` and Canon `0.67.0`.
 
 ## [0.70.0] - 2026-06-04
 

@@ -79,6 +79,11 @@ fn semantic_trace_projection() -> AdvancedContextProjection {
         }],
         relationships: Vec::new(),
         impact_findings: Vec::new(),
+        context_pack_entries: Vec::new(),
+        omission_findings: Vec::new(),
+        repository_map_state: None,
+        snapshot_cache_state: None,
+        patch_safe_edit_attempts: Vec::new(),
     }
 }
 
@@ -141,6 +146,11 @@ fn trace_summary_contract_surfaces_recovery_guidance_for_corrupt_index() {
             semantic_trace_records: Vec::new(),
             relationships: Vec::new(),
             impact_findings: Vec::new(),
+            context_pack_entries: Vec::new(),
+            omission_findings: Vec::new(),
+            repository_map_state: None,
+            snapshot_cache_state: None,
+            patch_safe_edit_attempts: Vec::new(),
         }),
         ..TraceSummaryView::default()
     };

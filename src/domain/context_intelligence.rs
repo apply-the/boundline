@@ -884,6 +884,307 @@ impl RetrievalBudgets {
     }
 }
 
+/// Fidelity tier assigned to one candidate before inclusion or omission.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ContextFidelityTier {
+    Critical,
+    Supporting,
+    Ambient,
+    Archived,
+}
+
+impl ContextFidelityTier {
+    /// Returns the stable serialization label for this fidelity tier.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Critical => "critical",
+            Self::Supporting => "supporting",
+            Self::Ambient => "ambient",
+            Self::Archived => "archived",
+        }
+    }
+}
+
+/// Inclusion mode used for one persisted context-pack entry.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ContextInclusionMode {
+    Full,
+    Excerpt,
+    Summary,
+    Signature,
+    Digest,
+    Omitted,
+}
+
+impl ContextInclusionMode {
+    /// Returns the stable serialization label for this inclusion mode.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Full => "full",
+            Self::Excerpt => "excerpt",
+            Self::Summary => "summary",
+            Self::Signature => "signature",
+            Self::Digest => "digest",
+            Self::Omitted => "omitted",
+        }
+    }
+
+    /// Returns true when the mode is lossy for critical execution decisions.
+    pub const fn is_lossy_for_critical(self) -> bool {
+        matches!(self, Self::Summary | Self::Signature | Self::Digest | Self::Omitted)
+    }
+}
+
+/// Severity attached to one inspectable omission or downgrade finding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ContextOmissionSeverity {
+    Info,
+    Warning,
+    Blocking,
+}
+
+impl ContextOmissionSeverity {
+    /// Returns the stable serialization label for this omission severity.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Info => "info",
+            Self::Warning => "warning",
+            Self::Blocking => "blocking",
+        }
+    }
+
+    /// Returns true when the finding must stop planning or execution.
+    pub const fn is_blocking(self) -> bool {
+        matches!(self, Self::Blocking)
+    }
+}
+
+/// Derived repository-map freshness surfaced through runtime projections.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RepositoryMapState {
+    Ready,
+    Stale,
+    Missing,
+    Degraded,
+    Corrupt,
+}
+
+impl RepositoryMapState {
+    /// Returns the stable serialization label for this repository-map state.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Ready => "ready",
+            Self::Stale => "stale",
+            Self::Missing => "missing",
+            Self::Degraded => "degraded",
+            Self::Corrupt => "corrupt",
+        }
+    }
+}
+
+/// Freshness state for the derived local snapshot cache.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SnapshotCacheState {
+    Ready,
+    Stale,
+    Missing,
+    Degraded,
+    Tracked,
+    Corrupt,
+}
+
+impl SnapshotCacheState {
+    /// Returns the stable serialization label for this snapshot-cache state.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Ready => "ready",
+            Self::Stale => "stale",
+            Self::Missing => "missing",
+            Self::Degraded => "degraded",
+            Self::Tracked => "tracked",
+            Self::Corrupt => "corrupt",
+        }
+    }
+}
+
+/// Outcome recorded for one patch-safe large-file edit attempt.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PatchSafeEditResultState {
+    Applied,
+    Drifted,
+    Rejected,
+    ManualReviewRequired,
+}
+
+impl PatchSafeEditResultState {
+    /// Returns the stable serialization label for this patch-safe result.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Applied => "applied",
+            Self::Drifted => "drifted",
+            Self::Rejected => "rejected",
+            Self::ManualReviewRequired => "manual_review_required",
+        }
+    }
+}
+
+/// Recoverable reference for a compacted large artifact.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DigestBackedArtifactRef {
+    pub digest: String,
+    pub artifact_kind: String,
+    pub summary: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub excerpt_anchor: Option<String>,
+    pub resolve_path: String,
+}
+
+impl DigestBackedArtifactRef {
+    /// Validates the compacted artifact reference before it is projected.
+    pub fn validate(&self) -> Result<(), ContextIntelligenceError> {
+        if self.digest.trim().is_empty() {
+            return Err(ContextIntelligenceError::MissingDigestBackedArtifactDigest);
+        }
+        if self.artifact_kind.trim().is_empty() {
+            return Err(ContextIntelligenceError::MissingDigestBackedArtifactKind {
+                digest: self.digest.clone(),
+            });
+        }
+        if self.summary.trim().is_empty() {
+            return Err(ContextIntelligenceError::MissingDigestBackedArtifactSummary {
+                digest: self.digest.clone(),
+            });
+        }
+        if self.resolve_path.trim().is_empty() {
+            return Err(ContextIntelligenceError::MissingDigestBackedArtifactResolvePath {
+                digest: self.digest.clone(),
+            });
+        }
+        Ok(())
+    }
+}
+
+/// Persisted handling decision for one context candidate.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ContextPackEntryProjection {
+    pub source_ref: String,
+    pub source_kind: RetrievalSourceKind,
+    pub authority_rank: AuthorityRank,
+    pub fidelity_tier: ContextFidelityTier,
+    pub inclusion_mode: ContextInclusionMode,
+    pub reason: String,
+    pub required_for_admission: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resolved_excerpt_anchor: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub digest_ref: Option<DigestBackedArtifactRef>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lifecycle_relevance: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub risk_relevance: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ranking_rationale: Option<String>,
+}
+
+impl ContextPackEntryProjection {
+    /// Validates one context-pack entry before it is persisted or projected.
+    pub fn validate(&self) -> Result<(), ContextIntelligenceError> {
+        if self.source_ref.trim().is_empty() {
+            return Err(ContextIntelligenceError::MissingContextPackEntrySourceRef);
+        }
+        if self.reason.trim().is_empty() {
+            return Err(ContextIntelligenceError::MissingContextPackEntryReason {
+                source_ref: self.source_ref.clone(),
+            });
+        }
+        if let Some(digest_ref) = &self.digest_ref {
+            digest_ref.validate()?;
+        }
+        Ok(())
+    }
+}
+
+/// Inspectable explanation for a context omission, downgrade, or refusal.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ContextOmissionFinding {
+    pub severity: ContextOmissionSeverity,
+    pub reason_code: String,
+    pub candidate_ref: String,
+    pub message: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub required_fidelity: Option<ContextFidelityTier>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub observed_mode: Option<ContextInclusionMode>,
+}
+
+impl ContextOmissionFinding {
+    /// Returns true when the omission finding should block continuation.
+    pub const fn blocks_continuation(&self) -> bool {
+        self.severity.is_blocking()
+    }
+
+    /// Validates one omission finding before it is persisted or projected.
+    pub fn validate(&self) -> Result<(), ContextIntelligenceError> {
+        if self.reason_code.trim().is_empty() {
+            return Err(ContextIntelligenceError::MissingOmissionReasonCode);
+        }
+        if self.candidate_ref.trim().is_empty() {
+            return Err(ContextIntelligenceError::MissingOmissionCandidateRef {
+                reason_code: self.reason_code.clone(),
+            });
+        }
+        if self.message.trim().is_empty() {
+            return Err(ContextIntelligenceError::MissingOmissionMessage {
+                reason_code: self.reason_code.clone(),
+            });
+        }
+        Ok(())
+    }
+}
+
+/// Patch-safe large-file edit attempt recorded for inspectable runtime state.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PatchSafeEditAttempt {
+    pub target_ref: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub anchor_refs: Vec<String>,
+    pub pre_apply_digest: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub post_apply_verification: Vec<String>,
+    pub result_state: PatchSafeEditResultState,
+}
+
+impl PatchSafeEditAttempt {
+    /// Validates one patch-safe edit attempt before it is persisted or projected.
+    pub fn validate(&self) -> Result<(), ContextIntelligenceError> {
+        if self.target_ref.trim().is_empty() {
+            return Err(ContextIntelligenceError::MissingPatchSafeTargetRef);
+        }
+        if self.anchor_refs.is_empty() {
+            return Err(ContextIntelligenceError::MissingPatchSafeAnchorRefs {
+                target_ref: self.target_ref.clone(),
+            });
+        }
+        if self.pre_apply_digest.trim().is_empty() {
+            return Err(ContextIntelligenceError::MissingPatchSafePreApplyDigest {
+                target_ref: self.target_ref.clone(),
+            });
+        }
+        if self.post_apply_verification.is_empty() {
+            return Err(ContextIntelligenceError::MissingPatchSafePostApplyVerification {
+                target_ref: self.target_ref.clone(),
+            });
+        }
+        Ok(())
+    }
+}
+
 /// One candidate surfaced or rejected during advanced-context retrieval.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct RetrievedEvidenceCandidate {
@@ -1500,6 +1801,16 @@ pub struct AdvancedContextProjection {
     pub relationships: Vec<RelationshipProjection>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub impact_findings: Vec<ImpactAnalysisFinding>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub context_pack_entries: Vec<ContextPackEntryProjection>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub omission_findings: Vec<ContextOmissionFinding>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repository_map_state: Option<RepositoryMapState>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub snapshot_cache_state: Option<SnapshotCacheState>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub patch_safe_edit_attempts: Vec<PatchSafeEditAttempt>,
 }
 
 impl AdvancedContextProjection {
@@ -1542,6 +1853,11 @@ impl AdvancedContextProjection {
     /// Returns the impact-finding count recorded in this projection.
     pub fn impact_finding_count(&self) -> usize {
         self.impact_findings.len()
+    }
+
+    /// Returns true when the context substrate recorded a blocking omission.
+    pub fn has_blocking_context_gap(&self) -> bool {
+        self.omission_findings.iter().any(ContextOmissionFinding::blocks_continuation)
     }
 
     /// Returns the contract-facing semantic capability label for compact status surfaces.
@@ -1669,13 +1985,22 @@ impl AdvancedContextProjection {
         for finding in &self.impact_findings {
             finding.validate()?;
         }
+        for entry in &self.context_pack_entries {
+            entry.validate()?;
+        }
+        for finding in &self.omission_findings {
+            finding.validate()?;
+        }
+        for attempt in &self.patch_safe_edit_attempts {
+            attempt.validate()?;
+        }
         Ok(())
     }
 }
 
 impl Serialize for AdvancedContextProjection {
     #[rustfmt::skip]
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { let mut state = serializer.serialize_struct("AdvancedContextProjection", 19)?;
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer { let mut state = serializer.serialize_struct("AdvancedContextProjection", 24)?;
         state.serialize_field("query_id", &self.query_id)?;
         state.serialize_field("retrieval_mode", &self.retrieval_mode)?;
         state.serialize_field("retrieval_state", &self.retrieval_state)?;
@@ -1712,6 +2037,21 @@ impl Serialize for AdvancedContextProjection {
         }
         if !self.impact_findings.is_empty() {
             state.serialize_field("impact_findings", &self.impact_findings)?;
+        }
+        if !self.context_pack_entries.is_empty() {
+            state.serialize_field("context_pack_entries", &self.context_pack_entries)?;
+        }
+        if !self.omission_findings.is_empty() {
+            state.serialize_field("omission_findings", &self.omission_findings)?;
+        }
+        if let Some(repository_map_state) = self.repository_map_state {
+            state.serialize_field("repository_map_state", &repository_map_state)?;
+        }
+        if let Some(snapshot_cache_state) = self.snapshot_cache_state {
+            state.serialize_field("snapshot_cache_state", &snapshot_cache_state)?;
+        }
+        if !self.patch_safe_edit_attempts.is_empty() {
+            state.serialize_field("patch_safe_edit_attempts", &self.patch_safe_edit_attempts)?;
         }
         state.end()
     }
@@ -1885,21 +2225,50 @@ pub enum ContextIntelligenceError {
     MissingFindingFollowUp { finding_id: String },
     #[error("impact finding `{finding_id}` requires supporting relationships")]
     MissingFindingSupport { finding_id: String },
+    #[error("digest-backed artifact reference requires a digest")]
+    MissingDigestBackedArtifactDigest,
+    #[error("digest-backed artifact `{digest}` requires an artifact kind")]
+    MissingDigestBackedArtifactKind { digest: String },
+    #[error("digest-backed artifact `{digest}` requires a summary")]
+    MissingDigestBackedArtifactSummary { digest: String },
+    #[error("digest-backed artifact `{digest}` requires a resolve path")]
+    MissingDigestBackedArtifactResolvePath { digest: String },
+    #[error("context-pack entry requires a source ref")]
+    MissingContextPackEntrySourceRef,
+    #[error("context-pack entry `{source_ref}` requires a reason")]
+    MissingContextPackEntryReason { source_ref: String },
+    #[error("context omission finding requires a reason code")]
+    MissingOmissionReasonCode,
+    #[error("context omission finding `{reason_code}` requires a candidate ref")]
+    MissingOmissionCandidateRef { reason_code: String },
+    #[error("context omission finding `{reason_code}` requires a message")]
+    MissingOmissionMessage { reason_code: String },
+    #[error("patch-safe edit attempt requires a target ref")]
+    MissingPatchSafeTargetRef,
+    #[error("patch-safe edit attempt `{target_ref}` requires anchor refs")]
+    MissingPatchSafeAnchorRefs { target_ref: String },
+    #[error("patch-safe edit attempt `{target_ref}` requires a pre-apply digest")]
+    MissingPatchSafePreApplyDigest { target_ref: String },
+    #[error("patch-safe edit attempt `{target_ref}` requires post-apply verification evidence")]
+    MissingPatchSafePostApplyVerification { target_ref: String },
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        AdvancedContextProjection, AuthorityRank, CandidateSelectionState,
-        ContextIntelligenceError, HybridOutcome, ImpactAnalysisFinding, ImpactFindingKind,
-        ImpactFindingSeverity, ImpactFindingStatus, IndexMaintenanceCommand,
-        IndexMaintenanceOperation, IndexMaintenanceTrigger, RemoteTransmissionPolicyState,
-        RetrievalBudgets, RetrievalCompatibilityState, RetrievalIndexState, RetrievalMatchOrigin,
-        RetrievalMode, RetrievalScore, RetrievalSourceKind, RetrievalStalenessState,
-        RetrievalState, RetrievedEvidenceCandidate, SemanticCapabilityState, SemanticChunkRecord,
+        AdvancedContextProjection, AuthorityRank, CandidateSelectionState, ContextFidelityTier,
+        ContextInclusionMode, ContextIntelligenceError, ContextOmissionFinding,
+        ContextOmissionSeverity, ContextPackEntryProjection, DigestBackedArtifactRef,
+        HybridOutcome, ImpactAnalysisFinding, ImpactFindingKind, ImpactFindingSeverity,
+        ImpactFindingStatus, IndexMaintenanceCommand, IndexMaintenanceOperation,
+        IndexMaintenanceTrigger, PatchSafeEditAttempt, PatchSafeEditResultState,
+        RemoteTransmissionPolicyState, RepositoryMapState, RetrievalBudgets,
+        RetrievalCompatibilityState, RetrievalIndexState, RetrievalMatchOrigin, RetrievalMode,
+        RetrievalScore, RetrievalSourceKind, RetrievalStalenessState, RetrievalState,
+        RetrievedEvidenceCandidate, SemanticCapabilityState, SemanticChunkRecord,
         SemanticChunkState, SemanticPolicyState, SemanticTraceEventKind, SemanticTraceRecord,
-        SemanticVectorRecord, SemanticVectorState, SourceDigestCompatibilityState,
-        SourceDigestRecord, SourcePresenceState,
+        SemanticVectorRecord, SemanticVectorState, SnapshotCacheState,
+        SourceDigestCompatibilityState, SourceDigestRecord, SourcePresenceState,
     };
     use crate::domain::governance::CanonSemanticProvenanceBoundary;
 
@@ -1933,6 +2302,311 @@ mod tests {
                 candidate_id: "candidate-domain-semantic".to_string(),
                 match_origin: RetrievalMatchOrigin::SemanticExpand,
             }
+        );
+    }
+
+    #[test]
+    fn context_substrate_types_expose_stable_labels_and_validate_required_fields() {
+        for (tier, label) in [
+            (ContextFidelityTier::Critical, "critical"),
+            (ContextFidelityTier::Supporting, "supporting"),
+            (ContextFidelityTier::Ambient, "ambient"),
+            (ContextFidelityTier::Archived, "archived"),
+        ] {
+            assert_eq!(tier.as_str(), label);
+        }
+
+        for (mode, label, lossy) in [
+            (ContextInclusionMode::Full, "full", false),
+            (ContextInclusionMode::Excerpt, "excerpt", false),
+            (ContextInclusionMode::Summary, "summary", true),
+            (ContextInclusionMode::Signature, "signature", true),
+            (ContextInclusionMode::Digest, "digest", true),
+            (ContextInclusionMode::Omitted, "omitted", true),
+        ] {
+            assert_eq!(mode.as_str(), label);
+            assert_eq!(mode.is_lossy_for_critical(), lossy);
+        }
+
+        for (severity, label) in [
+            (ContextOmissionSeverity::Info, "info"),
+            (ContextOmissionSeverity::Warning, "warning"),
+            (ContextOmissionSeverity::Blocking, "blocking"),
+        ] {
+            assert_eq!(severity.as_str(), label);
+        }
+
+        for (state, label) in [
+            (RepositoryMapState::Ready, "ready"),
+            (RepositoryMapState::Missing, "missing"),
+            (RepositoryMapState::Stale, "stale"),
+            (RepositoryMapState::Degraded, "degraded"),
+            (RepositoryMapState::Corrupt, "corrupt"),
+        ] {
+            assert_eq!(state.as_str(), label);
+        }
+
+        for (state, label) in [
+            (SnapshotCacheState::Ready, "ready"),
+            (SnapshotCacheState::Missing, "missing"),
+            (SnapshotCacheState::Stale, "stale"),
+            (SnapshotCacheState::Tracked, "tracked"),
+            (SnapshotCacheState::Degraded, "degraded"),
+            (SnapshotCacheState::Corrupt, "corrupt"),
+        ] {
+            assert_eq!(state.as_str(), label);
+        }
+
+        for (state, label) in [
+            (PatchSafeEditResultState::Applied, "applied"),
+            (PatchSafeEditResultState::Drifted, "drifted"),
+            (PatchSafeEditResultState::Rejected, "rejected"),
+            (PatchSafeEditResultState::ManualReviewRequired, "manual_review_required"),
+        ] {
+            assert_eq!(state.as_str(), label);
+        }
+
+        let digest_error = DigestBackedArtifactRef {
+            digest: String::new(),
+            artifact_kind: "log".to_string(),
+            summary: "summary".to_string(),
+            excerpt_anchor: None,
+            resolve_path: "logs/error.log".to_string(),
+        }
+        .validate()
+        .unwrap_err();
+        assert_eq!(digest_error, ContextIntelligenceError::MissingDigestBackedArtifactDigest);
+
+        let digest_kind_error = DigestBackedArtifactRef {
+            digest: "fnv64:testdigest".to_string(),
+            artifact_kind: String::new(),
+            summary: "summary".to_string(),
+            excerpt_anchor: None,
+            resolve_path: "logs/error.log".to_string(),
+        }
+        .validate()
+        .unwrap_err();
+        assert_eq!(
+            digest_kind_error,
+            ContextIntelligenceError::MissingDigestBackedArtifactKind {
+                digest: "fnv64:testdigest".to_string(),
+            }
+        );
+
+        let digest_summary_error = DigestBackedArtifactRef {
+            digest: "fnv64:testdigest".to_string(),
+            artifact_kind: "log".to_string(),
+            summary: String::new(),
+            excerpt_anchor: None,
+            resolve_path: "logs/error.log".to_string(),
+        }
+        .validate()
+        .unwrap_err();
+        assert_eq!(
+            digest_summary_error,
+            ContextIntelligenceError::MissingDigestBackedArtifactSummary {
+                digest: "fnv64:testdigest".to_string(),
+            }
+        );
+
+        let digest_path_error = DigestBackedArtifactRef {
+            digest: "fnv64:testdigest".to_string(),
+            artifact_kind: "log".to_string(),
+            summary: "summary".to_string(),
+            excerpt_anchor: None,
+            resolve_path: String::new(),
+        }
+        .validate()
+        .unwrap_err();
+        assert_eq!(
+            digest_path_error,
+            ContextIntelligenceError::MissingDigestBackedArtifactResolvePath {
+                digest: "fnv64:testdigest".to_string(),
+            }
+        );
+
+        let entry_error = ContextPackEntryProjection {
+            source_ref: "src/lib.rs".to_string(),
+            source_kind: RetrievalSourceKind::WorkspaceFile,
+            authority_rank: AuthorityRank::Structured,
+            fidelity_tier: ContextFidelityTier::Critical,
+            inclusion_mode: ContextInclusionMode::Excerpt,
+            required_for_admission: true,
+            reason: String::new(),
+            resolved_excerpt_anchor: None,
+            digest_ref: None,
+            lifecycle_relevance: Some("implementation_surface".to_string()),
+            risk_relevance: None,
+            ranking_rationale: Some("origin=fts".to_string()),
+        }
+        .validate()
+        .unwrap_err();
+        assert_eq!(
+            entry_error,
+            ContextIntelligenceError::MissingContextPackEntryReason {
+                source_ref: "src/lib.rs".to_string(),
+            }
+        );
+
+        let entry_source_error = ContextPackEntryProjection {
+            source_ref: String::new(),
+            source_kind: RetrievalSourceKind::WorkspaceFile,
+            authority_rank: AuthorityRank::Structured,
+            fidelity_tier: ContextFidelityTier::Critical,
+            inclusion_mode: ContextInclusionMode::Excerpt,
+            required_for_admission: true,
+            reason: "bounded excerpt".to_string(),
+            resolved_excerpt_anchor: None,
+            digest_ref: None,
+            lifecycle_relevance: Some("implementation_surface".to_string()),
+            risk_relevance: None,
+            ranking_rationale: Some("origin=fts".to_string()),
+        }
+        .validate()
+        .unwrap_err();
+        assert_eq!(entry_source_error, ContextIntelligenceError::MissingContextPackEntrySourceRef);
+
+        let omission_error = ContextOmissionFinding {
+            severity: ContextOmissionSeverity::Blocking,
+            reason_code: String::new(),
+            candidate_ref: "src/lib.rs".to_string(),
+            message: "critical context missing".to_string(),
+            required_fidelity: Some(ContextFidelityTier::Critical),
+            observed_mode: Some(ContextInclusionMode::Omitted),
+        }
+        .validate()
+        .unwrap_err();
+        assert_eq!(omission_error, ContextIntelligenceError::MissingOmissionReasonCode);
+
+        let omission_candidate_error = ContextOmissionFinding {
+            severity: ContextOmissionSeverity::Blocking,
+            reason_code: "critical_unavailable".to_string(),
+            candidate_ref: String::new(),
+            message: "critical context missing".to_string(),
+            required_fidelity: Some(ContextFidelityTier::Critical),
+            observed_mode: Some(ContextInclusionMode::Omitted),
+        }
+        .validate()
+        .unwrap_err();
+        assert_eq!(
+            omission_candidate_error,
+            ContextIntelligenceError::MissingOmissionCandidateRef {
+                reason_code: "critical_unavailable".to_string(),
+            }
+        );
+
+        let omission_message_error = ContextOmissionFinding {
+            severity: ContextOmissionSeverity::Blocking,
+            reason_code: "critical_unavailable".to_string(),
+            candidate_ref: "src/lib.rs".to_string(),
+            message: String::new(),
+            required_fidelity: Some(ContextFidelityTier::Critical),
+            observed_mode: Some(ContextInclusionMode::Omitted),
+        }
+        .validate()
+        .unwrap_err();
+        assert_eq!(
+            omission_message_error,
+            ContextIntelligenceError::MissingOmissionMessage {
+                reason_code: "critical_unavailable".to_string(),
+            }
+        );
+
+        let patch_error = PatchSafeEditAttempt {
+            target_ref: "src/lib.rs".to_string(),
+            anchor_refs: Vec::new(),
+            pre_apply_digest: "fnv64:test".to_string(),
+            post_apply_verification: vec!["cargo test".to_string()],
+            result_state: PatchSafeEditResultState::ManualReviewRequired,
+        }
+        .validate()
+        .unwrap_err();
+        assert_eq!(
+            patch_error,
+            ContextIntelligenceError::MissingPatchSafeAnchorRefs {
+                target_ref: "src/lib.rs".to_string(),
+            }
+        );
+
+        let patch_target_error = PatchSafeEditAttempt {
+            target_ref: String::new(),
+            anchor_refs: vec!["src/lib.rs#start-anchor".to_string()],
+            pre_apply_digest: "fnv64:test".to_string(),
+            post_apply_verification: vec!["cargo test".to_string()],
+            result_state: PatchSafeEditResultState::ManualReviewRequired,
+        }
+        .validate()
+        .unwrap_err();
+        assert_eq!(patch_target_error, ContextIntelligenceError::MissingPatchSafeTargetRef);
+
+        let patch_digest_error = PatchSafeEditAttempt {
+            target_ref: "src/lib.rs".to_string(),
+            anchor_refs: vec!["src/lib.rs#start-anchor".to_string()],
+            pre_apply_digest: String::new(),
+            post_apply_verification: vec!["cargo test".to_string()],
+            result_state: PatchSafeEditResultState::ManualReviewRequired,
+        }
+        .validate()
+        .unwrap_err();
+        assert_eq!(
+            patch_digest_error,
+            ContextIntelligenceError::MissingPatchSafePreApplyDigest {
+                target_ref: "src/lib.rs".to_string(),
+            }
+        );
+
+        let patch_verification_error = PatchSafeEditAttempt {
+            target_ref: "src/lib.rs".to_string(),
+            anchor_refs: vec!["src/lib.rs#start-anchor".to_string()],
+            pre_apply_digest: "fnv64:test".to_string(),
+            post_apply_verification: Vec::new(),
+            result_state: PatchSafeEditResultState::ManualReviewRequired,
+        }
+        .validate()
+        .unwrap_err();
+        assert_eq!(
+            patch_verification_error,
+            ContextIntelligenceError::MissingPatchSafePostApplyVerification {
+                target_ref: "src/lib.rs".to_string(),
+            }
+        );
+
+        let serialized_projection = serde_json::to_value(AdvancedContextProjection {
+            query_id: "query-domain-context-substrate".to_string(),
+            retrieval_mode: RetrievalMode::Local,
+            retrieval_state: RetrievalState::Selected,
+            retrieval_index_state: RetrievalIndexState::Ready,
+            semantic_policy_state: SemanticPolicyState::Disabled,
+            semantic_capability_state: SemanticCapabilityState::Unsupported,
+            hybrid_outcome: HybridOutcome::BaselineOnly,
+            budgets: RetrievalBudgets::default(),
+            remote_policy_state: RemoteTransmissionPolicyState::LocalOnly,
+            used_remote: false,
+            terminal_reason: Some("bounded context selected local evidence".to_string()),
+            selected_evidence: vec![semantic_candidate()],
+            rejected_candidates: Vec::new(),
+            semantic_trace_records: Vec::new(),
+            relationships: Vec::new(),
+            impact_findings: Vec::new(),
+            context_pack_entries: Vec::new(),
+            omission_findings: Vec::new(),
+            repository_map_state: None,
+            snapshot_cache_state: None,
+            patch_safe_edit_attempts: vec![PatchSafeEditAttempt {
+                target_ref: "src/lib.rs".to_string(),
+                anchor_refs: vec!["src/lib.rs#start-anchor".to_string()],
+                pre_apply_digest: "fnv64:test".to_string(),
+                post_apply_verification: vec!["cargo test".to_string()],
+                result_state: PatchSafeEditResultState::ManualReviewRequired,
+            }],
+        })
+        .unwrap();
+        assert_eq!(
+            serialized_projection
+                .get("patch_safe_edit_attempts")
+                .and_then(serde_json::Value::as_array)
+                .map(Vec::len),
+            Some(1)
         );
     }
 
@@ -1987,6 +2661,11 @@ mod tests {
             semantic_trace_records: Vec::new(),
             relationships: Vec::new(),
             impact_findings: Vec::new(),
+            context_pack_entries: Vec::new(),
+            omission_findings: Vec::new(),
+            repository_map_state: None,
+            snapshot_cache_state: None,
+            patch_safe_edit_attempts: Vec::new(),
         };
 
         assert_eq!(projection.semantic_selected_count(), 1);
@@ -2117,6 +2796,11 @@ mod tests {
                 recommended_follow_up: "run targeted tests".to_string(),
                 supporting_relationship_ids: vec!["relationship-1".to_string()],
             }],
+            context_pack_entries: Vec::new(),
+            omission_findings: Vec::new(),
+            repository_map_state: None,
+            snapshot_cache_state: None,
+            patch_safe_edit_attempts: Vec::new(),
         };
         assert_eq!(projection.impact_finding_count(), 1);
         projection.validate().unwrap();
@@ -2333,6 +3017,11 @@ mod tests {
             semantic_trace_records: Vec::new(),
             relationships: Vec::new(),
             impact_findings: Vec::new(),
+            context_pack_entries: Vec::new(),
+            omission_findings: Vec::new(),
+            repository_map_state: None,
+            snapshot_cache_state: None,
+            patch_safe_edit_attempts: Vec::new(),
         };
 
         let serialized = serde_json::to_value(&projection).unwrap();

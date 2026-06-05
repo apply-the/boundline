@@ -1015,6 +1015,7 @@ mod tests {
         WorkflowProgressState,
     };
     use crate::orchestrator::session_runtime::SessionRuntime;
+    use crate::test_support::CurrentDirGuard;
 
     struct TestWorkspace {
         path: PathBuf,
@@ -1698,6 +1699,7 @@ phases = ["capture", "plan", "run", "inspect"]
 summary = "Default workflow"
 "#,
         );
+        let _current_dir_guard = CurrentDirGuard::change_to(workspace.path());
 
         let resolved = resolve_workspace(None).unwrap();
         assert!(resolved.is_absolute());

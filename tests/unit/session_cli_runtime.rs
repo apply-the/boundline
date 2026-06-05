@@ -359,6 +359,11 @@ fn sample_advanced_context() -> AdvancedContextProjection {
             recommended_follow_up: "add or refresh the focused regression test".to_string(),
             supporting_relationship_ids: vec!["relationship-1".to_string()],
         }],
+        context_pack_entries: Vec::new(),
+        omission_findings: Vec::new(),
+        repository_map_state: None,
+        snapshot_cache_state: None,
+        patch_safe_edit_attempts: Vec::new(),
     }
 }
 

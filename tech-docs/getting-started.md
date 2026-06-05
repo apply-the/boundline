@@ -63,12 +63,15 @@ Read the output literally:
   ready, already satisfied, blocked, or repair-needed.
 - `actions` tells you the next repair or follow-up step.
 
-The current 0.70.0 release documents Canon `0.67.0` support for the machine-facing
+The current 0.71.0 release documents Canon `0.67.0` support for the machine-facing
 `canon governance start|refresh|capabilities --json` `v1` surface.
 
 During normal planning, expect the runtime to surface `plan_quality_state`,
 `backlog_quality_state`, and `planning_analysis_state` before execution is
 offered. Treat those as authoritative runtime gates rather than chat guidance.
+When the workspace is large enough to trigger context narrowing, also expect
+repository-map, omission, compaction, snapshot-cache, and patch-safe edit
+signals before planning is treated as credible.
 
 ## 3. Initialize The Workspace
 

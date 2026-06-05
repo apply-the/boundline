@@ -20,7 +20,7 @@ fn release_surface_tracks_current_workspace_version_without_stale_status_heading
     assert!(changelog.contains(&changelog_heading));
     assert!(
         roadmap.contains(&format!(
-            "Delivered in {version}: read-only planning-coherence gate, source-attributed findings, and withheld execution handoff on contradictions or producer gaps"
+            "Delivered in {version}: local context substrate, fidelity tiers, omitted-context visibility, patch-safe edit guards, and non-memory snapshot cache boundary"
         ))
     );
     assert!(!roadmap.contains("## Current Status:"));

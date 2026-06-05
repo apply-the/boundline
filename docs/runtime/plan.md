@@ -1,6 +1,6 @@
 # Plan
 
-Boundline 0.70.0 makes planning readiness a runtime gate, not a chat
+Boundline 0.71.0 makes planning readiness a runtime gate, not a chat
 convention.
 
 ## What `plan` Does
@@ -18,6 +18,10 @@ convention.
   `planning_analysis_coverage` after the runtime checks goal outcomes,
   validation anchors, execution handoff inputs, backlog sequencing, and any
   governed evidence already present in the session
+- records additive large-codebase context substrate fields such as typed
+  `context_pack_entries`, `omission_findings`, `repository_map_state`,
+  `snapshot_cache_state`, and `patch_safe_edit_attempts` when advanced context
+  selection is active
 - stops on one `phase_request` when a planning gate needs missing validation,
   missing backlog handoff evidence, or another blocking planning input
 - keeps execution handoff withheld until the gate clears
@@ -28,3 +32,8 @@ Use `status`, `next`, and `inspect` to see the same runtime decision from
 different surfaces. Do not invent execution from chat history, and do not
 treat `planning_analysis_findings` as permission to rewrite Canon or the plan
 outside the runtime repair path.
+
+When the large-codebase substrate reports a blocking omission, downgraded
+critical artifact, stale tracked snapshot cache, or unsafe oversized full-read
+request, planning remains blocked until the runtime can repair or narrow the
+context safely.
