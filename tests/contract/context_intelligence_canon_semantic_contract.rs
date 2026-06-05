@@ -80,6 +80,11 @@ fn canon_projection_contract_fixture() -> AdvancedContextProjection {
         }],
         relationships: Vec::new(),
         impact_findings: Vec::new(),
+        context_pack_entries: Vec::new(),
+        omission_findings: Vec::new(),
+        repository_map_state: None,
+        snapshot_cache_state: None,
+        patch_safe_edit_attempts: Vec::new(),
     }
 }
 

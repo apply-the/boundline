@@ -1,6 +1,6 @@
 # Inspect
 
-`inspect` explains why the Boundline 0.70.0 runtime chose the current plan or blocked
+`inspect` explains why the Boundline 0.71.0 runtime chose the current plan or blocked
 handoff.
 
 ## What To Read
@@ -12,6 +12,9 @@ Look for:
 - backlog-quality state, findings, and additive scope fields
 - planning-analysis state, source-attributed findings, and additive coverage
   metrics
+- context-pack entry projections with fidelity tiers and inclusion modes
+- omission findings, repository-map state, snapshot-cache state, and patch-safe
+  edit attempts
 - emitted `phase_request`
 - withheld or recovered execution handoff
 - trace-backed evidence for the next action
@@ -19,3 +22,6 @@ Look for:
 Use `status` first, then `inspect`, then `next` if you need the recovery
 route. Inspect is the right place to confirm whether the blocked condition is a
 validation gap, a backlog contradiction, or a governed producer contract gap.
+It is also the right place to confirm whether Boundline compacted a large
+artifact to a digest, omitted archived or unsafe context, or refused a large
+edit because the patch-safe boundary drifted.

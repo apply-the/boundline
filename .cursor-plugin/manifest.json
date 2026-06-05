@@ -1,7 +1,7 @@
 {
   "name": "boundline",
   "displayName": "Boundline Assistant Support for Cursor",
-  "version": "0.70.0",
+  "version": "0.71.0",
   "description": "CLI-authoritative assistant support for bounded engineering work",
   "author": {
     "name": "Apply The",

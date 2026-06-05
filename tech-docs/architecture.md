@@ -77,13 +77,15 @@ planning gates such as `goal_quality_state`, `plan_quality_state`,
 handoffs such as `phase_request`, `assistant_resume_command`, and
 `assistant_next_command`.
 
-The 0.70.0 line keeps plan quality as the first planning-readiness gate,
-follows it with backlog quality, and then runs a read-only planning-analysis
-coherence pass. If the active plan lacks a credible validation strategy, if the
-Canon backlog packet is closure-limited or still lacks execution-handoff
-evidence, or if planning analysis finds a contradiction between selected slice,
-validation coverage, and governed execution inputs, the runtime keeps planning
-non-terminal, emits one `phase_request` when recovery is possible, and
+The 0.71.0 line keeps plan quality as the first planning-readiness gate,
+follows it with backlog quality, keeps the read-only planning-analysis
+coherence pass, and now hardens large-codebase context admission. If the active
+plan lacks a credible validation strategy, if the Canon backlog packet is
+closure-limited or still lacks execution-handoff evidence, if planning
+analysis finds a contradiction between selected slice, validation coverage, and
+governed execution inputs, or if the context substrate reports blocking
+omissions, unsafe oversized reads, or stale tracked cache, the runtime keeps
+planning non-terminal, emits one `phase_request` when recovery is possible, and
 preserves the blocked assessment in status, inspect, traces, and orchestration
 snapshots until the operator answers or regenerates Canon output.
 
@@ -150,6 +152,9 @@ Planning in Boundline is evidence-driven:
 - `goal` persists the bounded session objective from authored goals and briefs.
 - `plan` builds one bounded context pack from workspace evidence, recent traces,
   and compatible Canon inputs.
+- the same context pack can now expose fidelity tiers, inclusion modes,
+  repository-map signals, digest-backed large-artifact refs, omission reasons,
+  and patch-safe edit constraints for large repositories
 - `run` executes bounded actions on that same session-owned runtime.
 - `status`, `next`, and `inspect` project the persisted route, context,
   follow-through, and findings instead of recomputing a new story.

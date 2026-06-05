@@ -8,6 +8,11 @@ The goal of Boundline is to transform non-deterministic AI iterations into predi
 
 ## Recently Delivered
 
+- `070` - Large Codebase Context Substrate: shipped the local large-codebase
+  context substrate in Boundline `0.71.0`. Planning now projects fidelity
+  tiers, inclusion modes, omission findings, repository-map readiness,
+  digest-backed compaction, patch-safe edit guards, and freshness-bound derived
+  snapshot-cache state instead of silently widening context reads.
 - `069` - Plan Analysis Contract: shipped the read-only planning-analysis gate
   in Boundline `0.70.0`. After plan quality and backlog quality are ready, the
   runtime now validates cross-artifact coherence across goal outcomes,

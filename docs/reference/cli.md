@@ -74,6 +74,7 @@ Prefer the restore command reported by `status`, `next`, or `inspect`.
 .boundline/session.json       active session state
 .boundline/traces/            trace records
 .boundline/checkpoints/       rollback manifests
+.boundline/context-intelligence/ derived retrieval DB, manifest, and local snapshot cache state
 .boundline/guidance/          workspace guidance overrides
 .boundline/guardians/         workspace guardian overrides
 .boundline/workflows.toml     optional workflow registry
@@ -116,6 +117,11 @@ Important trace and status fields can include:
 - `context_credibility`
 - `context_primary_inputs`
 - `context_provenance`
+- `repository_map_state`
+- `snapshot_cache_state`
+- `context_pack_entries`
+- `omission_findings`
+- `patch_safe_edit_attempts`
 - `goal_plan_state`
 - `planning_rationale`
 - `verification_strategy`

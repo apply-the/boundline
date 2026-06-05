@@ -1,4 +1,4 @@
-# S12 - Recursive Stage Refinement Profiles
+# Recursive Stage Refinement Profiles
 
 ## Owner
 
@@ -196,16 +196,15 @@ boundaries.
 Every recursive round must earn its existence through an inspectable delta.
 
 
-
 # Note
 
 ## Decision
 
-S12 should not absorb the DS4-inspired context/cache/trace/router/adapter ideas as its own scope.
+Should not absorb the DS4-inspired context/cache/trace/router/adapter ideas as its own scope.
 
-S12 should benefit from those foundations, but remain focused on bounded recursive stage movement.
+Should benefit from those foundations, but remain focused on bounded recursive stage movement.
 
-## S12 owns
+## Owns
 
 - bounded stage refinement loops
 - compact structured round packets
@@ -215,7 +214,7 @@ S12 should benefit from those foundations, but remain focused on bounded recursi
 - blocker stops
 - trace-visible refinement outcomes
 
-## S12 does not own
+## Does not own
 
 - context indexing
 - context fidelity policy
@@ -229,7 +228,7 @@ S12 should benefit from those foundations, but remain focused on bounded recursi
 
 ## Dependency alignment
 
-S12 should depend on:
+Should depend on:
 
 - S11 event/eval substrate
 - S15 council hardening
@@ -283,7 +282,7 @@ This item should depend on:
 - `08-evals-and-runtime-observability.md`
 - `10-review-councils-and-role-gated-governance.md`
 - `11-adaptive-governance-calibration.md`
-- `06-large-codebase-context-substrate.md` where Context Packs are needed
+- `specs/070-large-codebase-context-substrate/spec.md` where Context Packs are needed
 
 ## RecursiveMAS Boundary
 

@@ -64,6 +64,11 @@ A context pack is the bounded evidence set Boundline uses to plan or continue. I
 
 If context is insufficient, Boundline should stop and ask for clarification or better evidence.
 
+In `0.71.0`, context packs can also carry fidelity tiers, inclusion modes,
+repository-map signals, digest-backed large-artifact refs, omission findings,
+and patch-safe edit constraints. Those fields explain why a large repository
+could proceed safely or why planning stopped before execution.
+
 ## Expert Packs
 
 Expert packs provide reusable expertise for languages, frameworks, domains, review profiles, and delivery roles. Boundline can select packs from built-in sources, bundled assistant packs, workspace overrides, or compatible governed inputs.

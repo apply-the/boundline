@@ -4,7 +4,7 @@
 
 This roadmap item must stay separate from:
 
-- Persistent Context Snapshot Cache from `06-large-codebase-context-substrate.md`
+- Persistent Context Snapshot Cache from `specs/070-large-codebase-context-substrate/spec.md`
 - Trace Compaction Policy from `08-evals-and-runtime-observability.md`
 
 Cache is not memory.
@@ -17,7 +17,7 @@ Memory is reviewed, accepted, trace-linked knowledge that may influence future w
 
 | Related file | Relationship |
 |---|---|
-| `06-large-codebase-context-substrate.md` | May provide local cache and repo map, but those are not memory |
+| `specs/070-large-codebase-context-substrate/spec.md` | May provide local cache and repo map, but those are not memory |
 | `08-evals-and-runtime-observability.md` | Provides trace refs and compaction, but compaction summaries are not memory |
 | `18-completion-verification-runtime.md` | May produce evidence refs that support future memory proposals |
 | `19-plan-execution-orchestration.md` | May generate repeated operational patterns worth proposing as memory |

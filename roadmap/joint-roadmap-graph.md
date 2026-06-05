@@ -9,11 +9,6 @@ flowchart TD
     %% Styling
     classDef canon fill:#5b5b95,stroke:#333,stroke-width:2px,color:#fff
     classDef boundline fill:#1f6b4e,stroke:#333,stroke-width:2px,color:#fff
-    classDef nextUp fill:#c98b22,stroke:#333,stroke-width:2px,color:#fff
-
-    subgraph Core Foundations
-        B06["Boundline 06<br/>(Context Substrate)"]:::nextUp
-    end
 
     subgraph Verification Integrity
         C02["Canon 02<br/>(Verification Gates)"]:::canon
@@ -38,7 +33,7 @@ flowchart TD
     end
 
     subgraph Observability & Memory
-        C06["Canon 06<br/>(Observability Design)"]:::nextUp
+        C06["Canon 06<br/>(Observability Design)"]:::canon
         B08["Boundline 08<br/>(Evals & Observability)"]:::boundline
         B16["Boundline 16<br/>(Session Memory)"]:::boundline
     end
@@ -48,7 +43,6 @@ flowchart TD
     end
 
     %% Key Dependencies
-    B06 -.-> C02
     C02 ---|Hard Pair| B18
     B18 -->|Hard Dependency| B19
     B19 -->|Triggers Export| C03
@@ -61,17 +55,13 @@ flowchart TD
     B07 -.-> B17
     
     C06 -.->|Design for| B08
+    C05 -.->|Pairs well| C06
 ```
-
-## Next Features to Develop
-
-- **Canon Next**: `Canon 06 (Observability Design)` - Establishes the core event emission and tracking contracts required for long-running workflows and integrations with Boundline's eval systems.
-- **Boundline Next**: `Boundline 06 (Context Substrate)` - Finalizes the context extraction and assembly primitives required to properly gate operations, laying the groundwork for the upcoming Verification and Execution orchestration logic.
 
 ## Execution Order and Dependencies
 
-1. **Core Foundations (Boundline 06)**
-   - The foundational component for large-repository context handling. This is the remaining precursor before deeper execution-engine work.
+1. **Core Foundations**
+   - Boundline `04`, `05`, and `06` are now shipped. The next hard rollout dependency starts at verification.
 2. **Canon 02 + Boundline 18 (Verification Pair)**
    - The first crucial execution juncture. Canon defines the `claim -> proof -> evidence_ref` contract, while Boundline implements the runtime that executes the proof and blocks task completion.
 3. **Boundline 19 (Execution Orchestrator)**
@@ -82,5 +72,5 @@ flowchart TD
    - The actual external provider setup (MCP, setup, activation, health). `Boundline 07` comes first, followed by the security layer `Boundline 13` (secret inheritance and sandbox). It establishes the plugin layer that powers B14, B15, and B17.
 6. **Canon 07 (After provider setup)**
    - Arrives at the end to close the loop on the CLI side (Canon init) by gathering local routing choices, delegating execution back to Boundline.
-7. **Independent Features (Canon 06 & Boundline 08-12, 16)**
-   - These features cover autonomous workflows, observability, and advanced orchestrator additions. They do not block the core engine loop and can be parallelized based on priority. 
+7. **Independent Features (Canon 04, 05, 06 & Boundline 08-12, 16)**
+   - These features cover autonomous workflows, policy, observability, and advanced orchestrator additions. They do not block the core engine loop and can be parallelized based on priority. 

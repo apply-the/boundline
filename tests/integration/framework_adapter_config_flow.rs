@@ -1,3 +1,5 @@
+#![allow(unexpected_cfgs)]
+
 //! Integration coverage for guided adapter configuration and persisted config flows.
 
 use std::error::Error;
@@ -50,6 +52,10 @@ impl AdapterConfigInteractor for ScriptedAdapterConfigInteractor {
 }
 
 #[test]
+#[cfg_attr(
+    coverage,
+    ignore = "coverage sandbox cannot build sibling adapter repos outside the workspace target root"
+)]
 fn known_speckit_profile_activates_with_prefilled_defaults_and_runs_plan()
 -> Result<(), Box<dyn Error>> {
     let workspace = temp_specify_workspace_fixture("framework-adapter-config-speckit-defaults")?;
@@ -97,7 +103,7 @@ fn known_speckit_profile_activates_with_prefilled_defaults_and_runs_plan()
     assert!(plan_text.contains("framework_adapter_stage_status: succeeded"), "{plan_text}");
     assert!(
         plan_text.contains(
-            "framework_adapter_produced_artifacts: specs/069-plan-analysis-contract/spec.md, specs/069-plan-analysis-contract/plan.md, specs/069-plan-analysis-contract/tasks.md, .specify/workflows/speckit/planning.yml"
+            "framework_adapter_produced_artifacts: specs/070-large-codebase-context-substrate/spec.md, specs/070-large-codebase-context-substrate/plan.md, specs/070-large-codebase-context-substrate/tasks.md, .specify/workflows/speckit/planning.yml"
         ),
         "{plan_text}"
     );

@@ -1,3 +1,5 @@
+#![allow(unexpected_cfgs)]
+
 //! Integration coverage for explicit framework-adapter activation and pre-claim fallback.
 
 use std::error::Error;
@@ -300,6 +302,10 @@ fn explicit_speckit_add_activates_declared_run_stage_in_lifecycle_flow()
 }
 
 #[test]
+#[cfg_attr(
+    coverage,
+    ignore = "coverage sandbox cannot build sibling adapter repos outside the workspace target root"
+)]
 fn cross_repo_speckit_binary_smoke_bridges_real_specify_plan_and_completes_run()
 -> Result<(), Box<dyn Error>> {
     let workspace = temp_specify_workspace_fixture("framework-adapter-cross-repo-smoke")?;
@@ -334,7 +340,7 @@ fn cross_repo_speckit_binary_smoke_bridges_real_specify_plan_and_completes_run()
     assert!(plan_text.contains("framework_adapter_workflow_id: speckit-planning"), "{plan_text}");
     assert!(
         plan_text.contains(
-            "framework_adapter_produced_artifacts: specs/069-plan-analysis-contract/spec.md, specs/069-plan-analysis-contract/plan.md, specs/069-plan-analysis-contract/tasks.md, .specify/workflows/speckit/planning.yml"
+            "framework_adapter_produced_artifacts: specs/070-large-codebase-context-substrate/spec.md, specs/070-large-codebase-context-substrate/plan.md, specs/070-large-codebase-context-substrate/tasks.md, .specify/workflows/speckit/planning.yml"
         ),
         "{plan_text}"
     );

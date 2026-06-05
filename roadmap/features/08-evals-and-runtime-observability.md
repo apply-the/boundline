@@ -13,7 +13,7 @@ Trace compaction does not belong to `16-session-memory-and-repository-knowledge-
 | Related file | Relationship |
 |---|---|
 | `05-plan-analysis-contract.md` | Should be covered by planning-quality evals |
-| `06-large-codebase-context-substrate.md` | Needs context-selection evals and context-pack metrics |
+| `specs/070-large-codebase-context-substrate/spec.md` | Needs context-selection evals and context-pack metrics |
 | `07-external-capability-provider-protocol.md` | Needs provider-call events and provider eval fixtures |
 | `10-review-councils-and-role-gated-governance.md` | Needs council and guardian-finding evals |
 | `14-ai-gateway-and-inference-economics.md` | Owns cost policy but depends on event and route telemetry |

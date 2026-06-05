@@ -435,6 +435,7 @@ const PLAN_QUALITY_FINDING_PLANNING_RATIONALE: &str = "planning_rationale";
 const PLAN_QUALITY_FINDING_VERIFICATION_STRATEGY: &str = "verification_strategy";
 const PLAN_QUALITY_FINDING_CONTEXT_PACK_INSUFFICIENT: &str = "context_pack_insufficient";
 const PLAN_QUALITY_FINDING_CONTEXT_PACK_STALE: &str = "context_pack_stale";
+const PLAN_QUALITY_FINDING_CONTEXT_PACK_BLOCKED: &str = "context_pack_blocked";
 const PLAN_QUALITY_ASSUMPTION_DEFAULT_ROUTE_OVERRIDE: &str =
     "no explicit route override is required for this plan";
 const PLANNING_ANALYSIS_CODE_SUCCESS_CRITERION_UNCOVERED: &str = "success_criterion_uncovered";
@@ -1124,6 +1125,13 @@ impl GoalPlan {
                 }
                 ContextPackCredibility::Credible => {}
             }
+            if context_pack
+                .advanced_context
+                .as_ref()
+                .is_some_and(AdvancedContextProjection::has_blocking_context_gap)
+            {
+                findings.push(PLAN_QUALITY_FINDING_CONTEXT_PACK_BLOCKED.to_string());
+            }
         }
 
         if self.planning_rationale.as_deref().map(str::trim).unwrap_or_default().is_empty() {
@@ -1138,6 +1146,7 @@ impl GoalPlan {
                     finding.as_str(),
                     PLAN_QUALITY_FINDING_CONTEXT_PACK_INSUFFICIENT
                         | PLAN_QUALITY_FINDING_CONTEXT_PACK_STALE
+                        | PLAN_QUALITY_FINDING_CONTEXT_PACK_BLOCKED
                 )
             }) {
                 PlanQualityState::Blocked
@@ -1622,6 +1631,7 @@ mod tests {
         CanonExpertiseInputDisposition, ContextInput, ContextInputKind, ContextPack,
         ContextPackCredibility, ExpertPackSelectionOutcome, ExpertPackSelectionState,
         ExpertPackSignal, ExpertPackSignalStatus, GoalPlan, GoalPlanError,
+        PLAN_QUALITY_FINDING_CONTEXT_PACK_BLOCKED,
         PLANNING_ANALYSIS_ARTIFACT_KIND_BACKLOG_DOCUMENT,
         PLANNING_ANALYSIS_ARTIFACT_KIND_GOAL_PLAN, PLANNING_ANALYSIS_ARTIFACT_REF_SUCCESS_CRITERIA,
         PLANNING_ANALYSIS_CODE_ARTIFACT_CONTRADICTION,
@@ -1636,6 +1646,11 @@ mod tests {
         PlanningAnalysisSourceRef, PlanningAnalysisState, RejectedExpertCandidate,
         deduplicate_planning_analysis_findings, deduplicated_items,
         planning_analysis_state_for_findings,
+    };
+    use crate::domain::context_intelligence::{
+        AdvancedContextProjection, ContextOmissionFinding, ContextOmissionSeverity,
+        RemoteTransmissionPolicyState, RepositoryMapState, RetrievalIndexState, RetrievalMode,
+        RetrievalState, SemanticCapabilityState, SemanticPolicyState, SnapshotCacheState,
     };
     use crate::domain::governance::{
         BacklogQualityAssessment, BacklogQualityState, CanonEvidenceInspectSummary,
@@ -2247,6 +2262,74 @@ mod tests {
         }));
 
         Ok(())
+    }
+
+    #[test]
+    fn plan_quality_blocks_when_advanced_context_reports_blocking_gap() {
+        let plan = GoalPlan::new(
+            "Goal",
+            vec![PlannedTask {
+                task_id: "T001".to_string(),
+                description: "Repair the bounded implementation".to_string(),
+                target: "src/lib.rs".to_string(),
+                expected_outcome: Some("bounded implementation repaired".to_string()),
+                decision_type_hint: None,
+            }],
+        )
+        .unwrap()
+        .with_context_pack(ContextPack {
+            pack_id: "cp-blocking-gap".to_string(),
+            summary: "bounded context includes a blocked omission".to_string(),
+            credibility: ContextPackCredibility::Credible,
+            inputs: vec![ContextInput {
+                kind: ContextInputKind::WorkspaceFile,
+                reference: "src/lib.rs".to_string(),
+                rationale: "primary implementation surface".to_string(),
+                source: "workspace_scan".to_string(),
+                primary: true,
+            }],
+            selected_targets: vec!["src/lib.rs".to_string()],
+            advanced_context: Some(AdvancedContextProjection {
+                query_id: "query-plan-quality-blocked".to_string(),
+                retrieval_mode: RetrievalMode::Local,
+                retrieval_state: RetrievalState::Selected,
+                retrieval_index_state: RetrievalIndexState::Ready,
+                semantic_policy_state: SemanticPolicyState::Disabled,
+                semantic_capability_state: SemanticCapabilityState::Unsupported,
+                hybrid_outcome: crate::domain::context_intelligence::HybridOutcome::BaselineOnly,
+                budgets: Default::default(),
+                remote_policy_state: RemoteTransmissionPolicyState::LocalOnly,
+                used_remote: false,
+                terminal_reason: None,
+                selected_evidence: Vec::new(),
+                rejected_candidates: Vec::new(),
+                semantic_trace_records: Vec::new(),
+                relationships: Vec::new(),
+                impact_findings: Vec::new(),
+                context_pack_entries: Vec::new(),
+                omission_findings: vec![ContextOmissionFinding {
+                    severity: ContextOmissionSeverity::Blocking,
+                    reason_code: "critical_context_unavailable".to_string(),
+                    candidate_ref: "src/lib.rs".to_string(),
+                    message: "critical context is unavailable at the required fidelity".to_string(),
+                    required_fidelity: None,
+                    observed_mode: None,
+                }],
+                repository_map_state: Some(RepositoryMapState::Ready),
+                snapshot_cache_state: Some(SnapshotCacheState::Ready),
+                patch_safe_edit_attempts: Vec::new(),
+            }),
+            staleness_reason: None,
+        })
+        .with_planning_rationale("selected the bounded implementation surface")
+        .with_verification_strategy("run the focused validation command");
+
+        assert_eq!(plan.plan_quality_state().as_deref(), Some("blocked"));
+        assert!(
+            plan.plan_quality_findings()
+                .unwrap_or_default()
+                .contains(&PLAN_QUALITY_FINDING_CONTEXT_PACK_BLOCKED.to_string())
+        );
     }
 
     #[test]

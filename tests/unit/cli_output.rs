@@ -43,13 +43,15 @@ use boundline::domain::configuration::{
     InitConfigScope, ModelRoute, PersistedAdapterConfiguration, RoutingConfig, RuntimeKind,
 };
 use boundline::domain::context_intelligence::{
-    AdvancedContextProjection, AuthorityRank, CandidateSelectionState, HybridOutcome,
-    ImpactAnalysisFinding, ImpactFindingKind, ImpactFindingSeverity, ImpactFindingStatus,
-    RelationshipCredibilityState, RelationshipKind, RelationshipProjection,
-    RemoteTransmissionPolicyState, RetrievalCompatibilityState, RetrievalIndexState,
-    RetrievalMatchOrigin, RetrievalMode, RetrievalScore, RetrievalSourceKind,
-    RetrievalStalenessState, RetrievalState, RetrievedEvidenceCandidate, SemanticCapabilityState,
-    SemanticPolicyState,
+    AdvancedContextProjection, AuthorityRank, CandidateSelectionState, ContextFidelityTier,
+    ContextInclusionMode, ContextOmissionFinding, ContextOmissionSeverity,
+    ContextPackEntryProjection, DigestBackedArtifactRef, HybridOutcome, ImpactAnalysisFinding,
+    ImpactFindingKind, ImpactFindingSeverity, ImpactFindingStatus, PatchSafeEditAttempt,
+    PatchSafeEditResultState, RelationshipCredibilityState, RelationshipKind,
+    RelationshipProjection, RemoteTransmissionPolicyState, RepositoryMapState,
+    RetrievalCompatibilityState, RetrievalIndexState, RetrievalMatchOrigin, RetrievalMode,
+    RetrievalScore, RetrievalSourceKind, RetrievalStalenessState, RetrievalState,
+    RetrievedEvidenceCandidate, SemanticCapabilityState, SemanticPolicyState, SnapshotCacheState,
 };
 use boundline::domain::framework_adapter::{
     AdapterConfigCompletenessState, AdapterDiscoveryState, AdapterRegistrationSource,
@@ -141,6 +143,11 @@ fn sample_advanced_context() -> AdvancedContextProjection {
             recommended_follow_up: "add or refresh the focused regression test".to_string(),
             supporting_relationship_ids: vec!["relationship-1".to_string()],
         }],
+        context_pack_entries: Vec::new(),
+        omission_findings: Vec::new(),
+        repository_map_state: None,
+        snapshot_cache_state: None,
+        patch_safe_edit_attempts: Vec::new(),
     }
 }
 
@@ -1556,6 +1563,72 @@ fn render_session_status_surfaces_context_projection() {
     assert!(rendered.contains(
         "impact_finding: tests/context_router.rs [missing_test] add or refresh the focused regression test"
     ));
+}
+
+#[test]
+fn render_session_status_surfaces_context_substrate_projection_details() {
+    let mut advanced_context = sample_advanced_context();
+    advanced_context.repository_map_state = Some(RepositoryMapState::Missing);
+    advanced_context.snapshot_cache_state = Some(SnapshotCacheState::Tracked);
+    advanced_context.context_pack_entries = vec![ContextPackEntryProjection {
+        source_ref: "logs/error.log".to_string(),
+        source_kind: RetrievalSourceKind::Trace,
+        authority_rank: AuthorityRank::Structured,
+        fidelity_tier: ContextFidelityTier::Supporting,
+        inclusion_mode: ContextInclusionMode::Digest,
+        required_for_admission: false,
+        reason: "large trace compacted to digest".to_string(),
+        resolved_excerpt_anchor: Some("logs/error.log#digest-summary".to_string()),
+        lifecycle_relevance: Some("recent_trace".to_string()),
+        risk_relevance: Some("risk_signal".to_string()),
+        ranking_rationale: Some("origin=fts, authority=structured".to_string()),
+        digest_ref: Some(DigestBackedArtifactRef {
+            digest: "fnv64:testdigest".to_string(),
+            artifact_kind: "log".to_string(),
+            summary: "validation failed | stack trace".to_string(),
+            excerpt_anchor: Some("logs/error.log#digest-summary".to_string()),
+            resolve_path: "logs/error.log".to_string(),
+        }),
+    }];
+    advanced_context.omission_findings = vec![ContextOmissionFinding {
+        severity: ContextOmissionSeverity::Blocking,
+        reason_code: "critical_unavailable".to_string(),
+        candidate_ref: "src/context_router.rs".to_string(),
+        message: "critical context could not be admitted safely".to_string(),
+        required_fidelity: Some(ContextFidelityTier::Critical),
+        observed_mode: Some(ContextInclusionMode::Omitted),
+    }];
+    advanced_context.patch_safe_edit_attempts = vec![PatchSafeEditAttempt {
+        target_ref: "src/context_router.rs".to_string(),
+        anchor_refs: vec![
+            "src/context_router.rs#start-anchor".to_string(),
+            "src/context_router.rs#end-anchor".to_string(),
+        ],
+        pre_apply_digest: "fnv64:preapply".to_string(),
+        post_apply_verification: vec!["cargo test --quiet".to_string()],
+        result_state: PatchSafeEditResultState::ManualReviewRequired,
+    }];
+
+    let rendered = render_session_status(&SessionStatusView {
+        advanced_context: Some(advanced_context),
+        ..SessionStatusView::default()
+    });
+
+    assert!(rendered.contains("repository_map_state: missing"), "{rendered}");
+    assert!(rendered.contains("snapshot_cache_state: tracked"), "{rendered}");
+    assert!(rendered.contains("context_pack_entry_count: 1"), "{rendered}");
+    assert!(rendered.contains("context_omission_finding_count: 1"), "{rendered}");
+    assert!(rendered.contains("patch_safe_edit_attempt_count: 1"), "{rendered}");
+    assert!(rendered.contains("context_entry: logs/error.log [trace]"), "{rendered}");
+    assert!(rendered.contains("digest=fnv64:testdigest"), "{rendered}");
+    assert!(rendered.contains("context_omission: src/context_router.rs [blocking]"), "{rendered}");
+    assert!(rendered.contains("code=critical_unavailable"), "{rendered}");
+    assert!(rendered.contains("required_fidelity=critical"), "{rendered}");
+    assert!(rendered.contains("observed_mode=omitted"), "{rendered}");
+    assert!(
+        rendered.contains("patch_safe_edit: src/context_router.rs [manual_review_required]"),
+        "{rendered}"
+    );
 }
 
 #[test]

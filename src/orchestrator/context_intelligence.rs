@@ -18,19 +18,22 @@ use uuid::Uuid;
 use crate::domain::audit::format_audit_timestamp;
 use crate::domain::configuration::{AdvancedContextConfig, SemanticAccelerationPolicyState};
 use crate::domain::context_intelligence::{
-    AdvancedContextProjection, AuthorityRank, CandidateSelectionState, DerivedIndexManifest,
-    HybridOutcome, ImpactAnalysisFinding, ImpactFindingKind, ImpactFindingSeverity,
-    ImpactFindingStatus, IndexDoctorCheck, IndexDoctorConsistencyState, IndexDoctorReport,
-    IndexDoctorStatus, IndexLifecycleReport, IndexMaintenanceCommand, IndexRefreshReason,
-    IndexStaleReason, ManifestFtsState, RelationshipCredibilityState, RelationshipKind,
-    RelationshipProjection, RetrievalCompatibilityState, RetrievalIndexState, RetrievalMatchOrigin,
-    RetrievalMode, RetrievalScore, RetrievalSourceKind, RetrievalStalenessState, RetrievalState,
-    RetrievedEvidenceCandidate, SemanticCapabilityState, SemanticChunkRecord, SemanticChunkState,
-    SemanticEngine, SemanticPolicyState, SemanticTraceEventKind, SemanticTraceRecord,
-    VectorExtensionState,
+    AdvancedContextProjection, AuthorityRank, CandidateSelectionState, ContextFidelityTier,
+    ContextInclusionMode, ContextOmissionFinding, ContextOmissionSeverity,
+    ContextPackEntryProjection, DerivedIndexManifest, DigestBackedArtifactRef, HybridOutcome,
+    ImpactAnalysisFinding, ImpactFindingKind, ImpactFindingSeverity, ImpactFindingStatus,
+    IndexDoctorCheck, IndexDoctorConsistencyState, IndexDoctorReport, IndexDoctorStatus,
+    IndexLifecycleReport, IndexMaintenanceCommand, IndexRefreshReason, IndexStaleReason,
+    ManifestFtsState, PatchSafeEditAttempt, PatchSafeEditResultState, RelationshipCredibilityState,
+    RelationshipKind, RelationshipProjection, RepositoryMapState, RetrievalCompatibilityState,
+    RetrievalIndexState, RetrievalMatchOrigin, RetrievalMode, RetrievalScore, RetrievalSourceKind,
+    RetrievalStalenessState, RetrievalState, RetrievedEvidenceCandidate, SemanticCapabilityState,
+    SemanticChunkRecord, SemanticChunkState, SemanticEngine, SemanticPolicyState,
+    SemanticTraceEventKind, SemanticTraceRecord, SnapshotCacheState, VectorExtensionState,
 };
 use crate::domain::goal_plan::{ContextInput, ContextInputKind, ContextPackCredibility};
 use crate::domain::governance::{CanonSemanticEligibilityState, CanonSemanticProvenanceBoundary};
+use crate::domain::project_index::{PROJECT_INDEX_FILE, ProjectIndex};
 use crate::domain::project_memory::{
     CompatibilityOutcome, PromotionStateView, read_canon_semantic_artifact_surface,
 };
@@ -100,6 +103,17 @@ const FNV_OFFSET_BASIS: u64 = 14_695_981_039_346_656_037;
 const FNV_PRIME: u64 = 1_099_511_628_211;
 const MAX_INDEXED_BYTES: usize = 32 * 1024;
 const MAX_QUERY_TERMS: usize = 8;
+const LARGE_CONTEXT_EXCERPT_THRESHOLD_BYTES: u64 = 8 * 1024;
+const LARGE_CONTEXT_DIGEST_THRESHOLD_BYTES: u64 = 16 * 1024;
+const CONTEXT_REASON_UNSAFE_FULL_READ_REFUSED: &str = "unsafe_full_read_refused";
+const CONTEXT_REASON_CRITICAL_UNAVAILABLE: &str = "critical_context_unavailable";
+const CONTEXT_REASON_CRITICAL_DOWNGRADED: &str = "critical_context_downgraded";
+const CONTEXT_REASON_SEARCH_REQUIRED_BEFORE_READ: &str = "search_required_before_read";
+const CONTEXT_REASON_ARTIFACT_COMPACTED_TO_DIGEST: &str = "artifact_compacted_to_digest";
+const CONTEXT_REASON_REPOSITORY_MAP_UNAVAILABLE: &str = "repository_map_unavailable";
+const CONTEXT_REASON_SNAPSHOT_CACHE_STALE: &str = "snapshot_cache_stale";
+const CONTEXT_REASON_TRACKED_CACHE_DETECTED: &str = "tracked_cache_detected";
+const CONTEXT_REASON_ARCHIVED_CONTEXT_EXCLUDED: &str = "archived_context_excluded";
 
 #[cfg(feature = "sqlite-vec")]
 static SQLITE_VEC_AUTO_EXTENSION_REGISTRATION: OnceLock<Result<(), String>> = OnceLock::new();
@@ -562,14 +576,17 @@ fn build_advanced_context_projection_with_vector_state(
     let semantic_policy = build_state.semantic_policy;
 
     if policy.retrieval_mode == RetrievalMode::Disabled {
-        return terminal_projection(
+        return terminal_projection(TerminalProjectionInputs {
             query_id,
+            workspace_ref,
+            inputs,
+            selected_targets,
             policy,
             semantic_policy,
-            RetrievalState::Insufficient,
-            RetrievalIndexState::Insufficient,
-            "advanced retrieval is disabled by configuration".to_string(),
-        );
+            retrieval_state: RetrievalState::Insufficient,
+            retrieval_index_state: RetrievalIndexState::Insufficient,
+            terminal_reason: "advanced retrieval is disabled by configuration".to_string(),
+        });
     }
 
     let documents = collect_retrieval_documents(
@@ -582,14 +599,18 @@ fn build_advanced_context_projection_with_vector_state(
     );
 
     if documents.is_empty() {
-        return terminal_projection(
+        return terminal_projection(TerminalProjectionInputs {
             query_id,
+            workspace_ref,
+            inputs,
+            selected_targets,
             policy,
             semantic_policy,
-            RetrievalState::Insufficient,
-            RetrievalIndexState::Insufficient,
-            "no local documents were available for bounded advanced retrieval".to_string(),
-        );
+            retrieval_state: RetrievalState::Insufficient,
+            retrieval_index_state: RetrievalIndexState::Insufficient,
+            terminal_reason: "no local documents were available for bounded advanced retrieval"
+                .to_string(),
+        });
     }
 
     let document_map = documents
@@ -636,6 +657,15 @@ fn build_advanced_context_projection_with_vector_state(
             selected_evidence: &[],
             rejected_candidates: &rejected_candidates,
         });
+        let substrate_fields = build_context_substrate_projection_fields(
+            workspace_ref,
+            inputs,
+            selected_targets,
+            &documents,
+            &[],
+            &rejected_candidates,
+            default_index_state,
+        );
 
         return AdvancedContextProjection {
             query_id,
@@ -657,6 +687,11 @@ fn build_advanced_context_projection_with_vector_state(
             semantic_trace_records,
             relationships: Vec::new(),
             impact_findings: Vec::new(),
+            context_pack_entries: substrate_fields.context_pack_entries,
+            omission_findings: substrate_fields.omission_findings,
+            repository_map_state: substrate_fields.repository_map_state,
+            snapshot_cache_state: substrate_fields.snapshot_cache_state,
+            patch_safe_edit_attempts: substrate_fields.patch_safe_edit_attempts,
         };
     }
 
@@ -719,14 +754,17 @@ fn build_advanced_context_projection_with_vector_state(
                 policy.budgets.evidence_limit,
             );
             if fallback_refs.is_empty() {
-                return terminal_projection(
+                return terminal_projection(TerminalProjectionInputs {
                     query_id,
+                    workspace_ref,
+                    inputs,
+                    selected_targets,
                     policy,
                     semantic_policy,
-                    RetrievalState::Insufficient,
-                    default_index_state,
-                    "no indexed evidence matched the bounded goal".to_string(),
-                );
+                    retrieval_state: RetrievalState::Insufficient,
+                    retrieval_index_state: default_index_state,
+                    terminal_reason: "no indexed evidence matched the bounded goal".to_string(),
+                });
             }
             let base_reason =
                     "SQLite retrieval returned no stronger local match; promoted structured bounded context evidence"
@@ -769,14 +807,17 @@ fn build_advanced_context_projection_with_vector_state(
                 policy.budgets.evidence_limit,
             );
             if fallback_refs.is_empty() {
-                return terminal_projection(
+                return terminal_projection(TerminalProjectionInputs {
                     query_id,
+                    workspace_ref,
+                    inputs,
+                    selected_targets,
                     policy,
                     semantic_policy,
-                    RetrievalState::Unavailable,
-                    RetrievalIndexState::Stale,
-                    error.to_string(),
-                );
+                    retrieval_state: RetrievalState::Unavailable,
+                    retrieval_index_state: RetrievalIndexState::Stale,
+                    terminal_reason: error.to_string(),
+                });
             }
             (
                 candidate_decisions_from_refs(
@@ -847,6 +888,15 @@ fn build_advanced_context_projection_with_vector_state(
         selected_evidence: &selected_evidence,
         rejected_candidates: &rejected_candidates,
     });
+    let substrate_fields = build_context_substrate_projection_fields(
+        workspace_ref,
+        inputs,
+        selected_targets,
+        &documents,
+        &selected_evidence,
+        &rejected_candidates,
+        retrieval_index_state,
+    );
 
     let mut projection = AdvancedContextProjection {
         query_id: query_id.clone(),
@@ -865,17 +915,26 @@ fn build_advanced_context_projection_with_vector_state(
         semantic_trace_records,
         relationships,
         impact_findings,
+        context_pack_entries: substrate_fields.context_pack_entries,
+        omission_findings: substrate_fields.omission_findings,
+        repository_map_state: substrate_fields.repository_map_state,
+        snapshot_cache_state: substrate_fields.snapshot_cache_state,
+        patch_safe_edit_attempts: substrate_fields.patch_safe_edit_attempts,
     };
 
     if projection.validate().is_err() {
-        projection = terminal_projection(
+        projection = terminal_projection(TerminalProjectionInputs {
             query_id,
+            workspace_ref,
+            inputs,
+            selected_targets,
             policy,
             semantic_policy,
-            RetrievalState::Unavailable,
-            RetrievalIndexState::Stale,
-            "advanced retrieval projection validation failed after local indexing".to_string(),
-        );
+            retrieval_state: RetrievalState::Unavailable,
+            retrieval_index_state: RetrievalIndexState::Stale,
+            terminal_reason: "advanced retrieval projection validation failed after local indexing"
+                .to_string(),
+        });
     }
 
     projection
@@ -1129,6 +1188,15 @@ struct RetrievalDocumentMetadata {
     compatibility_reason: Option<String>,
 }
 
+#[derive(Debug, Default)]
+struct ContextSubstrateProjectionFields {
+    context_pack_entries: Vec<ContextPackEntryProjection>,
+    omission_findings: Vec<ContextOmissionFinding>,
+    repository_map_state: Option<RepositoryMapState>,
+    snapshot_cache_state: Option<SnapshotCacheState>,
+    patch_safe_edit_attempts: Vec<PatchSafeEditAttempt>,
+}
+
 #[derive(Debug, Clone)]
 struct CanonSemanticCompatibility {
     artifact_class: Option<String>,
@@ -1325,14 +1393,525 @@ fn credibility_degradation_reason(
     }
 }
 
-fn terminal_projection(
+fn build_context_substrate_projection_fields(
+    workspace_ref: &Path,
+    inputs: &[ContextInput],
+    selected_targets: &[String],
+    documents: &[RetrievalDocument],
+    selected_evidence: &[RetrievedEvidenceCandidate],
+    rejected_candidates: &[RetrievedEvidenceCandidate],
+    retrieval_index_state: RetrievalIndexState,
+) -> ContextSubstrateProjectionFields {
+    let document_map = documents
+        .iter()
+        .map(|document| (document.source_ref.as_str(), document))
+        .collect::<BTreeMap<_, _>>();
+    let critical_refs = critical_context_refs(inputs, selected_targets);
+    let repository_map_state = Some(repository_map_state_for_workspace(
+        workspace_ref,
+        retrieval_index_state,
+        selected_targets,
+    ));
+    let snapshot_cache_state =
+        Some(snapshot_cache_state_for_workspace(workspace_ref, retrieval_index_state));
+
+    let mut fields = ContextSubstrateProjectionFields {
+        repository_map_state,
+        snapshot_cache_state,
+        ..ContextSubstrateProjectionFields::default()
+    };
+
+    if matches!(fields.repository_map_state, Some(RepositoryMapState::Missing)) {
+        fields.omission_findings.push(ContextOmissionFinding {
+            severity: ContextOmissionSeverity::Warning,
+            reason_code: CONTEXT_REASON_REPOSITORY_MAP_UNAVAILABLE.to_string(),
+            candidate_ref: PROJECT_INDEX_FILE.to_string(),
+            message: "repository-map hints are unavailable; narrowing relies on bounded workspace evidence only".to_string(),
+            required_fidelity: None,
+            observed_mode: None,
+        });
+    }
+
+    if matches!(fields.snapshot_cache_state, Some(SnapshotCacheState::Stale)) {
+        fields.omission_findings.push(ContextOmissionFinding {
+            severity: ContextOmissionSeverity::Warning,
+            reason_code: CONTEXT_REASON_SNAPSHOT_CACHE_STALE.to_string(),
+            candidate_ref: DERIVED_INDEX_IGNORE_PATTERN_MANIFEST.to_string(),
+            message: "derived local context cache is stale and will not be trusted as authoritative planning context".to_string(),
+            required_fidelity: None,
+            observed_mode: None,
+        });
+    }
+
+    if matches!(fields.snapshot_cache_state, Some(SnapshotCacheState::Tracked)) {
+        fields.omission_findings.push(ContextOmissionFinding {
+            severity: ContextOmissionSeverity::Blocking,
+            reason_code: CONTEXT_REASON_TRACKED_CACHE_DETECTED.to_string(),
+            candidate_ref: DERIVED_INDEX_IGNORE_PATTERN_DATABASE.to_string(),
+            message: "tracked derived context cache artifacts were detected; repair ignore hygiene before trusting the local substrate".to_string(),
+            required_fidelity: None,
+            observed_mode: None,
+        });
+    }
+
+    for candidate in selected_evidence {
+        let document = document_map.get(candidate.source_ref.as_str()).copied();
+        let fidelity_tier =
+            classify_context_fidelity(candidate.source_ref.as_str(), &critical_refs);
+        let inclusion_mode = selected_candidate_inclusion_mode(workspace_ref, candidate, document);
+        let digest_ref =
+            digest_ref_for_candidate(workspace_ref, candidate, document, inclusion_mode);
+        let entry = ContextPackEntryProjection {
+            source_ref: candidate.source_ref.clone(),
+            source_kind: candidate.source_kind,
+            authority_rank: candidate.authority_rank,
+            fidelity_tier,
+            inclusion_mode,
+            reason: candidate.selection_reason.clone(),
+            required_for_admission: fidelity_tier == ContextFidelityTier::Critical,
+            resolved_excerpt_anchor: excerpt_anchor_for_candidate(
+                candidate,
+                document,
+                inclusion_mode,
+            ),
+            digest_ref,
+            lifecycle_relevance: Some(lifecycle_relevance_for_candidate(candidate).to_string()),
+            risk_relevance: risk_relevance_for_candidate(candidate, document),
+            ranking_rationale: Some(ranking_rationale_for_candidate(candidate)),
+        };
+        append_selected_candidate_findings(&mut fields.omission_findings, &entry, candidate);
+        append_patch_safe_edit_attempt(
+            &mut fields.patch_safe_edit_attempts,
+            workspace_ref,
+            &entry,
+            document,
+        );
+        fields.context_pack_entries.push(entry);
+    }
+
+    for candidate in rejected_candidates {
+        let document = document_map.get(candidate.source_ref.as_str()).copied();
+        let fidelity_tier =
+            classify_context_fidelity(candidate.source_ref.as_str(), &critical_refs);
+        let entry = ContextPackEntryProjection {
+            source_ref: candidate.source_ref.clone(),
+            source_kind: candidate.source_kind,
+            authority_rank: candidate.authority_rank,
+            fidelity_tier,
+            inclusion_mode: ContextInclusionMode::Omitted,
+            reason: candidate.selection_reason.clone(),
+            required_for_admission: fidelity_tier == ContextFidelityTier::Critical,
+            resolved_excerpt_anchor: None,
+            digest_ref: None,
+            lifecycle_relevance: Some(lifecycle_relevance_for_candidate(candidate).to_string()),
+            risk_relevance: risk_relevance_for_candidate(candidate, document),
+            ranking_rationale: Some(ranking_rationale_for_candidate(candidate)),
+        };
+        fields.omission_findings.push(rejected_candidate_omission_finding(
+            workspace_ref,
+            candidate,
+            &entry,
+            document,
+        ));
+        fields.context_pack_entries.push(entry);
+    }
+
+    fields
+}
+
+fn critical_context_refs(inputs: &[ContextInput], selected_targets: &[String]) -> BTreeSet<String> {
+    let mut refs = selected_targets.iter().cloned().collect::<BTreeSet<_>>();
+    for input in inputs.iter().filter(|input| input.primary) {
+        refs.insert(input.reference.clone());
+    }
+    refs
+}
+
+fn classify_context_fidelity(
+    source_ref: &str,
+    critical_refs: &BTreeSet<String>,
+) -> ContextFidelityTier {
+    if critical_refs.contains(source_ref) {
+        ContextFidelityTier::Critical
+    } else if is_archived_context_ref(source_ref) {
+        ContextFidelityTier::Archived
+    } else if source_ref.ends_with(".md")
+        || source_ref.contains("/docs/")
+        || source_ref.contains("/specs/")
+    {
+        ContextFidelityTier::Ambient
+    } else {
+        ContextFidelityTier::Supporting
+    }
+}
+
+fn is_archived_context_ref(source_ref: &str) -> bool {
+    source_ref.contains("/archive/")
+        || source_ref.contains("/archives/")
+        || source_ref.starts_with("archive/")
+        || source_ref.starts_with("archives/")
+        || source_ref.contains(".archive/")
+}
+
+fn selected_candidate_inclusion_mode(
+    workspace_ref: &Path,
+    candidate: &RetrievedEvidenceCandidate,
+    document: Option<&RetrievalDocument>,
+) -> ContextInclusionMode {
+    if is_archived_context_ref(candidate.source_ref.as_str()) {
+        return ContextInclusionMode::Omitted;
+    }
+    let Some(size_bytes) =
+        source_ref_size_bytes(workspace_ref, candidate.source_ref.as_str(), document)
+    else {
+        return ContextInclusionMode::Full;
+    };
+    if size_bytes >= LARGE_CONTEXT_DIGEST_THRESHOLD_BYTES
+        && should_compact_to_digest(candidate.source_ref.as_str())
+    {
+        ContextInclusionMode::Digest
+    } else if size_bytes >= LARGE_CONTEXT_EXCERPT_THRESHOLD_BYTES {
+        ContextInclusionMode::Excerpt
+    } else {
+        ContextInclusionMode::Full
+    }
+}
+
+fn source_ref_size_bytes(
+    workspace_ref: &Path,
+    source_ref: &str,
+    document: Option<&RetrievalDocument>,
+) -> Option<u64> {
+    let path = workspace_ref.join(source_ref);
+    fs::metadata(&path)
+        .ok()
+        .map(|metadata| metadata.len())
+        .or_else(|| document.map(|document| document.content.len() as u64))
+}
+
+fn should_compact_to_digest(source_ref: &str) -> bool {
+    source_ref.ends_with(".log")
+        || source_ref.ends_with(".diff")
+        || source_ref.ends_with(".patch")
+        || source_ref.contains("/logs/")
+        || source_ref.contains("/generated/")
+        || source_ref.contains("/dist/")
+        || source_ref.contains("/coverage/")
+}
+
+fn digest_ref_for_candidate(
+    _workspace_ref: &Path,
+    candidate: &RetrievedEvidenceCandidate,
+    document: Option<&RetrievalDocument>,
+    inclusion_mode: ContextInclusionMode,
+) -> Option<DigestBackedArtifactRef> {
+    if inclusion_mode != ContextInclusionMode::Digest {
+        return None;
+    }
+    let summary = document
+        .map(|document| summarize_digest_content(document.content.as_str()))
+        .unwrap_or_else(|| candidate.provenance_summary.clone());
+    let digest_source =
+        document.map(|document| document.content.as_str()).unwrap_or(candidate.source_ref.as_str());
+    Some(DigestBackedArtifactRef {
+        digest: semantic_content_hash(digest_source),
+        artifact_kind: digest_artifact_kind(candidate.source_ref.as_str()).to_string(),
+        summary,
+        excerpt_anchor: Some(candidate.source_ref.clone()),
+        resolve_path: candidate.source_ref.clone(),
+    })
+}
+
+fn summarize_digest_content(content: &str) -> String {
+    let summary = content
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .take(2)
+        .collect::<Vec<_>>()
+        .join(" | ");
+    if summary.is_empty() {
+        "large artifact compacted to a digest-backed reference".to_string()
+    } else {
+        summary
+    }
+}
+
+fn digest_artifact_kind(source_ref: &str) -> &'static str {
+    if source_ref.ends_with(".log") || source_ref.contains("/logs/") {
+        "log"
+    } else if source_ref.ends_with(".diff") || source_ref.ends_with(".patch") {
+        "diff"
+    } else if source_ref.contains("/generated/") || source_ref.contains("/dist/") {
+        "generated_output"
+    } else {
+        "workspace_artifact"
+    }
+}
+
+fn excerpt_anchor_for_candidate(
+    candidate: &RetrievedEvidenceCandidate,
+    _document: Option<&RetrievalDocument>,
+    inclusion_mode: ContextInclusionMode,
+) -> Option<String> {
+    match inclusion_mode {
+        ContextInclusionMode::Excerpt => Some(format!("{}#bounded-excerpt", candidate.source_ref)),
+        ContextInclusionMode::Digest => Some(format!("{}#digest-summary", candidate.source_ref)),
+        _ => None,
+    }
+}
+
+fn lifecycle_relevance_for_candidate(candidate: &RetrievedEvidenceCandidate) -> &'static str {
+    match candidate.source_kind {
+        RetrievalSourceKind::WorkspaceFile => "implementation_surface",
+        RetrievalSourceKind::ProjectMemory => "project_memory",
+        RetrievalSourceKind::Trace => "recent_trace",
+        RetrievalSourceKind::ReviewFinding => "review_feedback",
+        RetrievalSourceKind::VerificationEvidence => "verification_surface",
+        RetrievalSourceKind::CanonArtifact => "governed_artifact",
+    }
+}
+
+fn risk_relevance_for_candidate(
+    candidate: &RetrievedEvidenceCandidate,
+    document: Option<&RetrievalDocument>,
+) -> Option<String> {
+    if candidate.source_kind == RetrievalSourceKind::VerificationEvidence {
+        return Some("verification_evidence".to_string());
+    }
+    document
+        .filter(|document| document.content.to_ascii_lowercase().contains("risk"))
+        .map(|_| "risk_signal".to_string())
+}
+
+fn ranking_rationale_for_candidate(candidate: &RetrievedEvidenceCandidate) -> String {
+    let mut parts = vec![format!("origin={}", candidate.match_origin.as_str())];
+    if let Some(lexical_score) = candidate.lexical_score {
+        parts.push(format!("lexical={:.3}", lexical_score.as_raw()));
+    }
+    if let Some(semantic_score) = candidate.semantic_score {
+        parts.push(format!("semantic={:.3}", semantic_score.as_raw()));
+    }
+    parts.push(format!("authority={}", candidate.authority_rank.as_str()));
+    parts.join(", ")
+}
+
+fn append_selected_candidate_findings(
+    omission_findings: &mut Vec<ContextOmissionFinding>,
+    entry: &ContextPackEntryProjection,
+    candidate: &RetrievedEvidenceCandidate,
+) {
+    if entry.inclusion_mode == ContextInclusionMode::Digest {
+        omission_findings.push(ContextOmissionFinding {
+            severity: if entry.required_for_admission {
+                ContextOmissionSeverity::Blocking
+            } else {
+                ContextOmissionSeverity::Info
+            },
+            reason_code: if entry.required_for_admission {
+                CONTEXT_REASON_CRITICAL_DOWNGRADED.to_string()
+            } else {
+                CONTEXT_REASON_ARTIFACT_COMPACTED_TO_DIGEST.to_string()
+            },
+            candidate_ref: candidate.source_ref.clone(),
+            message: if entry.required_for_admission {
+                "critical context was compacted to a digest-backed reference and no longer satisfies the required fidelity".to_string()
+            } else {
+                "large artifact was compacted to a digest-backed reference for bounded context selection".to_string()
+            },
+            required_fidelity: entry.required_for_admission.then_some(ContextFidelityTier::Critical),
+            observed_mode: Some(entry.inclusion_mode),
+        });
+    }
+
+    if entry.inclusion_mode == ContextInclusionMode::Excerpt && entry.required_for_admission {
+        omission_findings.push(ContextOmissionFinding {
+            severity: ContextOmissionSeverity::Info,
+            reason_code: CONTEXT_REASON_SEARCH_REQUIRED_BEFORE_READ.to_string(),
+            candidate_ref: candidate.source_ref.clone(),
+            message:
+                "critical context was narrowed to a bounded excerpt instead of a full-file read"
+                    .to_string(),
+            required_fidelity: Some(ContextFidelityTier::Critical),
+            observed_mode: Some(entry.inclusion_mode),
+        });
+    }
+
+    if entry.inclusion_mode == ContextInclusionMode::Omitted {
+        omission_findings.push(ContextOmissionFinding {
+            severity: if entry.required_for_admission {
+                ContextOmissionSeverity::Blocking
+            } else {
+                ContextOmissionSeverity::Warning
+            },
+            reason_code: if entry.required_for_admission {
+                CONTEXT_REASON_CRITICAL_UNAVAILABLE.to_string()
+            } else {
+                CONTEXT_REASON_ARCHIVED_CONTEXT_EXCLUDED.to_string()
+            },
+            candidate_ref: candidate.source_ref.clone(),
+            message: if entry.required_for_admission {
+                "critical context could not be admitted safely at the required fidelity".to_string()
+            } else {
+                "archived context was excluded from the active bounded context pack".to_string()
+            },
+            required_fidelity: entry
+                .required_for_admission
+                .then_some(ContextFidelityTier::Critical),
+            observed_mode: Some(entry.inclusion_mode),
+        });
+    }
+}
+
+fn append_patch_safe_edit_attempt(
+    attempts: &mut Vec<PatchSafeEditAttempt>,
+    workspace_ref: &Path,
+    entry: &ContextPackEntryProjection,
+    document: Option<&RetrievalDocument>,
+) {
+    if entry.source_kind != RetrievalSourceKind::WorkspaceFile {
+        return;
+    }
+    let Some(size_bytes) =
+        source_ref_size_bytes(workspace_ref, entry.source_ref.as_str(), document)
+    else {
+        return;
+    };
+    if size_bytes < LARGE_CONTEXT_EXCERPT_THRESHOLD_BYTES {
+        return;
+    }
+    let digest_source =
+        document.map(|document| document.content.as_str()).unwrap_or(entry.source_ref.as_str());
+    attempts.push(PatchSafeEditAttempt {
+        target_ref: entry.source_ref.clone(),
+        anchor_refs: vec![
+            format!("{}#start-anchor", entry.source_ref),
+            format!("{}#end-anchor", entry.source_ref),
+        ],
+        pre_apply_digest: semantic_content_hash(digest_source),
+        post_apply_verification: vec![
+            "cargo fmt --check".to_string(),
+            "targeted validation required after bounded patch application".to_string(),
+        ],
+        result_state: PatchSafeEditResultState::ManualReviewRequired,
+    });
+}
+
+fn rejected_candidate_omission_finding(
+    workspace_ref: &Path,
+    candidate: &RetrievedEvidenceCandidate,
+    entry: &ContextPackEntryProjection,
+    document: Option<&RetrievalDocument>,
+) -> ContextOmissionFinding {
+    let size_bytes =
+        source_ref_size_bytes(workspace_ref, candidate.source_ref.as_str(), document).unwrap_or(0);
+    if entry.required_for_admission && size_bytes >= LARGE_CONTEXT_EXCERPT_THRESHOLD_BYTES {
+        return ContextOmissionFinding {
+            severity: ContextOmissionSeverity::Blocking,
+            reason_code: CONTEXT_REASON_UNSAFE_FULL_READ_REFUSED.to_string(),
+            candidate_ref: candidate.source_ref.clone(),
+            message: "critical oversized context was refused because no safe bounded full-read path was available".to_string(),
+            required_fidelity: Some(ContextFidelityTier::Critical),
+            observed_mode: Some(ContextInclusionMode::Omitted),
+        };
+    }
+
+    ContextOmissionFinding {
+        severity: if entry.required_for_admission {
+            ContextOmissionSeverity::Blocking
+        } else {
+            ContextOmissionSeverity::Warning
+        },
+        reason_code: if entry.required_for_admission {
+            CONTEXT_REASON_CRITICAL_UNAVAILABLE.to_string()
+        } else {
+            CONTEXT_REASON_SEARCH_REQUIRED_BEFORE_READ.to_string()
+        },
+        candidate_ref: candidate.source_ref.clone(),
+        message: if entry.required_for_admission {
+            "critical context could not be selected from the bounded repository scan".to_string()
+        } else {
+            "candidate remained omitted because bounded search signals were stronger elsewhere"
+                .to_string()
+        },
+        required_fidelity: entry.required_for_admission.then_some(ContextFidelityTier::Critical),
+        observed_mode: Some(ContextInclusionMode::Omitted),
+    }
+}
+
+fn repository_map_state_for_workspace(
+    workspace_ref: &Path,
+    retrieval_index_state: RetrievalIndexState,
+    selected_targets: &[String],
+) -> RepositoryMapState {
+    match retrieval_index_state {
+        RetrievalIndexState::Stale => RepositoryMapState::Stale,
+        RetrievalIndexState::Degraded
+        | RetrievalIndexState::Building
+        | RetrievalIndexState::Insufficient
+        | RetrievalIndexState::SemanticUnavailable => RepositoryMapState::Degraded,
+        RetrievalIndexState::Corrupt | RetrievalIndexState::Incompatible => {
+            RepositoryMapState::Corrupt
+        }
+        RetrievalIndexState::Missing => {
+            if ProjectIndex::load(workspace_ref).ok().flatten().is_some()
+                || !selected_targets.is_empty()
+            {
+                RepositoryMapState::Ready
+            } else {
+                RepositoryMapState::Missing
+            }
+        }
+        RetrievalIndexState::Ready => RepositoryMapState::Ready,
+    }
+}
+
+fn snapshot_cache_state_for_workspace(
+    workspace_ref: &Path,
+    retrieval_index_state: RetrievalIndexState,
+) -> SnapshotCacheState {
+    if !tracked_index_files(workspace_ref).is_empty() {
+        return SnapshotCacheState::Tracked;
+    }
+    match retrieval_index_state {
+        RetrievalIndexState::Ready => SnapshotCacheState::Ready,
+        RetrievalIndexState::Stale => SnapshotCacheState::Stale,
+        RetrievalIndexState::Missing => SnapshotCacheState::Missing,
+        RetrievalIndexState::Corrupt | RetrievalIndexState::Incompatible => {
+            SnapshotCacheState::Corrupt
+        }
+        RetrievalIndexState::Building
+        | RetrievalIndexState::Insufficient
+        | RetrievalIndexState::Degraded
+        | RetrievalIndexState::SemanticUnavailable => SnapshotCacheState::Degraded,
+    }
+}
+
+struct TerminalProjectionInputs<'a> {
     query_id: String,
-    policy: &AdvancedContextConfig,
+    workspace_ref: &'a Path,
+    inputs: &'a [ContextInput],
+    selected_targets: &'a [String],
+    policy: &'a AdvancedContextConfig,
     semantic_policy: SemanticAccelerationPolicyState,
     retrieval_state: RetrievalState,
     retrieval_index_state: RetrievalIndexState,
     terminal_reason: String,
-) -> AdvancedContextProjection {
+}
+
+fn terminal_projection(inputs: TerminalProjectionInputs<'_>) -> AdvancedContextProjection {
+    let TerminalProjectionInputs {
+        query_id,
+        workspace_ref,
+        inputs,
+        selected_targets,
+        policy,
+        semantic_policy,
+        retrieval_state,
+        retrieval_index_state,
+        terminal_reason,
+    } = inputs;
+
     let semantic_projection = match semantic_policy {
         SemanticAccelerationPolicyState::Disabled => SemanticProjectionState {
             policy_state: SemanticPolicyState::Disabled,
@@ -1363,6 +1942,15 @@ fn terminal_projection(
         selected_evidence: &[],
         rejected_candidates: &[],
     });
+    let substrate_fields = build_context_substrate_projection_fields(
+        workspace_ref,
+        inputs,
+        selected_targets,
+        &[],
+        &[],
+        &[],
+        retrieval_index_state,
+    );
 
     AdvancedContextProjection {
         query_id,
@@ -1381,6 +1969,11 @@ fn terminal_projection(
         semantic_trace_records,
         relationships: Vec::new(),
         impact_findings: Vec::new(),
+        context_pack_entries: substrate_fields.context_pack_entries,
+        omission_findings: substrate_fields.omission_findings,
+        repository_map_state: substrate_fields.repository_map_state,
+        snapshot_cache_state: substrate_fields.snapshot_cache_state,
+        patch_safe_edit_attempts: substrate_fields.patch_safe_edit_attempts,
     }
 }
 
@@ -3848,22 +4441,29 @@ mod tests {
     use uuid::Uuid;
 
     use super::{
-        AdvancedContextBuildState, AdvancedContextConfig, ContextIntelligenceBuildError,
-        RelationshipKind, RetrievalDocument, SEMANTIC_CHUNKS_TABLE_NAME,
-        SEMANTIC_INDEX_HOOK_TRIGGER_ENV, SEMANTIC_INDEX_HOOK_TRIGGER_POST_MERGE,
-        SEMANTIC_INDEX_HOOK_TRIGGER_POST_REWRITE, SEMANTIC_INDEX_MANIFEST_ID,
-        SEMANTIC_REFRESH_PENDING_REASON, SEMANTIC_VECTORS_TABLE_NAME, SemanticChunkRefreshRow,
-        aggregate_index_doctor_status, build_advanced_context_projection,
-        build_advanced_context_projection_with_vector_state, collect_retrieval_documents,
-        default_compatibility_state, delete_missing_semantic_chunks, derive_manifest_index_status,
-        derive_relationships_and_findings, detect_vector_extension_state,
+        AdvancedContextBuildState, AdvancedContextConfig, CONTEXT_REASON_ARCHIVED_CONTEXT_EXCLUDED,
+        CONTEXT_REASON_CRITICAL_DOWNGRADED, CONTEXT_REASON_REPOSITORY_MAP_UNAVAILABLE,
+        CONTEXT_REASON_SEARCH_REQUIRED_BEFORE_READ, CONTEXT_REASON_SNAPSHOT_CACHE_STALE,
+        CONTEXT_REASON_TRACKED_CACHE_DETECTED, ContextIntelligenceBuildError, RelationshipKind,
+        RetrievalDocument, SEMANTIC_CHUNKS_TABLE_NAME, SEMANTIC_INDEX_HOOK_TRIGGER_ENV,
+        SEMANTIC_INDEX_HOOK_TRIGGER_POST_MERGE, SEMANTIC_INDEX_HOOK_TRIGGER_POST_REWRITE,
+        SEMANTIC_INDEX_MANIFEST_ID, SEMANTIC_REFRESH_PENDING_REASON, SEMANTIC_VECTORS_TABLE_NAME,
+        SemanticChunkRefreshRow, aggregate_index_doctor_status, append_patch_safe_edit_attempt,
+        append_selected_candidate_findings, build_advanced_context_projection,
+        build_advanced_context_projection_with_vector_state,
+        build_context_substrate_projection_fields, classify_context_fidelity,
+        collect_retrieval_documents, default_compatibility_state, delete_missing_semantic_chunks,
+        derive_manifest_index_status, derive_relationships_and_findings,
+        detect_vector_extension_state, digest_ref_for_candidate,
         filtered_semantic_score_from_vec_distance, hook_trigger_stale_reason_from_env,
         index_stale_warning, initialize_schema, initialize_semantic_vector_table_for_state,
         inspect_manifest_consistency, inspect_vector_schema_consistency,
-        manifest_consistency_check, open_connection, promote_selected_target_refs,
-        query_semantic_matches, query_semantic_matches_from_payload, read_derived_index_manifest,
-        recommended_action_for_index_state, refresh_and_query_index, resolved_relative_path,
-        semantic_engine_for_trace, semantic_score_from_vec_distance, staleness_state,
+        lifecycle_relevance_for_candidate, manifest_consistency_check, open_connection,
+        promote_selected_target_refs, query_semantic_matches, query_semantic_matches_from_payload,
+        read_derived_index_manifest, recommended_action_for_index_state, refresh_and_query_index,
+        rejected_candidate_omission_finding, repository_map_state_for_workspace,
+        resolved_relative_path, selected_candidate_inclusion_mode, semantic_engine_for_trace,
+        semantic_score_from_vec_distance, snapshot_cache_state_for_workspace, staleness_state,
         structured_fallback_refs, sync_semantic_vector_row, upsert_semantic_manifest_row,
         vector_extension_state_from_modules, vector_schema_check,
         vector_schema_consistency_from_tables,
@@ -3875,12 +4475,13 @@ mod tests {
     };
     use crate::domain::configuration::SemanticAccelerationPolicyState;
     use crate::domain::context_intelligence::{
-        AuthorityRank, CandidateSelectionState, DerivedIndexManifest, HybridOutcome,
+        AuthorityRank, CandidateSelectionState, ContextFidelityTier, ContextInclusionMode,
+        ContextOmissionSeverity, ContextPackEntryProjection, DerivedIndexManifest, HybridOutcome,
         ImpactFindingKind, IndexDoctorConsistencyState, IndexDoctorStatus, IndexRefreshReason,
-        IndexStaleReason, ManifestFtsState, RetrievalCompatibilityState, RetrievalIndexState,
-        RetrievalMatchOrigin, RetrievalSourceKind, RetrievalStalenessState, RetrievalState,
-        RetrievedEvidenceCandidate, SemanticCapabilityState, SemanticChunkState, SemanticEngine,
-        SemanticPolicyState, VectorExtensionState,
+        IndexStaleReason, ManifestFtsState, RepositoryMapState, RetrievalCompatibilityState,
+        RetrievalIndexState, RetrievalMatchOrigin, RetrievalSourceKind, RetrievalStalenessState,
+        RetrievalState, RetrievedEvidenceCandidate, SemanticCapabilityState, SemanticChunkState,
+        SemanticEngine, SemanticPolicyState, SnapshotCacheState, VectorExtensionState,
     };
     use crate::domain::goal_plan::{ContextInput, ContextInputKind, ContextPackCredibility};
 
@@ -3926,6 +4527,491 @@ mod tests {
             canon_semantic_contract_line: None,
             canon_semantic_provenance_ref: None,
         }
+    }
+
+    #[test]
+    fn substrate_helper_functions_cover_fidelity_inclusion_digest_and_findings() {
+        let workspace = temp_workspace("boundline-context-substrate-helpers");
+        fs::create_dir_all(workspace.join("src")).unwrap();
+        fs::create_dir_all(workspace.join("logs")).unwrap();
+        fs::create_dir_all(workspace.join("archive")).unwrap();
+        fs::write(
+            workspace.join("src/lib.rs"),
+            format!("{}\n", "critical bounded context".repeat(2_000)),
+        )
+        .unwrap();
+        fs::write(workspace.join("logs/error.log"), "validation failed\nstack trace\n".repeat(800))
+            .unwrap();
+        fs::write(workspace.join("archive/legacy.md"), "# Legacy\n\nArchived context.\n").unwrap();
+
+        let critical_refs = BTreeSet::from(["src/lib.rs".to_string()]);
+        assert_eq!(
+            classify_context_fidelity("src/lib.rs", &critical_refs),
+            ContextFidelityTier::Critical
+        );
+        assert_eq!(
+            classify_context_fidelity("archive/legacy.md", &critical_refs),
+            ContextFidelityTier::Archived
+        );
+        assert_eq!(
+            classify_context_fidelity("docs/brief.md", &critical_refs),
+            ContextFidelityTier::Ambient
+        );
+        assert_eq!(
+            classify_context_fidelity("src/helper.rs", &critical_refs),
+            ContextFidelityTier::Supporting
+        );
+
+        let critical_candidate =
+            selected_candidate(RetrievalSourceKind::WorkspaceFile, "src/lib.rs");
+        let log_candidate = selected_candidate(RetrievalSourceKind::Trace, "logs/error.log");
+        let archived_candidate =
+            selected_candidate(RetrievalSourceKind::WorkspaceFile, "archive/legacy.md");
+
+        assert_eq!(
+            selected_candidate_inclusion_mode(&workspace, &critical_candidate, None),
+            ContextInclusionMode::Excerpt
+        );
+        assert_eq!(
+            selected_candidate_inclusion_mode(&workspace, &log_candidate, None),
+            ContextInclusionMode::Digest
+        );
+        assert_eq!(
+            selected_candidate_inclusion_mode(&workspace, &archived_candidate, None),
+            ContextInclusionMode::Omitted
+        );
+
+        let digest_ref = digest_ref_for_candidate(
+            &workspace,
+            &log_candidate,
+            Some(&RetrievalDocument {
+                source_ref: "logs/error.log".to_string(),
+                source_kind: RetrievalSourceKind::Trace,
+                authority_rank: AuthorityRank::Structured,
+                provenance_summary: "bounded evidence projection".to_string(),
+                compatibility_state: RetrievalCompatibilityState::Compatible,
+                compatibility_reason: None,
+                staleness_state: RetrievalStalenessState::Fresh,
+                canon_artifact_class: None,
+                canon_semantic_contract_line: None,
+                canon_semantic_provenance_boundary: None,
+                canon_semantic_provenance_ref: None,
+                canon_semantic_labels: Vec::new(),
+                metadata_json: "{}".to_string(),
+                content: "validation failed\nstack trace\n".repeat(2),
+            }),
+            ContextInclusionMode::Digest,
+        )
+        .unwrap();
+        assert_eq!(digest_ref.artifact_kind, "log");
+        assert_eq!(digest_ref.resolve_path, "logs/error.log");
+        assert!(digest_ref.summary.contains("validation failed"));
+
+        let mut omission_findings = Vec::new();
+        append_selected_candidate_findings(
+            &mut omission_findings,
+            &ContextPackEntryProjection {
+                source_ref: "src/lib.rs".to_string(),
+                source_kind: RetrievalSourceKind::WorkspaceFile,
+                fidelity_tier: ContextFidelityTier::Critical,
+                inclusion_mode: ContextInclusionMode::Excerpt,
+                required_for_admission: true,
+                reason: "search-before-read bounded the critical file".to_string(),
+                authority_rank: AuthorityRank::Structured,
+                resolved_excerpt_anchor: Some("src/lib.rs#bounded-excerpt".to_string()),
+                lifecycle_relevance: Some("implementation_surface".to_string()),
+                risk_relevance: None,
+                ranking_rationale: Some("origin=fts".to_string()),
+                digest_ref: None,
+            },
+            &critical_candidate,
+        );
+        append_selected_candidate_findings(
+            &mut omission_findings,
+            &ContextPackEntryProjection {
+                source_ref: "logs/error.log".to_string(),
+                source_kind: RetrievalSourceKind::Trace,
+                fidelity_tier: ContextFidelityTier::Supporting,
+                inclusion_mode: ContextInclusionMode::Digest,
+                required_for_admission: false,
+                reason: "large trace compacted to digest".to_string(),
+                authority_rank: AuthorityRank::Structured,
+                resolved_excerpt_anchor: Some("logs/error.log#digest-summary".to_string()),
+                lifecycle_relevance: Some("recent_trace".to_string()),
+                risk_relevance: Some("risk_signal".to_string()),
+                ranking_rationale: Some("origin=fts".to_string()),
+                digest_ref: Some(digest_ref.clone()),
+            },
+            &log_candidate,
+        );
+        append_selected_candidate_findings(
+            &mut omission_findings,
+            &ContextPackEntryProjection {
+                source_ref: "archive/legacy.md".to_string(),
+                source_kind: RetrievalSourceKind::WorkspaceFile,
+                fidelity_tier: ContextFidelityTier::Archived,
+                inclusion_mode: ContextInclusionMode::Omitted,
+                required_for_admission: false,
+                reason: "archived context excluded".to_string(),
+                authority_rank: AuthorityRank::Structured,
+                resolved_excerpt_anchor: None,
+                lifecycle_relevance: Some("implementation_surface".to_string()),
+                risk_relevance: None,
+                ranking_rationale: Some("origin=structured_fallback".to_string()),
+                digest_ref: None,
+            },
+            &archived_candidate,
+        );
+
+        assert!(omission_findings.iter().any(|finding| {
+            finding.reason_code == "search_required_before_read"
+                && finding.required_fidelity == Some(ContextFidelityTier::Critical)
+                && finding.observed_mode == Some(ContextInclusionMode::Excerpt)
+        }));
+        assert!(omission_findings.iter().any(|finding| {
+            finding.reason_code == "artifact_compacted_to_digest"
+                && finding.severity == ContextOmissionSeverity::Info
+        }));
+        assert!(omission_findings.iter().any(|finding| {
+            finding.reason_code == "archived_context_excluded"
+                && finding.observed_mode == Some(ContextInclusionMode::Omitted)
+        }));
+
+        let rejected = rejected_candidate_omission_finding(
+            &workspace,
+            &critical_candidate,
+            &ContextPackEntryProjection {
+                source_ref: "src/lib.rs".to_string(),
+                source_kind: RetrievalSourceKind::WorkspaceFile,
+                fidelity_tier: ContextFidelityTier::Critical,
+                inclusion_mode: ContextInclusionMode::Omitted,
+                required_for_admission: true,
+                reason: "unsafe full read refused".to_string(),
+                authority_rank: AuthorityRank::Structured,
+                resolved_excerpt_anchor: None,
+                lifecycle_relevance: Some("implementation_surface".to_string()),
+                risk_relevance: None,
+                ranking_rationale: Some("origin=fts".to_string()),
+                digest_ref: None,
+            },
+            None,
+        );
+        assert_eq!(rejected.reason_code, "unsafe_full_read_refused");
+        assert_eq!(rejected.observed_mode, Some(ContextInclusionMode::Omitted));
+
+        let mut patch_attempts = Vec::new();
+        append_patch_safe_edit_attempt(
+            &mut patch_attempts,
+            &workspace,
+            &ContextPackEntryProjection {
+                source_ref: "src/lib.rs".to_string(),
+                source_kind: RetrievalSourceKind::WorkspaceFile,
+                fidelity_tier: ContextFidelityTier::Critical,
+                inclusion_mode: ContextInclusionMode::Excerpt,
+                required_for_admission: true,
+                reason: "large file requires patch-safe editing".to_string(),
+                authority_rank: AuthorityRank::Structured,
+                resolved_excerpt_anchor: Some("src/lib.rs#bounded-excerpt".to_string()),
+                lifecycle_relevance: Some("implementation_surface".to_string()),
+                risk_relevance: None,
+                ranking_rationale: Some("origin=fts".to_string()),
+                digest_ref: None,
+            },
+            None,
+        );
+        assert_eq!(patch_attempts.len(), 1);
+        assert_eq!(patch_attempts[0].target_ref, "src/lib.rs");
+    }
+
+    #[test]
+    fn substrate_repository_and_snapshot_state_helpers_cover_missing_and_tracked_paths() {
+        let workspace = temp_workspace("boundline-context-substrate-state");
+        assert_eq!(
+            repository_map_state_for_workspace(&workspace, RetrievalIndexState::Missing, &[]),
+            RepositoryMapState::Missing
+        );
+        assert_eq!(
+            repository_map_state_for_workspace(
+                &workspace,
+                RetrievalIndexState::Missing,
+                &["src/lib.rs".to_string()]
+            ),
+            RepositoryMapState::Ready
+        );
+        assert_eq!(
+            repository_map_state_for_workspace(&workspace, RetrievalIndexState::Stale, &[]),
+            RepositoryMapState::Stale
+        );
+        assert_eq!(
+            repository_map_state_for_workspace(&workspace, RetrievalIndexState::Corrupt, &[]),
+            RepositoryMapState::Corrupt
+        );
+
+        assert_eq!(
+            snapshot_cache_state_for_workspace(&workspace, RetrievalIndexState::Missing),
+            SnapshotCacheState::Missing
+        );
+        assert_eq!(
+            snapshot_cache_state_for_workspace(&workspace, RetrievalIndexState::Stale),
+            SnapshotCacheState::Stale
+        );
+
+        let status = std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(&workspace)
+            .status()
+            .unwrap();
+        assert!(status.success());
+        let derived_index =
+            workspace.join(".boundline/context-intelligence/retrieval-index.sqlite3");
+        fs::create_dir_all(derived_index.parent().unwrap()).unwrap();
+        fs::write(&derived_index, "tracked derived index").unwrap();
+        let add_status = std::process::Command::new("git")
+            .args(["add", ".boundline/context-intelligence/retrieval-index.sqlite3"])
+            .current_dir(&workspace)
+            .status()
+            .unwrap();
+        assert!(add_status.success());
+
+        assert_eq!(
+            snapshot_cache_state_for_workspace(&workspace, RetrievalIndexState::Ready),
+            SnapshotCacheState::Tracked
+        );
+    }
+
+    #[test]
+    fn substrate_projection_fields_emit_warning_and_blocking_cache_findings() {
+        let workspace = temp_workspace("boundline-context-substrate-fields");
+
+        let missing_fields = build_context_substrate_projection_fields(
+            &workspace,
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            RetrievalIndexState::Missing,
+        );
+        assert!(missing_fields.omission_findings.iter().any(|finding| {
+            finding.reason_code == CONTEXT_REASON_REPOSITORY_MAP_UNAVAILABLE
+                && finding.severity == ContextOmissionSeverity::Warning
+        }));
+
+        let stale_fields = build_context_substrate_projection_fields(
+            &workspace,
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            RetrievalIndexState::Stale,
+        );
+        assert!(stale_fields.omission_findings.iter().any(|finding| {
+            finding.reason_code == CONTEXT_REASON_SNAPSHOT_CACHE_STALE
+                && finding.severity == ContextOmissionSeverity::Warning
+        }));
+
+        let git_status = std::process::Command::new("git")
+            .args(["init"])
+            .current_dir(&workspace)
+            .status()
+            .unwrap();
+        assert!(git_status.success());
+        let cache_root = workspace.join(".boundline/context-intelligence");
+        fs::create_dir_all(&cache_root).unwrap();
+        let cache_file = cache_root.join("retrieval-index.sqlite3");
+        fs::write(&cache_file, "tracked").unwrap();
+        let add_status = std::process::Command::new("git")
+            .args(["add", ".boundline/context-intelligence/retrieval-index.sqlite3"])
+            .current_dir(&workspace)
+            .status()
+            .unwrap();
+        assert!(add_status.success());
+
+        let tracked_fields = build_context_substrate_projection_fields(
+            &workspace,
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            RetrievalIndexState::Ready,
+        );
+        assert!(tracked_fields.omission_findings.iter().any(|finding| {
+            finding.reason_code == CONTEXT_REASON_TRACKED_CACHE_DETECTED
+                && finding.severity == ContextOmissionSeverity::Blocking
+        }));
+    }
+
+    #[test]
+    fn substrate_helper_branches_cover_default_summaries_and_noncritical_omissions() {
+        let workspace = temp_workspace("boundline-context-substrate-branches");
+        fs::create_dir_all(workspace.join("build/generated")).unwrap();
+        fs::write(workspace.join("build/generated/output.txt"), "").unwrap();
+
+        let review_candidate = RetrievedEvidenceCandidate {
+            candidate_id: "review-candidate".to_string(),
+            source_kind: RetrievalSourceKind::ReviewFinding,
+            source_ref: "review/finding.md".to_string(),
+            authority_rank: AuthorityRank::Structured,
+            match_origin: RetrievalMatchOrigin::StructuredFallback,
+            selection_state: CandidateSelectionState::Selected,
+            selection_reason: "review finding selected".to_string(),
+            provenance_summary: "review finding provenance".to_string(),
+            compatibility_state: RetrievalCompatibilityState::Compatible,
+            staleness_state: RetrievalStalenessState::Fresh,
+            lexical_score: None,
+            semantic_score: None,
+            canon_semantic_contract_line: None,
+            canon_semantic_provenance_ref: None,
+        };
+        assert_eq!(lifecycle_relevance_for_candidate(&review_candidate), "review_feedback");
+
+        let missing_size_candidate =
+            selected_candidate(RetrievalSourceKind::WorkspaceFile, "missing/file.rs");
+        assert_eq!(
+            selected_candidate_inclusion_mode(&workspace, &missing_size_candidate, None),
+            ContextInclusionMode::Full
+        );
+
+        let digest_candidate =
+            selected_candidate(RetrievalSourceKind::WorkspaceFile, "build/generated/output.txt");
+        let digest_document = RetrievalDocument {
+            source_ref: "build/generated/output.txt".to_string(),
+            source_kind: RetrievalSourceKind::WorkspaceFile,
+            authority_rank: AuthorityRank::Structured,
+            provenance_summary: "generated output".to_string(),
+            compatibility_state: RetrievalCompatibilityState::Compatible,
+            compatibility_reason: None,
+            staleness_state: RetrievalStalenessState::Fresh,
+            canon_artifact_class: None,
+            canon_semantic_contract_line: None,
+            canon_semantic_provenance_boundary: None,
+            canon_semantic_provenance_ref: None,
+            canon_semantic_labels: Vec::new(),
+            metadata_json: "{}".to_string(),
+            content: String::new(),
+        };
+        let digest_ref = digest_ref_for_candidate(
+            &workspace,
+            &digest_candidate,
+            Some(&digest_document),
+            ContextInclusionMode::Digest,
+        )
+        .unwrap();
+        assert_eq!(digest_ref.summary, "large artifact compacted to a digest-backed reference");
+        assert_eq!(digest_ref.artifact_kind, "generated_output");
+
+        let diff_candidate =
+            selected_candidate(RetrievalSourceKind::WorkspaceFile, "patches/fix.diff");
+        let diff_ref = digest_ref_for_candidate(
+            &workspace,
+            &diff_candidate,
+            Some(&digest_document),
+            ContextInclusionMode::Digest,
+        )
+        .unwrap();
+        assert_eq!(diff_ref.artifact_kind, "diff");
+
+        let workspace_artifact_candidate =
+            selected_candidate(RetrievalSourceKind::WorkspaceFile, "notes/output.txt");
+        let workspace_artifact_ref = digest_ref_for_candidate(
+            &workspace,
+            &workspace_artifact_candidate,
+            Some(&digest_document),
+            ContextInclusionMode::Digest,
+        )
+        .unwrap();
+        assert_eq!(workspace_artifact_ref.artifact_kind, "workspace_artifact");
+
+        let optional_omitted_entry = ContextPackEntryProjection {
+            source_ref: "archive/legacy.md".to_string(),
+            source_kind: RetrievalSourceKind::WorkspaceFile,
+            authority_rank: AuthorityRank::Structured,
+            fidelity_tier: ContextFidelityTier::Archived,
+            inclusion_mode: ContextInclusionMode::Omitted,
+            required_for_admission: false,
+            reason: "archived context excluded".to_string(),
+            resolved_excerpt_anchor: None,
+            digest_ref: None,
+            lifecycle_relevance: Some("implementation_surface".to_string()),
+            risk_relevance: None,
+            ranking_rationale: Some("origin=structured_fallback".to_string()),
+        };
+        let required_digest_entry = ContextPackEntryProjection {
+            source_ref: "logs/error.log".to_string(),
+            source_kind: RetrievalSourceKind::Trace,
+            authority_rank: AuthorityRank::Structured,
+            fidelity_tier: ContextFidelityTier::Critical,
+            inclusion_mode: ContextInclusionMode::Digest,
+            required_for_admission: true,
+            reason: "critical context compacted".to_string(),
+            resolved_excerpt_anchor: Some("logs/error.log#digest-summary".to_string()),
+            digest_ref: Some(digest_ref.clone()),
+            lifecycle_relevance: Some("recent_trace".to_string()),
+            risk_relevance: None,
+            ranking_rationale: Some("origin=fts".to_string()),
+        };
+        let mut findings = Vec::new();
+        append_selected_candidate_findings(
+            &mut findings,
+            &optional_omitted_entry,
+            &review_candidate,
+        );
+        append_selected_candidate_findings(
+            &mut findings,
+            &required_digest_entry,
+            &digest_candidate,
+        );
+        assert!(findings.iter().any(|finding| {
+            finding.reason_code == CONTEXT_REASON_ARCHIVED_CONTEXT_EXCLUDED
+                && finding.severity == ContextOmissionSeverity::Warning
+        }));
+        assert!(findings.iter().any(|finding| {
+            finding.reason_code == CONTEXT_REASON_CRITICAL_DOWNGRADED
+                && finding.severity == ContextOmissionSeverity::Blocking
+        }));
+
+        let mut attempts = Vec::new();
+        append_patch_safe_edit_attempt(&mut attempts, &workspace, &optional_omitted_entry, None);
+        assert!(attempts.is_empty());
+
+        let missing_size_entry = ContextPackEntryProjection {
+            source_ref: "missing/file.rs".to_string(),
+            source_kind: RetrievalSourceKind::WorkspaceFile,
+            authority_rank: AuthorityRank::Structured,
+            fidelity_tier: ContextFidelityTier::Supporting,
+            inclusion_mode: ContextInclusionMode::Full,
+            required_for_admission: false,
+            reason: "missing file".to_string(),
+            resolved_excerpt_anchor: None,
+            digest_ref: None,
+            lifecycle_relevance: Some("implementation_surface".to_string()),
+            risk_relevance: None,
+            ranking_rationale: Some("origin=fts".to_string()),
+        };
+        append_patch_safe_edit_attempt(&mut attempts, &workspace, &missing_size_entry, None);
+        assert!(attempts.is_empty());
+
+        assert_eq!(
+            rejected_candidate_omission_finding(
+                &workspace,
+                &review_candidate,
+                &optional_omitted_entry,
+                None,
+            )
+            .reason_code,
+            CONTEXT_REASON_SEARCH_REQUIRED_BEFORE_READ
+        );
+
+        assert_eq!(
+            repository_map_state_for_workspace(&workspace, RetrievalIndexState::Degraded, &[]),
+            RepositoryMapState::Degraded
+        );
+        assert_eq!(
+            snapshot_cache_state_for_workspace(&workspace, RetrievalIndexState::Corrupt),
+            SnapshotCacheState::Corrupt
+        );
     }
 
     fn valid_manifest_fixture(workspace: &std::path::Path) -> DerivedIndexManifest {

@@ -1,4 +1,4 @@
-# Configuration in Boundline 0.70.0
+# Configuration in Boundline 0.71.0
 
 This page covers the operator-facing configuration surface. Keep one rule in
 mind: configuration declares defaults and policy; the runtime still owns
@@ -69,12 +69,17 @@ These surfaces are not configuration keys:
 
 If those fields change, the runtime decided something from current evidence.
 
-The 0.70.0 release keeps planning-readiness evaluation runtime-owned as well:
+The 0.71.0 release keeps planning-readiness evaluation runtime-owned as well:
 `plan_quality_state`, `plan_quality_findings`, `plan_quality_assumptions`,
 `backlog_quality_state`, `backlog_quality_findings`, `backlog_task_count`,
 `backlog_mvp_scope`, `backlog_unmapped_items`, `planning_analysis_state`,
 `planning_analysis_findings`, and `planning_analysis_coverage` are additive
 runtime output, not configuration keys.
+
+The same runtime boundary now also owns large-codebase context substrate output
+such as `context_pack_entries`, `omission_findings`, `repository_map_state`,
+`snapshot_cache_state`, and `patch_safe_edit_attempts`. Those are derived
+runtime projections, not config.
 
 ## Workspace Bootstrap
 
@@ -224,7 +229,7 @@ boundline config show --scope workspace
 boundline config set-canon --workspace . --mode-selection auto-confirm
 ```
 
-The current 0.70.0 release documents Canon `0.67.0` support for the machine-facing
+The current 0.71.0 release documents Canon `0.67.0` support for the machine-facing
 `canon governance start|refresh|capabilities --json` `v1` surface.
 
 ## Workflow Registry Boundaries

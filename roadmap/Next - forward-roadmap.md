@@ -31,7 +31,7 @@ feature under `specs/`.
 | **03** | plan-quality-contract.md | Delivered in 0.67.0: first plan-readiness gate, one-question recovery, additive plan-quality projections |
 | **04** | [backlog-contract.md](features/04-backlog-contract.md) | Delivered in 0.69.0: Canon backlog packet gate, closure-limited blocking, and additive backlog-quality projections |
 | **05** | [plan-analysis-contract.md](features/05-plan-analysis-contract.md) | Delivered in 0.70.0: read-only planning-coherence gate, source-attributed findings, and withheld execution handoff on contradictions or producer gaps |
-| **06** | [large-codebase-context-substrate.md](features/06-large-codebase-context-substrate.md) | Long-term context handling limits |
+| **06** | [070-large-codebase-context-substrate](../specs/070-large-codebase-context-substrate/spec.md) | Delivered in 0.71.0: local context substrate, fidelity tiers, omitted-context visibility, patch-safe edit guards, and non-memory snapshot cache boundary |
 | **07** | [external-capability-provider-protocol.md](features/07-external-capability-provider-protocol.md) | Native provider contract, setup, and activation surface (replaces MCP) |
 | **08** | [evals-and-runtime-observability.md](features/08-evals-and-runtime-observability.md) | Local quality and regression layer |
 | **09** | [contextual-help-and-documentation-architecture.md](features/09-contextual-help-and-documentation-architecture.md) | Operator UX feature |
@@ -69,15 +69,16 @@ Boundline should consume those surfaces only through stable, versioned metadata:
 
 ### Large Codebase Context Hardening
 
-Boundline already has the local SQLite and FTS5 advanced-context substrate plus
-local semantic acceleration. The next slice should harden the runtime boundary:
+This slice is now delivered in `0.71.0`. Boundline's local substrate now:
 
-- refuse huge full-file reads unless explicitly allowed
-- support paged file reads with stable digests
-- store lazy hash references for huge logs, diffs, CI output, and generated files
-- show omitted context and skip reasons in inspect
-- require source spans for edits, not summaries
-- use anchored hunks and post-apply verification for large-file edits
+- refuses unsafe huge full-file reads unless explicitly allowed
+- supports excerpt and digest-backed handling for oversized artifacts
+- stores recoverable references for large logs, diffs, CI output, and
+  generated files
+- shows omitted context and skip reasons in inspectable runtime output
+- requires patch-safe large-file edit evidence rather than summary-only edits
+- keeps snapshot-cache reuse explicitly derived, freshness-bound, and
+  non-authoritative
 
 ### External Capability Provider Protocol
 

@@ -54,6 +54,9 @@ Canon backlog is governed source material, while Boundline validates execution r
 ## Planning Analysis Gate
 Planning analysis is a Boundline-owned read-only projection over the ready plan and backlog. Preserve `planning_analysis_state`, `planning_analysis_findings`, and `planning_analysis_coverage` whenever planning reports them. If `planning_analysis_state` is `blocked`, do not route to `/boundline-run`; present `/boundline-plan` or the emitted planning continuation as the only next route.
 
+## Large-Codebase Context Gate
+When planning reports `repository_map_state`, `snapshot_cache_state`, `context_pack_entries`, `omission_findings`, or `patch_safe_edit_attempts`, preserve them exactly. Treat blocking omission findings, stale tracked cache, unsafe oversized full-read refusal, digest-only critical evidence, or patch-safe edit drift as real planning stops and route back to `/boundline-plan` instead of `/boundline-run`.
+
 ## Gate Handling
 When a planning gate appears, ask the emitted question or present the emitted suggested choices, wait for the user's answer, and resume with the raw `resume_command` or assistant-safe route. Preserve `request_id`, `stage_key`, `expected_answer.type`, `artifact.artifact_ref`, and the exact raw continuation for shell execution.
 
