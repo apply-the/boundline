@@ -1,6 +1,6 @@
 # Status
 
-`status` is the quickest read on the Boundline 0.71.0 planning gates.
+`status` is the quickest read on the Boundline 0.72.0 planning gates.
 
 ## What To Look For
 
@@ -22,6 +22,12 @@ When a plan exists or is blocked, look for:
 - `context_pack_entry_count`
 - `context_omission_finding_count`
 - `patch_safe_edit_attempt_count`
+- `capability_provider_status`
+- `capability_provider_id`
+- `capability_provider_activation_state`
+- `capability_provider_capability_ids`
+- `capability_provider_setup_requirements`
+- `capability_provider_summary`
 - `next_command`
 - `assistant_next_command`
 - blocked or recovery guidance
@@ -37,3 +43,9 @@ When the large-codebase substrate is active, the same summary may also show
 typed context entry lines, omission reasons, and patch-safe edit guardrails.
 Treat blocked omissions, stale tracked cache, or unsafe full-read refusal as
 real planning stops rather than advisory context notes.
+
+When provider-backed execution is configured, the same summary can also expose
+provider activation state, declared capability IDs, setup requirements, and
+the latest validation disposition or failure class. Treat provider readiness,
+permission, or evidence failures as real bounded stops rather than hidden retry
+signals.

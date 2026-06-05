@@ -1,5 +1,5 @@
-# The latest published Boundline line is 0.71.0.
-boundline_version = "0.71.0"
+# The latest published Boundline line is 0.72.0.
+boundline_version = "0.72.0"
 # canon_version is the explicit Canon compatibility target for this release.
 # Keep it pinned so Boundline can be prepared before the Canon tag is public.
 canon_version = "0.67.0"
@@ -17,8 +17,8 @@ update_command = "brew upgrade boundline"
 [channels.winget]
 status = "ready_for_publication"
 package_identifier = "ApplyThe.Boundline"
-manifest_root = "distribution/winget/manifests/a/ApplyThe/Boundline/0.71.0"
+manifest_root = "distribution/winget/manifests/a/ApplyThe/Boundline/0.72.0"
 install_command = "winget install ApplyThe.Boundline"
 update_command = "winget upgrade ApplyThe.Boundline"
-bundle_name = "boundline-bundle-0.71.0-windows-x86_64.zip"
+bundle_name = "boundline-bundle-0.72.0-windows-x86_64.zip"
 canon_asset = "https://github.com/apply-the/canon/releases/download/0.67.0/canon-0.67.0-windows-x86_64.zip"

@@ -4,6 +4,8 @@ pub mod audit;
 pub mod auth_profile;
 #[path = "../../../src/domain/brief.rs"]
 pub mod brief;
+#[path = "../../../src/domain/capability_provider.rs"]
+pub mod capability_provider;
 #[path = "../../../src/domain/checkpoint.rs"]
 pub mod checkpoint;
 #[path = "../../../src/domain/cluster.rs"]

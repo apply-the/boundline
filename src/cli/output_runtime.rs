@@ -10,13 +10,16 @@ use crate::cli::adapter::{
     command_exists_on_path, config_schema_fingerprint, discovery_state_label,
 };
 use crate::domain::configuration::PersistedAdapterConfiguration;
+use crate::domain::configuration::PersistedCapabilityProviderConfiguration;
 use crate::domain::execution::StageRoutingDecisionRecord;
 use crate::domain::framework_adapter::{
     AdapterConfigCompletenessState, FrameworkAdapterStageOutcomeDetails,
     StoredAdapterConfigValueState,
 };
-use crate::domain::session::FrameworkAdapterStageFailureDetails;
-use crate::domain::trace::HookEventDispatchRecord;
+use crate::domain::session::{
+    CapabilityProviderExecutionRecord, FrameworkAdapterStageFailureDetails,
+};
+use crate::domain::trace::{CapabilityProviderTraceRecord, HookEventDispatchRecord};
 use crate::registry::agent_registry::FrameworkAdapterProfileRegistry;
 use serde_json::Value;
 
@@ -33,6 +36,10 @@ const EXECUTION_SOURCE_ADAPTER: &str = "adapter";
 const EXECUTION_SOURCE_BUILT_IN: &str = "built_in";
 const COMPATIBILITY_GATE_V1_STDIO_JSON: &str = "v1_json_over_stdin_stdout_only";
 const BLOCKED_REASON_UNSUPPORTED_TRANSPORT: &str = "unsupported_transport";
+const PROVIDER_STATUS_UNCONFIGURED: &str = "unconfigured";
+const PROVIDER_STATUS_ACTIVE: &str = "active";
+const PROVIDER_STATUS_BLOCKED: &str = "blocked";
+const PROVIDER_STATUS_INACTIVE: &str = "inactive";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct FrameworkAdapterOutputProjection {
@@ -90,6 +97,38 @@ impl FrameworkAdapterOutputProjection {
             lines.push(format!("framework_adapter_blocked_reason: {blocked_reason}"));
         }
 
+        lines
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct CapabilityProviderOutputProjection {
+    pub status: String,
+    pub provider_id: Option<String>,
+    pub activation_state: Option<String>,
+    pub capability_ids: Option<String>,
+    pub setup_requirements: Option<String>,
+    pub summary: Option<String>,
+}
+
+impl CapabilityProviderOutputProjection {
+    fn status_lines(&self) -> Vec<String> {
+        let mut lines = vec![format!("capability_provider_status: {}", self.status)];
+        if let Some(provider_id) = &self.provider_id {
+            lines.push(format!("capability_provider_id: {provider_id}"));
+        }
+        if let Some(activation_state) = &self.activation_state {
+            lines.push(format!("capability_provider_activation_state: {activation_state}"));
+        }
+        if let Some(capability_ids) = &self.capability_ids {
+            lines.push(format!("capability_provider_capability_ids: {capability_ids}"));
+        }
+        if let Some(setup_requirements) = &self.setup_requirements {
+            lines.push(format!("capability_provider_setup_requirements: {setup_requirements}"));
+        }
+        if let Some(summary) = &self.summary {
+            lines.push(format!("capability_provider_summary: {summary}"));
+        }
         lines
     }
 }
@@ -355,6 +394,91 @@ pub(crate) fn framework_adapter_status_lines(workspace_ref: &str) -> Vec<String>
     framework_adapter_output_projection(workspace_ref).status_lines()
 }
 
+pub(crate) fn capability_provider_status_lines(
+    workspace_ref: &str,
+    execution: Option<&CapabilityProviderExecutionRecord>,
+) -> Vec<String> {
+    if let Some(execution) = execution {
+        return capability_provider_execution_lines(Some(execution));
+    }
+    capability_provider_output_projection(workspace_ref).status_lines()
+}
+
+pub(crate) fn capability_provider_execution_lines(
+    execution: Option<&CapabilityProviderExecutionRecord>,
+) -> Vec<String> {
+    let Some(execution) = execution else {
+        return Vec::new();
+    };
+    let projection = &execution.projection;
+    let mut lines = vec![
+        format!("capability_provider_id: {}", projection.provider_id),
+        format!("capability_provider_activation_state: {}", projection.activation_state.as_str()),
+        format!("capability_provider_summary: {}", projection.summary),
+    ];
+    if let Some(capability_id) = &projection.capability_id {
+        lines.push(format!("capability_provider_capability_id: {capability_id}"));
+    }
+    if let Some(readiness_state) = projection.readiness_state {
+        lines.push(format!(
+            "capability_provider_readiness_state: {}",
+            match readiness_state {
+                crate::domain::capability_provider::ProviderReadinessState::Ready => "ready",
+                crate::domain::capability_provider::ProviderReadinessState::Degraded => "degraded",
+                crate::domain::capability_provider::ProviderReadinessState::Unavailable => {
+                    "unavailable"
+                }
+            }
+        ));
+    }
+    if let Some(validation_disposition) = projection.validation_disposition {
+        lines.push(format!(
+            "capability_provider_validation_disposition: {}",
+            validation_disposition.as_str()
+        ));
+    }
+    if let Some(failure_class) = projection.failure_class {
+        lines.push(format!("capability_provider_failure_class: {}", failure_class.as_str()));
+    }
+    if !projection.accepted_evidence_refs.is_empty() {
+        lines.push(format!(
+            "capability_provider_accepted_evidence_refs: {}",
+            projection.accepted_evidence_refs.join(", ")
+        ));
+    }
+    if !projection.rejected_evidence_refs.is_empty() {
+        lines.push(format!(
+            "capability_provider_rejected_evidence_refs: {}",
+            projection.rejected_evidence_refs.join(", ")
+        ));
+    }
+    if !projection.limitations.is_empty() {
+        lines.push(format!(
+            "capability_provider_limitations: {}",
+            projection.limitations.join(", ")
+        ));
+    }
+    if !projection.setup_requirements.is_empty() {
+        lines.push(format!(
+            "capability_provider_setup_requirements: {}",
+            render_provider_setup_requirements(&projection.setup_requirements)
+        ));
+    }
+    lines
+}
+
+pub(crate) fn capability_provider_trace_lines(
+    trace_record: Option<&CapabilityProviderTraceRecord>,
+) -> Vec<String> {
+    let Some(trace_record) = trace_record else {
+        return Vec::new();
+    };
+    capability_provider_execution_lines(Some(&CapabilityProviderExecutionRecord {
+        request_id: trace_record.request_id.clone(),
+        projection: trace_record.projection.clone(),
+    }))
+}
+
 pub(crate) fn framework_adapter_stage_failure_lines(
     failure: Option<&FrameworkAdapterStageFailureDetails>,
 ) -> Vec<String> {
@@ -538,6 +662,25 @@ pub(crate) fn framework_adapter_hook_dispatch_lines(
     ]
 }
 
+pub(crate) fn capability_provider_output_projection(
+    workspace_ref: &str,
+) -> CapabilityProviderOutputProjection {
+    let workspace = Path::new(workspace_ref);
+    if let Ok(Some(configuration)) =
+        FileConfigStore::for_workspace(workspace).local_capability_provider()
+    {
+        return projection_from_provider_configuration(configuration);
+    }
+    CapabilityProviderOutputProjection {
+        status: PROVIDER_STATUS_UNCONFIGURED.to_string(),
+        provider_id: None,
+        activation_state: None,
+        capability_ids: None,
+        setup_requirements: None,
+        summary: None,
+    }
+}
+
 fn configured_adapter_describe(
     workspace: &Path,
     adapter: &PersistedAdapterConfiguration,
@@ -551,9 +694,101 @@ fn configured_adapter_describe(
     host.describe().ok()
 }
 
+fn projection_from_provider_configuration(
+    configuration: PersistedCapabilityProviderConfiguration,
+) -> CapabilityProviderOutputProjection {
+    let selected = configuration
+        .active_provider_id
+        .as_deref()
+        .and_then(|provider_id| {
+            configuration.registrations.iter().find(|item| item.provider_id == provider_id)
+        })
+        .or_else(|| configuration.registrations.first());
+    let Some(selected) = selected else {
+        return CapabilityProviderOutputProjection {
+            status: PROVIDER_STATUS_UNCONFIGURED.to_string(),
+            provider_id: None,
+            activation_state: None,
+            capability_ids: None,
+            setup_requirements: None,
+            summary: None,
+        };
+    };
+    let status = match selected.activation_state {
+        crate::domain::capability_provider::CapabilityProviderActivationState::Active => {
+            PROVIDER_STATUS_ACTIVE
+        }
+        crate::domain::capability_provider::CapabilityProviderActivationState::Blocked => {
+            PROVIDER_STATUS_BLOCKED
+        }
+        _ => PROVIDER_STATUS_INACTIVE,
+    };
+    CapabilityProviderOutputProjection {
+        status: status.to_string(),
+        provider_id: Some(selected.provider_id.clone()),
+        activation_state: Some(selected.activation_state.as_str().to_string()),
+        capability_ids: Some(join_or_none(&selected.capability_ids)),
+        setup_requirements: Some(render_provider_setup_requirements(&selected.setup_requirements)),
+        summary: Some(if selected.has_blocking_setup_requirements() {
+            "provider activation is blocked by setup requirements".to_string()
+        } else {
+            "provider registration is available".to_string()
+        }),
+    }
+}
+
+fn render_provider_setup_requirements(
+    requirements: &[crate::domain::capability_provider::ProviderSetupRequirement],
+) -> String {
+    if requirements.is_empty() {
+        return "none".to_string();
+    }
+    requirements
+        .iter()
+        .map(|item| {
+            format!(
+                "{}={}",
+                item.display_label,
+                match item.resolution_state {
+                    crate::domain::capability_provider::ProviderSetupResolutionState::Present => {
+                        "present"
+                    }
+                    crate::domain::capability_provider::ProviderSetupResolutionState::Missing => {
+                        "missing"
+                    }
+                    crate::domain::capability_provider::ProviderSetupResolutionState::Invalid => {
+                        "invalid"
+                    }
+                    crate::domain::capability_provider::ProviderSetupResolutionState::Unchecked => {
+                        "unchecked"
+                    }
+                }
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn join_or_none(items: &[String]) -> String {
+    if items.is_empty() { "none".to_string() } else { items.join(", ") }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{framework_adapter_stage_failure_lines, framework_adapter_stage_routing_lines};
+    use super::{
+        capability_provider_execution_lines, capability_provider_trace_lines,
+        framework_adapter_stage_failure_lines, framework_adapter_stage_routing_lines,
+        projection_from_provider_configuration,
+    };
+    use crate::domain::capability_provider::{
+        CapabilityProviderActivationState, CapabilityProviderDiscoveryState,
+        CapabilityProviderProjection, CapabilityProviderRegistration,
+        CapabilityProviderRegistrationSource, CommandProviderTransport, ProviderFailureClass,
+        ProviderReadinessState, ProviderSetupRequiredState, ProviderSetupRequirement,
+        ProviderSetupRequirementKind, ProviderSetupResolutionState, ProviderTransportDescriptor,
+        ProviderValidationOutcome,
+    };
+    use crate::domain::configuration::PersistedCapabilityProviderConfiguration;
     use crate::domain::execution::StageRoutingDecisionRecord;
     use crate::domain::framework_adapter::{
         AdapterExecutionSource, AdapterFailureClass, AdapterLifecycleStageKey,
@@ -563,8 +798,10 @@ mod tests {
         StageRoutingDecisionReason,
     };
     use crate::domain::session::{
-        FrameworkAdapterStageFailureDetails, LifecycleStageExecutionRecord,
+        CapabilityProviderExecutionRecord, FrameworkAdapterStageFailureDetails,
+        LifecycleStageExecutionRecord,
     };
+    use crate::domain::trace::CapabilityProviderTraceRecord;
 
     #[test]
     fn framework_adapter_stage_routing_lines_surface_planning_details() {
@@ -629,6 +866,209 @@ mod tests {
         assert!(
             lines.iter().any(|line| line == "framework_adapter_validation_refs: validation/run.md")
         );
+    }
+
+    #[test]
+    fn capability_provider_lines_surface_projection_and_trace_details() {
+        let projection = CapabilityProviderProjection {
+            provider_id: "demo-provider".to_string(),
+            activation_state: CapabilityProviderActivationState::Active,
+            capability_id: Some("capability.demo".to_string()),
+            readiness_state: Some(ProviderReadinessState::Degraded),
+            validation_disposition: Some(ProviderValidationOutcome::Rejected),
+            failure_class: Some(ProviderFailureClass::PostExecutionValidation),
+            setup_requirements: vec![ProviderSetupRequirement {
+                requirement_id: "config-token".to_string(),
+                kind: ProviderSetupRequirementKind::ConfigValue,
+                required_state: ProviderSetupRequiredState::Required,
+                resolution_state: ProviderSetupResolutionState::Present,
+                display_label: "token".to_string(),
+                source_ref: Some("config/token".to_string()),
+            }],
+            accepted_evidence_refs: vec!["artifact://accepted".to_string()],
+            rejected_evidence_refs: vec!["artifact://rejected".to_string()],
+            limitations: vec!["bounded".to_string()],
+            summary: "provider summary".to_string(),
+        };
+        let execution_lines =
+            capability_provider_execution_lines(Some(&CapabilityProviderExecutionRecord {
+                request_id: "req-1".to_string(),
+                projection: projection.clone(),
+            }));
+        assert!(
+            execution_lines
+                .iter()
+                .any(|line| line == "capability_provider_capability_id: capability.demo")
+        );
+        assert!(
+            execution_lines
+                .iter()
+                .any(|line| line == "capability_provider_readiness_state: degraded")
+        );
+        assert!(
+            execution_lines
+                .iter()
+                .any(|line| { line == "capability_provider_validation_disposition: rejected" })
+        );
+        assert!(execution_lines.iter().any(|line| {
+            line == "capability_provider_failure_class: post_execution_validation"
+        }));
+        assert!(execution_lines.iter().any(|line| {
+            line == "capability_provider_accepted_evidence_refs: artifact://accepted"
+        }));
+        assert!(execution_lines.iter().any(|line| {
+            line == "capability_provider_rejected_evidence_refs: artifact://rejected"
+        }));
+        assert!(
+            execution_lines.iter().any(|line| line == "capability_provider_limitations: bounded")
+        );
+        assert!(
+            execution_lines
+                .iter()
+                .any(|line| { line == "capability_provider_setup_requirements: token=present" })
+        );
+
+        let trace_lines = capability_provider_trace_lines(Some(&CapabilityProviderTraceRecord {
+            request_id: "req-1".to_string(),
+            projection,
+            validation: crate::domain::capability_provider::ProviderValidationDisposition {
+                request_id: "req-1".to_string(),
+                disposition: ProviderValidationOutcome::Rejected,
+                failure_class: Some(ProviderFailureClass::PostExecutionValidation),
+                accepted_evidence_refs: vec!["artifact://accepted".to_string()],
+                rejected_evidence_refs: vec!["artifact://rejected".to_string()],
+                reason: "provider summary".to_string(),
+            },
+        }));
+        assert!(
+            trace_lines.iter().any(|line| line == "capability_provider_summary: provider summary")
+        );
+    }
+
+    #[test]
+    fn capability_provider_projection_prefers_active_registration_and_surfaces_setup_summary() {
+        let projection =
+            projection_from_provider_configuration(PersistedCapabilityProviderConfiguration {
+                registrations: vec![CapabilityProviderRegistration {
+                    provider_id: "demo-provider".to_string(),
+                    display_name: "Demo Provider".to_string(),
+                    transport: ProviderTransportDescriptor::Command(CommandProviderTransport {
+                        command_ref: "/bin/echo".to_string(),
+                        args: Vec::new(),
+                        working_directory_ref: None,
+                        environment_ref_names: Vec::new(),
+                    }),
+                    registration_source: CapabilityProviderRegistrationSource::OperatorCli,
+                    discovery_state: CapabilityProviderDiscoveryState::Explicit,
+                    activation_state: CapabilityProviderActivationState::Blocked,
+                    config_refs: Vec::new(),
+                    secret_handle_refs: Vec::new(),
+                    setup_requirements: vec![ProviderSetupRequirement {
+                        requirement_id: "secret-demo".to_string(),
+                        kind: ProviderSetupRequirementKind::SecretHandle,
+                        required_state: ProviderSetupRequiredState::Required,
+                        resolution_state: ProviderSetupResolutionState::Missing,
+                        display_label: "demo-secret".to_string(),
+                        source_ref: None,
+                    }],
+                    capability_ids: vec!["capability.demo".to_string()],
+                    active_profile_id: None,
+                }],
+                active_provider_id: Some("demo-provider".to_string()),
+                last_validated_at: Some(7),
+            });
+
+        assert_eq!(projection.status, "blocked");
+        assert_eq!(projection.provider_id.as_deref(), Some("demo-provider"));
+        assert_eq!(projection.setup_requirements.as_deref(), Some("demo-secret=missing"));
+        assert_eq!(
+            projection.summary.as_deref(),
+            Some("provider activation is blocked by setup requirements")
+        );
+    }
+
+    #[test]
+    fn capability_provider_output_helpers_cover_unconfigured_and_optional_branches() {
+        let unconfigured =
+            projection_from_provider_configuration(PersistedCapabilityProviderConfiguration {
+                registrations: Vec::new(),
+                active_provider_id: None,
+                last_validated_at: None,
+            });
+        assert_eq!(unconfigured.status, "unconfigured");
+        assert!(unconfigured.provider_id.is_none());
+
+        let inactive_projection =
+            projection_from_provider_configuration(PersistedCapabilityProviderConfiguration {
+                registrations: vec![CapabilityProviderRegistration {
+                    provider_id: "inactive-provider".to_string(),
+                    display_name: "Inactive Provider".to_string(),
+                    transport: ProviderTransportDescriptor::Command(CommandProviderTransport {
+                        command_ref: "/bin/echo".to_string(),
+                        args: Vec::new(),
+                        working_directory_ref: None,
+                        environment_ref_names: Vec::new(),
+                    }),
+                    registration_source: CapabilityProviderRegistrationSource::OperatorCli,
+                    discovery_state: CapabilityProviderDiscoveryState::Explicit,
+                    activation_state: CapabilityProviderActivationState::Inactive,
+                    config_refs: Vec::new(),
+                    secret_handle_refs: Vec::new(),
+                    setup_requirements: vec![ProviderSetupRequirement {
+                        requirement_id: "config-demo".to_string(),
+                        kind: ProviderSetupRequirementKind::ConfigValue,
+                        required_state: ProviderSetupRequiredState::Required,
+                        resolution_state: ProviderSetupResolutionState::Unchecked,
+                        display_label: "demo-config".to_string(),
+                        source_ref: None,
+                    }],
+                    capability_ids: Vec::new(),
+                    active_profile_id: None,
+                }],
+                active_provider_id: Some("inactive-provider".to_string()),
+                last_validated_at: Some(9),
+            });
+        assert_eq!(inactive_projection.status, "inactive");
+        assert_eq!(inactive_projection.capability_ids.as_deref(), Some("none"));
+        assert_eq!(
+            inactive_projection.setup_requirements.as_deref(),
+            Some("demo-config=unchecked")
+        );
+        assert_eq!(
+            inactive_projection.summary.as_deref(),
+            Some("provider activation is blocked by setup requirements")
+        );
+        let status_lines = inactive_projection.status_lines();
+        assert!(status_lines.iter().any(|line| line == "capability_provider_status: inactive"));
+        assert!(status_lines.iter().any(|line| {
+            line == "capability_provider_setup_requirements: demo-config=unchecked"
+        }));
+    }
+
+    #[test]
+    fn capability_provider_execution_lines_cover_missing_optional_fields() {
+        let lines = capability_provider_execution_lines(Some(&CapabilityProviderExecutionRecord {
+            request_id: "req-empty".to_string(),
+            projection: CapabilityProviderProjection {
+                provider_id: "demo-provider".to_string(),
+                activation_state: CapabilityProviderActivationState::Blocked,
+                capability_id: None,
+                readiness_state: Some(ProviderReadinessState::Unavailable),
+                validation_disposition: Some(ProviderValidationOutcome::Blocked),
+                failure_class: None,
+                setup_requirements: Vec::new(),
+                accepted_evidence_refs: Vec::new(),
+                rejected_evidence_refs: Vec::new(),
+                limitations: Vec::new(),
+                summary: "blocked summary".to_string(),
+            },
+        }));
+        assert!(
+            lines.iter().any(|line| line == "capability_provider_readiness_state: unavailable")
+        );
+        assert!(lines.iter().any(|line| line == "capability_provider_summary: blocked summary"));
+        assert!(lines.iter().all(|line| !line.starts_with("capability_provider_capability_id:")));
+        assert!(lines.iter().all(|line| !line.starts_with("capability_provider_failure_class:")));
     }
 
     fn sample_planning_details() -> FrameworkAdapterStageOutcomeDetails {

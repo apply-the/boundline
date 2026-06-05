@@ -17,6 +17,7 @@
 //! | [`governance`] | Governance-decision helpers and Canon memory compaction |
 //! | [`flow_inference`] | Flow inference from goal text and workspace signals |
 //! | [`context_intelligence`] | Advanced-context retrieval (SQLite+FTS5) |
+//! | [`capability_provider_runtime`] | Capability-provider admission and execution helpers |
 //! | [`guidance_runtime`] | Capability discovery and bounded guardian execution |
 //! | [`guidance_catalog_runtime`] | Directory-based guidance catalog pack discovery |
 //! | [`planner`] | `Planner` trait and static test double |
@@ -29,6 +30,7 @@ pub mod flow_inference;
 pub mod goal_planner;
 pub mod governance;
 pub mod context_intelligence;
+pub mod capability_provider_runtime;
 pub mod guidance_catalog_runtime;
 pub mod guidance_runtime;
 pub mod planner;

@@ -964,6 +964,7 @@ fn write_distinct_review_routing(workspace: &Path) {
             },
             canon: None,
             adapter: None,
+            capability_provider: None,
         })
         .unwrap();
 }

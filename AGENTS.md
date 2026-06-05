@@ -12,6 +12,7 @@ Auto-generated from all feature plans. Last updated: 2026-06-05
 - Rust 1.96.0, edition 2024 + Existing workspace crates and dependencies only; (069-plan-analysis-contract)
 - Existing workspace-local session and trace files plus governed (069-plan-analysis-contract)
 - Existing workspace-local `.boundline/session.json`, (070-large-codebase-context-substrate)
+- Existing workspace-local `.boundline/config.toml`, (071-capability-provider-protocol)
 
 - Rust 1.96.0, edition 2024 + `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, `rusqlite`, `dialoguer`
 - Workspace-local config and traces: `.boundline/session.json`, `.boundline/traces/`, `.boundline/config.toml`, `.boundline/execution.json`, `.boundline/workflows.toml`
@@ -44,9 +45,9 @@ Crate versioning follows Semantic Versioning.
 Before 1.0.0, breaking changes MAY occur in minor versions.
 
 ## Recent Changes
+- 071-capability-provider-protocol: Added Rust 1.96.0, edition 2024 + Existing workspace crates and dependencies only;
 - 070-large-codebase-context-substrate: Added Rust 1.96.0, edition 2024 + Existing workspace crates and dependencies only;
 - 069-plan-analysis-contract: Added Rust 1.96.0, edition 2024 + Existing workspace crates and dependencies only;
-- 067-plan-quality-contract: Added Rust 1.96.0, edition 2024 + existing workspace crates and dependencies only; no new runtime dependency planned
 
 
 <!-- MANUAL ADDITIONS START -->

@@ -26,6 +26,8 @@ pub mod orchestrate;
 pub mod output;
 #[path = "../../../src/cli/probe.rs"]
 pub mod probe;
+#[path = "../../../src/cli/provider.rs"]
+pub mod provider;
 #[path = "../../../src/cli/run.rs"]
 pub mod run;
 #[path = "../../../src/cli/session.rs"]

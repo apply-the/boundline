@@ -63,7 +63,7 @@ Read the output literally:
   ready, already satisfied, blocked, or repair-needed.
 - `actions` tells you the next repair or follow-up step.
 
-The current 0.71.0 release documents Canon `0.67.0` support for the machine-facing
+The current 0.72.0 release documents Canon `0.67.0` support for the machine-facing
 `canon governance start|refresh|capabilities --json` `v1` surface.
 
 During normal planning, expect the runtime to surface `plan_quality_state`,
@@ -72,6 +72,10 @@ offered. Treat those as authoritative runtime gates rather than chat guidance.
 When the workspace is large enough to trigger context narrowing, also expect
 repository-map, omission, compaction, snapshot-cache, and patch-safe edit
 signals before planning is treated as credible.
+
+If the selected route depends on an external capability provider, also expect
+setup, health, permission-admission, and evidence-validation signals before a
+provider-backed run is treated as credible.
 
 ## 3. Initialize The Workspace
 
@@ -97,6 +101,14 @@ If you do not need a repo-local assistant surface yet, you can still run:
 
 ```bash
 boundline init
+```
+
+If your workspace needs one bounded external capability source, register it
+explicitly after init:
+
+```bash
+boundline provider add demo --workspace . --command python3 --arg scripts/provider.py
+boundline provider show --workspace . --json
 ```
 
 If you want a local Ollama route profile, start Ollama first, pull the models

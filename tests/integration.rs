@@ -136,6 +136,12 @@ mod framework_adapter_config_flow;
 #[path = "integration/framework_adapter_override_flow.rs"]
 mod framework_adapter_override_flow;
 
+#[path = "integration/capability_provider_activation_flow.rs"]
+mod capability_provider_activation_flow;
+
+#[path = "integration/capability_provider_execution_flow.rs"]
+mod capability_provider_execution_flow;
+
 #[path = "integration/cluster_bootstrap_flow.rs"]
 mod cluster_bootstrap_flow;
 

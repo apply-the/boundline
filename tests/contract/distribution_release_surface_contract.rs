@@ -20,7 +20,7 @@ fn release_surface_tracks_current_workspace_version_without_stale_status_heading
     assert!(changelog.contains(&changelog_heading));
     assert!(
         roadmap.contains(&format!(
-            "Delivered in {version}: local context substrate, fidelity tiers, omitted-context visibility, patch-safe edit guards, and non-memory snapshot cache boundary"
+            "Delivered in {version}: explicit capability-provider registration, fail-closed activation and permission admission, bounded execute-plus-evidence collection, and additive provider status or trace projections"
         ))
     );
     assert!(!roadmap.contains("## Current Status:"));

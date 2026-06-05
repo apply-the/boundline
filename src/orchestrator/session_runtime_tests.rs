@@ -514,7 +514,13 @@ fn context() -> TaskContext {
 
 fn save_local_routing(workspace: &Path, routing: RoutingConfig) {
     FileConfigStore::for_workspace(workspace)
-        .save_local(&ConfigFile { version: 1, routing, canon: None, adapter: None })
+        .save_local(&ConfigFile {
+            version: 1,
+            routing,
+            canon: None,
+            adapter: None,
+            capability_provider: None,
+        })
         .unwrap();
 }
 
@@ -3280,6 +3286,7 @@ fn plan_task_adopts_workspace_canon_governance_without_explicit_session_selectio
                 default_system_context: Some("existing".to_string()),
             }),
             adapter: None,
+            capability_provider: None,
         })
         .unwrap();
 
@@ -3407,6 +3414,7 @@ fn plan_task_blocks_nested_workspace_before_canon_targets_parent_git_root() {
                 default_system_context: Some("existing".to_string()),
             }),
             adapter: None,
+            capability_provider: None,
         })
         .unwrap();
 
@@ -3508,6 +3516,7 @@ fn plan_task_blocks_when_canon_is_selected_but_not_initialized() {
                     default_system_context: Some("existing".to_string()),
                 }),
                 adapter: None,
+                capability_provider: None,
             })
             .is_ok()
     );
@@ -6858,6 +6867,7 @@ fn planning_runtime_helpers_cover_governance_resolution_upstream_briefs_and_adap
             default_system_context: Some(super::SYSTEM_CONTEXT_EXISTING_TEXT.to_string()),
         }),
         adapter: None,
+        capability_provider: None,
     })?;
     let config_session = build_session(&workspace, decision_task(&workspace_ref, json!({})));
     assert_eq!(

@@ -51,6 +51,7 @@ fn local_adapter_round_trip_persists_top_level_adapter_block() -> Result<(), Box
         routing: RoutingConfig::default(),
         canon: None,
         adapter: Some(adapter.clone()),
+        capability_provider: None,
     })?;
 
     let loaded =

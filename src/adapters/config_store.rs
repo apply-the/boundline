@@ -4,7 +4,10 @@ use std::path::{Path, PathBuf};
 
 use thiserror::Error;
 
-use crate::domain::configuration::{ConfigFile, PersistedAdapterConfiguration, RoutingConfig};
+use crate::domain::configuration::{
+    ConfigFile, PersistedAdapterConfiguration, PersistedCapabilityProviderConfiguration,
+    RoutingConfig,
+};
 
 const GLOBAL_CONFIG_DIR_NAME: &str = "boundline";
 const GLOBAL_CONFIG_FILE_NAME: &str = "config.toml";
@@ -93,6 +96,17 @@ impl FileConfigStore {
     pub fn global_adapter() -> Result<Option<PersistedAdapterConfiguration>, ConfigStoreError> {
         Ok(Self::load_global()?.and_then(|cfg| cfg.adapter))
     }
+
+    pub fn local_capability_provider(
+        &self,
+    ) -> Result<Option<PersistedCapabilityProviderConfiguration>, ConfigStoreError> {
+        Ok(self.load_local()?.and_then(|cfg| cfg.capability_provider))
+    }
+
+    pub fn global_capability_provider()
+    -> Result<Option<PersistedCapabilityProviderConfiguration>, ConfigStoreError> {
+        Ok(Self::load_global()?.and_then(|cfg| cfg.capability_provider))
+    }
 }
 
 fn load_from_path(path: &Path) -> Result<Option<ConfigFile>, ConfigStoreError> {
@@ -159,7 +173,19 @@ mod tests {
     use uuid::Uuid;
 
     use super::{ConfigStoreError, FileConfigStore};
-    use crate::domain::configuration::{ConfigFile, ModelRoute, RoutingConfig, RuntimeKind};
+    use crate::domain::capability_provider::{
+        CapabilityProviderActivationState, CapabilityProviderDiscoveryState,
+        CapabilityProviderRegistration, CapabilityProviderRegistrationSource,
+        CommandProviderTransport, ProviderTransportDescriptor,
+    };
+    use crate::domain::configuration::{
+        ConfigFile, ModelRoute, PersistedAdapterConfiguration,
+        PersistedCapabilityProviderConfiguration, RoutingConfig, RuntimeKind,
+    };
+    use crate::domain::framework_adapter::{
+        AdapterConfigCompletenessState, AdapterDiscoveryState, AdapterRegistrationSource,
+        AdapterSelectionMode,
+    };
 
     struct EnvRestore<'a> {
         old_xdg: Option<OsString>,
@@ -259,6 +285,7 @@ mod tests {
             },
             canon: None,
             adapter: None,
+            capability_provider: None,
         };
 
         let error = store.save_local(&cfg).unwrap_err();
@@ -288,6 +315,38 @@ mod tests {
     }
 
     #[test]
+    fn global_provider_and_adapter_accessors_round_trip() {
+        let xdg_home =
+            std::env::temp_dir().join(format!("boundline-global-provider-{}", Uuid::new_v4()));
+        let home =
+            std::env::temp_dir().join(format!("boundline-global-provider-home-{}", Uuid::new_v4()));
+
+        with_config_env(Some(&xdg_home), Some(&home), || {
+            let config = ConfigFile {
+                version: 1,
+                routing: valid_config().routing,
+                canon: None,
+                adapter: Some(sample_adapter_configuration()),
+                capability_provider: Some(sample_capability_provider_configuration()),
+            };
+
+            let saved_path = FileConfigStore::save_global(&config)
+                .map_err(|error| error.to_string())
+                .expect("global config should save");
+            let adapter = FileConfigStore::global_adapter()
+                .map_err(|error| error.to_string())
+                .expect("global adapter should load");
+            let provider = FileConfigStore::global_capability_provider()
+                .map_err(|error| error.to_string())
+                .expect("global provider should load");
+
+            assert_eq!(saved_path, FileConfigStore::global_config_path());
+            assert_eq!(adapter, config.adapter);
+            assert_eq!(provider, config.capability_provider);
+        });
+    }
+
+    #[test]
     fn local_env_paths_resolve_from_workspace_root() {
         let workspace =
             std::env::temp_dir().join(format!("boundline-config-env-{}", Uuid::new_v4()));
@@ -313,6 +372,53 @@ mod tests {
         });
     }
 
+    fn sample_adapter_configuration() -> PersistedAdapterConfiguration {
+        PersistedAdapterConfiguration {
+            selection: crate::domain::configuration::AdapterSelectionRecord {
+                selection_mode: AdapterSelectionMode::KnownProfile,
+                adapter_id: "speckit".to_string(),
+                display_name: "Speckit".to_string(),
+                command: "boundline-adapter-speckit".to_string(),
+                args: Vec::new(),
+                registration_source: AdapterRegistrationSource::AdapterAdd,
+                discovery_state: AdapterDiscoveryState::ExplicitCommand,
+                compatibility_line: "framework-adapter-v1".to_string(),
+                updated_at: 1,
+            },
+            schema_fingerprint: "schema-v1".to_string(),
+            completeness_state: AdapterConfigCompletenessState::Complete,
+            interactive_resolution: false,
+            last_validated_at: Some(1),
+            value_count: 0,
+            values: Vec::new(),
+        }
+    }
+
+    fn sample_capability_provider_configuration() -> PersistedCapabilityProviderConfiguration {
+        PersistedCapabilityProviderConfiguration {
+            registrations: vec![CapabilityProviderRegistration {
+                provider_id: "demo-provider".to_string(),
+                display_name: "Demo Provider".to_string(),
+                transport: ProviderTransportDescriptor::Command(CommandProviderTransport {
+                    command_ref: "/bin/echo".to_string(),
+                    args: Vec::new(),
+                    working_directory_ref: None,
+                    environment_ref_names: Vec::new(),
+                }),
+                registration_source: CapabilityProviderRegistrationSource::OperatorCli,
+                discovery_state: CapabilityProviderDiscoveryState::Explicit,
+                activation_state: CapabilityProviderActivationState::Active,
+                config_refs: vec!["token=config/token".to_string()],
+                secret_handle_refs: vec!["provider-secret".to_string()],
+                setup_requirements: Vec::new(),
+                capability_ids: vec!["capability.demo".to_string()],
+                active_profile_id: None,
+            }],
+            active_provider_id: Some("demo-provider".to_string()),
+            last_validated_at: Some(1),
+        }
+    }
+
     #[test]
     fn invalid_global_config_reports_validation_error() {
         let xdg_home =
@@ -328,6 +434,7 @@ mod tests {
             },
             canon: None,
             adapter: None,
+            capability_provider: None,
         };
         fs::write(&path, toml::to_string_pretty(&cfg).unwrap()).unwrap();
 

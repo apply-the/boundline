@@ -1,7 +1,7 @@
 {
   "name": "boundline",
   "displayName": "Boundline Assistant Support for Codex",
-  "version": "0.71.0",
+  "version": "0.72.0",
   "description": "CLI-authoritative assistant support for bounded engineering work",
   "author": {
     "name": "Apply The",

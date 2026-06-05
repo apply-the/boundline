@@ -1,6 +1,8 @@
 //! Session-native persistence models, routing projections, and operator-facing
 //! view helpers.
 
+#[path = "session/capability_provider.rs"]
+pub mod capability_provider;
 #[path = "session/framework_adapter.rs"]
 pub mod framework_adapter;
 
@@ -36,6 +38,7 @@ use crate::domain::task_context::{
 };
 use crate::domain::trace::{HookEventDispatchRecord, current_timestamp_millis};
 use crate::domain::workflow::{ProjectScalePath, WorkflowProgressState};
+pub use capability_provider::CapabilityProviderExecutionRecord;
 pub use framework_adapter::{FrameworkAdapterStageFailureDetails, LifecycleStageExecutionRecord};
 
 const BOUNDLINE_STATE_ROOT: &str = ".boundline";
@@ -1215,6 +1218,8 @@ pub struct SessionStatusView {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub latest_framework_adapter_stage_failure: Option<FrameworkAdapterStageFailureDetails>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latest_capability_provider_execution: Option<CapabilityProviderExecutionRecord>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub latest_decision_status: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub latest_decision_target: Option<String>,
@@ -1407,6 +1412,7 @@ impl Default for SessionStatusView {
             latest_framework_adapter_stage_routing: None,
             latest_framework_adapter_hook_dispatch: None,
             latest_framework_adapter_stage_failure: None,
+            latest_capability_provider_execution: None,
             latest_decision_status: None,
             latest_decision_target: None,
             latest_changed_files: None,

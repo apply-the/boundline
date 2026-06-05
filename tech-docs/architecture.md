@@ -77,7 +77,7 @@ planning gates such as `goal_quality_state`, `plan_quality_state`,
 handoffs such as `phase_request`, `assistant_resume_command`, and
 `assistant_next_command`.
 
-The 0.71.0 line keeps plan quality as the first planning-readiness gate,
+The 0.72.0 line keeps plan quality as the first planning-readiness gate,
 follows it with backlog quality, keeps the read-only planning-analysis
 coherence pass, and now hardens large-codebase context admission. If the active
 plan lacks a credible validation strategy, if the Canon backlog packet is
@@ -88,6 +88,12 @@ omissions, unsafe oversized reads, or stale tracked cache, the runtime keeps
 planning non-terminal, emits one `phase_request` when recovery is possible, and
 preserves the blocked assessment in status, inspect, traces, and orchestration
 snapshots until the operator answers or regenerates Canon output.
+
+The same line also adds the first native external capability-provider protocol.
+Boundline now owns explicit provider registration, setup requirement
+projection, activation, health checks, permission admission, and accepted
+versus rejected evidence classification before any provider-backed result can
+influence delivery state.
 
 ## Host Surface Boundary
 

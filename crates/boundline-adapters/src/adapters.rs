@@ -4,6 +4,8 @@ pub mod agent;
 pub mod audit_store;
 #[path = "../../../src/adapters/auth_profile_store.rs"]
 pub mod auth_profile_store;
+#[path = "../../../src/adapters/capability_provider_runtime.rs"]
+pub mod capability_provider_runtime;
 #[path = "../../../src/adapters/checkpoint_store.rs"]
 pub mod checkpoint_store;
 #[path = "../../../src/adapters/cluster_store.rs"]

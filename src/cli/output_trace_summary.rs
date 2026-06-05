@@ -10,8 +10,9 @@ use super::routing::{
     route_config_projection_for_trace_summary, trace_route_owner,
 };
 use super::runtime::{
-    append_reasoning_profile_lines, framework_adapter_hook_dispatch_lines,
-    framework_adapter_stage_failure_lines, framework_adapter_stage_routing_lines,
+    append_reasoning_profile_lines, capability_provider_trace_lines,
+    framework_adapter_hook_dispatch_lines, framework_adapter_stage_failure_lines,
+    framework_adapter_stage_routing_lines,
 };
 use super::support::{push_governance_display_lines, render_guidance_projection_lines};
 use super::{TraceEventType, TraceSummaryView, step_kind_text, step_status_text, task_status_text};
@@ -42,6 +43,7 @@ pub fn render_trace_summary_brief(
     lines.extend(framework_adapter_stage_failure_lines(
         summary.framework_adapter_stage_failure.as_ref(),
     ));
+    lines.extend(capability_provider_trace_lines(summary.capability_provider_trace.as_ref()));
     lines.extend(framework_adapter_stage_routing_lines(
         summary.framework_adapter_stage_routing.as_ref(),
     ));
@@ -554,6 +556,7 @@ pub fn render_trace_summary(
     lines.extend(framework_adapter_stage_failure_lines(
         summary.framework_adapter_stage_failure.as_ref(),
     ));
+    lines.extend(capability_provider_trace_lines(summary.capability_provider_trace.as_ref()));
     lines.extend(framework_adapter_stage_routing_lines(
         summary.framework_adapter_stage_routing.as_ref(),
     ));

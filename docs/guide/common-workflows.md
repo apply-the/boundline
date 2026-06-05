@@ -2,12 +2,17 @@
 
 Use this page while operating the main session-native Boundline loop.
 
-Boundline 0.71.0 ships the current planning-readiness chain. When the plan
+Boundline 0.72.0 ships the current planning-readiness chain. When the plan
 needs a missing validation strategy, when Canon only produced a closure-limited
 backlog packet, when the full packet still lacks an execution handoff, or when
 planning analysis finds a contradiction between the selected slice, validation
 anchors, and execution inputs, the runtime stops on one explicit planning gate
 and keeps the same session alive for recovery.
+
+The same line also lets one workspace register one explicit active capability
+provider at a time. Provider-backed execution stays bounded by setup
+requirements, health checks, permission admission, prepare-time context checks,
+and post-execution evidence validation.
 
 ## The Standard Loop
 
@@ -19,6 +24,7 @@ Two optional preflight steps can happen before the loop:
 
 - `boundline models auth ...` when the selected provider route needs a stored credential
 - `boundline probe` when you want a read-only readiness answer
+- `boundline provider health ...` when you want a read-only provider readiness answer
 
 ## Goal
 

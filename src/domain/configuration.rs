@@ -1,5 +1,7 @@
 //! Routing, runtime-capability, and domain-template configuration models.
 
+#[path = "configuration/capability_provider.rs"]
+pub mod capability_provider;
 #[path = "configuration/framework_adapter.rs"]
 pub mod framework_adapter;
 
@@ -17,6 +19,7 @@ use crate::domain::domain_templates::{
     DomainFamily, DomainTemplateSettings, ExternalContextBinding,
 };
 use crate::domain::governance::CanonModeSelectionPreference;
+pub use capability_provider::PersistedCapabilityProviderConfiguration;
 pub use framework_adapter::{
     AdapterConfigValueRecord, AdapterSelectionRecord, KnownAdapterProfileDefinition,
     KnownAdapterProfileFieldDefault, PersistedAdapterConfiguration, ResolvedAdapterConfigSet,
@@ -776,6 +779,8 @@ pub struct ConfigFile {
     pub canon: Option<CanonPreferences>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub adapter: Option<PersistedAdapterConfiguration>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capability_provider: Option<PersistedCapabilityProviderConfiguration>,
 }
 
 impl Default for ConfigFile {
@@ -785,6 +790,7 @@ impl Default for ConfigFile {
             routing: RoutingConfig::default(),
             canon: None,
             adapter: None,
+            capability_provider: None,
         }
     }
 }

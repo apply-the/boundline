@@ -50,6 +50,16 @@ boundline adapter show --workspace <workspace> --json
 boundline adapter remove --workspace <workspace>
 ```
 
+### Capability Providers
+
+```bash
+boundline provider add <provider-id> --workspace <workspace> --command <program> [--arg <arg> ...]
+boundline provider add <provider-id> --workspace <workspace> --endpoint <url>
+boundline provider show --workspace <workspace> --json
+boundline provider health --workspace <workspace>
+boundline provider remove <provider-id> --workspace <workspace>
+```
+
 ### Workflows
 
 ```bash
@@ -131,6 +141,12 @@ Important trace and status fields can include:
 - `framework_adapter_execution_source`
 - `framework_adapter_supported_transports`
 - `framework_adapter_config_state`
+- `capability_provider_status`
+- `capability_provider_id`
+- `capability_provider_activation_state`
+- `capability_provider_capability_ids`
+- `capability_provider_setup_requirements`
+- `capability_provider_summary`
 - `loaded_packs`
 - `skipped_packs`
 - `catalog_validation_findings`

@@ -13,6 +13,10 @@ The goal of Boundline is to transform non-deterministic AI iterations into predi
   tiers, inclusion modes, omission findings, repository-map readiness,
   digest-backed compaction, patch-safe edit guards, and freshness-bound derived
   snapshot-cache state instead of silently widening context reads.
+- `071` - Capability Provider Protocol: shipped the first native provider
+  contract in Boundline `0.72.0`. Operators now register providers
+  explicitly, satisfy setup requirements before activation, and keep provider
+  execution bounded by health, permission admission, and evidence validation.
 - `069` - Plan Analysis Contract: shipped the read-only planning-analysis gate
   in Boundline `0.70.0`. After plan quality and backlog quality are ready, the
   runtime now validates cross-artifact coherence across goal outcomes,
@@ -32,7 +36,6 @@ The goal of Boundline is to transform non-deterministic AI iterations into predi
 - **Sandboxed Execution & Secret Inheritance**: Local safety boundaries, path/network policies, and read-only/dry-run mutation modes.
 
 ### Provider Ecosystem
-- **External Capability Provider Protocol**: A native provider contract replacing MCP, defining explicit permissions, health checks, and evidence collection.
 - **Open Model Provider Support**: Treating Qwen, Gemma, and Llama models as open-weight families exposed through secure provider adapters.
 - **AI Gateway & Inference Economics**: Managing route health, local vs remote transmission decisions, route budgets, and latency telemetry.
 

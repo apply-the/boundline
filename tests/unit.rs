@@ -162,3 +162,12 @@ mod guidance_runtime;
 
 #[path = "unit/guidance_catalog_runtime.rs"]
 mod guidance_catalog_runtime;
+
+#[path = "unit/capability_provider_model.rs"]
+mod capability_provider_model;
+
+#[path = "unit/capability_provider_transport_runtime.rs"]
+mod capability_provider_transport_runtime;
+
+#[path = "unit/capability_provider_orchestrator.rs"]
+mod capability_provider_orchestrator;

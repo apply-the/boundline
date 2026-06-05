@@ -340,7 +340,7 @@ fn cross_repo_speckit_binary_smoke_bridges_real_specify_plan_and_completes_run()
     assert!(plan_text.contains("framework_adapter_workflow_id: speckit-planning"), "{plan_text}");
     assert!(
         plan_text.contains(
-            "framework_adapter_produced_artifacts: specs/070-large-codebase-context-substrate/spec.md, specs/070-large-codebase-context-substrate/plan.md, specs/070-large-codebase-context-substrate/tasks.md, .specify/workflows/speckit/planning.yml"
+            "framework_adapter_produced_artifacts: specs/071-capability-provider-protocol/spec.md, specs/071-capability-provider-protocol/plan.md, specs/071-capability-provider-protocol/tasks.md, .specify/workflows/speckit/planning.yml"
         ),
         "{plan_text}"
     );

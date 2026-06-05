@@ -261,7 +261,7 @@ It should not enter Boundline core and should not be confused with `12-recursive
 
 This item should depend on:
 
-- `07-external-capability-provider-protocol.md`
+- `specs/071-capability-provider-protocol/spec.md`
 - `08-evals-and-runtime-observability.md`
 - `14-ai-gateway-and-inference-economics.md`
 - `12-recursive-stage-refinement-profiles.md`

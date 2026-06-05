@@ -1,5 +1,7 @@
 //! Persisted execution traces and flattened trace-summary projections.
 
+#[path = "trace/capability_provider.rs"]
+pub mod capability_provider;
 #[path = "trace/framework_adapter.rs"]
 pub mod framework_adapter;
 
@@ -22,6 +24,7 @@ use crate::domain::session::{
 };
 use crate::domain::step::{StepKind, StepStatus};
 use crate::domain::task::{TaskStatus, TerminalReason};
+pub use capability_provider::CapabilityProviderTraceRecord;
 pub use framework_adapter::HookEventDispatchRecord;
 
 /// Returns the current UNIX timestamp in milliseconds.
@@ -351,6 +354,8 @@ pub struct TraceSummaryView {
     pub framework_adapter_hook_dispatch: Option<HookEventDispatchRecord>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub framework_adapter_stage_failure: Option<FrameworkAdapterStageFailureDetails>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capability_provider_trace: Option<CapabilityProviderTraceRecord>,
     pub terminal_status: TaskStatus,
     pub terminal_reason: TerminalReason,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -418,6 +423,7 @@ impl Default for TraceSummaryView {
             framework_adapter_stage_routing: None,
             framework_adapter_hook_dispatch: None,
             framework_adapter_stage_failure: None,
+            capability_provider_trace: None,
             terminal_status: TaskStatus::Planned,
             terminal_reason: TerminalReason::new(TerminalCondition::GoalSatisfied, "", None),
             duration: None,

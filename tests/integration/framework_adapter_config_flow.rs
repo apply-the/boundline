@@ -103,7 +103,7 @@ fn known_speckit_profile_activates_with_prefilled_defaults_and_runs_plan()
     assert!(plan_text.contains("framework_adapter_stage_status: succeeded"), "{plan_text}");
     assert!(
         plan_text.contains(
-            "framework_adapter_produced_artifacts: specs/070-large-codebase-context-substrate/spec.md, specs/070-large-codebase-context-substrate/plan.md, specs/070-large-codebase-context-substrate/tasks.md, .specify/workflows/speckit/planning.yml"
+            "framework_adapter_produced_artifacts: specs/071-capability-provider-protocol/spec.md, specs/071-capability-provider-protocol/plan.md, specs/071-capability-provider-protocol/tasks.md, .specify/workflows/speckit/planning.yml"
         ),
         "{plan_text}"
     );

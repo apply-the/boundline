@@ -123,6 +123,7 @@ fn stale_plan_quality_workspace(prefix: &str) -> PathBuf {
             },
             canon: None,
             adapter: None,
+            capability_provider: None,
         })
         .unwrap();
     workspace

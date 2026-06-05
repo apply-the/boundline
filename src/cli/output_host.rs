@@ -7,7 +7,7 @@ use crate::cli::{CommandExitStatus, DeveloperCommand};
 use crate::domain::session::SessionStatusView;
 use crate::domain::trace::TraceSummaryView;
 
-use super::runtime::framework_adapter_output_projection;
+use super::runtime::{capability_provider_output_projection, framework_adapter_output_projection};
 
 /// Exit-code families used by host-facing command wrappers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -73,6 +73,18 @@ pub struct HostCommandEnvelope {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub framework_adapter_blocked_reason: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capability_provider_status: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capability_provider_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capability_provider_activation_state: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capability_provider_capability_ids: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capability_provider_setup_requirements: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capability_provider_summary: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub trace_summary: Option<TraceSummaryView>,
 }
 
@@ -102,6 +114,8 @@ pub fn render_host_command_json(
 ) -> String {
     let adapter_projection =
         session_status.map(|view| framework_adapter_output_projection(&view.workspace_ref));
+    let provider_projection =
+        session_status.map(|view| capability_provider_output_projection(&view.workspace_ref));
     match serde_json::to_string_pretty(&HostCommandEnvelope {
         command_name: command_name.to_string(),
         exit_status: command_exit_status_label(exit_status).to_string(),
@@ -144,6 +158,24 @@ pub fn render_host_command_json(
         framework_adapter_blocked_reason: adapter_projection
             .as_ref()
             .and_then(|projection| projection.blocked_reason.clone()),
+        capability_provider_status: provider_projection
+            .as_ref()
+            .map(|projection| projection.status.clone()),
+        capability_provider_id: provider_projection
+            .as_ref()
+            .and_then(|projection| projection.provider_id.clone()),
+        capability_provider_activation_state: provider_projection
+            .as_ref()
+            .and_then(|projection| projection.activation_state.clone()),
+        capability_provider_capability_ids: provider_projection
+            .as_ref()
+            .and_then(|projection| projection.capability_ids.clone()),
+        capability_provider_setup_requirements: provider_projection
+            .as_ref()
+            .and_then(|projection| projection.setup_requirements.clone()),
+        capability_provider_summary: provider_projection
+            .as_ref()
+            .and_then(|projection| projection.summary.clone()),
         trace_summary: trace_summary.cloned(),
     }) {
         Ok(rendered) => rendered,
@@ -203,6 +235,7 @@ pub fn command_name(command: &DeveloperCommand) -> &'static str {
         DeveloperCommand::Update { .. } => "update",
         DeveloperCommand::Config { .. } => "config",
         DeveloperCommand::Adapter { .. } => "adapter",
+        DeveloperCommand::Provider { .. } => "provider",
         DeveloperCommand::Cluster { .. } => "cluster",
         DeveloperCommand::Models { .. } => "models",
     }
@@ -236,7 +269,10 @@ mod tests {
         command_name, push_output_section, render_host_command_json, render_orchestrate_event_json,
         render_orchestrate_stream_json, stdout_presentation,
     };
-    use crate::cli::IndexSubcommand;
+    use crate::cli::{
+        AdapterSubcommand, ClusterSubcommand, ConfigSubcommand, IndexSubcommand,
+        ModelsAuthSubcommand, ModelsSubcommand, ProviderSubcommand,
+    };
     use crate::domain::configuration::InitConfigScope;
 
     fn minimal_event(kind: &str, msg: &str) -> OrchestrateEventEnvelope {
@@ -346,6 +382,65 @@ mod tests {
     fn command_name_returns_index_for_index_variant() {
         let cmd = DeveloperCommand::Index { command: IndexSubcommand::Status { workspace: None } };
         assert_eq!(command_name(&cmd), "index");
+    }
+
+    #[test]
+    fn command_name_covers_recent_command_variants() {
+        let cases = [
+            (
+                DeveloperCommand::Update {
+                    workspace: ".".into(),
+                    target: Vec::new(),
+                    ide: Vec::new(),
+                    auto_approve: None,
+                    template: None,
+                    diff: false,
+                    apply: false,
+                    adopt: false,
+                    prune: false,
+                    status: false,
+                    force: false,
+                },
+                "update",
+            ),
+            (
+                DeveloperCommand::Config {
+                    command: ConfigSubcommand::Show {
+                        workspace: Some(".".into()),
+                        cluster: None,
+                        scope: None,
+                    },
+                },
+                "config",
+            ),
+            (
+                DeveloperCommand::Adapter {
+                    command: AdapterSubcommand::Show { workspace: Some(".".into()) },
+                },
+                "adapter",
+            ),
+            (
+                DeveloperCommand::Provider {
+                    command: ProviderSubcommand::Show { workspace: Some(".".into()) },
+                },
+                "provider",
+            ),
+            (
+                DeveloperCommand::Cluster {
+                    command: ClusterSubcommand::Status { workspace: ".".into() },
+                },
+                "cluster",
+            ),
+            (
+                DeveloperCommand::Models {
+                    command: ModelsSubcommand::Auth { command: ModelsAuthSubcommand::Status },
+                },
+                "models",
+            ),
+        ];
+        for (command, expected) in cases {
+            assert_eq!(command_name(&command), expected);
+        }
     }
 
     #[test]
