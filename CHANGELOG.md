@@ -46,9 +46,31 @@ Highlights:
 
 Release metadata note:
 
-- The current Boundline release line is `0.71.0`; published package metadata,
+- The current Boundline release line is `0.72.0`; published package metadata,
   distribution metadata, assistant plugin manifests, and docs are aligned to
   that version while Canon compatibility remains `0.67.0`.
+
+## [0.72.0] - 2026-06-05
+
+Delivered specs:
+
+- `071` - Capability Provider Protocol
+
+Highlights:
+
+- Added the first Boundline-owned external capability-provider protocol with
+  explicit operator registration, setup-requirement projection, activation, and
+  readiness dry-runs before a provider may be trusted at runtime.
+- Added bounded `capabilities`, `health`, `prepare`, `execute`, and
+  `collect_evidence` transport flows over command or HTTP providers while
+  keeping provider output proposal-only until Boundline validates the result.
+- Enforced fail-closed permission admission, lifecycle-phase support,
+  metadata-conflict handling, and accepted-versus-rejected evidence tracking so
+  provider-backed execution cannot silently mutate Boundline-owned state.
+- Surfaced additive provider identity, activation state, capability IDs, setup
+  requirements, failure class, and evidence projections through status,
+  inspect, host JSON, traces, assistant assets, and release-aligned docs for
+  Boundline `0.72.0` and Canon `0.67.0`.
 
 ## [0.71.0] - 2026-06-05
 

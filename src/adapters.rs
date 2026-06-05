@@ -17,6 +17,7 @@
 //! | [`auth_profile_store`] | Provider credential storage |
 //! | [`governance_runtime`] | Canon CLI and local governance runtime adapters |
 //! | [`provider_runtime`] | HTTP adapters for OpenAI, Anthropic, Copilot, etc. |
+//! | [`capability_provider_runtime`] | Command/HTTP capability-provider transport helpers |
 //! | [`agent`] | Step-agent adapters plus framework-adapter subprocess hosts |
 //! | [`tool`] | `ToolAdapter` trait and function-based adapter |
 //! | [`env_layer`] | Environment variable constants and availability checks |
@@ -25,6 +26,7 @@
 pub mod audit_store;
 pub mod agent;
 pub mod auth_profile_store;
+pub mod capability_provider_runtime;
 pub mod checkpoint_store;
 pub mod cluster_store;
 pub mod config_store;

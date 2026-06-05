@@ -72,9 +72,7 @@ fn write_canon_capture_stub(
     let script_path = workspace.join(script_name);
     fs::write(
         &script_path,
-        format!(
-            "#!/bin/sh\nrequest=$(cat)\nprintf '%s' \"$request\" > './{capture_file_name}'\nprintf '%s' '{stdout_json}'\n"
-        ),
+        format!("#!/bin/sh\ncat > './{capture_file_name}'\nprintf '%s' '{stdout_json}'\n"),
     )?;
     make_executable(&script_path)?;
     Ok(script_path)

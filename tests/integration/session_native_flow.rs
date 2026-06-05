@@ -254,6 +254,7 @@ fn blocked_native_run_surfaces_delegation_across_status_and_inspect() {
         },
         canon: None,
         adapter: None,
+        capability_provider: None,
     };
     config.routing.slot_effort_policies.insert(
         RouteSlot::Implementation,

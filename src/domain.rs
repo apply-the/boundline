@@ -18,6 +18,7 @@
 //! | [`audit`] | Audit entries, actors, algorithms, outcomes |
 //! | [`flow`] | Built-in flow definitions and step metadata |
 //! | [`framework_adapter`] | External adapter selection, capability, and trace vocabulary |
+//! | [`capability_provider`] | External capability-provider protocol vocabulary |
 //! | [`review`] | Council profiles, vote rules, stop semantics |
 //! | [`reasoning`] | Reasoning profiles, debate, confidence levels |
 //! | [`cluster`] | Multi-workspace clusters and delivery stories |
@@ -30,6 +31,7 @@
 pub mod audit;
 pub mod auth_profile;
 pub mod brief;
+pub mod capability_provider;
 pub mod checkpoint;
 pub mod cluster;
 pub mod configuration;

@@ -12,9 +12,9 @@ use super::routing::{
     session_route_owner,
 };
 use super::runtime::{
-    append_reasoning_profile_lines, framework_adapter_hook_dispatch_lines,
-    framework_adapter_stage_failure_lines, framework_adapter_stage_routing_lines,
-    framework_adapter_status_lines,
+    append_reasoning_profile_lines, capability_provider_status_lines,
+    framework_adapter_hook_dispatch_lines, framework_adapter_stage_failure_lines,
+    framework_adapter_stage_routing_lines, framework_adapter_status_lines,
 };
 use super::support::push_governance_display_lines;
 use super::{SessionStatusView, session_status_text};
@@ -45,6 +45,10 @@ pub fn render_session_status_brief(view: &SessionStatusView) -> String {
 
     lines.extend(render_session_projection_prefix(view).lines().map(str::to_string));
     lines.extend(framework_adapter_status_lines(&view.workspace_ref));
+    lines.extend(capability_provider_status_lines(
+        &view.workspace_ref,
+        view.latest_capability_provider_execution.as_ref(),
+    ));
     lines.extend(framework_adapter_stage_routing_lines(
         view.latest_framework_adapter_stage_routing.as_ref(),
     ));
@@ -650,6 +654,10 @@ pub fn render_session_status(view: &SessionStatusView) -> String {
     lines.extend(render_session_projection_prefix(view).lines().map(str::to_string));
     lines.push(format!("route_owner: {}", session_route_owner(view)));
     lines.extend(framework_adapter_status_lines(&view.workspace_ref));
+    lines.extend(capability_provider_status_lines(
+        &view.workspace_ref,
+        view.latest_capability_provider_execution.as_ref(),
+    ));
     lines.extend(framework_adapter_stage_routing_lines(
         view.latest_framework_adapter_stage_routing.as_ref(),
     ));

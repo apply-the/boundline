@@ -1,7 +1,8 @@
 # Configuration Reference
 
 Configuration controls how Boundline resolves routing, assistant bindings,
-Canon defaults, domain defaults, and other explicit runtime policy.
+Canon defaults, provider registrations, domain defaults, and other explicit
+runtime policy.
 
 Configuration is not the same thing as session state, traces, or provider auth.
 
@@ -43,6 +44,7 @@ Workspace and global config can own:
 - runtime capability profiles
 - slot effort policies
 - Canon preferences
+- capability-provider registrations and active selection metadata
 - domain template settings
 - project memory roots
 - workflow registry references
@@ -84,6 +86,24 @@ boundline models auth status
 - In the current public slice, `login` supports `github-copilot`.
 
 Treat these profiles as operator credentials, not repository configuration.
+
+## Capability Provider Configuration
+
+Capability-provider registrations are workspace-visible configuration, but the
+runtime still owns activation and validation outcomes.
+
+Use the CLI surface instead of editing raw keys:
+
+```bash
+boundline provider add demo --workspace <workspace> --command python3 --arg scripts/provider.py
+boundline provider show --workspace <workspace> --json
+boundline provider remove demo --workspace <workspace>
+```
+
+Configuration stores provider descriptors, config-ref wiring, secret-handle
+refs, setup requirements, and the currently selected provider ID. Readiness,
+validation disposition, accepted evidence, and failure class remain runtime
+state rather than config-authored truth.
 
 ## Assistant Setup Versus Routing
 

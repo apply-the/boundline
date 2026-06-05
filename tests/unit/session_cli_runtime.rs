@@ -402,7 +402,13 @@ fn build_goal_captured_session(workspace: &Path) -> ActiveSessionRecord {
 
 fn save_local_routing(workspace: &Path, routing: RoutingConfig) {
     FileConfigStore::for_workspace(workspace)
-        .save_local(&ConfigFile { version: 1, routing, canon: None, adapter: None })
+        .save_local(&ConfigFile {
+            version: 1,
+            routing,
+            canon: None,
+            adapter: None,
+            capability_provider: None,
+        })
         .unwrap();
 }
 

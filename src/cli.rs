@@ -19,7 +19,7 @@ use crate::domain::trace::current_timestamp_millis;
 
 use super::{
     adapter, assistant_assets, checkpoint, cluster, config, diagnostics, govern, index, init,
-    inspect, models_auth, orchestrate, output, probe, run, session, workflow,
+    inspect, models_auth, orchestrate, output, probe, provider, run, session, workflow,
     workspace as cli_workspace,
 };
 use init::OllamaProfile;
@@ -75,6 +75,7 @@ pub enum CommandName {
     Assistant,
     Config,
     Adapter,
+    Provider,
     Cluster,
     Models,
 }
@@ -104,6 +105,7 @@ impl CommandName {
             Self::Assistant => "assistant",
             Self::Config => "config",
             Self::Adapter => "adapter",
+            Self::Provider => "provider",
             Self::Cluster => "cluster",
             Self::Models => "models",
         }
@@ -471,6 +473,10 @@ pub enum DeveloperCommand {
         #[command(subcommand)]
         command: AdapterSubcommand,
     },
+    Provider {
+        #[command(subcommand)]
+        command: ProviderSubcommand,
+    },
     Cluster {
         #[command(subcommand)]
         command: ClusterSubcommand,
@@ -824,6 +830,47 @@ pub enum AdapterSubcommand {
     },
 }
 
+/// Capability-provider registration and inspection subcommands.
+#[derive(Debug, Subcommand)]
+pub enum ProviderSubcommand {
+    Add {
+        provider_id: String,
+        #[arg(long)]
+        display_name: Option<String>,
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        #[arg(long)]
+        command: Option<String>,
+        #[arg(long)]
+        endpoint: Option<String>,
+        #[arg(long = "arg", allow_hyphen_values = true)]
+        arg: Vec<String>,
+        #[arg(long = "config-ref")]
+        config_ref: Vec<String>,
+        #[arg(long = "secret-handle")]
+        secret_handle: Vec<String>,
+        #[arg(long = "require-config")]
+        require_config: Vec<String>,
+        #[arg(long = "require-secret")]
+        require_secret: Vec<String>,
+    },
+    Show {
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+    },
+    Remove {
+        provider_id: String,
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+    },
+    Health {
+        #[arg(long)]
+        provider_id: Option<String>,
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+    },
+}
+
 /// Model provider authentication and status subcommands.
 #[derive(Debug, Subcommand)]
 pub enum ModelsSubcommand {
@@ -878,6 +925,7 @@ impl DeveloperCommand {
             Self::Update { .. } => CommandName::Update,
             Self::Config { .. } => CommandName::Config,
             Self::Adapter { .. } => CommandName::Adapter,
+            Self::Provider { .. } => CommandName::Provider,
             Self::Cluster { .. } => CommandName::Cluster,
             Self::Models { .. } => CommandName::Models,
         }
@@ -1310,6 +1358,25 @@ impl DeveloperCommandSession {
                 exit_status: None,
                 trace_location: None,
             },
+            DeveloperCommand::Provider { command } => Self {
+                command_name: CommandName::Provider,
+                workspace_ref: match command {
+                    ProviderSubcommand::Add { workspace, .. }
+                    | ProviderSubcommand::Show { workspace }
+                    | ProviderSubcommand::Remove { workspace, .. }
+                    | ProviderSubcommand::Health { workspace, .. } => {
+                        workspace.as_ref().map(|path| path.to_string_lossy().into_owned())
+                    }
+                },
+                requires_workspace_ref: false,
+                install_check: false,
+                goal: None,
+                trace_ref: None,
+                started_at: current_timestamp_millis(),
+                completed_at: None,
+                exit_status: None,
+                trace_location: None,
+            },
             DeveloperCommand::Cluster { command } => Self {
                 command_name: CommandName::Cluster,
                 workspace_ref: match command {
@@ -1386,6 +1453,7 @@ impl DeveloperCommandSession {
             | CommandName::Assistant
             | CommandName::Config
             | CommandName::Adapter
+            | CommandName::Provider
             | CommandName::Cluster
             | CommandName::Models
             | CommandName::Probe => {}
@@ -1819,6 +1887,9 @@ fn command_environment_workspace(command: &DeveloperCommand) -> Option<PathBuf> 
         }
         DeveloperCommand::Config { command } => command_environment_workspace_for_config(command),
         DeveloperCommand::Adapter { command } => command_environment_workspace_for_adapter(command),
+        DeveloperCommand::Provider { command } => {
+            command_environment_workspace_for_provider(command)
+        }
         DeveloperCommand::Cluster { command } => cluster_command_environment_workspace(command),
         DeveloperCommand::Assistant { .. } => None,
         DeveloperCommand::Models { .. } => None,
@@ -1932,6 +2003,17 @@ fn command_environment_workspace_for_adapter(command: &AdapterSubcommand) -> Opt
     }
 }
 
+fn command_environment_workspace_for_provider(command: &ProviderSubcommand) -> Option<PathBuf> {
+    match command {
+        ProviderSubcommand::Add { workspace, .. }
+        | ProviderSubcommand::Show { workspace }
+        | ProviderSubcommand::Remove { workspace, .. }
+        | ProviderSubcommand::Health { workspace, .. } => {
+            resolve_command_workspace(workspace.as_deref())
+        }
+    }
+}
+
 fn resolve_command_workspace(workspace: Option<&Path>) -> Option<PathBuf> {
     cli_workspace::resolve_workspace(workspace).ok()
 }
@@ -1969,6 +2051,7 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
         DeveloperCommand::Update { .. } => dispatch_update_command(command),
         DeveloperCommand::Config { command } => dispatch_config_command(command),
         DeveloperCommand::Adapter { command } => dispatch_adapter_command(command),
+        DeveloperCommand::Provider { command } => dispatch_provider_command(command),
         DeveloperCommand::Cluster { command } => dispatch_cluster_command(command),
         DeveloperCommand::Probe { workspace } => dispatch_probe_command(workspace.as_deref()),
         DeveloperCommand::Models { command } => dispatch_models_command(command),
@@ -2807,6 +2890,52 @@ fn dispatch_adapter_command(command: &AdapterSubcommand) -> DispatchOutcome {
     DispatchOutcome::text(report.exit_status, report.terminal_output, None)
 }
 
+fn dispatch_provider_command(command: &ProviderSubcommand) -> DispatchOutcome {
+    let report = match command {
+        ProviderSubcommand::Add {
+            provider_id,
+            display_name,
+            workspace,
+            command,
+            endpoint,
+            arg,
+            config_ref,
+            secret_handle,
+            require_config,
+            require_secret,
+        } => provider::execute_add(provider::AddProviderRequest {
+            provider_id,
+            display_name: display_name.as_deref(),
+            workspace: workspace.as_deref(),
+            command: command.as_deref(),
+            endpoint: endpoint.as_deref(),
+            arg,
+            config_ref,
+            secret_handle,
+            require_config,
+            require_secret,
+        }),
+        ProviderSubcommand::Show { workspace } => {
+            provider::execute_show(provider::ShowProviderRequest {
+                workspace: workspace.as_deref(),
+            })
+        }
+        ProviderSubcommand::Remove { provider_id, workspace } => {
+            provider::execute_remove(provider::RemoveProviderRequest {
+                provider_id,
+                workspace: workspace.as_deref(),
+            })
+        }
+        ProviderSubcommand::Health { provider_id, workspace } => {
+            provider::execute_health(provider::HealthProviderRequest {
+                provider_id: provider_id.as_deref(),
+                workspace: workspace.as_deref(),
+            })
+        }
+    };
+    DispatchOutcome::text(report.exit_status, report.terminal_output, None)
+}
+
 fn dispatch_cluster_command(command: &ClusterSubcommand) -> DispatchOutcome {
     let result = match command {
         ClusterSubcommand::Init { workspace, cluster_id, member } => {
@@ -2947,7 +3076,9 @@ mod tests {
         AdapterSubcommand, AssistantSubcommand, CheckpointSubcommand, Cli, ClusterSubcommand,
         CommandExitStatus, CommandName, ConfigSubcommand, DeveloperCommand,
         DeveloperCommandSession, IndexSubcommand, ModelsAuthSubcommand, ModelsSubcommand,
-        SessionSubcommand, WorkflowSubcommand, dispatch, dispatch_serialized_index_report,
+        ProviderSubcommand, SessionSubcommand, WorkflowSubcommand,
+        command_environment_workspace_for_provider, dispatch, dispatch_provider_command,
+        dispatch_serialized_index_report,
     };
     use crate::adapters::config_store::FileConfigStore;
     use crate::adapters::session_store::{FileSessionStore, SessionStore};
@@ -3052,6 +3183,139 @@ fn red_to_green_addition() {
             }
             other => panic!("expected update command, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn provider_command_parsing_and_dispatch_cover_workspace_resolution_paths() {
+        let cli = Cli::try_parse_from([
+            "boundline",
+            "provider",
+            "add",
+            "demo-provider",
+            "--workspace",
+            ".",
+            "--command",
+            "/bin/echo",
+        ])
+        .unwrap();
+
+        match cli.command {
+            Some(DeveloperCommand::Provider { command }) => {
+                assert!(
+                    command_environment_workspace_for_provider(&command)
+                        .is_some_and(|workspace| workspace.is_absolute())
+                );
+            }
+            other => panic!("expected provider command, got {other:?}"),
+        }
+
+        let dispatched = dispatch_provider_command(&ProviderSubcommand::Show { workspace: None });
+        assert_eq!(dispatched.exit_status, CommandExitStatus::NonSuccess);
+        assert!(dispatched.output.contains("provider_status: blocked"));
+    }
+
+    #[test]
+    fn provider_subcommands_and_compact_output_cover_remaining_cli_branches() -> Result<(), String>
+    {
+        let workspace = temp_workspace("boundline-cli-provider-subcommands");
+        let workspace_text = workspace.to_string_lossy().into_owned();
+
+        let add = Cli::try_parse_from([
+            "boundline",
+            "provider",
+            "add",
+            "demo-provider",
+            "--workspace",
+            &workspace_text,
+            "--endpoint",
+            "http://127.0.0.1:9/provider",
+        ])
+        .map_err(|error| error.to_string())?;
+        let add_command = add.command.ok_or_else(|| "expected add command".to_string())?;
+        let add_session = DeveloperCommandSession::from_command(&add_command);
+        if add_session.command_name != CommandName::Provider
+            || add_session.workspace_ref.as_deref() != Some(workspace_text.as_str())
+        {
+            return Err("provider add session projection should preserve workspace".to_string());
+        }
+        if CommandName::Provider.to_string() != "provider" {
+            return Err("provider command name should render as provider".to_string());
+        }
+
+        let show_command =
+            Cli::try_parse_from(["boundline", "provider", "show", "--workspace", &workspace_text])
+                .map_err(|error| error.to_string())?
+                .command
+                .ok_or_else(|| "expected show command".to_string())?;
+        let remove_command = Cli::try_parse_from([
+            "boundline",
+            "provider",
+            "remove",
+            "demo-provider",
+            "--workspace",
+            &workspace_text,
+        ])
+        .map_err(|error| error.to_string())?
+        .command
+        .ok_or_else(|| "expected remove command".to_string())?;
+        let health_command = Cli::try_parse_from([
+            "boundline",
+            "provider",
+            "health",
+            "--provider-id",
+            "demo-provider",
+            "--workspace",
+            &workspace_text,
+        ])
+        .map_err(|error| error.to_string())?
+        .command
+        .ok_or_else(|| "expected health command".to_string())?;
+
+        for command in [&show_command, &remove_command, &health_command] {
+            let session = DeveloperCommandSession::from_command(command);
+            if session.workspace_ref.as_deref() != Some(workspace_text.as_str()) {
+                return Err("provider subcommand session should preserve workspace".to_string());
+            }
+        }
+
+        let health_subcommand = match &health_command {
+            DeveloperCommand::Provider { command } => command,
+            _ => return Err("expected provider health subcommand".to_string()),
+        };
+        let resolved_provider_workspace =
+            command_environment_workspace_for_provider(health_subcommand).ok_or_else(|| {
+                "provider health should resolve command environment workspace".to_string()
+            })?;
+        if !resolved_provider_workspace.is_absolute() {
+            return Err("provider workspace resolution should produce an absolute path".to_string());
+        }
+        if dispatch(&add_command).exit_status != CommandExitStatus::NonSuccess {
+            return Err("provider add dispatch should surface endpoint failure".to_string());
+        }
+        for command in [&show_command, &remove_command, &health_command] {
+            let outcome = dispatch(command);
+            if outcome.output.is_empty() {
+                return Err("provider dispatch should always surface terminal output".to_string());
+            }
+        }
+
+        let compact = super::DispatchOutcome {
+            exit_status: CommandExitStatus::Succeeded,
+            output: "verbose output".to_string(),
+            host_output: None,
+            stream_output: None,
+            compact_output: Some("compact output".to_string()),
+            prefer_compact_output_in_verbose: false,
+            inspection_target: None,
+            trace_location: None,
+            session_status: None,
+            guidance_guardian: None,
+            trace_summary: None,
+        };
+        if compact.render_human_output(false) != "compact output" {
+            return Err("compact output should be preferred for brief rendering".to_string());
+        }
+        Ok(())
     }
 
     #[test]

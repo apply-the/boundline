@@ -1,6 +1,6 @@
 # Traces And Inspectability
 
-Boundline 0.71.0 traces make delivery explainable. They preserve what the runtime decided, what it used as evidence, what it ran, what it skipped, what failed, and what should happen next.
+Boundline 0.72.0 traces make delivery explainable. They preserve what the runtime decided, what it used as evidence, what it ran, what it skipped, what failed, and what should happen next.
 
 ## Where Traces Live
 
@@ -35,6 +35,9 @@ Depending on the command and lifecycle phase, traces can include:
 - planning-analysis state, source-attributed findings, coverage metrics, and
   any execution-handoff withholding caused by cross-artifact contradictions or
   producer contract gaps
+- capability-provider identity, activation state, validation disposition,
+  failure class, accepted evidence refs, rejected evidence refs, and declared
+  limitations when a provider-backed path ran or was blocked
 - route owner and route config projection
 - selected guidance and guardian sources
 - loaded and skipped packs

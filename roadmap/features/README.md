@@ -35,7 +35,7 @@ Use the local Speckit templates as the source of truth when converting a seed:
 | Delivered | 04 | Backlog readiness gate | Shipped in 0.69.0; validates Canon backlog packets before execution handoff and preserves additive backlog-quality projections. |
 | Delivered | 05 | Planning analysis gate | Shipped in 0.70.0; adds a read-only cross-artifact coherence gate with source-attributed findings and withheld execution handoff on contradictions or producer gaps. |
 | Delivered | 06 / 070 | Large-repo safety | Shipped in 0.71.0 with typed fidelity tiers, omission findings, repository-map visibility, digest-backed compaction, and patch-safe edit guards. |
-| Now | 07 | Provider boundary and setup | Implement discovery, explicit operator registration, health, and one read-only provider lifecycle before mutation providers. |
+| Delivered | 07 / 071 | Provider boundary and setup | Shipped in 0.72.0 with explicit operator registration, setup-requirement projection, fail-closed activation and permission admission, and additive evidence-first provider runtime projections. |
 | Next | 08 | Measurement substrate | Add local event schema plus a tiny golden eval corpus before expanding AI behavior. |
 | Next | 18 | Completion proof gate | Block task or stage closeout until a claim-matched proof command runs freshly. |
 | Next | 09 | Operator discoverability | Start with Boundline `help-next`; keep Canon help as Canon-owned. |
@@ -76,7 +76,7 @@ Seed 02 is intentionally not revised by this pass.
 18 completion verification runtime
    -> 19 plan execution orchestration
 
-07 provider protocol
+07 provider protocol (shipped in 0.72.0)
 13 sandbox execution
 19 plan execution orchestration
 bounded execution backends and operator setup

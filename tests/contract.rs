@@ -52,6 +52,9 @@ mod distribution_metadata_contract;
 #[path = "contract/distribution_release_surface_contract.rs"]
 mod distribution_release_surface_contract;
 
+#[path = "contract/capability_provider_protocol_contract.rs"]
+mod capability_provider_protocol_contract;
+
 #[path = "contract/trace_summary_contract.rs"]
 mod trace_summary_contract;
 

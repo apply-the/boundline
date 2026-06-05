@@ -61,7 +61,7 @@ flowchart TD
 ## Execution Order and Dependencies
 
 1. **Core Foundations**
-   - Boundline `04`, `05`, and `06` are now shipped. The next hard rollout dependency starts at verification.
+   - Boundline `04`, `05`, `06`, and `07` are now shipped. The next hard rollout dependency starts at verification.
 2. **Canon 02 + Boundline 18 (Verification Pair)**
    - The first crucial execution juncture. Canon defines the `claim -> proof -> evidence_ref` contract, while Boundline implements the runtime that executes the proof and blocks task completion.
 3. **Boundline 19 (Execution Orchestrator)**
@@ -69,7 +69,7 @@ flowchart TD
 4. **Canon 03 (Parallel to 19)**
    - Defines purely the handoff/progress schema. It can be developed in parallel to the Boundline execution engine, or right before its integration to allow Boundline to export compatible packets.
 5. **Boundline 07 -> Boundline 13 (Provider Layer)**
-   - The actual external provider setup (MCP, setup, activation, health). `Boundline 07` comes first, followed by the security layer `Boundline 13` (secret inheritance and sandbox). It establishes the plugin layer that powers B14, B15, and B17.
+   - `Boundline 07` is now shipped and owns the external provider setup contract: explicit registration, setup, activation, health, permission admission, and evidence handling. `Boundline 13` follows as the security layer (secret inheritance and sandbox) and builds on that provider boundary to power B14, B15, and B17.
 6. **Canon 07 (After provider setup)**
    - Arrives at the end to close the loop on the CLI side (Canon init) by gathering local routing choices, delegating execution back to Boundline.
 7. **Independent Features (Canon 04, 05, 06 & Boundline 08-12, 16)**

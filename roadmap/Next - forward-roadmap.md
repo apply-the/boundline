@@ -32,7 +32,7 @@ feature under `specs/`.
 | **04** | [backlog-contract.md](features/04-backlog-contract.md) | Delivered in 0.69.0: Canon backlog packet gate, closure-limited blocking, and additive backlog-quality projections |
 | **05** | [plan-analysis-contract.md](features/05-plan-analysis-contract.md) | Delivered in 0.70.0: read-only planning-coherence gate, source-attributed findings, and withheld execution handoff on contradictions or producer gaps |
 | **06** | [070-large-codebase-context-substrate](../specs/070-large-codebase-context-substrate/spec.md) | Delivered in 0.71.0: local context substrate, fidelity tiers, omitted-context visibility, patch-safe edit guards, and non-memory snapshot cache boundary |
-| **07** | [external-capability-provider-protocol.md](features/07-external-capability-provider-protocol.md) | Native provider contract, setup, and activation surface (replaces MCP) |
+| **07** | [071-capability-provider-protocol](../specs/071-capability-provider-protocol/spec.md) | Delivered in 0.72.0: explicit capability-provider registration, fail-closed activation and permission admission, bounded execute-plus-evidence collection, and additive provider status or trace projections |
 | **08** | [evals-and-runtime-observability.md](features/08-evals-and-runtime-observability.md) | Local quality and regression layer |
 | **09** | [contextual-help-and-documentation-architecture.md](features/09-contextual-help-and-documentation-architecture.md) | Operator UX feature |
 | **10** | [review-councils-and-role-gated-governance.md](features/10-review-councils-and-role-gated-governance.md) | Extend delivered S3/S056 work |
@@ -82,9 +82,9 @@ This slice is now delivered in `0.71.0`. Boundline's local substrate now:
 
 ### External Capability Provider Protocol
 
-Provider output is not truth. Providers produce claims, findings, artifacts,
-evidence, and state patch proposals. Boundline validates, traces, accepts,
-rejects, or escalates.
+This slice is now delivered in `0.72.0`. Provider output is not truth.
+Providers produce claims, findings, artifacts, evidence, and state patch
+proposals. Boundline validates, traces, accepts, rejects, or escalates.
 
 V1 should define:
 

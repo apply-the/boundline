@@ -1065,6 +1065,7 @@ mod tests {
             framework_adapter_stage_routing: None,
             framework_adapter_hook_dispatch: None,
             framework_adapter_stage_failure: None,
+            capability_provider_trace: None,
             terminal_status: TaskStatus::Failed,
             terminal_reason: TerminalReason::new(
                 TerminalCondition::UnrecoverableError,
@@ -2321,6 +2322,7 @@ mod tests {
             framework_adapter_stage_routing: None,
             framework_adapter_hook_dispatch: None,
             framework_adapter_stage_failure: None,
+            capability_provider_trace: None,
             terminal_status: TaskStatus::Succeeded,
             terminal_reason: TerminalReason::new(TerminalCondition::GoalSatisfied, "done", None),
             duration: Some(42),

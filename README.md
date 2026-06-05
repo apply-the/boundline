@@ -27,7 +27,7 @@ Boundline forces an explicit, inspectable workflow:
 3. `run` -> Execute the next approved step.
 4. `inspect` -> Report the authoritative runtime state.
 
-In the 0.71.0 release, `plan` enforces the full planning-readiness chain before
+In the 0.72.0 release, `plan` enforces the full planning-readiness chain before
 execution handoff: goal quality, plan quality, backlog quality, then planning
 analysis. Planning analysis is a read-only coherence gate across the active
 goal, plan outcomes, validation strategy, Canon backlog packet, execution
@@ -41,6 +41,12 @@ The same release also hardens large-codebase context admission. Planning now
 projects typed context-pack entries, omission findings, repository-map
 readiness, digest-backed compaction, snapshot-cache freshness, and patch-safe
 large-file edit constraints instead of silently widening context reads.
+
+The same line also adds the first native external capability-provider protocol.
+Operators now register providers explicitly, satisfy setup requirements before
+activation, dry-run readiness before use, and keep provider output
+non-authoritative until Boundline validates the returned evidence or rejects
+the proposal.
 
 ## Installation
 
@@ -169,6 +175,22 @@ Adapter execution in V1 stays intentionally bounded: one trusted local
 subprocess, one-shot JSON over stdin/stdout, the same standard success or error
 envelope on stdout for every command, optional structured stderr captured only
 as trace enrichment, and no graceful-shutdown or long-lived daemon lifecycle.
+
+External capability providers stay separate from framework adapters. Use the
+provider surface when you want one bounded capability source with explicit
+permissions, setup, health, and evidence handling:
+
+```bash
+boundline provider add local-demo --workspace <workspace> --command python3 --arg scripts/provider.py
+boundline provider show --workspace <workspace> --json
+boundline provider health --workspace <workspace>
+boundline provider remove local-demo --workspace <workspace>
+```
+
+Provider-backed execution remains subordinate to Boundline runtime policy. The
+runtime owns permission admission, phase support, failure classification,
+accepted-versus-rejected evidence refs, and any stop condition surfaced
+through `status`, `inspect`, or traces.
 
 ## How chat commands map to CLI/runtime state
 

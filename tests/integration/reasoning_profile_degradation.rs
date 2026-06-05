@@ -182,6 +182,7 @@ fn save_collapsed_review_routing(workspace: &Path) -> Result<(), Box<dyn Error>>
         },
         canon: None,
         adapter: None,
+        capability_provider: None,
     })?;
 
     Ok(())

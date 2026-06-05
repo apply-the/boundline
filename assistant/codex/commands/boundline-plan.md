@@ -44,6 +44,7 @@ Planning analysis is a Boundline-owned read-only projection over the ready plan 
 
 ## Large-Codebase Context Gate
 When planning reports `repository_map_state`, `snapshot_cache_state`, `context_pack_entries`, `omission_findings`, or `patch_safe_edit_attempts`, preserve them exactly. Treat blocking omission findings, stale tracked cache, unsafe oversized full-read refusal, digest-only critical evidence, or patch-safe edit drift as real planning stops and route back to `/boundline:plan` instead of `/boundline:run`.
+When planning also reports `capability_provider_status`, `capability_provider_id`, `capability_provider_setup_requirements`, or `capability_provider_summary`, preserve them exactly. Treat incomplete provider setup or blocked provider readiness as a real stop before provider-backed execution is offered.
 
 ## Gate Handling
 When a planning gate appears, ask the emitted question or present the emitted suggested choices, wait for the user's answer, and resume with the raw `resume_command` or assistant-safe route. Preserve `request_id`, `stage_key`, `expected_answer.type`, `artifact.artifact_ref`, and the exact raw continuation for shell execution.

@@ -103,7 +103,7 @@ See [Project Memory Structure](../reference/file-layout).
 - Canon remains an external governed-knowledge boundary, not Boundline's
     orchestrator.
 
-The current Boundline `0.71.0` line documents Canon `0.67.0` support for
+The current Boundline `0.72.0` line documents Canon `0.67.0` support for
 `canon governance start|refresh|capabilities --json` `v1`.
 
 The same runtime now owns the derived semantic index lifecycle under
@@ -111,9 +111,10 @@ The same runtime now owns the derived semantic index lifecycle under
 `manifest.json`, explicit `boundline index ...` commands, and lightweight
 stale-mark hook behavior when the operator opts in.
 
-The 0.71.0 release keeps the same plan-quality gate, preserves the formal
+The 0.72.0 release keeps the same plan-quality gate, preserves the formal
 backlog-quality gate, keeps the read-only planning-analysis coherence pass, and
-adds the typed large-codebase context substrate.
+keeps the typed large-codebase context substrate while adding the first native
+capability-provider protocol.
 After goal quality and plan quality are ready, Boundline inspects the Canon
 backlog packet, blocks closure-limited risk-only packets, surfaces additive
 backlog-quality fields, and then validates selected-slice sequencing,
@@ -125,6 +126,11 @@ context-pack entries, omission findings, repository-map readiness,
 digest-backed compaction, snapshot-cache freshness, and patch-safe edit attempt
 state through plan, status, inspect, and traces. That substrate stays local,
 deterministic, and derived; it does not replace reviewed memory.
+
+When provider-backed execution is active, the runtime also owns explicit
+registration, activation, health checks, permission admission, bounded
+prepare/execute/evidence collection, and accepted-versus-rejected evidence
+projection. Provider output remains subordinate to Boundline validation.
 
 ## Framework Adapter Boundary
 

@@ -127,6 +127,7 @@ pub fn execute_show(
                 routing: config.routing,
                 canon: None,
                 adapter: None,
+                capability_provider: None,
             };
             render_scope("cluster", &scope_view)
         }
@@ -1584,6 +1585,7 @@ mod tests {
             },
             canon: None,
             adapter: None,
+            capability_provider: None,
         };
 
         let saved_path =
@@ -1672,6 +1674,7 @@ mod tests {
             },
             canon: None,
             adapter: Some(sample_persisted_adapter()),
+            capability_provider: None,
         };
         FileConfigStore::for_workspace(&workspace).save_local(&local_config).unwrap();
 
@@ -2452,6 +2455,7 @@ mod tests {
                 routing: cluster.routing.clone(),
                 canon: None,
                 adapter: None,
+                capability_provider: None,
             },
         );
         assert!(rendered.contains("- react: enabled=false"));
@@ -2475,6 +2479,7 @@ mod tests {
                 },
                 canon: None,
                 adapter: None,
+                capability_provider: None,
             },
         );
         assert!(helper_rendered.contains("- vue: enabled=inherit"));

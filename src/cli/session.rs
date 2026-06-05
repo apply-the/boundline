@@ -1854,6 +1854,7 @@ pub(crate) fn build_status_view_with_follow_up(
             .latest_terminal_reason
             .as_ref()
             .and_then(FrameworkAdapterStageFailureDetails::from_terminal_reason),
+        latest_capability_provider_execution: None,
         latest_decision_status: latest_decision
             .map(|decision| decision_status_text(decision.status).to_string()),
         latest_decision_target: latest_decision.map(|decision| decision.target.clone()),
@@ -3205,6 +3206,7 @@ fn red_to_green_addition() {
             },
             canon: None,
             adapter: None,
+            capability_provider: None,
         };
         FileConfigStore::for_workspace(&workspace).save_local(&config).unwrap();
         workspace
@@ -4100,6 +4102,7 @@ fn red_to_green_addition() {
             },
             canon: None,
             adapter: None,
+            capability_provider: None,
         };
         config.routing.slot_effort_policies.insert(
             RouteSlot::Implementation,

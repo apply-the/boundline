@@ -807,6 +807,7 @@ pub fn summarize_trace(
         framework_adapter_stage_failure: FrameworkAdapterStageFailureDetails::from_terminal_reason(
             &terminal_reason,
         ),
+        capability_provider_trace: None,
         terminal_status,
         terminal_reason,
         duration: trace.duration_millis(),

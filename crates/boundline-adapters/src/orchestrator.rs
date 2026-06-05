@@ -1,3 +1,5 @@
+#[path = "../../../src/orchestrator/capability_provider_runtime.rs"]
+pub mod capability_provider_runtime;
 #[path = "../../../src/orchestrator/context_intelligence.rs"]
 pub mod context_intelligence;
 #[path = "../../../src/orchestrator/decision_loop.rs"]
