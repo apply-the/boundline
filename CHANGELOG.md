@@ -46,9 +46,28 @@ Highlights:
 
 Release metadata note:
 
-- The current Boundline release line is `0.72.0`; published package metadata,
+- The current Boundline release line is `0.74.0`; published package metadata,
   distribution metadata, assistant plugin manifests, and docs are aligned to
-  that version while Canon compatibility remains `0.67.0`.
+  that version while Canon compatibility remains `0.71.0`.
+
+## [0.74.0] - 2026-06-06
+
+Delivered specs:
+
+- `074` - Review Councils And Governance
+
+Highlights:
+
+- Added `boundline council adjudicate`, a guardian-activation-router CLI that
+  reads `.boundline/guardian-rules.toml` (or falls back to built-in defaults),
+  activates the correct guardians for the current change surface, and produces a
+  clean/blocked council decision with human-readable and JSON output.
+- Added guardian activation ruleset with file, stage, language, and risk filters
+  plus contradiction detection that fails closed on conflicting rules.
+- Added single-adjudicator council decision model with accepted/rejected/deferred
+  findings, mandatory guardian evidence rules, and binary clean/blocked outcome.
+- Emitted `council.decision.produced` structured runtime event for trace
+  visibility.
 
 ## [0.73.0] - 2026-06-05
 

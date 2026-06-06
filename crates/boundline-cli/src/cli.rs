@@ -8,10 +8,16 @@ pub mod checkpoint;
 pub mod cluster;
 #[path = "../../../src/cli/config.rs"]
 pub mod config;
+#[path = "../../../src/cli/council.rs"]
+pub mod council;
 #[path = "../../../src/cli/diagnostics.rs"]
 pub mod diagnostics;
+#[path = "../../../src/cli/evals.rs"]
+pub mod evals;
 #[path = "../../../src/cli/govern.rs"]
 pub mod govern;
+#[path = "../../../src/cli/help_next.rs"]
+pub mod help_next;
 #[path = "../../../src/cli/index.rs"]
 pub mod index;
 #[path = "../../../src/cli/init.rs"]
@@ -32,6 +38,8 @@ pub mod provider;
 pub mod run;
 #[path = "../../../src/cli/session.rs"]
 pub mod session;
+#[path = "../../../src/cli/trace_compaction.rs"]
+pub mod trace_compaction;
 #[path = "../../../src/cli/workflow.rs"]
 pub mod workflow;
 #[path = "../../../src/cli/workspace.rs"]

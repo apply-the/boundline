@@ -20,7 +20,7 @@ fn release_surface_tracks_current_workspace_version_without_stale_status_heading
     assert!(changelog.contains(&changelog_heading));
     assert!(
         roadmap.contains(&format!(
-            "Delivered in {version}: local quality evals, trace compaction policy with five retention classes, structured event vocabulary, JSONL export, runtime metrics, and CI-compatible eval summary"
+            "Delivered in {version}: guardian activation router, council adjudication, role-gated governance"
         ))
     );
     assert!(!roadmap.contains("## Current Status:"));

@@ -8,7 +8,7 @@ use crate::domain::governance::{CANONICAL_MODES, CanonCapabilitySnapshot, CanonM
 
 // Keep the supported Canon companion target centralized so release metadata,
 // docs, and compatibility checks advance together.
-pub const SUPPORTED_CANON_VERSION: &str = "0.67.0";
+pub const SUPPORTED_CANON_VERSION: &str = "0.71.0";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -500,7 +500,10 @@ mod tests {
                 "security-assessment",
                 "system-assessment",
                 "migration",
-                "supply-chain-analysis"
+                "supply-chain-analysis",
+                "brainstorming",
+                "debugging",
+                "policy-shaping"
             ],
             "status_values": ["governed_ready", "awaiting_approval", "blocked"],
             "approval_state_values": ["not_needed", "requested", "granted"],

@@ -1,6 +1,6 @@
 # Status
 
-`status` is the quickest read on the Boundline 0.73.0 planning gates.
+`status` is the quickest read on the Boundline 0.74.0 planning gates.
 
 ## What To Look For
 

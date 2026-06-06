@@ -238,6 +238,10 @@ pub fn command_name(command: &DeveloperCommand) -> &'static str {
         DeveloperCommand::Provider { .. } => "provider",
         DeveloperCommand::Cluster { .. } => "cluster",
         DeveloperCommand::Models { .. } => "models",
+        DeveloperCommand::Council { .. } => "council",
+        DeveloperCommand::HelpNext(_) => "help-next",
+        DeveloperCommand::Evals { .. } => "evals",
+        DeveloperCommand::Trace { .. } => "trace",
     }
 }
 
@@ -436,6 +440,46 @@ mod tests {
                     command: ModelsSubcommand::Auth { command: ModelsAuthSubcommand::Status },
                 },
                 "models",
+            ),
+            (
+                DeveloperCommand::Council {
+                    command: crate::cli::CouncilCommand::Adjudicate {
+                        workspace: None,
+                        json: false,
+                    },
+                },
+                "council",
+            ),
+            (
+                DeveloperCommand::HelpNext(crate::cli::help_next::HelpNextArgs {
+                    all: false,
+                    json: false,
+                }),
+                "help-next",
+            ),
+            (
+                DeveloperCommand::Evals {
+                    command: crate::cli::evals::EvalsSubcommand::Run(
+                        crate::cli::evals::EvalsRunArgs {
+                            workspace: None,
+                            suite: None,
+                            json: false,
+                        },
+                    ),
+                },
+                "evals",
+            ),
+            (
+                DeveloperCommand::Trace {
+                    command: crate::cli::trace_compaction::TraceSubcommand::Compact(
+                        crate::cli::trace_compaction::TraceCompactArgs {
+                            workspace: None,
+                            preserve_accepted: false,
+                            json: false,
+                        },
+                    ),
+                },
+                "trace",
             ),
         ];
         for (command, expected) in cases {

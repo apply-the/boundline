@@ -48,7 +48,12 @@ fn first_slice_canon_stage_mapping_matches_supported_flows() {
     );
     assert_eq!(
         supported_canon_modes_for_stage("change", "understand-change"),
-        &[CanonMode::Change, CanonMode::Discovery]
+        &[
+            CanonMode::Change,
+            CanonMode::Discovery,
+            CanonMode::Brainstorming,
+            CanonMode::PolicyShaping
+        ]
     );
     assert_eq!(
         supported_canon_modes_for_stage("change", "implement"),
@@ -65,11 +70,11 @@ fn first_slice_canon_stage_mapping_matches_supported_flows() {
     );
     assert_eq!(
         supported_canon_modes_for_stage("bug-fix", "investigate"),
-        &[CanonMode::Discovery, CanonMode::Change, CanonMode::Incident]
+        &[CanonMode::Discovery, CanonMode::Change, CanonMode::Incident, CanonMode::Debugging]
     );
     assert_eq!(
         supported_canon_modes_for_stage("bug-fix", "implement"),
-        &[CanonMode::Implementation, CanonMode::Refactor]
+        &[CanonMode::Implementation, CanonMode::Refactor, CanonMode::Debugging]
     );
     assert_eq!(
         supported_canon_modes_for_stage("bug-fix", "verify"),
@@ -140,7 +145,7 @@ fn canon_stage_mapping_derives_candidates_from_stage_support_order() {
 
     assert_eq!(
         candidate_canon_modes(&policy, GovernanceRuntimeKind::Local),
-        vec![CanonMode::Discovery, CanonMode::Change, CanonMode::Incident]
+        vec![CanonMode::Discovery, CanonMode::Change, CanonMode::Incident, CanonMode::Debugging]
     );
     assert_eq!(resolved_canon_mode(&policy, GovernanceRuntimeKind::Local), None);
 }
