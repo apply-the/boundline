@@ -56,7 +56,7 @@ flowchart TD
 ## Execution Order and Dependencies
 
 1. **Core Foundations**
-   - Boundline `04`, `05`, `06`, `07`, and `08` are now shipped. The next hard rollout dependency starts at verification.
+   - Boundline `04`, `05`, `06`, `07`, `08`, and `09` are now shipped. The next hard rollout dependency starts at verification.
 2. **Canon 02 + Boundline 18 (Verification Pair)**
    - The first crucial execution juncture. Canon defines the `claim -> proof -> evidence_ref` contract, while Boundline implements the runtime that executes the proof and blocks task completion.
 3. **Boundline 19 (Execution Orchestrator)**

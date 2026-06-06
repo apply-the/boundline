@@ -14,6 +14,8 @@ pub const SCHEMA_VERSION_GUARDIAN_FINDING: &str = "1.0";
 pub const SCHEMA_VERSION_PROVIDER_CALL: &str = "1.0";
 pub const SCHEMA_VERSION_TRACE_COMPACTED: &str = "1.0";
 pub const SCHEMA_VERSION_HELP_NEXT_REQUESTED: &str = "1.0";
+pub const SCHEMA_VERSION_GUARDIAN_ACTIVATION: &str = "1.0";
+pub const SCHEMA_VERSION_COUNCIL_DECISION: &str = "1.0";
 pub const SCHEMA_VERSION_PHASE_REQUESTED: &str = "1.0";
 pub const SCHEMA_VERSION_ROUTE_DECISION: &str = "1.0";
 pub const SCHEMA_VERSION_CONTEXT_SELECTION: &str = "1.0";
@@ -29,10 +31,12 @@ pub enum EventType {
     RouteDecisionMade,
     ContextSelectionRecorded,
     HelpNextRequested,
+    GuardianActivationPlanProduced,
+    CouncilDecisionProduced,
 }
 
 impl EventType {
-    pub const fn all() -> [Self; 8] {
+    pub const fn all() -> [Self; 10] {
         [
             Self::PlanningAnalysisCompleted,
             Self::GuardianFindingEmitted,
@@ -42,6 +46,8 @@ impl EventType {
             Self::RouteDecisionMade,
             Self::ContextSelectionRecorded,
             Self::HelpNextRequested,
+            Self::GuardianActivationPlanProduced,
+            Self::CouncilDecisionProduced,
         ]
     }
 
@@ -55,6 +61,8 @@ impl EventType {
             Self::RouteDecisionMade => "route.decision.made",
             Self::ContextSelectionRecorded => "context.selection.recorded",
             Self::HelpNextRequested => "boundline.help_next.requested",
+            Self::GuardianActivationPlanProduced => "guardian.activation.plan.produced",
+            Self::CouncilDecisionProduced => "council.decision.produced",
         }
     }
 
@@ -68,6 +76,8 @@ impl EventType {
             Self::RouteDecisionMade => SCHEMA_VERSION_ROUTE_DECISION,
             Self::ContextSelectionRecorded => SCHEMA_VERSION_CONTEXT_SELECTION,
             Self::HelpNextRequested => SCHEMA_VERSION_HELP_NEXT_REQUESTED,
+            Self::GuardianActivationPlanProduced => SCHEMA_VERSION_GUARDIAN_ACTIVATION,
+            Self::CouncilDecisionProduced => SCHEMA_VERSION_COUNCIL_DECISION,
         }
     }
 }
