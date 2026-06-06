@@ -134,11 +134,10 @@ Use the repository scripts when available.
 Preferred Linux/macOS scripts:
 
 ```bash
+scripts/update-docs-versions.sh 
 scripts/clippy.sh
 scripts/test.sh
 scripts/coverage.sh
-scripts/update-docs-versions.sh
-scripts/validate-assistant-plugins.sh
 scripts/check-no-local-paths.sh
 scripts/check-rust-no-panic.sh
 ```
@@ -146,6 +145,7 @@ scripts/check-rust-no-panic.sh
 Preferred Windows scripts when applicable:
 
 ```powershell
+scripts/update-docs-versions.sh
 scripts/clippy.ps1
 scripts/test.ps1
 scripts/coverage.ps1

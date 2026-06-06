@@ -18,8 +18,8 @@ use crate::domain::governance::{CanonMode, CanonModeSelectionPreference, Governa
 use crate::domain::trace::current_timestamp_millis;
 
 use super::{
-    adapter, assistant_assets, checkpoint, cluster, config, diagnostics, govern, index, init,
-    inspect, models_auth, orchestrate, output, probe, provider, run, session, workflow,
+    adapter, assistant_assets, checkpoint, cluster, config, council, diagnostics, govern, index,
+    init, inspect, models_auth, orchestrate, output, probe, provider, run, session, workflow,
     workspace as cli_workspace,
 };
 use init::OllamaProfile;
@@ -78,6 +78,7 @@ pub enum CommandName {
     Provider,
     Cluster,
     Models,
+    Council,
 }
 
 impl CommandName {
@@ -108,6 +109,7 @@ impl CommandName {
             Self::Provider => "provider",
             Self::Cluster => "cluster",
             Self::Models => "models",
+            Self::Council => "council",
         }
     }
 }
@@ -485,6 +487,11 @@ pub enum DeveloperCommand {
         #[command(subcommand)]
         command: ModelsSubcommand,
     },
+    /// Run council adjudication over guardian findings.
+    Council {
+        #[command(subcommand)]
+        command: CouncilCommand,
+    },
 }
 
 /// Workflow-specific subcommands.
@@ -799,6 +806,23 @@ pub enum ConfigSubcommand {
         #[arg(long)]
         reference: String,
     },
+    /// Run council adjudication over guardian findings.
+    Council {
+        #[command(subcommand)]
+        command: CouncilCommand,
+    },
+}
+
+/// Council subcommands.
+#[derive(Debug, Subcommand)]
+pub enum CouncilCommand {
+    /// Adjudicate guardian findings and produce a clean/blocked decision.
+    Adjudicate {
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 /// Framework-adapter registration and inspection subcommands.
@@ -928,6 +952,7 @@ impl DeveloperCommand {
             Self::Provider { .. } => CommandName::Provider,
             Self::Cluster { .. } => CommandName::Cluster,
             Self::Models { .. } => CommandName::Models,
+            Self::Council { .. } => CommandName::Council,
         }
     }
 }
@@ -1330,6 +1355,9 @@ impl DeveloperCommandSession {
                     ConfigSubcommand::SetCanon { workspace, .. } => {
                         workspace.as_ref().map(|path| path.to_string_lossy().into_owned())
                     }
+                    ConfigSubcommand::Council {
+                        command: CouncilCommand::Adjudicate { workspace, .. },
+                    } => workspace.as_ref().map(|path| path.to_string_lossy().into_owned()),
                 },
                 requires_workspace_ref: false,
                 install_check: false,
@@ -1407,6 +1435,22 @@ impl DeveloperCommandSession {
                 exit_status: None,
                 trace_location: None,
             },
+            DeveloperCommand::Council { command: CouncilCommand::Adjudicate { workspace, .. } } => {
+                Self {
+                    command_name: CommandName::Council,
+                    workspace_ref: workspace
+                        .as_ref()
+                        .map(|path| path.to_string_lossy().into_owned()),
+                    requires_workspace_ref: false,
+                    install_check: false,
+                    goal: None,
+                    trace_ref: None,
+                    started_at: current_timestamp_millis(),
+                    completed_at: None,
+                    exit_status: None,
+                    trace_location: None,
+                }
+            }
         }
     }
 
@@ -1456,6 +1500,7 @@ impl DeveloperCommandSession {
             | CommandName::Provider
             | CommandName::Cluster
             | CommandName::Models
+            | CommandName::Council
             | CommandName::Probe => {}
         }
 
@@ -1893,6 +1938,9 @@ fn command_environment_workspace(command: &DeveloperCommand) -> Option<PathBuf> 
         DeveloperCommand::Cluster { command } => cluster_command_environment_workspace(command),
         DeveloperCommand::Assistant { .. } => None,
         DeveloperCommand::Models { .. } => None,
+        DeveloperCommand::Council { command: CouncilCommand::Adjudicate { workspace, .. } } => {
+            resolve_command_workspace(workspace.as_deref())
+        }
     }
 }
 
@@ -1990,6 +2038,9 @@ fn command_environment_workspace_for_config(command: &ConfigSubcommand) -> Optio
         ConfigSubcommand::SetCanon { workspace, .. } => {
             resolve_command_workspace(workspace.as_deref())
         }
+        ConfigSubcommand::Council { command: CouncilCommand::Adjudicate { workspace, .. } } => {
+            resolve_command_workspace(workspace.as_deref())
+        }
     }
 }
 
@@ -2055,6 +2106,24 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
         DeveloperCommand::Cluster { command } => dispatch_cluster_command(command),
         DeveloperCommand::Probe { workspace } => dispatch_probe_command(workspace.as_deref()),
         DeveloperCommand::Models { command } => dispatch_models_command(command),
+        DeveloperCommand::Council { command: CouncilCommand::Adjudicate { workspace, json } } => {
+            let workspace_path = workspace.clone().unwrap_or_else(|| PathBuf::from("."));
+            match council::run(&workspace_path, *json) {
+                Ok(exit_code) => {
+                    let status = if exit_code == 0 {
+                        CommandExitStatus::Succeeded
+                    } else {
+                        CommandExitStatus::NonSuccess
+                    };
+                    DispatchOutcome::text(status, String::new(), None)
+                }
+                Err(err) => DispatchOutcome::text(
+                    CommandExitStatus::InvalidInvocation,
+                    err.to_string(),
+                    None,
+                ),
+            }
+        }
     }
 }
 
@@ -2856,6 +2925,21 @@ fn dispatch_config_command(command: &ConfigSubcommand) -> DispatchOutcome {
                 *kind,
                 reference,
             )
+        }
+        ConfigSubcommand::Council { command: CouncilCommand::Adjudicate { workspace, json } } => {
+            let ws = workspace.clone().unwrap_or_else(|| PathBuf::from("."));
+            let exit_status = match council::run(&ws, *json) {
+                Ok(0) => CommandExitStatus::Succeeded,
+                Ok(_) => CommandExitStatus::NonSuccess,
+                Err(e) => {
+                    return DispatchOutcome::text(
+                        CommandExitStatus::InvalidInvocation,
+                        e.to_string(),
+                        None,
+                    );
+                }
+            };
+            return DispatchOutcome::text(exit_status, String::new(), None);
         }
     };
     dispatch_prefixed_result(CommandName::Config, result, |report| {

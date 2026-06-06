@@ -1,6 +1,6 @@
 # Traces And Inspectability
 
-Boundline 0.73.0 traces make delivery explainable. They preserve what the runtime decided, what it used as evidence, what it ran, what it skipped, what failed, and what should happen next.
+Boundline 0.74.0 traces make delivery explainable. They preserve what the runtime decided, what it used as evidence, what it ran, what it skipped, what failed, and what should happen next.
 
 ## Where Traces Live
 

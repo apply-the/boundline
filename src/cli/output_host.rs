@@ -238,6 +238,7 @@ pub fn command_name(command: &DeveloperCommand) -> &'static str {
         DeveloperCommand::Provider { .. } => "provider",
         DeveloperCommand::Cluster { .. } => "cluster",
         DeveloperCommand::Models { .. } => "models",
+        DeveloperCommand::Council { .. } => "council",
     }
 }
 

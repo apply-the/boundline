@@ -8,6 +8,8 @@ pub mod checkpoint;
 pub mod cluster;
 #[path = "../../../src/cli/config.rs"]
 pub mod config;
+#[path = "../../../src/cli/council.rs"]
+pub mod council;
 #[path = "../../../src/cli/diagnostics.rs"]
 pub mod diagnostics;
 #[path = "../../../src/cli/govern.rs"]
