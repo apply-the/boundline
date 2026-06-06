@@ -55,9 +55,19 @@ Release metadata note:
 Delivered specs:
 
 - `072` - Evals And Runtime Observability
+- `073` - Contextual Help And Documentation Architecture (Boundline)
 
 Highlights:
 
+- Added `boundline help-next`, a read-only operator guidance command that
+  inspects workspace state across six lifecycle phases (uninitialized,
+  initialized, active, blocked, failed, ready) and returns the next recommended
+  action with an exact command, reason, and documentation link via a versioned
+  `.boundline/help-links.toml` link map.
+- Added `--json` flag for CI/automation consumption and `--all` flag for
+  complete diagnostics listing.
+- Added `boundline.help_next.requested` structured event to the runtime event
+  vocabulary for operator-friction observability.
 - Added a local eval suite covering planning quality, context selection quality,
   guardian finding quality, council rejection behavior, provider call failure
   handling, and trace compaction survival of accepted decisions and rejection

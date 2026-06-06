@@ -108,6 +108,22 @@ runtime.
 These surfaces may render summaries, evidence, findings, checkpoints, and
 read-only governed references, but they do not own delivery state.
 
+## Operator Guidance And Observability
+
+`boundline help-next` is the operator guidance entry point. It inspects
+workspace state across six lifecycle phases (uninitialized, initialized,
+active, blocked, failed, ready) and returns the next recommended action with
+an exact command, reason, and documentation link.
+
+The runtime event vocabulary (`src/domain/observability.rs`) emits structured
+events for planning analysis, guardian findings, provider calls, compaction,
+and help-next requests — consumed by `boundline trace export --format jsonl`
+and external dashboards.
+
+Eval fixtures (`src/domain/evals.rs`) validate delivery quality across
+planning, context selection, guardian findings, council rejection, provider
+failure, and compaction survival dimensions.
+
 ## Framework Adapter Boundary
 
 Framework adapters extend the runtime without replacing it.

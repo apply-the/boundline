@@ -33,12 +33,10 @@ flowchart TD
     end
 
     subgraph Observability & Memory
-        B08["Boundline 08<br/>(Evals & Observability)"]:::boundline
         B16["Boundline 16<br/>(Session Memory)"]:::boundline
     end
 
     subgraph Advanced Workflows & Policy
-        B09["Boundline 09<br/>(Contextual Help)"]:::boundline
     end
 
     %% Key Dependencies
@@ -58,7 +56,7 @@ flowchart TD
 ## Execution Order and Dependencies
 
 1. **Core Foundations**
-   - Boundline `04`, `05`, `06`, and `07` are now shipped. The next hard rollout dependency starts at verification.
+   - Boundline `04`, `05`, `06`, `07`, and `08` are now shipped. The next hard rollout dependency starts at verification.
 2. **Canon 02 + Boundline 18 (Verification Pair)**
    - The first crucial execution juncture. Canon defines the `claim -> proof -> evidence_ref` contract, while Boundline implements the runtime that executes the proof and blocks task completion.
 3. **Boundline 19 (Execution Orchestrator)**
@@ -69,5 +67,5 @@ flowchart TD
    - `Boundline 07` is now shipped and owns the external provider setup contract: explicit registration, setup, activation, health, permission admission, and evidence handling. `Boundline 13` follows as the security layer (secret inheritance and sandbox) and builds on that provider boundary to power B14, B15, and B17.
 6. **Canon 07 (After provider setup)**
    - Arrives at the end to close the loop on the CLI side (Canon init) by gathering local routing choices, delegating execution back to Boundline.
-7. **Independent Features (Canon 04 & Boundline 08-12, 16)**
-   - These features cover autonomous workflows, policy, observability, and advanced orchestrator additions. They do not block the core engine loop and can be parallelized based on priority. 
+7. **Independent Features (Canon 04 & Boundline 10-12, 16)**
+   - These features cover autonomous workflows, policy, and advanced orchestrator additions. They do not block the core engine loop and can be parallelized based on priority. 

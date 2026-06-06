@@ -6,7 +6,7 @@ Canon and Boundline
 
 ## Status
 
-A-level product adoption feature
+Spec in 073: `boundline help-next` (Boundline) and `canon help-next` (Canon) — two separate owned slices coordinated across repos.
 
 ## Speckit Seed Notes
 
