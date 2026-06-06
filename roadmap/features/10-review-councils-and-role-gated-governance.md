@@ -14,7 +14,7 @@ Councils decide how findings are reviewed, grouped, adjudicated, and escalated.
 
 | Related file | Relationship |
 |---|---|
-| `08-evals-and-runtime-observability.md` | Provides event/eval substrate for council and guardian decisions |
+| `../specs/072-evals-runtime-observability/feat-evals-and-runtime-observability.md` | Provides event/eval substrate for council and guardian decisions |
 | `11-adaptive-governance-calibration.md` | Consumes council/guardian findings to decide control level |
 | `14-ai-gateway-and-inference-economics.md` | Owns route cost policy for council and guardian execution |
 | `12-recursive-stage-refinement-profiles.md` | May reuse council findings but does not redefine councils |

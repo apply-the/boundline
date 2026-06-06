@@ -8,9 +8,9 @@ members = [
 resolver = "3"
 
 [workspace.package]
-# Published release metadata tracks the current public tag; capability-provider
-# protocol closure is tracked under CHANGELOG 0.72.0.
-version = "0.72.0"
+# Published release metadata tracks the current public tag; evals and runtime
+# observability closure is tracked under CHANGELOG 0.73.0.
+version = "0.73.0"
 edition = "2024"
 license = "MIT"
 description = "Bounded cognitive runtime for AI-assisted software delivery."

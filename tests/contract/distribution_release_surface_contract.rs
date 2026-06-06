@@ -20,7 +20,7 @@ fn release_surface_tracks_current_workspace_version_without_stale_status_heading
     assert!(changelog.contains(&changelog_heading));
     assert!(
         roadmap.contains(&format!(
-            "Delivered in {version}: explicit capability-provider registration, fail-closed activation and permission admission, bounded execute-plus-evidence collection, and additive provider status or trace projections"
+            "Delivered in {version}: local quality evals, trace compaction policy with five retention classes, structured event vocabulary, JSONL export, runtime metrics, and CI-compatible eval summary"
         ))
     );
     assert!(!roadmap.contains("## Current Status:"));

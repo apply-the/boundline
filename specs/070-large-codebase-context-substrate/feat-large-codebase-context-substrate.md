@@ -22,7 +22,7 @@ It must not become memory or semantic truth.
 |---|---|
 | `05-plan-analysis-contract.md` | Consumes context packs and consistency evidence, but does not own indexing or context selection |
 | `07-external-capability-provider-protocol.md` | Provider-supplied context belongs to provider protocol, not local context substrate |
-| `08-evals-and-runtime-observability.md` | Owns evals, events, trace export, and trace compaction |
+| `../072-evals-runtime-observability/feat-evals-and-runtime-observability.md` | Owns evals, events, trace export, and trace compaction |
 | `16-session-memory-and-repository-knowledge-distillation.md` | Owns reviewed memory proposals; cache must not become memory |
 | `19-plan-execution-orchestration.md` | Consumes validated context and task surfaces during execution |
 

@@ -33,7 +33,7 @@ feature under `specs/`.
 | **05** | [plan-analysis-contract.md](features/05-plan-analysis-contract.md) | Delivered in 0.70.0: read-only planning-coherence gate, source-attributed findings, and withheld execution handoff on contradictions or producer gaps |
 | **06** | [070-large-codebase-context-substrate](../specs/070-large-codebase-context-substrate/spec.md) | Delivered in 0.71.0: local context substrate, fidelity tiers, omitted-context visibility, patch-safe edit guards, and non-memory snapshot cache boundary |
 | **07** | [071-capability-provider-protocol](../specs/071-capability-provider-protocol/spec.md) | Delivered in 0.72.0: explicit capability-provider registration, fail-closed activation and permission admission, bounded execute-plus-evidence collection, and additive provider status or trace projections |
-| **08** | [evals-and-runtime-observability.md](features/08-evals-and-runtime-observability.md) | Local quality and regression layer |
+| **08** | [evals-and-runtime-observability.md](../specs/072-evals-runtime-observability/feat-evals-and-runtime-observability.md) | Delivered in 0.73.0: local quality evals, trace compaction policy with five retention classes, structured event vocabulary, JSONL export, runtime metrics, and CI-compatible eval summary |
 | **09** | [contextual-help-and-documentation-architecture.md](features/09-contextual-help-and-documentation-architecture.md) | Operator UX feature |
 | **10** | [review-councils-and-role-gated-governance.md](features/10-review-councils-and-role-gated-governance.md) | Extend delivered S3/S056 work |
 | **11** | [adaptive-governance-calibration.md](features/11-adaptive-governance-calibration.md) | Extend delivered S4/S057 work |

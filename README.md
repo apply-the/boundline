@@ -48,9 +48,20 @@ activation, dry-run readiness before use, and keep provider output
 non-authoritative until Boundline validates the returned evidence or rejects
 the proposal.
 
+## 🔨 Development
+
+Run these from the repository root:
+
+| Task | Linux / macOS | Windows |
+|------|---------------|---------|
+| Format check | `cargo fmt --all -- --check` | `cargo fmt --all -- --check` |
+| Clippy | `bash scripts/clippy.sh` | `pwsh scripts/clippy.ps1` |
+| Tests | `bash scripts/test.sh` | `pwsh scripts/test.ps1` |
+| Coverage | `bash scripts/coverage.sh` | `pwsh scripts/coverage.ps1` |
+
 ## Installation
 
-### Ubuntu / Debian (APT)
+### Linux (Ubuntu / Debian APT)
 
 We provide official `.deb` packages for `amd64` and `arm64` via the Apply The APT repository. 
 
@@ -73,17 +84,20 @@ boundline --version
 boundline doctor --install
 ```
 
-### GitHub Releases Fallback
-If you prefer not to use the APT repository, you can download the `.deb` files directly from the [GitHub Releases](https://github.com/apply-the/boundline/releases) page and install them manually:
+### macOS (Homebrew)
+
 ```bash
-sudo dpkg -i boundline_<version>_<arch>.deb
+brew tap apply-the/boundline && brew install boundline
 ```
 
-### Source Install Fallback (Requires Rust)
-If you are developing Boundline or using an unsupported architecture, you can build from source:
-```bash
-cargo install --path .
-```
+### Windows
+
+Windows support is planned via Scoop and winget. For now, you can build from source.
+
+### Other Options
+
+- **GitHub Release (.deb fallback):** Download `.deb` files directly from the [Releases](https://github.com/apply-the/boundline/releases) page.
+- **Source install fallback (requires Rust):** Run `cargo install --path .` from the repository root.
 
 ## Quick Start
 

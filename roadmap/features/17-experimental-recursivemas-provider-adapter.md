@@ -262,7 +262,7 @@ It should not enter Boundline core and should not be confused with `12-recursive
 This item should depend on:
 
 - `specs/071-capability-provider-protocol/spec.md`
-- `08-evals-and-runtime-observability.md`
+- `../specs/072-evals-runtime-observability/feat-evals-and-runtime-observability.md`
 - `14-ai-gateway-and-inference-economics.md`
 - `12-recursive-stage-refinement-profiles.md`
 - a proven bounded lifecycle for long-lived local providers when checkpoint loading makes one-shot execution impractical
