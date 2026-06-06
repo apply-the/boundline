@@ -306,4 +306,118 @@ mod tests {
             assert!(!s.label().is_empty());
         }
     }
+
+    #[test]
+    fn initialized_state_suggests_goal() {
+        let rec =
+            HelpNextRecommendation::from_diagnostics(HelpNextState::Initialized, vec![], None);
+        assert_eq!(rec.state, HelpNextState::Initialized);
+        assert_eq!(rec.recommended_command.as_deref(), Some("boundline goal"));
+        assert!(!rec.blockers_found);
+    }
+
+    #[test]
+    fn failed_state_from_diagnostics_suggests_retry() {
+        let rec = HelpNextRecommendation::from_diagnostics(HelpNextState::Failed, vec![], None);
+        assert_eq!(rec.state, HelpNextState::Failed);
+        assert_eq!(rec.recommended_command.as_deref(), Some("boundline run"));
+    }
+
+    #[test]
+    fn blocked_state_with_no_blocking_diagnostics_is_not_blocked() {
+        let diag = HelpNextDiagnostic {
+            key: "warn".into(),
+            severity: DiagnosticSeverity::Warning,
+            message: "just a warning".into(),
+            source: None,
+            command: None,
+            docs_key: "fallback".into(),
+        };
+        let rec =
+            HelpNextRecommendation::from_diagnostics(HelpNextState::Blocked, vec![diag], None);
+        assert!(!rec.blockers_found);
+    }
+
+    #[test]
+    fn ready_state_via_from_diagnostics() {
+        let rec = HelpNextRecommendation::from_diagnostics(HelpNextState::Ready, vec![], None);
+        assert_eq!(rec.state, HelpNextState::Ready);
+        assert!(!rec.blockers_found);
+        assert_eq!(rec.recommended_command.as_deref(), Some("boundline run"));
+    }
+
+    #[test]
+    fn active_state_via_from_diagnostics() {
+        let rec = HelpNextRecommendation::from_diagnostics(HelpNextState::Active, vec![], None);
+        assert_eq!(rec.recommended_command.as_deref(), Some("boundline run"));
+    }
+
+    #[test]
+    fn diagnostic_serialization_roundtrip() {
+        let d = HelpNextDiagnostic {
+            key: "test".into(),
+            severity: DiagnosticSeverity::Blocking,
+            message: "msg".into(),
+            source: Some("file".into()),
+            command: Some("cmd".into()),
+            docs_key: "fallback".into(),
+        };
+        let json = serde_json::to_string(&d).unwrap();
+        let parsed: HelpNextDiagnostic = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.key, "test");
+        assert_eq!(parsed.severity, DiagnosticSeverity::Blocking);
+    }
+
+    #[test]
+    fn recommendation_serialization_roundtrip() {
+        let rec = HelpNextRecommendation::ready(Some("docs".into()));
+        let json = serde_json::to_string(&rec).unwrap();
+        let parsed: HelpNextRecommendation = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.state, HelpNextState::Ready);
+    }
+
+    #[test]
+    fn help_next_event_serialization_roundtrip() {
+        let event = HelpNextEvent {
+            state: "blocked".into(),
+            lifecycle_phase: Some("plan".into()),
+            blocked_category: Some("planning".into()),
+            diagnostics_count: 2,
+            recommended_action_id: "repair".into(),
+            recommended_command: Some("boundline plan".into()),
+            docs_link: Some("wiki/troubleshoot".into()),
+            output_format: "human".into(),
+        };
+        let json = serde_json::to_string(&event).unwrap();
+        let parsed: HelpNextEvent = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.state, "blocked");
+        assert_eq!(parsed.diagnostics_count, 2);
+    }
+
+    #[test]
+    fn diagnostic_key_constants_are_non_empty() {
+        let keys = [
+            DIAGNOSTIC_KEY_UNINITIALIZED,
+            DIAGNOSTIC_KEY_NO_SESSION,
+            DIAGNOSTIC_KEY_BLOCKED_PLANNING,
+            DIAGNOSTIC_KEY_BLOCKED_EXECUTION,
+            DIAGNOSTIC_KEY_FAILED,
+            DIAGNOSTIC_KEY_CONFIG_MISSING,
+            DIAGNOSTIC_KEY_PROVIDER_NOT_ACTIVATED,
+            DIAGNOSTIC_KEY_CONTEXT_PACK_MISSING,
+            DIAGNOSTIC_KEY_GUARDIAN_FINDING,
+            DIAGNOSTIC_KEY_STOP_RULE,
+            DIAGNOSTIC_KEY_HEALTHY,
+            DIAGNOSTIC_KEY_FALLBACK,
+        ];
+        for k in keys {
+            assert!(!k.is_empty());
+        }
+    }
+
+    #[test]
+    fn severity_ordering_blocking_gt_warning_gt_info() {
+        assert!(DiagnosticSeverity::Blocking > DiagnosticSeverity::Warning);
+        assert!(DiagnosticSeverity::Warning > DiagnosticSeverity::Info);
+    }
 }
