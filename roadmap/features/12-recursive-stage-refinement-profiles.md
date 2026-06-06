@@ -279,7 +279,7 @@ It should benefit from those foundations, but remain focused on bounded recursiv
 
 This item should depend on:
 
-- `08-evals-and-runtime-observability.md`
+- `../specs/072-evals-runtime-observability/feat-evals-and-runtime-observability.md`
 - `10-review-councils-and-role-gated-governance.md`
 - `11-adaptive-governance-calibration.md`
 - `specs/070-large-codebase-context-substrate/spec.md` where Context Packs are needed

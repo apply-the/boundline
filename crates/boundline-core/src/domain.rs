@@ -20,6 +20,8 @@ pub mod decision;
 pub mod distribution;
 #[path = "../../../src/domain/domain_templates.rs"]
 pub mod domain_templates;
+#[path = "../../../src/domain/evals.rs"]
+pub mod evals;
 #[path = "../../../src/domain/execution.rs"]
 pub mod execution;
 #[path = "../../../src/domain/flow.rs"]
@@ -42,6 +44,8 @@ pub mod guidance_catalog;
 pub mod limits;
 #[path = "../../../src/domain/negotiation.rs"]
 pub mod negotiation;
+#[path = "../../../src/domain/observability.rs"]
+pub mod observability;
 #[path = "../../../src/domain/plan.rs"]
 pub mod plan;
 #[path = "../../../src/domain/probe.rs"]
@@ -72,6 +76,8 @@ pub mod task_context;
 pub mod tool_result;
 #[path = "../../../src/domain/trace.rs"]
 pub mod trace;
+#[path = "../../../src/domain/trace_compaction.rs"]
+pub mod trace_compaction;
 #[path = "../../../src/domain/workflow.rs"]
 pub mod workflow;
 #[path = "../../../src/domain/workspace_hygiene.rs"]

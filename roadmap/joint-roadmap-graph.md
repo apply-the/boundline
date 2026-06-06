@@ -33,7 +33,6 @@ flowchart TD
     end
 
     subgraph Observability & Memory
-        C06["Canon 06<br/>(Observability Design)"]:::canon
         B08["Boundline 08<br/>(Evals & Observability)"]:::boundline
         B16["Boundline 16<br/>(Session Memory)"]:::boundline
     end
@@ -53,9 +52,7 @@ flowchart TD
     B07 -.-> B14
     B07 -.-> B15
     B07 -.-> B17
-    
-    C06 -.->|Design for| B08
-    C05 -.->|Pairs well| C06
+
 ```
 
 ## Execution Order and Dependencies
@@ -72,5 +69,5 @@ flowchart TD
    - `Boundline 07` is now shipped and owns the external provider setup contract: explicit registration, setup, activation, health, permission admission, and evidence handling. `Boundline 13` follows as the security layer (secret inheritance and sandbox) and builds on that provider boundary to power B14, B15, and B17.
 6. **Canon 07 (After provider setup)**
    - Arrives at the end to close the loop on the CLI side (Canon init) by gathering local routing choices, delegating execution back to Boundline.
-7. **Independent Features (Canon 04, 05, 06 & Boundline 08-12, 16)**
+7. **Independent Features (Canon 04 & Boundline 08-12, 16)**
    - These features cover autonomous workflows, policy, observability, and advanced orchestrator additions. They do not block the core engine loop and can be parallelized based on priority. 

@@ -50,6 +50,29 @@ Release metadata note:
   distribution metadata, assistant plugin manifests, and docs are aligned to
   that version while Canon compatibility remains `0.67.0`.
 
+## [0.73.0] - 2026-06-05
+
+Delivered specs:
+
+- `072` - Evals And Runtime Observability
+
+Highlights:
+
+- Added a local eval suite covering planning quality, context selection quality,
+  guardian finding quality, council rejection behavior, provider call failure
+  handling, and trace compaction survival of accepted decisions and rejection
+  reasons, runnable both locally and in CI with per-eval pass/fail summaries.
+- Added a trace compaction policy with five retention classes (lossless,
+  structured, summary, index-only, discardable), conservative tiebreaking, hard
+  survival guarantees for accepted decisions and rejection reasons, and
+  oversized-trace detection.
+- Added structured runtime event vocabulary with per-event-type `schema_version`,
+  JSONL export with event deduplication, sensitive-data filtering, and empty-
+  export handling.
+- Added runtime metrics collection (compaction counts, class distribution, trace
+  sizes, context dimensions, provider latency, stop reasons, finding counts)
+  exposed through status, inspect, and JSONL export surfaces.
+
 ## [0.72.0] - 2026-06-05
 
 Delivered specs:
