@@ -82,6 +82,10 @@ pub enum CanonMode {
     SupplyChainAnalysis,
     #[serde(alias = "pr_review")]
     PrReview,
+    Brainstorming,
+    Debugging,
+    #[serde(alias = "policy_shaping")]
+    PolicyShaping,
 }
 
 impl CanonMode {
@@ -103,6 +107,9 @@ impl CanonMode {
             Self::Migration => "migration",
             Self::SupplyChainAnalysis => "supply-chain-analysis",
             Self::PrReview => "pr-review",
+            Self::Brainstorming => "brainstorming",
+            Self::Debugging => "debugging",
+            Self::PolicyShaping => "policy-shaping",
         }
     }
 
@@ -124,6 +131,9 @@ impl CanonMode {
             Self::Migration => "migration.md",
             Self::SupplyChainAnalysis => "supply-chain-analysis.md",
             Self::PrReview => "pr-review.md",
+            Self::Brainstorming => "option-map.md",
+            Self::Debugging => "debugging-trace.md",
+            Self::PolicyShaping => "policy-diff.md",
         }
     }
 
@@ -142,6 +152,8 @@ impl CanonMode {
                 | Self::Migration
                 | Self::SupplyChainAnalysis
                 | Self::PrReview
+                | Self::Debugging
+                | Self::PolicyShaping
         )
     }
 
@@ -156,7 +168,7 @@ impl CanonMode {
     /// Map a Canon mode to its minimum authority-zone floor.
     pub const fn stage_authority_floor(self) -> CanonAuthorityZone {
         match self {
-            Self::Discovery | Self::Requirements => CanonAuthorityZone::Green,
+            Self::Discovery | Self::Requirements | Self::Brainstorming => CanonAuthorityZone::Green,
             Self::SystemShaping
             | Self::Architecture
             | Self::Backlog
@@ -170,7 +182,9 @@ impl CanonMode {
             | Self::Migration
             | Self::SecurityAssessment
             | Self::SystemAssessment
-            | Self::SupplyChainAnalysis => CanonAuthorityZone::Red,
+            | Self::SupplyChainAnalysis
+            | Self::Debugging
+            | Self::PolicyShaping => CanonAuthorityZone::Red,
         }
     }
 }
@@ -230,6 +244,9 @@ impl std::str::FromStr for CanonMode {
             "migration" => Ok(Self::Migration),
             "supply-chain-analysis" => Ok(Self::SupplyChainAnalysis),
             "pr-review" => Ok(Self::PrReview),
+            "brainstorming" => Ok(Self::Brainstorming),
+            "debugging" => Ok(Self::Debugging),
+            "policy-shaping" => Ok(Self::PolicyShaping),
             other => Err(format!("unknown Canon mode `{other}`")),
         }
     }
@@ -244,7 +261,7 @@ where
 }
 
 /// The current project-scale Canon mode set supported through Boundline.
-pub const CANONICAL_MODES: [CanonMode; 16] = [
+pub const CANONICAL_MODES: [CanonMode; 19] = [
     CanonMode::Discovery,
     CanonMode::Requirements,
     CanonMode::SystemShaping,
@@ -261,6 +278,9 @@ pub const CANONICAL_MODES: [CanonMode; 16] = [
     CanonMode::SystemAssessment,
     CanonMode::Migration,
     CanonMode::SupplyChainAnalysis,
+    CanonMode::Brainstorming,
+    CanonMode::Debugging,
+    CanonMode::PolicyShaping,
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -305,7 +325,7 @@ pub fn validate_canon_capabilities_for_mode(
     Ok(())
 }
 
-static GOVERNED_STAGE_CATALOG: [GovernedStageCatalogEntry; 16] = [
+static GOVERNED_STAGE_CATALOG: [GovernedStageCatalogEntry; 19] = [
     GovernedStageCatalogEntry {
         mode: CanonMode::Discovery,
         consider_when: "problem, user, or evidence is ambiguous",
@@ -450,14 +470,43 @@ static GOVERNED_STAGE_CATALOG: [GovernedStageCatalogEntry; 16] = [
         can_lead_to_implementation_or_refactor: true,
         recommendation_only: true,
     },
+    GovernedStageCatalogEntry {
+        mode: CanonMode::Brainstorming,
+        consider_when: "problem, user, or evidence requires structured divergence and ideation",
+        required_system_context: "goal, loosely defined problem statement, or idea brief",
+        category: GovernedStageCategory::Planning,
+        voting_may_be_required: false,
+        can_lead_to_implementation_or_refactor: true,
+        recommendation_only: true,
+    },
+    GovernedStageCatalogEntry {
+        mode: CanonMode::Debugging,
+        consider_when: "a reproducible bug requires systematic fault isolation and fix",
+        required_system_context: "bug report, reproduction steps, failure context",
+        category: GovernedStageCategory::ExecutionGuidance,
+        voting_may_be_required: true,
+        can_lead_to_implementation_or_refactor: true,
+        recommendation_only: true,
+    },
+    GovernedStageCatalogEntry {
+        mode: CanonMode::PolicyShaping,
+        consider_when: "a governance policy or architectural rule change is proposed",
+        required_system_context: "draft policy, existing constitution, project scale",
+        category: GovernedStageCategory::Planning,
+        voting_may_be_required: true,
+        can_lead_to_implementation_or_refactor: false,
+        recommendation_only: true,
+    },
 ];
 
+const DELIVERY_DISCOVERY_MODES: [CanonMode; 2] = [CanonMode::Discovery, CanonMode::Brainstorming];
 const DELIVERY_REQUIREMENTS_MODES: [CanonMode; 1] = [CanonMode::Requirements];
 const DELIVERY_SYSTEM_SHAPING_MODES: [CanonMode; 1] = [CanonMode::SystemShaping];
 const DELIVERY_ARCHITECTURE_MODES: [CanonMode; 1] = [CanonMode::Architecture];
 const DELIVERY_BACKLOG_MODES: [CanonMode; 1] = [CanonMode::Backlog];
 const DELIVERY_IMPLEMENTATION_MODES: [CanonMode; 1] = [CanonMode::Implementation];
-const CHANGE_UNDERSTAND_MODES: [CanonMode; 2] = [CanonMode::Change, CanonMode::Discovery];
+const CHANGE_UNDERSTAND_MODES: [CanonMode; 4] =
+    [CanonMode::Change, CanonMode::Discovery, CanonMode::Brainstorming, CanonMode::PolicyShaping];
 const CHANGE_IMPLEMENT_MODES: [CanonMode; 2] = [CanonMode::Implementation, CanonMode::Refactor];
 const CHANGE_VERIFY_MODES: [CanonMode; 4] = [
     CanonMode::SecurityAssessment,
@@ -465,9 +514,10 @@ const CHANGE_VERIFY_MODES: [CanonMode; 4] = [
     CanonMode::Review,
     CanonMode::PrReview,
 ];
-const BUG_FIX_INVESTIGATE_MODES: [CanonMode; 3] =
-    [CanonMode::Discovery, CanonMode::Change, CanonMode::Incident];
-const BUG_FIX_IMPLEMENT_MODES: [CanonMode; 2] = [CanonMode::Implementation, CanonMode::Refactor];
+const BUG_FIX_INVESTIGATE_MODES: [CanonMode; 4] =
+    [CanonMode::Discovery, CanonMode::Change, CanonMode::Incident, CanonMode::Debugging];
+const BUG_FIX_IMPLEMENT_MODES: [CanonMode; 3] =
+    [CanonMode::Implementation, CanonMode::Refactor, CanonMode::Debugging];
 const BUG_FIX_VERIFY_MODES: [CanonMode; 4] = [
     CanonMode::SecurityAssessment,
     CanonMode::Verification,
@@ -487,6 +537,7 @@ pub const EXECUTION_STAGE_KEY_REVIEW: &str = "run:review";
 
 pub fn supported_canon_modes_for_stage(flow_name: &str, stage_id: &str) -> &'static [CanonMode] {
     match (flow_name, stage_id) {
+        ("delivery", "discovery") => &DELIVERY_DISCOVERY_MODES,
         ("delivery", "requirements") => &DELIVERY_REQUIREMENTS_MODES,
         ("delivery", "system-shaping") => &DELIVERY_SYSTEM_SHAPING_MODES,
         ("delivery", "architecture") => &DELIVERY_ARCHITECTURE_MODES,
@@ -2969,12 +3020,12 @@ mod tests {
         assert_eq!("requirements".parse::<CanonMode>().unwrap(), CanonMode::Requirements);
         assert_eq!("pr-review".parse::<CanonMode>().unwrap(), CanonMode::PrReview);
 
-        assert_eq!(CANONICAL_MODES.len(), 16);
+        assert_eq!(CANONICAL_MODES.len(), 19);
         assert!(CANONICAL_MODES.contains(&CanonMode::Requirements));
         assert!(CANONICAL_MODES.contains(&CanonMode::PrReview));
 
         let catalog = governed_stage_catalog();
-        assert_eq!(catalog.len(), 16);
+        assert_eq!(catalog.len(), 19);
         assert!(catalog.iter().any(|entry| {
             entry.mode == CanonMode::Review
                 && entry.category == GovernedStageCategory::Review

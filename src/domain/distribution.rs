@@ -500,7 +500,10 @@ mod tests {
                 "security-assessment",
                 "system-assessment",
                 "migration",
-                "supply-chain-analysis"
+                "supply-chain-analysis",
+                "brainstorming",
+                "debugging",
+                "policy-shaping"
             ],
             "status_values": ["governed_ready", "awaiting_approval", "blocked"],
             "approval_state_values": ["not_needed", "requested", "granted"],

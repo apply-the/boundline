@@ -18,7 +18,10 @@
     "security-assessment",
     "system-assessment",
     "migration",
-    "supply-chain-analysis"
+    "supply-chain-analysis",
+    "brainstorming",
+    "debugging",
+    "policy-shaping"
   ],
   "status_values": ["pending_selection", "running", "governed_ready", "awaiting_approval", "blocked", "incomplete", "completed", "failed"],
   "approval_state_values": ["not_needed", "requested", "granted", "rejected", "expired"],

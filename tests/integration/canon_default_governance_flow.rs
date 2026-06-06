@@ -280,7 +280,7 @@ fn write_ready_canon_on_path(prefix: &str, workspace: &Path, mode: &str) -> Path
         &format!("Canon completed {mode}"),
     );
     let capabilities = format!(
-        r#"{{"canon_version":"{SUPPORTED_CANON_VERSION}","supported_schema_versions":["2026-02-01"],"operations":["start","refresh","capabilities"],"supported_modes":["requirements","discovery","system-shaping","architecture","backlog","change","implementation","refactor","review","verification","pr-review","incident","security-assessment","system-assessment","migration","supply-chain-analysis"],"status_values":["governed_ready","awaiting_approval","blocked"],"approval_state_values":["not_needed","requested","granted"],"packet_readiness_values":["reusable","pending","incomplete"],"compatibility_notes":["stable-json"]}}"#
+        r#"{{"canon_version":"{SUPPORTED_CANON_VERSION}","supported_schema_versions":["2026-02-01"],"operations":["start","refresh","capabilities"],"supported_modes":["requirements","discovery","system-shaping","architecture","backlog","change","implementation","refactor","review","verification","pr-review","incident","security-assessment","system-assessment","migration","supply-chain-analysis","brainstorming","debugging","policy-shaping"],"status_values":["governed_ready","awaiting_approval","blocked"],"approval_state_values":["not_needed","requested","granted"],"packet_readiness_values":["reusable","pending","incomplete"],"compatibility_notes":["stable-json"]}}"#
     );
     fs::write(
         &canon,
@@ -307,7 +307,7 @@ fn write_capturing_canon_on_path(prefix: &str, workspace: &Path, response_json: 
     let canon = bin_dir.join("canon");
     let capture_path = workspace.join(".boundline/canon-request.json");
     let capabilities = format!(
-        r#"{{"canon_version":"{SUPPORTED_CANON_VERSION}","supported_schema_versions":["2026-02-01"],"operations":["start","refresh","capabilities"],"supported_modes":["requirements","discovery","system-shaping","architecture","backlog","change","implementation","refactor","review","verification","pr-review","incident","security-assessment","system-assessment","migration","supply-chain-analysis"],"status_values":["governed_ready","awaiting_approval","blocked","pending_selection","incomplete"],"approval_state_values":["not_needed","requested","granted"],"packet_readiness_values":["reusable","pending","incomplete"],"compatibility_notes":["stable-json"]}}"#
+        r#"{{"canon_version":"{SUPPORTED_CANON_VERSION}","supported_schema_versions":["2026-02-01"],"operations":["start","refresh","capabilities"],"supported_modes":["requirements","discovery","system-shaping","architecture","backlog","change","implementation","refactor","review","verification","pr-review","incident","security-assessment","system-assessment","migration","supply-chain-analysis","brainstorming","debugging","policy-shaping"],"status_values":["governed_ready","awaiting_approval","blocked","pending_selection","incomplete"],"approval_state_values":["not_needed","requested","granted"],"packet_readiness_values":["reusable","pending","incomplete"],"compatibility_notes":["stable-json"]}}"#
     );
     fs::write(
         &canon,
@@ -341,7 +341,7 @@ fn write_multi_stage_capturing_canon_on_path(
     let capture_prefix = workspace.join(".boundline/canon-request");
     let count_path = workspace.join(".boundline/canon-request-count");
     let capabilities = format!(
-        r#"{{"canon_version":"{SUPPORTED_CANON_VERSION}","supported_schema_versions":["2026-02-01"],"operations":["start","refresh","capabilities"],"supported_modes":["requirements","discovery","system-shaping","architecture","backlog","change","implementation","refactor","review","verification","pr-review","incident","security-assessment","system-assessment","migration","supply-chain-analysis"],"status_values":["governed_ready","awaiting_approval","blocked","pending_selection","incomplete"],"approval_state_values":["not_needed","requested","granted"],"packet_readiness_values":["reusable","pending","incomplete"],"compatibility_notes":["stable-json"]}}"#
+        r#"{{"canon_version":"{SUPPORTED_CANON_VERSION}","supported_schema_versions":["2026-02-01"],"operations":["start","refresh","capabilities"],"supported_modes":["requirements","discovery","system-shaping","architecture","backlog","change","implementation","refactor","review","verification","pr-review","incident","security-assessment","system-assessment","migration","supply-chain-analysis","brainstorming","debugging","policy-shaping"],"status_values":["governed_ready","awaiting_approval","blocked","pending_selection","incomplete"],"approval_state_values":["not_needed","requested","granted"],"packet_readiness_values":["reusable","pending","incomplete"],"compatibility_notes":["stable-json"]}}"#
     );
     fs::write(
         &canon,

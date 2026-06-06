@@ -1209,7 +1209,16 @@ fn supported_canon_modes_include_expected_stage_whitelist_entries() {
         ("delivery", "architecture", vec![CanonMode::Architecture]),
         ("delivery", "backlog", vec![CanonMode::Backlog]),
         ("delivery", "implementation", vec![CanonMode::Implementation]),
-        ("change", "understand-change", vec![CanonMode::Change, CanonMode::Discovery]),
+        (
+            "change",
+            "understand-change",
+            vec![
+                CanonMode::Change,
+                CanonMode::Discovery,
+                CanonMode::Brainstorming,
+                CanonMode::PolicyShaping,
+            ],
+        ),
         ("change", "implement", vec![CanonMode::Implementation, CanonMode::Refactor]),
         (
             "change",
@@ -1224,9 +1233,18 @@ fn supported_canon_modes_include_expected_stage_whitelist_entries() {
         (
             "bug-fix",
             "investigate",
-            vec![CanonMode::Discovery, CanonMode::Change, CanonMode::Incident],
+            vec![
+                CanonMode::Discovery,
+                CanonMode::Change,
+                CanonMode::Incident,
+                CanonMode::Debugging,
+            ],
         ),
-        ("bug-fix", "implement", vec![CanonMode::Implementation, CanonMode::Refactor]),
+        (
+            "bug-fix",
+            "implement",
+            vec![CanonMode::Implementation, CanonMode::Refactor, CanonMode::Debugging],
+        ),
         (
             "bug-fix",
             "verify",

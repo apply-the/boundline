@@ -37,6 +37,7 @@ pub mod planner;
 pub mod recovery;
 mod review_trace;
 pub mod session_runtime;
+pub mod session_runtime_observability;
 pub mod terminal;
 
 pub use engine::{Orchestrator, OrchestratorError};

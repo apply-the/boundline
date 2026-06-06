@@ -8,9 +8,7 @@ use std::path::PathBuf;
 use clap::Args;
 use serde::Serialize;
 
-use crate::domain::help_next::{
-    HelpNextDiagnostic, HelpNextRecommendation, HelpNextState,
-};
+use crate::domain::help_next::{HelpNextDiagnostic, HelpNextRecommendation, HelpNextState};
 
 /// Inspect the current workspace and recommend the next action.
 #[derive(Debug, Args)]
@@ -82,7 +80,7 @@ pub fn render_human(rec: &HelpNextRecommendation) -> String {
     out.push_str(&format!("State: {}\n", rec.state.label()));
 
     if let Some(ref primary) = rec.primary_issue {
-        out.push_str(&format!("Blockers found: yes\n"));
+        out.push_str("Blockers found: yes\n");
         out.push_str("---\n");
         out.push_str(&format!("{}\n", primary.message));
     } else {

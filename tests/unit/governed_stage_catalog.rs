@@ -7,7 +7,7 @@ fn governed_stage_catalog_covers_all_project_scale_canon_modes() {
     let catalog = governed_stage_catalog();
     let modes = catalog.iter().map(|entry| entry.mode).collect::<Vec<_>>();
 
-    assert_eq!(modes.len(), 16);
+    assert_eq!(modes.len(), 19);
     for mode in [
         CanonMode::Discovery,
         CanonMode::Requirements,
@@ -25,6 +25,9 @@ fn governed_stage_catalog_covers_all_project_scale_canon_modes() {
         CanonMode::SystemAssessment,
         CanonMode::Migration,
         CanonMode::SupplyChainAnalysis,
+        CanonMode::Brainstorming,
+        CanonMode::Debugging,
+        CanonMode::PolicyShaping,
     ] {
         assert!(modes.contains(&mode), "missing mode {mode}");
     }

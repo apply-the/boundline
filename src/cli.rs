@@ -18,9 +18,9 @@ use crate::domain::governance::{CanonMode, CanonModeSelectionPreference, Governa
 use crate::domain::trace::current_timestamp_millis;
 
 use super::{
-    adapter, assistant_assets, checkpoint, cluster, config, council, diagnostics, govern, index,
-    init, inspect, models_auth, orchestrate, output, probe, provider, run, session, workflow,
-    workspace as cli_workspace,
+    adapter, assistant_assets, checkpoint, cluster, config, council, diagnostics, evals, govern,
+    help_next, index, init, inspect, models_auth, orchestrate, output, probe, provider, run,
+    session, trace_compaction, workflow, workspace as cli_workspace,
 };
 use init::OllamaProfile;
 
@@ -79,6 +79,9 @@ pub enum CommandName {
     Cluster,
     Models,
     Council,
+    HelpNext,
+    Evals,
+    Trace,
 }
 
 impl CommandName {
@@ -110,6 +113,9 @@ impl CommandName {
             Self::Cluster => "cluster",
             Self::Models => "models",
             Self::Council => "council",
+            Self::HelpNext => "help-next",
+            Self::Evals => "evals",
+            Self::Trace => "trace",
         }
     }
 }
@@ -491,6 +497,18 @@ pub enum DeveloperCommand {
     Council {
         #[command(subcommand)]
         command: CouncilCommand,
+    },
+    /// Inspect the current workspace and recommend the next action.
+    HelpNext(help_next::HelpNextArgs),
+    /// Evaluate outputs and runs against fixtures.
+    Evals {
+        #[command(subcommand)]
+        command: evals::EvalsSubcommand,
+    },
+    /// Manage session trace lifecycle and compaction.
+    Trace {
+        #[command(subcommand)]
+        command: trace_compaction::TraceSubcommand,
     },
 }
 
@@ -953,6 +971,9 @@ impl DeveloperCommand {
             Self::Cluster { .. } => CommandName::Cluster,
             Self::Models { .. } => CommandName::Models,
             Self::Council { .. } => CommandName::Council,
+            Self::HelpNext(_) => CommandName::HelpNext,
+            Self::Evals { .. } => CommandName::Evals,
+            Self::Trace { .. } => CommandName::Trace,
         }
     }
 }
@@ -1451,6 +1472,50 @@ impl DeveloperCommandSession {
                     trace_location: None,
                 }
             }
+            DeveloperCommand::HelpNext(_) => Self {
+                command_name: CommandName::HelpNext,
+                workspace_ref: None,
+                requires_workspace_ref: false,
+                install_check: false,
+                goal: None,
+                trace_ref: None,
+                started_at: current_timestamp_millis(),
+                completed_at: None,
+                exit_status: None,
+                trace_location: None,
+            },
+            DeveloperCommand::Evals { command: evals::EvalsSubcommand::Run(args) } => Self {
+                command_name: CommandName::Evals,
+                workspace_ref: args
+                    .workspace
+                    .as_ref()
+                    .map(|path| path.to_string_lossy().into_owned()),
+                requires_workspace_ref: false,
+                install_check: false,
+                goal: None,
+                trace_ref: None,
+                started_at: current_timestamp_millis(),
+                completed_at: None,
+                exit_status: None,
+                trace_location: None,
+            },
+            DeveloperCommand::Trace {
+                command: trace_compaction::TraceSubcommand::Compact(args),
+            } => Self {
+                command_name: CommandName::Trace,
+                workspace_ref: args
+                    .workspace
+                    .as_ref()
+                    .map(|path| path.to_string_lossy().into_owned()),
+                requires_workspace_ref: false,
+                install_check: false,
+                goal: None,
+                trace_ref: None,
+                started_at: current_timestamp_millis(),
+                completed_at: None,
+                exit_status: None,
+                trace_location: None,
+            },
         }
     }
 
@@ -1501,6 +1566,9 @@ impl DeveloperCommandSession {
             | CommandName::Cluster
             | CommandName::Models
             | CommandName::Council
+            | CommandName::HelpNext
+            | CommandName::Evals
+            | CommandName::Trace
             | CommandName::Probe => {}
         }
 
@@ -1918,6 +1986,13 @@ fn command_environment_workspace(command: &DeveloperCommand) -> Option<PathBuf> 
         | DeveloperCommand::Govern { workspace, .. } => {
             resolve_command_workspace(workspace.as_deref())
         }
+        DeveloperCommand::HelpNext(_) => resolve_command_workspace(None),
+        DeveloperCommand::Evals { command: evals::EvalsSubcommand::Run(args) } => {
+            resolve_command_workspace(args.workspace.as_deref())
+        }
+        DeveloperCommand::Trace { command: trace_compaction::TraceSubcommand::Compact(args) } => {
+            resolve_command_workspace(args.workspace.as_deref())
+        }
         DeveloperCommand::Index { command } => index_command_environment_workspace(command),
         DeveloperCommand::Session { command } => session_command_environment_workspace(command),
         DeveloperCommand::Workflow { command } => workflow_command_environment_workspace(command),
@@ -2124,6 +2199,59 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
                 ),
             }
         }
+        DeveloperCommand::HelpNext(args) => {
+            let workspace = resolve_command_workspace(None).unwrap_or_else(|| PathBuf::from("."));
+            match help_next::run_help_next(&workspace, args) {
+                Ok(rec) => {
+                    let text = if args.json {
+                        help_next::render_json(&rec).unwrap_or_else(|e| e.to_string())
+                    } else {
+                        help_next::render_human(&rec)
+                    };
+                    DispatchOutcome::text(CommandExitStatus::Succeeded, text, None)
+                }
+                Err(e) => DispatchOutcome::text(CommandExitStatus::NonSuccess, e.to_string(), None),
+            }
+        }
+        DeveloperCommand::Evals { command } => match command {
+            evals::EvalsSubcommand::Run(args) => {
+                let workspace = resolve_command_workspace(args.workspace.as_deref())
+                    .unwrap_or_else(|| PathBuf::from("."));
+                match evals::run_evals(&workspace, args) {
+                    Ok(summary) => {
+                        let text = if args.json {
+                            evals::render_json(&summary).unwrap_or_else(|e| e.to_string())
+                        } else {
+                            evals::render_human(&summary)
+                        };
+                        DispatchOutcome::text(CommandExitStatus::Succeeded, text, None)
+                    }
+                    Err(e) => {
+                        DispatchOutcome::text(CommandExitStatus::NonSuccess, e.to_string(), None)
+                    }
+                }
+            }
+        },
+        DeveloperCommand::Trace { command } => match command {
+            trace_compaction::TraceSubcommand::Compact(args) => {
+                let workspace = resolve_command_workspace(args.workspace.as_deref())
+                    .unwrap_or_else(|| PathBuf::from("."));
+                match trace_compaction::run_trace_compaction(&workspace, args) {
+                    Ok(metrics) => {
+                        let text = if args.json {
+                            trace_compaction::render_json(&metrics)
+                                .unwrap_or_else(|e| e.to_string())
+                        } else {
+                            trace_compaction::render_human(&metrics)
+                        };
+                        DispatchOutcome::text(CommandExitStatus::Succeeded, text, None)
+                    }
+                    Err(e) => {
+                        DispatchOutcome::text(CommandExitStatus::NonSuccess, e.to_string(), None)
+                    }
+                }
+            }
+        },
     }
 }
 
