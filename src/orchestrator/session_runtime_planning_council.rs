@@ -170,6 +170,65 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn write_stage_council_artifact_reports_io_errors() -> Result<(), Box<dyn Error>> {
+        let tmp = temp_workspace("write-fail")?;
+        // Make the workspace root a file instead of a directory
+        let file_path = tmp.as_path().join("file-root");
+        fs::write(&file_path, "content")?;
+        let runtime = SessionRuntime::for_workspace(&file_path);
+
+        let request = StageCouncilRequest {
+            stage_key: STAGE_KEY.to_string(),
+            phase: "planning".to_string(),
+            producer_slot: "planning".to_string(),
+            target_refs: vec![],
+            current_artifact_ref: None,
+            goal: "test".to_string(),
+            constraints: vec![],
+        };
+
+        let result = runtime.write_stage_council_artifact(&request, "test", "content");
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("failed to create council artifact directory")
+                || err.contains("failed to write stage council artifact")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn stage_council_blocked_outcome_reports_validation_error_on_invalid_output()
+    -> Result<(), Box<dyn Error>> {
+        let tmp = temp_workspace("write-validate")?;
+        let runtime = SessionRuntime::for_workspace(tmp.as_path());
+
+        let request = StageCouncilRequest {
+            stage_key: STAGE_KEY.to_string(),
+            phase: "planning".to_string(),
+            producer_slot: "planning".to_string(),
+            target_refs: vec![],
+            current_artifact_ref: None,
+            goal: "test".to_string(),
+            constraints: vec![],
+        };
+
+        let producer_output = StageCouncilArtifact {
+            route_slot: "planning".to_string(),
+            evidence_ref: "evidence.md".to_string(),
+            summary: Some("test".to_string()),
+        };
+
+        // empty next_action should fail validation
+        let result =
+            runtime.stage_council_blocked_outcome(&request, &producer_output, "reason", "");
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(err.contains("invariant"));
+        Ok(())
+    }
+
     fn temp_workspace(prefix: &str) -> Result<TestWorkspace, Box<dyn Error>> {
         TestWorkspace::new(prefix)
     }

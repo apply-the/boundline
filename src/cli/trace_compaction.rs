@@ -65,3 +65,55 @@ pub fn render_human(metrics: &CompactionMetrics) -> String {
         metrics.preserved_decision_count
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn run_trace_compaction_returns_metrics() {
+        let args = TraceCompactArgs { workspace: None, preserve_accepted: false, json: false };
+        let root = PathBuf::from(".");
+        let metrics = run_trace_compaction(&root, &args).unwrap();
+        assert_eq!(metrics.compaction_count, 1);
+    }
+
+    #[test]
+    fn render_json_formats_metrics() {
+        let metrics = CompactionMetrics {
+            compaction_count: 1,
+            class_distribution: std::collections::HashMap::new(),
+            trace_size_before_bytes: 0,
+            trace_size_after_bytes: 0,
+            lossy_count: 0,
+            preserved_decision_count: 0,
+            preserved_rejection_count: 0,
+        };
+        let json = render_json(&metrics).unwrap();
+        assert!(json.contains("\"compaction_count\": 1"));
+    }
+
+    #[test]
+    fn render_human_formats_metrics() {
+        let metrics = CompactionMetrics {
+            compaction_count: 1,
+            class_distribution: std::collections::HashMap::new(),
+            trace_size_before_bytes: 100,
+            trace_size_after_bytes: 50,
+            lossy_count: 0,
+            preserved_decision_count: 0,
+            preserved_rejection_count: 0,
+        };
+        let text = render_human(&metrics);
+        assert!(text.contains("Size before: 100 bytes"));
+    }
+
+    #[test]
+    fn trace_compaction_cli_error_display() {
+        let err = TraceCompactionCliError::Io(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "test err",
+        ));
+        assert_eq!(err.to_string(), "failed to read trace: test err");
+    }
+}

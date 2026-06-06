@@ -441,6 +441,46 @@ mod tests {
                 },
                 "models",
             ),
+            (
+                DeveloperCommand::Council {
+                    command: crate::cli::CouncilCommand::Adjudicate {
+                        workspace: None,
+                        json: false,
+                    },
+                },
+                "council",
+            ),
+            (
+                DeveloperCommand::HelpNext(crate::cli::help_next::HelpNextArgs {
+                    all: false,
+                    json: false,
+                }),
+                "help-next",
+            ),
+            (
+                DeveloperCommand::Evals {
+                    command: crate::cli::evals::EvalsSubcommand::Run(
+                        crate::cli::evals::EvalsRunArgs {
+                            workspace: None,
+                            suite: None,
+                            json: false,
+                        },
+                    ),
+                },
+                "evals",
+            ),
+            (
+                DeveloperCommand::Trace {
+                    command: crate::cli::trace_compaction::TraceSubcommand::Compact(
+                        crate::cli::trace_compaction::TraceCompactArgs {
+                            workspace: None,
+                            preserve_accepted: false,
+                            json: false,
+                        },
+                    ),
+                },
+                "trace",
+            ),
         ];
         for (command, expected) in cases {
             assert_eq!(command_name(&command), expected);

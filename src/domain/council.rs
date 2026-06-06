@@ -207,42 +207,22 @@ impl GuardianActivationPlan {
     /// Produce an activation plan from the matched rules.
     #[must_use]
     pub fn from_rules(rules: &[&GuardianRule], source: RulesetSource) -> Self {
-        let mut activated = Vec::new();
-        let mut skipped = Vec::new();
-        let mut mandatory: Vec<String> = Vec::new();
-        let mut optional_skips: Vec<String> = Vec::new();
+        let activated = Self::collect_unique(rules.iter().flat_map(|r| &r.activate));
+        let mandatory = Self::collect_unique(rules.iter().flat_map(|r| &r.mandatory));
+        let optional_skips: Vec<_> = rules.iter().flat_map(|r| &r.skip).cloned().collect();
 
-        for rule in rules {
-            for g in &rule.activate {
-                if !activated.contains(g) {
-                    activated.push(g.clone());
-                }
-            }
-            for g in &rule.skip {
-                optional_skips.push(g.clone());
-            }
-            for g in &rule.mandatory {
-                if !mandatory.contains(g) {
-                    mandatory.push(g.clone());
-                }
-            }
-        }
+        let skipped = optional_skips
+            .into_iter()
+            .filter(|g| !activated.contains(g))
+            .map(|g| GuardianSkipRecord {
+                is_mandatory: mandatory.contains(&g),
+                guardian_id: g,
+                reason: "excluded by matching rule".into(),
+            })
+            .collect();
 
-        // Guardians that are skipped but not in the activated list produce
-        // a skip record.
-        for g in &optional_skips {
-            if !activated.contains(g) {
-                skipped.push(GuardianSkipRecord {
-                    guardian_id: g.clone(),
-                    reason: "excluded by matching rule".into(),
-                    is_mandatory: mandatory.contains(g),
-                });
-            }
-        }
-
-        // Mandatory guardians not in the activated list are unavailable.
         let mandatory_unavailable: Vec<String> =
-            mandatory.iter().filter(|g| !activated.contains(*g)).cloned().collect();
+            mandatory.into_iter().filter(|g| !activated.contains(g)).collect();
 
         let escalation = if !mandatory_unavailable.is_empty() {
             Some("mandatory guardians unavailable — escalation required".into())
@@ -259,6 +239,19 @@ impl GuardianActivationPlan {
             mandatory_unavailable,
             escalation,
         }
+    }
+
+    fn collect_unique<'a, I>(iter: I) -> Vec<String>
+    where
+        I: Iterator<Item = &'a String>,
+    {
+        let mut vec = Vec::new();
+        for item in iter {
+            if !vec.contains(item) {
+                vec.push(item.clone());
+            }
+        }
+        vec
     }
 
     /// Build a zero-guardian plan for trivial changes.

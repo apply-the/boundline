@@ -176,4 +176,79 @@ skip = ["rust-guardian"]
         let exit = run(tmp.path(), false).unwrap();
         assert_eq!(exit, 0);
     }
+
+    #[test]
+    fn run_with_json_output() {
+        let tmp = tempdir().unwrap();
+        let exit = run(tmp.path(), true).unwrap();
+        assert_eq!(exit, 0);
+    }
+
+    #[test]
+    fn run_with_empty_ruleset_returns_clean() {
+        let tmp = tempdir().unwrap();
+        let boundline_dir = tmp.path().join(".boundline");
+        std::fs::create_dir_all(&boundline_dir).unwrap();
+        let ruleset_path = boundline_dir.join("guardian-rules.toml");
+        std::fs::write(&ruleset_path, "schema_version = \"1.0\"\nrules = []\n").unwrap();
+        let exit = run(tmp.path(), false).unwrap();
+        assert_eq!(exit, 0);
+    }
+
+    #[test]
+    fn invalid_toml_fails_validation() {
+        let tmp = tempdir().unwrap();
+        let boundline_dir = tmp.path().join(".boundline");
+        std::fs::create_dir_all(&boundline_dir).unwrap();
+        let ruleset_path = boundline_dir.join("guardian-rules.toml");
+        std::fs::write(&ruleset_path, "schema_version = \"1.0\"\nrules = \"invalid\"\n").unwrap();
+        let result = load_ruleset(tmp.path());
+        assert!(matches!(result, Err(CouncilCliError::RulesetInvalid(_))));
+    }
+
+    #[test]
+    fn to_string_formats_errors() {
+        let err1 = CouncilCliError::RulesetRead("test".into());
+        let err2 = CouncilCliError::RulesetInvalid("test".into());
+        assert_eq!(err1.to_string(), "failed to read ruleset: test");
+        assert_eq!(err2.to_string(), "ruleset is invalid: test");
+    }
+
+    #[test]
+    fn run_with_mandatory_unavailable() {
+        // Need a ruleset that requires an unavailable mandatory guardian
+        let tmp = tempdir().unwrap();
+        let boundline_dir = tmp.path().join(".boundline");
+        std::fs::create_dir_all(&boundline_dir).unwrap();
+        let ruleset_path = boundline_dir.join("guardian-rules.toml");
+        std::fs::write(
+            &ruleset_path,
+            r#"schema_version = "1.0"
+
+[[rules]]
+id = "test"
+stages = ["run"]
+files = ["src/**/*.rs"]
+activate = ["unknown-guardian"]
+"#,
+        )
+        .unwrap();
+        // It will return blocked but exit code is still 0 (the decision is captured in output)
+        let exit = run(tmp.path(), false).unwrap();
+        assert_eq!(exit, 0);
+    }
+
+    #[test]
+    fn to_string_formats_io_error() {
+        let err = CouncilCliError::Io(std::io::Error::new(std::io::ErrorKind::NotFound, "test"));
+        assert_eq!(err.to_string(), "io error: test");
+    }
+
+    #[test]
+    fn to_string_formats_json_error() {
+        // Just trigger From<serde_json::Error>
+        let json_err = serde_json::from_str::<serde_json::Value>("invalid").unwrap_err();
+        let err = CouncilCliError::from(json_err);
+        assert!(err.to_string().starts_with("failed to read ruleset: expected value"));
+    }
 }

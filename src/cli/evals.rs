@@ -58,3 +58,37 @@ pub fn render_human(summary: &EvalSummary) -> String {
         summary.duration_ms
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn run_evals_returns_empty_summary() {
+        let args = EvalsRunArgs { workspace: None, suite: None, json: false };
+        let root = PathBuf::from(".");
+        let summary = run_evals(&root, &args).unwrap();
+        assert_eq!(summary.total_count, 0);
+    }
+
+    #[test]
+    fn render_json_formats_correctly() {
+        let summary = EvalSummary::from_results(vec![]);
+        let json = render_json(&summary).unwrap();
+        assert!(json.contains("\"total_count\": 0"));
+    }
+
+    #[test]
+    fn render_human_formats_correctly() {
+        let summary = EvalSummary::from_results(vec![]);
+        let text = render_human(&summary);
+        assert!(text.contains("Total: 0"));
+    }
+
+    #[test]
+    fn evals_cli_error_display() {
+        let err =
+            EvalsCliError::Io(std::io::Error::new(std::io::ErrorKind::NotFound, "test error"));
+        assert_eq!(err.to_string(), "failed to read evaluations: test error");
+    }
+}
