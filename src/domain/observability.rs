@@ -13,6 +13,7 @@ pub const SCHEMA_VERSION_PLANNING_ANALYSIS: &str = "1.0";
 pub const SCHEMA_VERSION_GUARDIAN_FINDING: &str = "1.0";
 pub const SCHEMA_VERSION_PROVIDER_CALL: &str = "1.0";
 pub const SCHEMA_VERSION_TRACE_COMPACTED: &str = "1.0";
+pub const SCHEMA_VERSION_HELP_NEXT_REQUESTED: &str = "1.0";
 pub const SCHEMA_VERSION_PHASE_REQUESTED: &str = "1.0";
 pub const SCHEMA_VERSION_ROUTE_DECISION: &str = "1.0";
 pub const SCHEMA_VERSION_CONTEXT_SELECTION: &str = "1.0";
@@ -27,10 +28,11 @@ pub enum EventType {
     PhaseRequested,
     RouteDecisionMade,
     ContextSelectionRecorded,
+    HelpNextRequested,
 }
 
 impl EventType {
-    pub const fn all() -> [Self; 7] {
+    pub const fn all() -> [Self; 8] {
         [
             Self::PlanningAnalysisCompleted,
             Self::GuardianFindingEmitted,
@@ -39,6 +41,7 @@ impl EventType {
             Self::PhaseRequested,
             Self::RouteDecisionMade,
             Self::ContextSelectionRecorded,
+            Self::HelpNextRequested,
         ]
     }
 
@@ -51,6 +54,7 @@ impl EventType {
             Self::PhaseRequested => "phase.requested",
             Self::RouteDecisionMade => "route.decision.made",
             Self::ContextSelectionRecorded => "context.selection.recorded",
+            Self::HelpNextRequested => "boundline.help_next.requested",
         }
     }
 
@@ -63,6 +67,7 @@ impl EventType {
             Self::PhaseRequested => SCHEMA_VERSION_PHASE_REQUESTED,
             Self::RouteDecisionMade => SCHEMA_VERSION_ROUTE_DECISION,
             Self::ContextSelectionRecorded => SCHEMA_VERSION_CONTEXT_SELECTION,
+            Self::HelpNextRequested => SCHEMA_VERSION_HELP_NEXT_REQUESTED,
         }
     }
 }

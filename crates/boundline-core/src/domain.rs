@@ -40,6 +40,8 @@ pub mod governance;
 pub mod guidance;
 #[path = "../../../src/domain/guidance_catalog.rs"]
 pub mod guidance_catalog;
+#[path = "../../../src/domain/help_next.rs"]
+pub mod help_next;
 #[path = "../../../src/domain/limits.rs"]
 pub mod limits;
 #[path = "../../../src/domain/negotiation.rs"]

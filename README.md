@@ -229,6 +229,7 @@ when the operator deliberately asks for `--compatibility`.
 | `boundline run` | Execute the next pending step in the plan. |
 | `boundline status` | Check the current session status and next actions. |
 | `boundline inspect` | View detailed execution traces and evidence. |
+| `boundline help-next` | Diagnose the workspace state and recommend the next action. |
 | `boundline index status` | Report manifest-backed derived-index lifecycle state. |
 | `boundline index doctor` | Diagnose tracked, stale, corrupt, or degraded derived-index state. |
 
