@@ -36,7 +36,17 @@ fn request() -> GovernanceRuntimeRequest {
 }
 
 fn temp_workspace(prefix: &str) -> io::Result<PathBuf> {
-    let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
+    let base = std::env::temp_dir();
+    if !base.exists() {
+        // Under cargo llvm-cov, /tmp may not be available on some CI runners.
+        // Fall back to the current working directory as a last resort.
+        let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        fs::create_dir_all(&cwd)?;
+        let workspace = cwd.join(format!("{prefix}-{}", Uuid::new_v4()));
+        fs::create_dir_all(&workspace)?;
+        return Ok(workspace);
+    }
+    let workspace = base.join(format!("{prefix}-{}", Uuid::new_v4()));
     fs::create_dir_all(&workspace)?;
     Ok(workspace)
 }

@@ -4,10 +4,6 @@
 
 Boundline, Canon policy-aware
 
-## Status
-
-B-level, after S15
-
 ## Speckit Seed Notes
 
 - Seed role: adaptive-governance hardening over existing runtime confidence and

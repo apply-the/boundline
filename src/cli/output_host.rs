@@ -239,6 +239,7 @@ pub fn command_name(command: &DeveloperCommand) -> &'static str {
         DeveloperCommand::Cluster { .. } => "cluster",
         DeveloperCommand::Models { .. } => "models",
         DeveloperCommand::Council { .. } => "council",
+        DeveloperCommand::Override { .. } => "override",
         DeveloperCommand::HelpNext(_) => "help-next",
         DeveloperCommand::Evals { .. } => "evals",
         DeveloperCommand::Trace { .. } => "trace",
@@ -449,6 +450,17 @@ mod tests {
                     },
                 },
                 "council",
+            ),
+            (
+                DeveloperCommand::Override {
+                    workspace: None,
+                    guardian_id: "test".to_string(),
+                    control_id: "test".to_string(),
+                    level: "advisory".to_string(),
+                    reason: "reason".to_string(),
+                    expiry: None,
+                },
+                "override",
             ),
             (
                 DeveloperCommand::HelpNext(crate::cli::help_next::HelpNextArgs {

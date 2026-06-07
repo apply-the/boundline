@@ -33,10 +33,14 @@ pub enum EventType {
     HelpNextRequested,
     GuardianActivationPlanProduced,
     CouncilDecisionProduced,
+    ControlLevelAssigned,
+    ControlLevelGraduated,
+    ControlDegraded,
+    ControlEscalated,
 }
 
 impl EventType {
-    pub const fn all() -> [Self; 10] {
+    pub const fn all() -> [Self; 14] {
         [
             Self::PlanningAnalysisCompleted,
             Self::GuardianFindingEmitted,
@@ -48,6 +52,10 @@ impl EventType {
             Self::HelpNextRequested,
             Self::GuardianActivationPlanProduced,
             Self::CouncilDecisionProduced,
+            Self::ControlLevelAssigned,
+            Self::ControlLevelGraduated,
+            Self::ControlDegraded,
+            Self::ControlEscalated,
         ]
     }
 
@@ -63,6 +71,10 @@ impl EventType {
             Self::HelpNextRequested => "boundline.help_next.requested",
             Self::GuardianActivationPlanProduced => "guardian.activation.plan.produced",
             Self::CouncilDecisionProduced => "council.decision.produced",
+            Self::ControlLevelAssigned => "control.level.assigned",
+            Self::ControlLevelGraduated => "control.level.graduated",
+            Self::ControlDegraded => "control.degraded",
+            Self::ControlEscalated => "control.escalated",
         }
     }
 
@@ -78,6 +90,10 @@ impl EventType {
             Self::HelpNextRequested => SCHEMA_VERSION_HELP_NEXT_REQUESTED,
             Self::GuardianActivationPlanProduced => SCHEMA_VERSION_GUARDIAN_ACTIVATION,
             Self::CouncilDecisionProduced => SCHEMA_VERSION_COUNCIL_DECISION,
+            Self::ControlLevelAssigned => SCHEMA_VERSION_COUNCIL_DECISION,
+            Self::ControlLevelGraduated => SCHEMA_VERSION_COUNCIL_DECISION,
+            Self::ControlDegraded => SCHEMA_VERSION_COUNCIL_DECISION,
+            Self::ControlEscalated => SCHEMA_VERSION_COUNCIL_DECISION,
         }
     }
 }

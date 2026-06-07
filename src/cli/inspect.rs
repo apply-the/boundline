@@ -1208,6 +1208,128 @@ pub enum TraceSummaryError {
     UnknownStepKind(String),
 }
 
+// ── Calibration Inspection ────────────────────────────────────────────
+
+use crate::domain::calibration::{
+    AuthorityZone, ControlLevelAssignment, GuardianTrustRecord, OverrideRecord, RiskLevel,
+    load_calibration_policy,
+};
+
+/// A summary of calibration state for inspect output.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct CalibrationInspectionView {
+    pub policy_loaded: bool,
+    pub policy_path: String,
+    pub schema_version: String,
+    pub evidence_window: u32,
+    pub minimum_evidence_threshold: u32,
+    pub assignments: Vec<ControlLevelAssignment>,
+    pub trust_records: Vec<GuardianTrustRecord>,
+    pub override_records: Vec<OverrideRecord>,
+}
+
+/// Load calibration policy and render control-level assignments for inspect.
+pub fn render_calibration_inspection(
+    workspace_root: &std::path::Path,
+    activated_guardian_ids: &[String],
+    json: bool,
+) -> String {
+    let policy_result = load_calibration_policy(workspace_root);
+    let policy = match policy_result {
+        Ok(p) => p,
+        Err(_) => {
+            if json {
+                return r#"{"calibration":{"error":"failed to load calibration policy"}}"#
+                    .to_string();
+            }
+            return "Calibration: failed to load calibration policy\n".to_string();
+        }
+    };
+
+    // For now, assign default levels to all activated guardians.
+    // Full authority zone and risk level resolution happens in council adjudication.
+    let assignments: Vec<ControlLevelAssignment> = activated_guardian_ids
+        .iter()
+        .map(|id| policy.resolve_level(id, AuthorityZone::Green, RiskLevel::Low, None))
+        .collect();
+
+    let trust_records: Vec<GuardianTrustRecord> =
+        activated_guardian_ids.iter().map(|id| GuardianTrustRecord::new(id)).collect();
+
+    if json {
+        let view = CalibrationInspectionView {
+            policy_loaded: true,
+            policy_path: workspace_root
+                .join(".boundline")
+                .join("calibration-policy.toml")
+                .to_string_lossy()
+                .to_string(),
+            schema_version: policy.schema_version.clone(),
+            evidence_window: policy.evidence_window,
+            minimum_evidence_threshold: policy.minimum_evidence_threshold,
+            assignments: assignments.clone(),
+            trust_records: trust_records.clone(),
+            override_records: Vec::new(),
+        };
+        serde_json::to_string_pretty(&view)
+            .unwrap_or_else(|_| r#"{"calibration":{"error":"serialization failed"}}"#.to_string())
+    } else {
+        let mut lines = Vec::new();
+        lines.push("Guardian Calibration".to_string());
+        lines.push(format!(
+            "  Policy: {} (schema v{})",
+            if policy.entries.is_empty() {
+                "built-in all-advisory default"
+            } else {
+                "loaded from .boundline/calibration-policy.toml"
+            },
+            policy.schema_version
+        ));
+        lines.push(format!(
+            "  Evidence window: {} sessions (min sample: {})",
+            policy.evidence_window, policy.minimum_evidence_threshold
+        ));
+        lines.push(String::new());
+
+        for assignment in &assignments {
+            lines.push(format!(
+                "  {}: {:?} (guardian confidence: {:.2}, calibrated: {:.2})",
+                assignment.rule_id,
+                assignment.assigned_level,
+                assignment.guardian_confidence,
+                assignment.calibrated_confidence
+            ));
+            lines.push(format!("    Reason: {}", assignment.reason));
+            if let Some(from) = assignment.degraded_from {
+                lines.push(format!(
+                    "    Degraded from: {from:?} — {}",
+                    assignment.degradation_reason.as_deref().unwrap_or("unknown")
+                ));
+            }
+            lines.push(String::new());
+        }
+
+        for record in &trust_records {
+            if record.adjudicated_count() > 0 {
+                let tpr_str = record
+                    .true_positive_rate()
+                    .map(|r| format!("{:.2}", r))
+                    .unwrap_or_else(|| "N/A".to_string());
+                lines.push(format!(
+                    "  Trust: {} — TP={}, FP={}, deferred={}, TPR={}",
+                    record.rule_id,
+                    record.true_positive_count,
+                    record.false_positive_count,
+                    record.deferred_count,
+                    tpr_str
+                ));
+            }
+        }
+
+        lines.join("\n")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs;
@@ -1774,26 +1896,17 @@ mod tests {
 
         let selected_trace = resolve_session_trace_ref(&workspace, Some("selected-session"))
             .map_err(|error| error.to_string())?;
-        if selected_trace.as_deref() != Some("selected/trace.json") {
-            return Err(format!("expected selected trace ref, got {selected_trace:?}"));
-        }
+        assert_eq!(selected_trace.as_deref(), Some("selected/trace.json"));
 
         let active_trace =
             resolve_session_trace_ref(&workspace, None).map_err(|error| error.to_string())?;
-        if active_trace.as_deref() != Some("active/trace.json") {
-            return Err(format!("expected active trace ref, got {active_trace:?}"));
-        }
+        assert_eq!(active_trace.as_deref(), Some("active/trace.json"));
 
         let active_after = store
             .load()
             .map_err(|error| error.to_string())?
             .ok_or_else(|| "expected active session record".to_string())?;
-        if active_after.session_id != active_record.session_id {
-            return Err(format!(
-                "expected active session {} to remain selected, got {}",
-                active_record.session_id, active_after.session_id
-            ));
-        }
+        assert_eq!(active_after.session_id, active_record.session_id);
 
         Ok(())
     }
@@ -2519,5 +2632,78 @@ mod tests {
             ),
             "updated src/lib.rs, src/main.rs after 2 attempt(s)"
         );
+    }
+
+    #[test]
+    fn calibration_inspection_view_handles_missing_policy() {
+        let ws = temp_workspace("calib");
+        let guardians = vec!["g1".to_string(), "g2".to_string()];
+
+        let plain = super::render_calibration_inspection(&ws, &guardians, false);
+        assert!(plain.contains("built-in all-advisory default"));
+
+        let json_out = super::render_calibration_inspection(&ws, &guardians, true);
+        assert!(json_out.contains("\"policy_loaded\""));
+    }
+
+    #[test]
+    fn calibration_inspection_view_handles_valid_policy() {
+        let ws = temp_workspace("calib-valid");
+        let guardians = vec!["test-guardian".to_string()];
+
+        // Write a valid calibration policy
+        let policy_path = ws.join(".boundline").join("calibration-policy.toml");
+        std::fs::write(
+            &policy_path,
+            r#"schema_version = "1.0"
+evidence_window = 100
+minimum_evidence_threshold = 10
+
+[[entries]]
+rule_id = "test-guardian"
+authority_zone = "green"
+risk_level = "low"
+default_level = "catch"
+green_level = "catch"
+yellow_level = "rule"
+red_level = "rule"
+confidence_threshold = 0.85
+
+[entries.override_policy]
+allowed_roles = ["operator"]
+required_evidence = ["reason"]
+time_limited = false
+"#,
+        )
+        .unwrap();
+
+        // Write a mock trust record
+        let trust_path = ws.join(".boundline").join("trust-records.json");
+        std::fs::write(
+            &trust_path,
+            r#"
+[
+  {
+    "rule_id": "test-guardian",
+    "true_positive_count": 5,
+    "false_positive_count": 1,
+    "deferred_count": 0,
+    "last_updated": "123"
+  }
+]
+"#,
+        )
+        .unwrap();
+
+        let plain = super::render_calibration_inspection(&ws, &guardians, false);
+        assert!(plain.contains("Guardian Calibration"));
+        assert!(plain.contains("loaded from .boundline/calibration-policy.toml"));
+        assert!(plain.contains("test-guardian: Catch"));
+
+        let json_out = super::render_calibration_inspection(&ws, &guardians, true);
+        let parsed: serde_json::Value = serde_json::from_str(&json_out).unwrap();
+        assert!(parsed.get("policy_loaded").unwrap().as_bool().unwrap());
+        assert_eq!(parsed.get("schema_version").unwrap().as_str().unwrap(), "1.0");
+        assert_eq!(parsed.get("evidence_window").unwrap().as_u64().unwrap(), 100);
     }
 }

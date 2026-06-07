@@ -224,7 +224,12 @@ fn temp_workspace(prefix: &str) -> PathBuf {
 fn write_provider_script(prefix: &str, body: impl AsRef<str>) -> Result<PathBuf, Box<dyn Error>> {
     let directory = temp_workspace(prefix);
     let script_path = directory.join(format!("{prefix}-{}.sh", Uuid::new_v4()));
-    fs::write(&script_path, body.as_ref())?;
+    {
+        use std::io::Write;
+        let mut f = std::fs::File::create(&script_path)?;
+        f.write_all(body.as_ref().as_bytes())?;
+        f.flush()?;
+    }
     let mut permissions = fs::metadata(&script_path)?.permissions();
     permissions.set_mode(0o755);
     fs::set_permissions(&script_path, permissions)?;

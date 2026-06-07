@@ -216,3 +216,6 @@ mod guidance_index_contract;
 
 #[path = "contract/guardian_index_contract.rs"]
 mod guardian_index_contract;
+
+#[path = "contract/calibration_output_contract.rs"]
+mod calibration_output_contract;

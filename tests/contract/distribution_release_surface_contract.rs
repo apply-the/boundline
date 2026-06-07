@@ -20,7 +20,7 @@ fn release_surface_tracks_current_workspace_version_without_stale_status_heading
     assert!(changelog.contains(&changelog_heading));
     assert!(
         roadmap.contains(&format!(
-            "Delivered in {version}: guardian activation router, council adjudication, role-gated governance"
+            "Delivered in {version}: graduated control levels, trust evolution, override records, degradation & escalation"
         ))
     );
     assert!(!roadmap.contains("## Current Status:"));

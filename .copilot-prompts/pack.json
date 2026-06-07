@@ -1,7 +1,7 @@
 {
   "name": "boundline",
   "displayName": "Boundline Copilot Prompt Pack",
-  "version": "0.74.0",
+  "version": "0.75.0",
   "description": "CLI-authoritative Copilot prompt pack for bounded engineering work",
   "author": {
     "name": "Apply The",

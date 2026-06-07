@@ -267,3 +267,6 @@ mod delight_feedback_signals;
 
 #[path = "integration/assistant_host_parity_paths.rs"]
 mod assistant_host_parity_paths;
+
+#[path = "integration/calibration_flow.rs"]
+mod calibration_flow;

@@ -25,6 +25,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: 1.96.0
           targets: ${{ matrix.target }}
 
       - name: Install cross-compilation tools
@@ -99,13 +100,20 @@ jobs:
           path: packages-repo
 
       - name: Publish to APT Repository
+        env:
+          APT_GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
+          APT_GPG_PASSPHRASE: ${{ secrets.APT_GPG_PASSPHRASE }}
         run: |
+          sudo apt-get update && sudo apt-get install -y dpkg-dev
+
           mkdir -p packages-repo/apt/pool/main/b/boundline/
           find deb-packages -name "*.deb" -exec cp {} packages-repo/apt/pool/main/b/boundline/ \;
           
           cd packages-repo
+          ./scripts/rebuild-apt-repo.sh
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add apt/pool/main/b/boundline/
+          git add apt/pool/main/b/boundline/ apt/dists/
           git commit -m "Publish Boundline APT packages for ${{ github.ref_name }}"
           git push

@@ -36,7 +36,7 @@ feature under `specs/`.
 | **08** | [evals-and-runtime-observability.md](../specs/072-evals-runtime-observability/feat-evals-and-runtime-observability.md) | Delivered in 0.73.0: local quality evals, trace compaction policy with five retention classes, structured event vocabulary, JSONL export, runtime metrics, and CI-compatible eval summary |
 | **09** | [contextual-help-and-documentation-architecture.md](../specs/073-contextual-help-docs/feat-contextual-help-and-documentation-architecture.md) | Delivered: `boundline help-next` operator guidance surface; Canon companion spec in canon/specs/073 |
 | **10** | [review-councils-and-role-gated-governance.md](../specs/074-review-councils-governance/feat-review-councils-and-role-gated-governance.md) | Delivered in 0.74.0: guardian activation router, council adjudication, role-gated governance |
-| **11** | [adaptive-governance-calibration.md](features/11-adaptive-governance-calibration.md) | Extend delivered S4/S057 work |
+| **11** | [adaptive-governance-calibration.md](../specs/075-adaptive-governance-calibration/spec.md) | Delivered in 0.75.0: graduated control levels, trust evolution, override records, degradation & escalation |
 | **12** | [recursive-stage-refinement-profiles.md](features/12-recursive-stage-refinement-profiles.md) | Later: bounded structured refinement after council and adaptive-governance hardening |
 | **13** | [sandboxed-execution-and-secret-inheritance.md](features/13-sandboxed-execution-and-secret-inheritance.md) | Local safety boundaries |
 | **14** | [ai-gateway-and-inference-economics.md](features/14-ai-gateway-and-inference-economics.md) | Scale and route health feature |
