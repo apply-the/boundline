@@ -626,6 +626,9 @@ pub fn render_run_trace(
                         event.payload.get("flow_name").and_then(Value::as_str).unwrap_or("unknown");
                     lines.push(format!("flow inferred: {flow}"));
                 }
+                TraceEventType::RefinementRoundCompleted => {
+                    // Round packets are surfaced via inspection, not run-trace output.
+                }
             }
         }
 

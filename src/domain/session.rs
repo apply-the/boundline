@@ -1138,6 +1138,9 @@ pub struct SessionStatusView {
     pub backlog_unmapped_items: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub planning_analysis_state: Option<String>,
+    /// Active refinement profile summary (profile, rounds, stop reason, outcome).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub refinement_summary: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub planning_analysis_findings: Option<Vec<PlanningAnalysisFinding>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1473,6 +1476,7 @@ impl Default for SessionStatusView {
             latest_voting_blocking: None,
             latest_voting_next_action: None,
             delight_feedback: None,
+            refinement_summary: None,
             next_command: None,
             explanation: String::new(),
         }

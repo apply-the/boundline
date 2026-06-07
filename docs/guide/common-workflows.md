@@ -2,7 +2,7 @@
 
 Use this page while operating the main session-native Boundline loop.
 
-Boundline 0.75.0 ships the current planning-readiness chain. When the plan
+Boundline 0.76.0 ships the current planning-readiness chain. When the plan
 needs a missing validation strategy, when Canon only produced a closure-limited
 backlog packet, when the full packet still lacks an execution handoff, or when
 planning analysis finds a contradiction between the selected slice, validation

@@ -62,6 +62,8 @@ pub mod project_index;
 pub mod project_memory;
 #[path = "../../../src/domain/reasoning.rs"]
 pub mod reasoning;
+#[path = "../../../src/domain/refinement.rs"]
+pub mod refinement;
 #[path = "../../../src/domain/review.rs"]
 pub mod review;
 #[path = "../../../src/domain/routing_decision.rs"]

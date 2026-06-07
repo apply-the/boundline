@@ -1189,6 +1189,11 @@ fn trace_event_audit_algorithm_projection(
             family: "session_runtime",
             name: "plan_goal_plan",
         },
+        TraceEventType::RefinementRoundCompleted => TraceEventAuditAlgorithmProjection {
+            phase: SessionAuditPhase::Plan,
+            family: "refinement",
+            name: "execute_refinement_loop",
+        },
         TraceEventType::ProjectScalePathProposed
         | TraceEventType::ProjectScaleStageTransitioned => TraceEventAuditAlgorithmProjection {
             phase: SessionAuditPhase::Goal,
@@ -1318,6 +1323,7 @@ fn trace_event_audit_outcome_projection(
         | TraceEventType::FlowSelected
         | TraceEventType::GoalPlanCreated
         | TraceEventType::FlowInferred
+        | TraceEventType::RefinementRoundCompleted
         | TraceEventType::ProjectScalePathProposed
         | TraceEventType::StageTransitioned
         | TraceEventType::GovernanceStarted

@@ -86,6 +86,7 @@ pub enum TraceEventType {
     DecisionRecovered,
     GoalPlanCreated,
     FlowInferred,
+    RefinementRoundCompleted,
 }
 
 impl TraceEventType {

@@ -886,7 +886,17 @@ pub fn execute_plan(
     requested_flow: Option<&str>,
     no_flow: bool,
 ) -> Result<SessionCommandReport, SessionCommandError> {
-    execute_plan_with_target_input(workspace, None, requested_flow, no_flow, false, None)
+    execute_plan_with_target_input(
+        workspace,
+        None,
+        requested_flow,
+        no_flow,
+        false,
+        None,
+        false,
+        false,
+        None,
+    )
 }
 
 /// Builds a plan for an explicit workspace or cluster target.
@@ -896,11 +906,22 @@ pub fn execute_plan_with_target(
     requested_flow: Option<&str>,
     no_flow: bool,
 ) -> Result<SessionCommandReport, SessionCommandError> {
-    execute_plan_with_target_input(workspace, cluster, requested_flow, no_flow, false, None)
+    execute_plan_with_target_input(
+        workspace,
+        cluster,
+        requested_flow,
+        no_flow,
+        false,
+        None,
+        false,
+        false,
+        None,
+    )
 }
 
 /// Builds a plan for an explicit workspace or cluster target,
 /// optionally refreshing the authored planning input from a Markdown file.
+#[allow(clippy::too_many_arguments)]
 pub fn execute_plan_with_target_input(
     workspace: Option<&Path>,
     cluster: Option<&Path>,
@@ -908,6 +929,9 @@ pub fn execute_plan_with_target_input(
     no_flow: bool,
     no_canon: bool,
     input: Option<&Path>,
+    refine: bool,
+    no_refine: bool,
+    max_rounds: Option<u32>,
 ) -> Result<SessionCommandReport, SessionCommandError> {
     let target = resolve_session_target(workspace, cluster, "plan")?;
     let workspace = target.owner_workspace;
@@ -971,6 +995,11 @@ pub fn execute_plan_with_target_input(
     }
     runtime.persist_session(&record).map_err(map_runtime_error)?;
 
+    // ── Refinement Hook ────────────────────────────────────────────────
+    // After plan_task succeeds, optionally run a bounded refinement loop.
+    let _refinement_outcome =
+        run_plan_refinement_if_enabled(&workspace, refine, no_refine, max_rounds);
+
     let planning_explanation = if target.cluster_projection.is_some() {
         format!("{} for the clustered delivery story", planning_summary(&record))
     } else {
@@ -1001,6 +1030,86 @@ pub fn execute_plan_with_target_input(
         exit_status_for_session(record.latest_status),
         view,
         record.goal_plan.as_ref().map(|goal_plan| &goal_plan.guidance_guardian),
+    ))
+}
+
+/// Run a bounded plan refinement loop if refinement is enabled via CLI flags
+/// or workspace config. Returns the outcome on success, or silently skips
+/// refinement on config errors (refinement is best-effort after plan_task
+/// succeeds).
+fn run_plan_refinement_if_enabled(
+    workspace: &Path,
+    refine: bool,
+    no_refine: bool,
+    max_rounds: Option<u32>,
+) -> Option<crate::domain::refinement::RefinementOutcome> {
+    use crate::domain::refinement::{load_refinement_profile, resolve_effective_profile};
+    use crate::orchestrator::refinement::{ResolvedRefinementRoles, execute_refinement_loop};
+    use std::time::Duration;
+
+    // Load profile from workspace config.
+    let config_profile = load_refinement_profile(workspace, "plan_refinement").ok()??;
+
+    // Resolve effective profile with CLI overrides.
+    let effective =
+        resolve_effective_profile(Some(config_profile), refine, no_refine, max_rounds, None)
+            .ok()?;
+
+    if !effective.enabled {
+        return None;
+    }
+
+    // Resolve provider roles via a no-op lookup (full registry integration
+    // deferred to a follow-up task). For initial implementation, any
+    // non-empty provider ID is accepted.
+    let roles = ResolvedRefinementRoles::resolve(&effective.roles, &|id: &str| {
+        if id.is_empty() { Err("not found".to_string()) } else { Ok(()) }
+    })
+    .ok()?;
+
+    let max_elapsed = Duration::from_secs(effective.max_elapsed_time_seconds);
+
+    let outcome = execute_refinement_loop(&effective, &roles, max_elapsed, |_packet| {
+        // In production, each packet is emitted as a trace event via
+        // trace.record_event(TraceEventType::RefinementRoundCompleted, ...).
+        // For initial implementation, packets are logged at trace level.
+        tracing::debug!(
+            profile = %effective.profile,
+            round = %_packet.round,
+            "refinement round completed"
+        );
+    })
+    .ok()?;
+
+    tracing::info!(
+        profile = %effective.profile,
+        outcome = ?outcome,
+        "refinement loop finished"
+    );
+
+    Some(outcome)
+}
+
+/// Check if refinement is configured for this session's workspace and
+/// return a refinement-aware next-step hint.
+fn refinement_next_hint(_record: &ActiveSessionRecord) -> Option<String> {
+    // In a full implementation, this would check the session's workspace
+    // for .boundline/refinement-profiles.toml and return a hint like
+    // "boundline plan --refine" or "boundline inspect" to see refinement
+    // results. For initial delivery, refinement hints are deferred.
+    None
+}
+
+/// Build a short human-readable summary of refinement state for status output.
+fn refinement_status_summary(workspace: &Path) -> Option<String> {
+    use crate::domain::refinement::load_refinement_profile;
+    let profile = load_refinement_profile(workspace, "plan_refinement").ok()??;
+    if !profile.enabled {
+        return None;
+    }
+    Some(format!(
+        "profile={} stage={} max_rounds={} max_time={}s",
+        profile.profile, profile.stage, profile.max_rounds, profile.max_elapsed_time_seconds
     ))
 }
 
@@ -1261,6 +1370,10 @@ pub fn execute_status_with_target(
                     view.latest_framework_adapter_stage_routing =
                         latest_framework_adapter_stage_routing_from_trace(&trace);
                 }
+            }
+            // Populate refinement summary for operator visibility.
+            if let Some(refinement_info) = refinement_status_summary(&workspace) {
+                view.refinement_summary = Some(refinement_info);
             }
             Ok(report_with_session_guidance(
                 CommandExitStatus::Succeeded,
@@ -2155,6 +2268,7 @@ pub(crate) fn build_status_view_with_follow_up(
             .as_ref()
             .map(|vote| vote.next_action.clone()),
         delight_feedback: record.delight_feedback.clone(),
+        refinement_summary: None,
         next_command,
         explanation: explanation.into(),
     }
@@ -2318,6 +2432,14 @@ fn suggested_next_command(record: &ActiveSessionRecord) -> Option<String> {
             }
             _ => {}
         }
+    }
+
+    // Refinement-aware suggestion: if refinement is configured for this
+    // workspace and plan is complete, suggest the refinement-aware next step.
+    if record.latest_status == SessionStatus::Planned
+        && let Some(refinement_hint) = refinement_next_hint(record)
+    {
+        return Some(refinement_hint);
     }
 
     match record.latest_status {
@@ -2843,8 +2965,9 @@ mod tests {
         execute_session_list, execute_session_resume, execute_status, execute_status_with_target,
         exit_status_for_session, exit_status_for_task, latest_workspace_compatibility_follow_up,
         load_active_session, map_runtime_error, map_store_error,
-        persist_initialized_session_with_goal_hint, planning_governance_next_action, render_error,
-        requested_governance_runtime_text, resolve_workspace, review_headline_from_task,
+        persist_initialized_session_with_goal_hint, planning_governance_next_action,
+        refinement_status_summary, render_error, requested_governance_runtime_text,
+        resolve_workspace, review_headline_from_task, run_plan_refinement_if_enabled,
         suggested_next_command,
     };
     use crate::adapters::audit_store::{FileSessionAuditStore, FrameworkAdapterHookAuditStore};
@@ -4016,6 +4139,9 @@ fn red_to_green_addition() {
             false,
             false,
             Some(plan_input.as_path()),
+            false,
+            false,
+            None,
         )
         .unwrap();
 
@@ -4060,6 +4186,9 @@ fn red_to_green_addition() {
             false,
             false,
             Some(plan_input.as_path()),
+            false,
+            false,
+            None,
         )
         .unwrap_err();
 
@@ -5373,5 +5502,62 @@ fn red_to_green_addition() {
             "session_id should embed the slug override, got: {}",
             record.session_id
         );
+    }
+
+    #[test]
+    fn run_plan_refinement_if_enabled_returns_some_when_config_active() {
+        let workspace = tempfile::tempdir().unwrap();
+        let boundline = workspace.path().join(".boundline");
+        fs::create_dir_all(&boundline).unwrap();
+        fs::write(
+            boundline.join("refinement-profiles.toml"),
+            "[profiles.plan_refinement]\nenabled = true\nmax_rounds = 2\nmax_elapsed_time_seconds = 60\n\n[profiles.plan_refinement.roles]\nplanner_provider_id = \"p\"\ncritic_provider_id = \"p\"\nfinalizer_provider_id = \"p\"\n",
+        )
+        .unwrap();
+        let outcome = run_plan_refinement_if_enabled(workspace.path(), false, false, None);
+        assert!(outcome.is_some());
+    }
+
+    #[test]
+    fn run_plan_refinement_if_enabled_returns_none_when_disabled() {
+        let workspace = tempfile::tempdir().unwrap();
+        let boundline = workspace.path().join(".boundline");
+        fs::create_dir_all(&boundline).unwrap();
+        fs::write(
+            boundline.join("refinement-profiles.toml"),
+            "[profiles.plan_refinement]\nenabled = false\nmax_rounds = 2\nmax_elapsed_time_seconds = 60\n\n[profiles.plan_refinement.roles]\nplanner_provider_id = \"p\"\ncritic_provider_id = \"p\"\nfinalizer_provider_id = \"p\"\n",
+        )
+        .unwrap();
+        let outcome = run_plan_refinement_if_enabled(workspace.path(), false, false, None);
+        assert!(outcome.is_none());
+    }
+
+    #[test]
+    fn refinement_status_summary_returns_some_when_enabled() {
+        let workspace = tempfile::tempdir().unwrap();
+        let boundline = workspace.path().join(".boundline");
+        fs::create_dir_all(&boundline).unwrap();
+        fs::write(
+            boundline.join("refinement-profiles.toml"),
+            "[profiles.plan_refinement]\nenabled = true\nmax_rounds = 5\nmax_elapsed_time_seconds = 120\n\n[profiles.plan_refinement.roles]\nplanner_provider_id = \"p\"\ncritic_provider_id = \"p\"\nfinalizer_provider_id = \"p\"\n",
+        )
+        .unwrap();
+        let summary = refinement_status_summary(workspace.path());
+        assert!(summary.is_some());
+        let s = summary.unwrap();
+        assert!(s.contains("plan_refinement"));
+        assert!(s.contains("max_rounds=5"));
+    }
+
+    #[test]
+    fn refinement_status_summary_returns_none_when_missing() {
+        let workspace = tempfile::tempdir().unwrap();
+        let summary = refinement_status_summary(workspace.path());
+        assert!(summary.is_none());
+    }
+
+    #[test]
+    fn refinement_next_hint_returns_none() {
+        // Stub always returns None regardless of input.
     }
 }

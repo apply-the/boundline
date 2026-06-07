@@ -496,6 +496,9 @@ fn execute_plan_for_orchestration(
         false,
         no_canon,
         planning_input,
+        false,
+        false,
+        None,
     ) {
         Ok(report) => Ok(report),
         Err(SessionCommandError::ClarificationRequired { headline, prompt }) => {

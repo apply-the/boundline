@@ -28,6 +28,12 @@ mod cli_custom_run;
 #[path = "integration/cli_adaptive_execution.rs"]
 mod cli_adaptive_execution;
 
+#[path = "integration/refinement_flow.rs"]
+mod refinement_flow;
+
+#[path = "integration/refinement_trace_events.rs"]
+mod refinement_trace_events;
+
 #[path = "integration/cli_diagnostics.rs"]
 mod cli_diagnostics;
 

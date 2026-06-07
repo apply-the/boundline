@@ -36,6 +36,8 @@ pub mod override_cmd;
 pub mod probe;
 #[path = "../../../src/cli/provider.rs"]
 pub mod provider;
+#[path = "../../../src/cli/refinement_cmd.rs"]
+pub mod refinement_cmd;
 #[path = "../../../src/cli/run.rs"]
 pub mod run;
 #[path = "../../../src/cli/session.rs"]
