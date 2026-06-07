@@ -30,6 +30,8 @@ pub mod models_auth;
 pub mod orchestrate;
 #[path = "../../../src/cli/output.rs"]
 pub mod output;
+#[path = "../../../src/cli/override.rs"]
+pub mod override_cmd;
 #[path = "../../../src/cli/probe.rs"]
 pub mod probe;
 #[path = "../../../src/cli/provider.rs"]

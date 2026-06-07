@@ -50,6 +50,25 @@ Release metadata note:
   distribution metadata, assistant plugin manifests, and docs are aligned to
   that version while Canon compatibility remains `0.71.0`.
 
+## [0.75.0] - 2026-06-07
+
+Delivered specs:
+
+- `075` - Adaptive Governance Calibration
+
+Highlights:
+
+- Added graduated control levels (advisory → catch → rule → hook) with
+  calibration policy stored in `.boundline/calibration-policy.toml`.
+- Added `boundline override` command for operator bypass of catch and rule
+  findings with trace-visible override records.
+- Added guardian trust metric accumulation (true/false positive counting,
+  TPR/FPR computation) with configurable evidence window for promotion/demotion.
+- Added degradation rules (provider/model/tool unavailability) and escalation
+  triggers (repeated unresolved, red zone, low-confidence/high-impact).
+- Integrated calibration into `boundline council adjudicate` and `boundline inspect`
+  with human-readable and JSON output.
+
 ## [0.74.0] - 2026-06-06
 
 Delivered specs:

@@ -19,8 +19,8 @@ use crate::domain::trace::current_timestamp_millis;
 
 use super::{
     adapter, assistant_assets, checkpoint, cluster, config, council, diagnostics, evals, govern,
-    help_next, index, init, inspect, models_auth, orchestrate, output, probe, provider, run,
-    session, trace_compaction, workflow, workspace as cli_workspace,
+    help_next, index, init, inspect, models_auth, orchestrate, output, override_cmd, probe,
+    provider, run, session, trace_compaction, workflow, workspace as cli_workspace,
 };
 use init::OllamaProfile;
 
@@ -79,6 +79,7 @@ pub enum CommandName {
     Cluster,
     Models,
     Council,
+    Override,
     HelpNext,
     Evals,
     Trace,
@@ -113,6 +114,7 @@ impl CommandName {
             Self::Cluster => "cluster",
             Self::Models => "models",
             Self::Council => "council",
+            Self::Override => "override",
             Self::HelpNext => "help-next",
             Self::Evals => "evals",
             Self::Trace => "trace",
@@ -497,6 +499,21 @@ pub enum DeveloperCommand {
     Council {
         #[command(subcommand)]
         command: CouncilCommand,
+    },
+    /// Write an explicit override record to bypass a catch or rule block.
+    Override {
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        #[arg(long)]
+        guardian_id: String,
+        #[arg(long)]
+        control_id: String,
+        #[arg(long)]
+        level: String,
+        #[arg(long)]
+        reason: String,
+        #[arg(long)]
+        expiry: Option<String>,
     },
     /// Inspect the current workspace and recommend the next action.
     HelpNext(help_next::HelpNextArgs),
@@ -971,6 +988,7 @@ impl DeveloperCommand {
             Self::Cluster { .. } => CommandName::Cluster,
             Self::Models { .. } => CommandName::Models,
             Self::Council { .. } => CommandName::Council,
+            Self::Override { .. } => CommandName::Override,
             Self::HelpNext(_) => CommandName::HelpNext,
             Self::Evals { .. } => CommandName::Evals,
             Self::Trace { .. } => CommandName::Trace,
@@ -1472,6 +1490,18 @@ impl DeveloperCommandSession {
                     trace_location: None,
                 }
             }
+            DeveloperCommand::Override { workspace, .. } => Self {
+                command_name: CommandName::Override,
+                workspace_ref: workspace.as_ref().map(|path| path.to_string_lossy().into_owned()),
+                requires_workspace_ref: false,
+                install_check: false,
+                goal: None,
+                trace_ref: None,
+                started_at: current_timestamp_millis(),
+                completed_at: None,
+                exit_status: None,
+                trace_location: None,
+            },
             DeveloperCommand::HelpNext(_) => Self {
                 command_name: CommandName::HelpNext,
                 workspace_ref: None,
@@ -1566,6 +1596,7 @@ impl DeveloperCommandSession {
             | CommandName::Cluster
             | CommandName::Models
             | CommandName::Council
+            | CommandName::Override
             | CommandName::HelpNext
             | CommandName::Evals
             | CommandName::Trace
@@ -2016,6 +2047,9 @@ fn command_environment_workspace(command: &DeveloperCommand) -> Option<PathBuf> 
         DeveloperCommand::Council { command: CouncilCommand::Adjudicate { workspace, .. } } => {
             resolve_command_workspace(workspace.as_deref())
         }
+        DeveloperCommand::Override { workspace, .. } => {
+            resolve_command_workspace(workspace.as_deref())
+        }
     }
 }
 
@@ -2182,6 +2216,32 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
         DeveloperCommand::Probe { workspace } => dispatch_probe_command(workspace.as_deref()),
         DeveloperCommand::Models { command } => dispatch_models_command(command),
         DeveloperCommand::Council { command } => dispatch_council_command(command),
+        DeveloperCommand::Override {
+            workspace,
+            guardian_id,
+            control_id,
+            level,
+            reason,
+            expiry,
+        } => {
+            let ws = workspace.clone().unwrap_or_else(|| PathBuf::from("."));
+            match override_cmd::run(&ws, guardian_id, control_id, level, reason, expiry.as_deref())
+            {
+                Ok(code) => {
+                    let status = if code == 0 {
+                        CommandExitStatus::Succeeded
+                    } else {
+                        CommandExitStatus::NonSuccess
+                    };
+                    DispatchOutcome::text(status, String::new(), None)
+                }
+                Err(err) => DispatchOutcome::text(
+                    CommandExitStatus::InvalidInvocation,
+                    err.to_string(),
+                    None,
+                ),
+            }
+        }
         DeveloperCommand::HelpNext(args) => dispatch_help_next_command(args),
         DeveloperCommand::Evals { command } => dispatch_evals_command(command),
         DeveloperCommand::Trace { command } => dispatch_trace_command(command),

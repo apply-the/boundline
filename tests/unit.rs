@@ -171,3 +171,7 @@ mod capability_provider_transport_runtime;
 
 #[path = "unit/capability_provider_orchestrator.rs"]
 mod capability_provider_orchestrator;
+
+#[allow(clippy::unwrap_used)]
+#[path = "unit/calibration_model.rs"]
+mod calibration_model;

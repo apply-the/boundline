@@ -24,6 +24,8 @@ pub mod recovery;
 mod review_trace;
 #[path = "../../../src/orchestrator/session_runtime.rs"]
 pub mod session_runtime;
+#[path = "../../../src/orchestrator/session_runtime_observability.rs"]
+pub mod session_runtime_observability;
 #[path = "../../../src/orchestrator/terminal.rs"]
 pub mod terminal;
 
