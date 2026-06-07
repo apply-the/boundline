@@ -19,6 +19,7 @@ pub const SCHEMA_VERSION_COUNCIL_DECISION: &str = "1.0";
 pub const SCHEMA_VERSION_PHASE_REQUESTED: &str = "1.0";
 pub const SCHEMA_VERSION_ROUTE_DECISION: &str = "1.0";
 pub const SCHEMA_VERSION_CONTEXT_SELECTION: &str = "1.0";
+pub const SCHEMA_VERSION_REFINEMENT_ROUND: &str = "1.0";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -37,10 +38,11 @@ pub enum EventType {
     ControlLevelGraduated,
     ControlDegraded,
     ControlEscalated,
+    RefinementRoundCompleted,
 }
 
 impl EventType {
-    pub const fn all() -> [Self; 14] {
+    pub const fn all() -> [Self; 15] {
         [
             Self::PlanningAnalysisCompleted,
             Self::GuardianFindingEmitted,
@@ -56,6 +58,7 @@ impl EventType {
             Self::ControlLevelGraduated,
             Self::ControlDegraded,
             Self::ControlEscalated,
+            Self::RefinementRoundCompleted,
         ]
     }
 
@@ -75,6 +78,7 @@ impl EventType {
             Self::ControlLevelGraduated => "control.level.graduated",
             Self::ControlDegraded => "control.degraded",
             Self::ControlEscalated => "control.escalated",
+            Self::RefinementRoundCompleted => "refinement.round.completed",
         }
     }
 
@@ -94,6 +98,7 @@ impl EventType {
             Self::ControlLevelGraduated => SCHEMA_VERSION_COUNCIL_DECISION,
             Self::ControlDegraded => SCHEMA_VERSION_COUNCIL_DECISION,
             Self::ControlEscalated => SCHEMA_VERSION_COUNCIL_DECISION,
+            Self::RefinementRoundCompleted => SCHEMA_VERSION_REFINEMENT_ROUND,
         }
     }
 }

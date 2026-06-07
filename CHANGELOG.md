@@ -50,6 +50,22 @@ Release metadata note:
   distribution metadata, assistant plugin manifests, and docs are aligned to
   that version while Canon compatibility remains `0.71.0`.
 
+## [0.76.0] - 2026-06-07
+
+Delivered specs:
+
+- `076` - Recursive Stage Refinement Profiles
+
+Highlights:
+
+- Bounded, inspectable stage-refinement loops over the existing session-native runtime
+- Single refinement profile (`plan_refinement`) for the plan stage with `planner → critic → planner → finalizer` pattern
+- Compact structured round packets persisted in the trace store with trace-linked artifact references
+- Hard round limits, no-progress detection, time budget enforcement, and closed stop-reason vocabulary (9 values)
+- Runtime-validated confidence model with critic-proposed and effective confidence tracking
+- CLI flags: `--refine`, `--no-refine`, `--max-rounds N`
+- Integration with `boundline status`, `boundline next`, and `boundline inspect` for refinement visibility
+
 ## [0.75.0] - 2026-06-07
 
 Delivered specs:

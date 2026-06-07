@@ -28,6 +28,12 @@ mod global_assistant_install_contract;
 #[path = "contract/project_scale_session_contract.rs"]
 mod project_scale_session_contract;
 
+#[path = "contract/refinement_config_contract.rs"]
+mod refinement_config_contract;
+
+#[path = "contract/refinement_output_contract.rs"]
+mod refinement_output_contract;
+
 #[path = "contract/canon_capability_contract.rs"]
 mod canon_capability_contract;
 

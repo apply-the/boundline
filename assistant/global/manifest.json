@@ -1,7 +1,7 @@
 {
   "name": "boundline-global-assistant-bootstrap",
   "display_name": "Boundline Global Assistant Bootstrap",
-  "version": "0.75.0",
+  "version": "0.76.0",
   "description": "User-scoped assistant bootstrap commands for Boundline before workspace initialization.",
   "commands": [
     "/boundline:init",

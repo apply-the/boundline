@@ -37,7 +37,7 @@ feature under `specs/`.
 | **09** | [contextual-help-and-documentation-architecture.md](../specs/073-contextual-help-docs/feat-contextual-help-and-documentation-architecture.md) | Delivered: `boundline help-next` operator guidance surface; Canon companion spec in canon/specs/073 |
 | **10** | [review-councils-and-role-gated-governance.md](../specs/074-review-councils-governance/feat-review-councils-and-role-gated-governance.md) | Delivered in 0.74.0: guardian activation router, council adjudication, role-gated governance |
 | **11** | [adaptive-governance-calibration.md](../specs/075-adaptive-governance-calibration/spec.md) | Delivered in 0.75.0: graduated control levels, trust evolution, override records, degradation & escalation |
-| **12** | [recursive-stage-refinement-profiles.md](features/12-recursive-stage-refinement-profiles.md) | Later: bounded structured refinement after council and adaptive-governance hardening |
+| **12** | [076-recursive-stage-refinement](../specs/076-recursive-stage-refinement/spec.md) | Delivered in 0.76.0: bounded stage-refinement loops, plan_refinement profile, compact round packets, closed stop-reason vocabulary |
 | **13** | [sandboxed-execution-and-secret-inheritance.md](features/13-sandboxed-execution-and-secret-inheritance.md) | Local safety boundaries |
 | **14** | [ai-gateway-and-inference-economics.md](features/14-ai-gateway-and-inference-economics.md) | Scale and route health feature |
 | **15** | [browser-and-visual-testing-provider.md](features/15-browser-and-visual-testing-provider.md) | Provider via protocol |

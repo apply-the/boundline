@@ -194,6 +194,15 @@ pub enum DeveloperCommand {
         no_flow: bool,
         #[arg(long = "no-canon")]
         no_canon: bool,
+        /// Enable recursive stage refinement for the plan stage.
+        #[arg(long = "refine", conflicts_with = "no_refine")]
+        refine: bool,
+        /// Disable recursive stage refinement even when configured.
+        #[arg(long = "no-refine", conflicts_with = "refine")]
+        no_refine: bool,
+        /// Maximum number of refinement rounds (overrides config).
+        #[arg(long = "max-rounds", value_name = "N")]
+        max_rounds: Option<u32>,
     },
     /// Lightweight preflight check for assistant hosts.
     Probe {
@@ -2704,19 +2713,30 @@ fn dispatch_session_command(command: &DeveloperCommand) -> DispatchOutcome {
             CommandName::Flow,
             session::execute_flow_with_target(workspace.as_deref(), cluster.as_deref(), name),
         ),
-        DeveloperCommand::Plan { workspace, cluster, input, flow, no_flow, no_canon } => {
-            dispatch_session_result(
-                CommandName::Plan,
-                session::execute_plan_with_target_input(
-                    workspace.as_deref(),
-                    cluster.as_deref(),
-                    flow.as_deref(),
-                    *no_flow,
-                    *no_canon,
-                    input.as_deref(),
-                ),
-            )
-        }
+        DeveloperCommand::Plan {
+            workspace,
+            cluster,
+            input,
+            flow,
+            no_flow,
+            no_canon,
+            refine,
+            no_refine,
+            max_rounds,
+        } => dispatch_session_result(
+            CommandName::Plan,
+            session::execute_plan_with_target_input(
+                workspace.as_deref(),
+                cluster.as_deref(),
+                flow.as_deref(),
+                *no_flow,
+                *no_canon,
+                input.as_deref(),
+                *refine,
+                *no_refine,
+                *max_rounds,
+            ),
+        ),
         DeveloperCommand::Step { workspace, cluster } => dispatch_session_result(
             CommandName::Step,
             session::execute_step_with_target(workspace.as_deref(), cluster.as_deref()),
@@ -4114,6 +4134,9 @@ fn red_to_green_addition() {
                 flow: None,
                 no_flow: false,
                 no_canon: false,
+                refine: false,
+                no_refine: false,
+                max_rounds: None,
             },
             DeveloperCommand::Step { workspace: Some(workspace.clone()), cluster: None },
             DeveloperCommand::Next {
@@ -4202,6 +4225,9 @@ fn red_to_green_addition() {
             flow: Some("bug-fix".to_string()),
             no_flow: false,
             no_canon: false,
+            refine: false,
+            no_refine: false,
+            max_rounds: None,
         });
         assert_eq!(plan.exit_status, CommandExitStatus::Succeeded);
         assert!(plan.output.contains("execution_path: native_goal_plan"), "{}", plan.output);
@@ -4327,6 +4353,9 @@ fn red_to_green_addition() {
             flow: Some("bug-fix".to_string()),
             no_flow: false,
             no_canon: false,
+            refine: false,
+            no_refine: false,
+            max_rounds: None,
         });
         assert_eq!(plan.exit_status, CommandExitStatus::Succeeded, "{}", plan.output);
         assert!(plan.output.contains("goal_plan_state: confirmed"), "{}", plan.output);

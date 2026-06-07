@@ -20,6 +20,8 @@ pub mod guidance_runtime;
 pub mod planner;
 #[path = "../../../src/orchestrator/recovery.rs"]
 pub mod recovery;
+#[path = "../../../src/orchestrator/refinement.rs"]
+pub mod refinement;
 #[path = "../../../src/orchestrator/review_trace.rs"]
 mod review_trace;
 #[path = "../../../src/orchestrator/session_runtime.rs"]

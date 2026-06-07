@@ -606,6 +606,10 @@ impl TraceSummaryFold {
                     self.decision_timeline.push(format!("flow_inferred: {flow_name}"));
                 }
             }
+            TraceEventType::RefinementRoundCompleted => {
+                // Refinement round packets are surfaced via the refinement
+                // inspection projection (render_refinement_inspection).
+            }
             TraceEventType::DecisionCreated
             | TraceEventType::DecisionDispatched
             | TraceEventType::DecisionVerified

@@ -571,6 +571,9 @@ fn developer_command_sessions_cover_variant_mapping_validation_and_completion() 
             flow: None,
             no_flow: false,
             no_canon: false,
+            refine: false,
+            no_refine: false,
+            max_rounds: None,
         },
         DeveloperCommand::Step { workspace: Some(workspace.clone()), cluster: None },
         DeveloperCommand::Run {
