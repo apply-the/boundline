@@ -103,34 +103,46 @@ See [Project Memory Structure](../reference/file-layout).
 - Canon remains an external governed-knowledge boundary, not Boundline's
     orchestrator.
 
-The current Boundline `0.72.0` line documents Canon `0.67.0` support for
+The current Boundline `0.76.0` line documents Canon `0.71.0` support for
 `canon governance start|refresh|capabilities --json` `v1`.
 
-The same runtime now owns the derived semantic index lifecycle under
+The runtime owns the derived semantic index lifecycle under
 `.boundline/context-intelligence/`, including the retrieval DB,
 `manifest.json`, explicit `boundline index ...` commands, and lightweight
 stale-mark hook behavior when the operator opts in.
 
-The 0.72.0 release keeps the same plan-quality gate, preserves the formal
-backlog-quality gate, keeps the read-only planning-analysis coherence pass, and
-keeps the typed large-codebase context substrate while adding the first native
-capability-provider protocol.
-After goal quality and plan quality are ready, Boundline inspects the Canon
-backlog packet, blocks closure-limited risk-only packets, surfaces additive
-backlog-quality fields, and then validates selected-slice sequencing,
-acceptance coverage, execution-handoff inputs, and governed producer evidence
-before execution handoff is offered.
+Delivery gates are additive and cumulative across the runtime:
 
-When advanced context selection is active, the same runtime now projects typed
-context-pack entries, omission findings, repository-map readiness,
-digest-backed compaction, snapshot-cache freshness, and patch-safe edit attempt
-state through plan, status, inspect, and traces. That substrate stays local,
-deterministic, and derived; it does not replace reviewed memory.
-
-When provider-backed execution is active, the runtime also owns explicit
-registration, activation, health checks, permission admission, bounded
-prepare/execute/evidence collection, and accepted-versus-rejected evidence
-projection. Provider output remains subordinate to Boundline validation.
+- **Plan-quality gate** (`0.67.0`): blocks execution until plan readiness is
+  confirmed; one-question recovery when evidence is missing.
+- **Backlog-quality gate** (`0.69.0`): blocks closure-limited Canon backlog
+  packets, surfaces additive backlog-quality fields, and requests clarification
+  when execution-handoff evidence is absent.
+- **Planning-analysis gate** (`0.70.0`): validates cross-artifact coherence
+  (goal outcomes, validation coverage, slice sequencing, execution-handoff
+  inputs, governed producer evidence) and withholds execution on contradictions
+  or producer gaps.
+- **Context substrate** (`0.71.0`): projects typed context-pack entries,
+  omission findings, repository-map readiness, digest-backed compaction,
+  snapshot-cache freshness, and patch-safe edit attempt state. Stays local,
+  deterministic, and derived; does not replace reviewed memory.
+- **Capability-provider protocol** (`0.72.0`): explicit registration,
+  activation, health checks, permission admission, bounded
+  prepare/execute/evidence collection, and accepted-versus-rejected evidence
+  projection. Provider output remains subordinate to Boundline validation.
+- **Evals & runtime observability** (`0.73.0`): local quality evals, trace
+  compaction with five retention classes, structured event vocabulary, JSONL
+  export, and CI-compatible eval summaries.
+- **Review councils & role-gated governance** (`0.74.0`): guardian activation
+  router, council adjudication, and role-gated governance with trace-visible
+  override and escalation records.
+- **Adaptive governance calibration** (`0.75.0`): graduated control levels
+  (advisory → catch → rule → hook), calibration policy, `boundline override`
+  for operator bypass, and trust-evolution tracking.
+- **Stage-refinement profiles** (`0.76.0`): bounded, inspectable refinement
+  loops with `planner → critic → planner → finalizer` pattern, structured
+  round packets, hard round limits, no-progress detection, time budgets, and 9
+  closed stop reasons. CLI flags `--refine`, `--no-refine`, `--max-rounds N`.
 
 ## Framework Adapter Boundary
 
@@ -154,16 +166,34 @@ Current public repositories on this line:
 
 ## Runtime Families
 
-Boundline currently ships two runtime-owned algorithm families:
+Boundline currently ships three runtime-owned algorithm families:
 
-- review-council assembly, independence guarding, vote resolution, and bounded
-    adjudication projection
-- reasoning-profile activation, independence assessment, bounded profile
-    outcomes, and confidence handoff
+- **Review councils**: council assembly, independence guarding, vote
+  resolution, and bounded adjudication projection.
+- **Reasoning profiles**: profile activation, independence assessment, bounded
+  profile outcomes, and confidence handoff. Surfaced profiles include
+  `bounded_self_consistency`, `independent_pair_review`,
+  `heterogeneous_security_review`, and `bounded_reflexion`.
+- **Stage refinement**: bounded iterative refinement over a specific planning
+  stage with structured round packets, critic-proposed confidence scoring,
+  material-delta detection, finding deduplication, and a closed set of 9 stop
+  reasons. The currently surfaced refinement profile is `plan_refinement`.
 
-The currently surfaced reasoning profiles are `bounded_self_consistency`,
-`independent_pair_review`, `heterogeneous_security_review`, and
-`bounded_reflexion`.
+## Operator Commands
+
+| Command | Purpose |
+|---|---|
+| `boundline init` | Bootstrap a fresh workspace. |
+| `boundline goal` | Inject an operator requirement. |
+| `boundline plan [--refine\|--no-refine] [--max-rounds N]` | Generate a bounded plan, optionally with stage refinement. |
+| `boundline run` | Execute the plan sequentially. |
+| `boundline status` | Read current session state. |
+| `boundline next` | Project the next recommended action, including refinement suggestions. |
+| `boundline inspect` | Drill into session, trace, or refinement round details. |
+| `boundline override` | Operator bypass of catch and rule findings. |
+| `boundline probe` | Read-only readiness check (init vs doctor vs session-ready). |
+| `boundline models auth login\|status\|remove` | Manage provider credentials. |
+| `boundline help-next` | Contextual operator guidance surface. |
 
 ## Runtime Data Flow
 

@@ -17,6 +17,11 @@ Boundline models engineering work as a deterministic state machine:
 1. **`Init`**: A fresh workspace. No active goal.
 2. **`Goal`**: The operator injects a requirement. The session now has a purpose.
 3. **`Plan`**: Boundline (or an external adapter) generates a sequence of bounded actions based on the goal and context.
+    - **Refinement (optional sub-state)**: When `--refine` is active, the plan
+      stage enters a bounded refinement loop (`planner → critic → planner →
+      finalizer`) before the plan is considered ready. Each round produces a
+      structured round packet persisted in the trace store with confidence
+      scoring, findings, and a closed stop reason.
 4. **`Run`**: The execution engine processes the plan sequentially.
 5. **`Inspect/Status`**: At any point, the runtime can pause and report the exact state without needing to "ask the LLM what it did."
 
@@ -26,5 +31,9 @@ Because the state is fully persisted to disk at each transition, you can interru
 
 To ensure total transparency, the session model incorporates append-only logging and state rollback mechanisms:
 
-- **`traces/`**: Every subprocess invocation, planner prompt, and adapter handoff is recorded as an immutable JSON trace file.
+- **`traces/`**: Every subprocess invocation, planner prompt, adapter handoff,
+  and refinement round is recorded as an immutable JSON trace file. Refinement
+  rounds emit `RefinementRoundCompleted` events with round number, stop reason,
+  critic and effective confidence scores, findings, and trace-linked artifact
+  references.
 - **`checkpoints/`**: Before destructive edits, Boundline can snapshot the workspace state, allowing the operator to reject an execution and revert the session cleanly.

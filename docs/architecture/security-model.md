@@ -23,6 +23,23 @@ Guardians are fast, local validation checks that evaluate the outcome of an acti
 
 If a Guardian trips, the execution is halted, the state is rolled back, and the session is marked as `blocked`.
 
+## Adaptive Governance Calibration
+
+Governance controls are not binary. Boundline supports graduated control levels
+defined in `.boundline/calibration-policy.toml`:
+
+| Level | Behavior |
+|---|---|
+| **Advisory** | Findings are logged but do not block execution. |
+| **Catch** | Findings block execution by default; operator may override. |
+| **Rule** | Findings block execution; override requires explicit justification. |
+| **Hook** | Findings unconditionally block execution; no override permitted. |
+
+The `boundline override` command lets the operator bypass catch and rule
+findings with a trace-visible record. Each override is persisted in the session
+trace and audit log. The calibration policy can evolve over time as trust in
+the runtime grows — levels can be raised or lowered per finding category.
+
 ## Safe Local Execution
 
 The entire architecture is designed to protect your local environment:
