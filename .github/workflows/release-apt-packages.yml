@@ -5,19 +5,82 @@ on:
     tags:
       - 'v*'
       - '[0-9]*'
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag to publish, for example 0.76.0. Defaults to the current ref name."
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: "release-apt-packages-${{ github.ref_name }}"
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
 
 jobs:
+  prepare:
+    name: Prepare release metadata
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      version: ${{ steps.meta.outputs.version }}
+      release_name: ${{ steps.meta.outputs.release_name }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - id: meta
+        name: Resolve release metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && -n "${{ inputs.release_tag }}" ]]; then
+            tag="${{ inputs.release_tag }}"
+          else
+            tag="${GITHUB_REF_NAME}"
+          fi
+
+          if [[ -z "$tag" ]]; then
+            echo "Unable to determine release tag." >&2
+            exit 1
+          fi
+
+          version="${tag#v}"
+
+          cargo_version="$(sed -n 's/^version = "\([^"]*\)"$/\1/p' Cargo.toml | head -n 1)"
+          if [[ -z "$cargo_version" ]]; then
+            echo "Unable to determine version from Cargo.toml." >&2
+            exit 1
+          fi
+
+          if [[ "$version" != "$cargo_version" ]]; then
+            echo "Release version ${version} does not match Cargo.toml version ${cargo_version}." >&2
+            exit 1
+          fi
+
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "release_name=Boundline ${version}" >> "$GITHUB_OUTPUT"
+
   build-deb:
-    name: Build Debian Package (${{ matrix.arch }})
+    name: Build Debian package (${{ matrix.arch }})
+    needs: prepare
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         include:
           - target: x86_64-unknown-linux-gnu
             arch: amd64
           - target: aarch64-unknown-linux-gnu
             arch: arm64
-    
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -37,83 +100,113 @@ jobs:
       - name: Install cargo-deb
         run: cargo install cargo-deb
 
-      - name: Build Debian Package
+      - name: Build Debian package
+        shell: bash
         run: |
+          set -euo pipefail
+
           export CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc
           export CC_aarch64_unknown_linux_gnu=aarch64-linux-gnu-gcc
           export CXX_aarch64_unknown_linux_gnu=aarch64-linux-gnu-g++
-          cargo deb --target ${{ matrix.target }}
 
-      - name: Validate and Rename Package
-        id: package
+          cargo deb --target "${{ matrix.target }}"
+
+      - id: package
+        name: Validate and rename package
+        shell: bash
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          ARCH: ${{ matrix.arch }}
         run: |
-          DEB_FILE=$(find target -name "boundline_*.deb" | head -n 1)
-          if [ -z "$DEB_FILE" ]; then
-            echo "Failed to find generated .deb file"
+          set -euo pipefail
+
+          deb_file="$(find target -name "boundline_*.deb" | head -n 1)"
+          if [[ -z "$deb_file" ]]; then
+            echo "Failed to find generated .deb file." >&2
             exit 1
           fi
-          
-          # Extract version from GitHub ref
-          VERSION=${GITHUB_REF#refs/tags/}
-          VERSION=${VERSION#v}
-          
-          NEW_NAME="boundline_${VERSION}_${{ matrix.arch }}.deb"
-          mv "$DEB_FILE" "$NEW_NAME"
-          
-          # Validation
-          echo "Inspecting package: $NEW_NAME"
-          dpkg-deb --info "$NEW_NAME"
-          dpkg-deb --contents "$NEW_NAME"
-          
-          if ! dpkg-deb --contents "$NEW_NAME" | grep -q "/usr/bin/boundline"; then
-             echo "Binary not found in package at /usr/bin/boundline"
-             exit 1
-          fi
-          echo "deb_file=$NEW_NAME" >> $GITHUB_OUTPUT
 
-      - name: Attach to GitHub Release
+          new_name="boundline_${VERSION}_${ARCH}.deb"
+          mv "$deb_file" "$new_name"
+
+          echo "Inspecting package: $new_name"
+          dpkg-deb --info "$new_name"
+          dpkg-deb --contents "$new_name"
+
+          if ! dpkg-deb --contents "$new_name" | grep -q "/usr/bin/boundline"; then
+            echo "Binary not found in package at /usr/bin/boundline." >&2
+            exit 1
+          fi
+
+          echo "deb_file=$new_name" >> "$GITHUB_OUTPUT"
+
+      - name: Attach Debian package to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ needs.prepare.outputs.tag }}
+          name: ${{ needs.prepare.outputs.release_name }}
           files: ${{ steps.package.outputs.deb_file }}
 
-      - name: Upload Artifact
+      - name: Upload Debian package artifact
         uses: actions/upload-artifact@v4
         with:
           name: boundline-deb-${{ matrix.arch }}
           path: ${{ steps.package.outputs.deb_file }}
+          if-no-files-found: error
 
-  publish-packages:
-    name: Publish to APT Repository
-    needs: build-deb
+  trigger-packages-apt-publication:
+    name: Trigger APT publication
+    needs:
+      - prepare
+      - build-deb
     runs-on: ubuntu-latest
+
     steps:
-      - name: Download Artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: deb-packages
-
-      - name: Checkout Packages Repository
-        uses: actions/checkout@v4
-        with:
-          repository: apply-the/packages
-          token: ${{ secrets.PACKAGES_REPO_TOKEN }}
-          path: packages-repo
-
-      - name: Publish to APT Repository
+      - name: Require packages repo token
+        shell: bash
         env:
-          APT_GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
-          APT_GPG_PASSPHRASE: ${{ secrets.APT_GPG_PASSPHRASE }}
+          PACKAGES_REPO_TOKEN: ${{ secrets.PACKAGES_REPO_TOKEN }}
         run: |
-          sudo apt-get update && sudo apt-get install -y dpkg-dev
+          set -euo pipefail
 
-          mkdir -p packages-repo/apt/pool/main/b/boundline/
-          find deb-packages -name "*.deb" -exec cp {} packages-repo/apt/pool/main/b/boundline/ \;
-          
-          cd packages-repo
-          ./scripts/rebuild-apt-repo.sh
+          if [[ -z "${PACKAGES_REPO_TOKEN:-}" ]]; then
+            echo "PACKAGES_REPO_TOKEN is required to trigger apply-the/packages publication." >&2
+            exit 1
+          fi
 
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add apt/pool/main/b/boundline/ apt/dists/
-          git commit -m "Publish Boundline APT packages for ${{ github.ref_name }}"
-          git push
+      - name: Trigger APT publication in packages repo
+        shell: bash
+        env:
+          PACKAGES_REPO_TOKEN: ${{ secrets.PACKAGES_REPO_TOKEN }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          amd64_url="https://github.com/apply-the/boundline/releases/download/${TAG}/boundline_${VERSION}_amd64.deb"
+          arm64_url="https://github.com/apply-the/boundline/releases/download/${TAG}/boundline_${VERSION}_arm64.deb"
+
+          echo "Checking release assets exist..."
+          curl -fsI "$amd64_url" >/dev/null
+          curl -fsI "$arm64_url" >/dev/null
+
+          payload="$(jq -n \
+            --arg package "boundline" \
+            --arg version "$VERSION" \
+            --arg amd64_url "$amd64_url" \
+            --arg arm64_url "$arm64_url" \
+            '{
+              event_type: "publish-deb",
+              client_payload: {
+                package: $package,
+                version: $version,
+                deb_urls: [$amd64_url, $arm64_url]
+              }
+            }')"
+
+          echo "Triggering apply-the/packages APT publication..."
+          curl -fsSL -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${PACKAGES_REPO_TOKEN}" \
+            https://api.github.com/repos/apply-the/packages/dispatches \
+            -d "$payload"
