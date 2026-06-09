@@ -1,33 +1,15 @@
-name: sync-homebrew-tap
+name: release-macos
 
 on:
-  push:
-    branches:
-      - main
-    tags:
-      - "*.*.*"
-    paths:
-      - "Cargo.toml"
-      - "distribution/channel-metadata.toml"
-      - "distribution/homebrew/Formula/boundline.rb"
-      - "scripts/sync-distribution-metadata.sh"
-      - "scripts/release/sync-homebrew-tap.sh"
-      - ".github/workflows/sync-homebrew-tap.yml"
-  workflow_dispatch:
-    inputs:
-      version:
-        description: "Boundline version. Defaults to the workspace version or pushed tag."
-        required: false
+  release:
+    types: [published]
 
 permissions:
   contents: read
 
-env:
-  CARGO_TERM_COLOR: always
-
 jobs:
-  prepare:
-    name: prepare-tap-sync
+  prepare-metadata:
+    name: Prepare tap sync metadata
     runs-on: ubuntu-latest
     outputs:
       boundline_version: ${{ steps.meta.outputs.boundline_version }}
@@ -39,99 +21,68 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
+          tag="${GITHUB_REF#refs/tags/}"
+          boundline_version="${tag#v}"
           metadata_file="distribution/channel-metadata.toml"
-          cargo_version="$(sed -n 's/^version = "\([^"]*\)"$/\1/p' Cargo.toml | head -n 1)"
-          metadata_version="$(sed -n 's/^boundline_version = "\([^"]*\)"$/\1/p' "$metadata_file" | head -n 1)"
           canon_version="$(sed -n 's/^canon_version = "\([^"]*\)"$/\1/p' "$metadata_file" | head -n 1)"
           tap_repository="$(sed -n '/^\[channels\.homebrew\]/,/^\[/{s/^tap_repository = "\([^"]*\)"$/\1/p}' "$metadata_file" | head -n 1)"
-
-          if [[ -n "${{ github.event.inputs.version }}" ]]; then
-            boundline_version="${{ github.event.inputs.version }}"
-          elif [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
-            boundline_version="${GITHUB_REF_NAME}"
-          else
-            boundline_version="$cargo_version"
-          fi
-
-          if [[ "$cargo_version" != "$boundline_version" ]]; then
-            echo "Cargo.toml version $cargo_version does not match requested tap sync version $boundline_version" >&2
-            exit 1
-          fi
-
-          if [[ "$metadata_version" != "$boundline_version" ]]; then
-            echo "distribution/channel-metadata.toml version $metadata_version does not match requested tap sync version $boundline_version" >&2
-            exit 1
-          fi
-
           echo "boundline_version=$boundline_version" >> "$GITHUB_OUTPUT"
           echo "canon_version=$canon_version" >> "$GITHUB_OUTPUT"
           echo "tap_repository=$tap_repository" >> "$GITHUB_OUTPUT"
 
-  sync:
-    name: sync-boundline-formula
-    needs: prepare
-    if: needs.prepare.outputs.tap_repository != ''
+  sync-formula:
+    name: Sync Homebrew formula
+    needs: prepare-metadata
+    if: needs.prepare-metadata.outputs.tap_repository != ''
     runs-on: ubuntu-latest
     steps:
       - name: Require tap sync token
         shell: bash
         env:
           HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
-          TAP_REPOSITORY: ${{ needs.prepare.outputs.tap_repository }}
+          TAP_REPOSITORY: ${{ needs.prepare-metadata.outputs.tap_repository }}
         run: |
           if [[ -z "$HOMEBREW_TAP_GITHUB_TOKEN" ]]; then
-            echo "HOMEBREW_TAP_GITHUB_TOKEN is required to sync ${TAP_REPOSITORY}. Add it as a repository or organization secret available to this repo with contents:write access to ${TAP_REPOSITORY} and permission to push to its main branch, then rerun sync-homebrew-tap." >&2
+            echo "HOMEBREW_TAP_GITHUB_TOKEN is required to sync ${TAP_REPOSITORY}." >&2
             exit 1
           fi
-
       - uses: actions/checkout@v4
-
       - name: Regenerate distribution metadata
         shell: bash
         run: bash "$GITHUB_WORKSPACE/scripts/sync-distribution-metadata.sh"
-
       - uses: actions/checkout@v4
         with:
-          repository: ${{ needs.prepare.outputs.tap_repository }}
+          repository: ${{ needs.prepare-metadata.outputs.tap_repository }}
           ref: main
           token: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
           path: homebrew-tap
-
       - id: sync_formula
-        name: Sync Homebrew formula into tap checkout
+        name: Sync formula into tap checkout
         shell: bash
         run: |
           sync_output="$(bash "$GITHUB_WORKSPACE/scripts/release/sync-homebrew-tap.sh" \
             --formula "$GITHUB_WORKSPACE/distribution/homebrew/Formula/boundline.rb" \
             --tap-root "$GITHUB_WORKSPACE/homebrew-tap")"
-
           printf '%s\n' "$sync_output"
-
           sync_status="$(printf '%s\n' "$sync_output" | sed -n 's/^STATUS=//p' | head -n 1)"
           formula_path="$(printf '%s\n' "$sync_output" | sed -n 's/^FORMULA_PATH=//p' | head -n 1)"
-
           echo "status=$sync_status" >> "$GITHUB_OUTPUT"
           echo "formula_path=$formula_path" >> "$GITHUB_OUTPUT"
-
       - name: Push Homebrew tap update
         if: steps.sync_formula.outputs.status != 'noop'
         shell: bash
         env:
-          BOUNDLINE_VERSION: ${{ needs.prepare.outputs.boundline_version }}
+          BOUNDLINE_VERSION: ${{ needs.prepare-metadata.outputs.boundline_version }}
           FORMULA_PATH: ${{ steps.sync_formula.outputs.formula_path }}
-          TAP_REPOSITORY: ${{ needs.prepare.outputs.tap_repository }}
+          TAP_REPOSITORY: ${{ needs.prepare-metadata.outputs.tap_repository }}
         run: |
           cd homebrew-tap
-
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
           if git diff --quiet -- Formula/boundline.rb; then
-            echo "Expected ${FORMULA_PATH} to change before pushing Boundline ${BOUNDLINE_VERSION} into ${TAP_REPOSITORY}, but the tap checkout is clean." >&2
+            echo "Expected formula change before pushing." >&2
             exit 1
           fi
-
           git add Formula/boundline.rb
           git commit -m "boundline ${BOUNDLINE_VERSION}"
           git push origin HEAD:main
