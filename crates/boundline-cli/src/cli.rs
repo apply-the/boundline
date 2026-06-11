@@ -14,6 +14,8 @@ pub mod council;
 pub mod diagnostics;
 #[path = "../../../src/cli/evals.rs"]
 pub mod evals;
+#[path = "../../../src/cli/exec.rs"]
+pub mod exec;
 #[path = "../../../src/cli/govern.rs"]
 pub mod govern;
 #[path = "../../../src/cli/help_next.rs"]

@@ -103,7 +103,7 @@ See [Project Memory Structure](../reference/file-layout).
 - Canon remains an external governed-knowledge boundary, not Boundline's
     orchestrator.
 
-The current Boundline `0.76.0` line documents Canon `0.71.0` support for
+The current Boundline `0.76.0` line documents Canon `0.72.5` support for
 `canon governance start|refresh|capabilities --json` `v1`.
 
 The runtime owns the derived semantic index lifecycle under
@@ -122,7 +122,7 @@ Delivery gates are additive and cumulative across the runtime:
   (goal outcomes, validation coverage, slice sequencing, execution-handoff
   inputs, governed producer evidence) and withholds execution on contradictions
   or producer gaps.
-- **Context substrate** (`0.71.0`): projects typed context-pack entries,
+- **Context substrate** (`0.72.5`): projects typed context-pack entries,
   omission findings, repository-map readiness, digest-backed compaction,
   snapshot-cache freshness, and patch-safe edit attempt state. Stays local,
   deterministic, and derived; does not replace reviewed memory.
