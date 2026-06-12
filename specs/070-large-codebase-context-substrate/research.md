@@ -23,7 +23,7 @@ Result: no feature-driven catalog change is required for this plan packet.
 Boundline still ships the same provider families, assistant defaults, and route
 surfaces after the 2026-06-05 check, so the bundled
 `assistant/catalog/model-catalog.toml` only needs a release-line refresh to
-`0.71.0`, not a catalog-shape change. Any future pruning of legacy vendor
+`0.72.5`, not a catalog-shape change. Any future pruning of legacy vendor
 aliases should be handled as dedicated catalog maintenance, not folded into
 this substrate slice.
 

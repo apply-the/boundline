@@ -16,10 +16,11 @@ use crate::domain::configuration::{
 use crate::domain::domain_templates::{DomainFamily, ExternalContextKind};
 use crate::domain::governance::{CanonMode, CanonModeSelectionPreference, GovernanceRuntimeKind};
 use crate::domain::trace::current_timestamp_millis;
+use boundline_core::execution::evidence::RiskZone;
 
 use super::{
-    adapter, assistant_assets, checkpoint, cluster, config, council, diagnostics, evals, govern,
-    help_next, index, init, inspect, models_auth, orchestrate, output, override_cmd, probe,
+    adapter, assistant_assets, checkpoint, cluster, config, council, diagnostics, evals, exec,
+    govern, help_next, index, init, inspect, models_auth, orchestrate, output, override_cmd, probe,
     provider, run, session, trace_compaction, workflow, workspace as cli_workspace,
 };
 use init::OllamaProfile;
@@ -83,6 +84,7 @@ pub enum CommandName {
     HelpNext,
     Evals,
     Trace,
+    Exec,
 }
 
 impl CommandName {
@@ -118,6 +120,7 @@ impl CommandName {
             Self::HelpNext => "help-next",
             Self::Evals => "evals",
             Self::Trace => "trace",
+            Self::Exec => "exec",
         }
     }
 }
@@ -535,6 +538,27 @@ pub enum DeveloperCommand {
     Trace {
         #[command(subcommand)]
         command: trace_compaction::TraceSubcommand,
+    },
+    /// Execute a shell command with safety classification, policy enforcement, and evidence capture.
+    Exec {
+        /// The shell command to execute.
+        #[arg(value_name = "COMMAND")]
+        command: String,
+        /// Execute via deterministic dry-run tier; do not apply mutations.
+        #[arg(long)]
+        dry_run: bool,
+        /// Execute but block filesystem writes.
+        #[arg(long)]
+        no_mutation: bool,
+        /// Classify the command and print intent + policy decision without executing.
+        #[arg(long)]
+        classify_only: bool,
+        /// Override execution zone (green, yellow, red).
+        #[arg(long)]
+        zone: Option<String>,
+        /// Output evidence as JSON to stdout.
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -1001,6 +1025,7 @@ impl DeveloperCommand {
             Self::HelpNext(_) => CommandName::HelpNext,
             Self::Evals { .. } => CommandName::Evals,
             Self::Trace { .. } => CommandName::Trace,
+            Self::Exec { .. } => CommandName::Exec,
         }
     }
 }
@@ -1555,6 +1580,18 @@ impl DeveloperCommandSession {
                 exit_status: None,
                 trace_location: None,
             },
+            DeveloperCommand::Exec { .. } => Self {
+                command_name: CommandName::Exec,
+                workspace_ref: None,
+                requires_workspace_ref: false,
+                install_check: false,
+                goal: None,
+                trace_ref: None,
+                started_at: current_timestamp_millis(),
+                completed_at: None,
+                exit_status: None,
+                trace_location: None,
+            },
         }
     }
 
@@ -1609,6 +1646,7 @@ impl DeveloperCommandSession {
             | CommandName::HelpNext
             | CommandName::Evals
             | CommandName::Trace
+            | CommandName::Exec
             | CommandName::Probe => {}
         }
 
@@ -2033,6 +2071,7 @@ fn command_environment_workspace(command: &DeveloperCommand) -> Option<PathBuf> 
         DeveloperCommand::Trace { command: trace_compaction::TraceSubcommand::Compact(args) } => {
             resolve_command_workspace(args.workspace.as_deref())
         }
+        DeveloperCommand::Exec { .. } => resolve_command_workspace(None),
         DeveloperCommand::Index { command } => index_command_environment_workspace(command),
         DeveloperCommand::Session { command } => session_command_environment_workspace(command),
         DeveloperCommand::Workflow { command } => workflow_command_environment_workspace(command),
@@ -2254,6 +2293,24 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
         DeveloperCommand::HelpNext(args) => dispatch_help_next_command(args),
         DeveloperCommand::Evals { command } => dispatch_evals_command(command),
         DeveloperCommand::Trace { command } => dispatch_trace_command(command),
+        DeveloperCommand::Exec { command, dry_run, no_mutation, classify_only, zone, json } => {
+            let zone_enum = zone.as_deref().and_then(|z| match z {
+                "green" => Some(RiskZone::Green),
+                "yellow" => Some(RiskZone::Yellow),
+                "red" => Some(RiskZone::Red),
+                _ => None,
+            });
+            let args = exec::ExecArgs {
+                command: command.clone(),
+                dry_run: *dry_run,
+                no_mutation: *no_mutation,
+                classify_only: *classify_only,
+                zone: zone_enum,
+                json: *json,
+            };
+            let report = exec::execute(args, None);
+            DispatchOutcome::text(report.exit_status, report.terminal_output, None)
+        }
     }
 }
 

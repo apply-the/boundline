@@ -14,7 +14,7 @@ surfaces with explicit fidelity tiers, inclusion modes, omission reasons,
 critical-context blocking, repository-map-assisted search-before-read,
 digest-backed compaction, patch-safe edit guidance, and a derived
 snapshot-cache boundary that remains explicitly separate from memory. Close the
-slice as Boundline `0.71.0`, keep Canon compatibility guidance at `0.67.0`,
+slice as Boundline `0.72.5`, keep Canon compatibility guidance at `0.67.0`,
 record a provider-catalog audit, and require at least 95% changed-file coverage
 for touched Rust implementation files.
 
@@ -67,7 +67,7 @@ implementation files must stay above 95% changed-file coverage
 context pack per planning step, one derived repository map and snapshot-cache
 state per workspace, additive session and trace projections, assistant/runtime
 surface updates, docs, release metadata, and quality closure for Boundline
-`0.71.0`
+`0.72.5`
 
 ## Constitution Check
 
@@ -173,7 +173,7 @@ tech-docs/
 distribution/
 ├── channel-metadata.toml
 ├── homebrew/Formula/boundline.rb
-└── winget/manifests/a/ApplyThe/Boundline/0.71.0/
+└── winget/manifests/a/ApplyThe/Boundline/0.72.5/
 ```
 
 **Structure Decision**: Keep the feature inside the existing single Rust

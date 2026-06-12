@@ -154,7 +154,7 @@ Expected result:
 - focused context-substrate tests pass
 - changed Rust implementation files meet at least 95% changed-file coverage
 - docs, assistant assets, changelog, version metadata, and Canon compatibility
-  guidance consistently describe release `0.71.0`
+  guidance consistently describe release `0.72.5`
 
 Manual validation for `SC-004`:
 

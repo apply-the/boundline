@@ -17,38 +17,35 @@ recorded workspace version.
 
 ## [Unreleased]
 
-Highlights:
-
-- Corrected the shipped Speckit adapter semantics around the split workflow
-  boundary: `plan` now routes through `speckit-planning`, `run` routes through
-  `speckit-implementation`, the planning readiness loop remains explicit and
-  bridge-owned, and the legacy combined workflow surface plus hidden fallback
-  have been retired from the active packet.
-- Recorded a 2026-06-01 post-correction validation rerun across the host,
-  template, and Speckit repos, including a passing `/speckit.analyze` result
-  for the corrected 066 packet slice.
-- Retired the unshipped terminal UI planning artifacts and removed the related
-  product-line references from the active roadmap.
-- Added `boundline models auth login|status|remove` so provider-backed routes
-  can reuse user-scoped authentication outside any one repository; the current
-  public login surface supports `github-copilot`.
-- Aligned runtime planning handoffs around explicit gate and follow-up outputs,
-  including planning-quality projections and assistant-safe resume or next
-  commands instead of implicit host continuation.
-- Added the read-only `boundline probe` preflight surface, plus bootstrap-safe
-  assistant guidance and contract coverage so goal and plan hosts can detect
-  init versus doctor versus session-ready states before orchestration.
-- Closed the remaining cross-host assistant contract gaps so Copilot prompt
-  packs and repo-local Claude, Codex, and Antigravity command surfaces describe
-  the same probe and follow-through behavior.
-- Realigned the active Canon compatibility boundary and related reasoning
-  contracts to Canon `0.67.0`.
+No unreleased changes.
 
 Release metadata note:
 
-- The current Boundline release line is `0.74.0`; published package metadata,
+- The current Boundline release line is `0.77.0`; published package metadata,
   distribution metadata, assistant plugin manifests, and docs are aligned to
-  that version while Canon compatibility remains `0.71.0`.
+  that version while Canon compatibility remains `0.72.5`.
+
+## [0.77.0] - 2026-06-11
+
+Delivered specs:
+
+- `077` - Safe Command Execution and Evidence Capture
+
+Highlights:
+
+- Added `boundline exec` command with deterministic command intent classification
+  (read, test, mutate, install, deploy, unknown), Intent × Zone policy matrix,
+  dry-run tiering, and structured evidence capture.
+- Introduced execution policy matrix (`execution-policy.toml`) with configurable
+  per-intent/per-zone modes and command-level overrides.
+- Added prefix-based secret redaction for common token formats (GitHub, AWS, JWT)
+  with configurable patterns and allowlist rules via `redaction.toml`.
+- Implemented evidence packet capture with trace IDs, truncation caps,
+  artifact manifests, and mutation boundary computation.
+- Added governance hooks for blocking or requiring approval on high-risk
+  intents in restricted zones.
+- Added configurable evidence limits (`evidence-limits.toml`) for stdout/stderr
+  caps and mutation entry limits.
 
 ## [0.76.0] - 2026-06-07
 
@@ -159,7 +156,7 @@ Highlights:
   inspect, host JSON, traces, assistant assets, and release-aligned docs for
   Boundline `0.72.0` and Canon `0.67.0`.
 
-## [0.71.0] - 2026-06-05
+## [0.72.5] - 2026-06-05
 
 Delivered specs:
 
@@ -178,7 +175,7 @@ Highlights:
   compacted artifacts, omission reasons, and patch-safe edit constraints.
 - Kept the snapshot cache explicitly derived and non-authoritative while
   aligning release metadata, docs, assistant assets, Homebrew, and WinGet to
-  Boundline `0.71.0` and Canon `0.67.0`.
+  Boundline `0.72.5` and Canon `0.67.0`.
 
 ## [0.70.0] - 2026-06-04
 

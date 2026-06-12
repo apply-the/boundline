@@ -39,7 +39,8 @@ Use the local Speckit templates as the source of truth when converting a seed:
 | Next | 08 | Measurement substrate | Add local event schema plus a tiny golden eval corpus before expanding AI behavior. |
 | Next | 18 | Completion proof gate | Block task or stage closeout until a claim-matched proof command runs freshly. |
 | Next | 09 | Operator discoverability | Start with Boundline `help-next`; keep Canon help as Canon-owned. |
-| Next | 13 | Execution isolation | Add one local test sandbox mode with artifact capture before mutation commit. |
+| In Progress (spec 077) | 13 | Safe command execution | Add command intent classification, execution policy, evidence capture, artifact manifest, secret redaction, and mutation boundaries. No Docker required. |
+| Deferred | 13B | Sandbox execution runtime | Docker sandbox with mount/network/filesystem policy and secret handle inheritance. Depends on provider permissions (07) and execution evidence foundation (13A). Moved to `unplanned/`. |
 | Later | 19 | Execution control plane | Add one sequential task runner with checkpoint and resume after proof gating is stable. |
 | Later | 10, 11 | Governance hardening | Treat as deltas over shipped council/adaptive docs, not greenfield systems. |
 | Later | 12 | Recursive refinement | Add one bounded, inspectable sequential stage-refinement profile after council and adaptive-governance hardening. |
@@ -60,7 +61,7 @@ Seed 02 is intentionally not revised by this pass.
          -> 19 plan execution orchestration
   -> 08 evals and observability
   -> 07 provider protocol
-      -> 13 sandbox execution
+      -> 13 safe command execution
       -> 15 browser provider
       -> 14 AI gateway economics
 
@@ -77,10 +78,8 @@ Seed 02 is intentionally not revised by this pass.
    -> 19 plan execution orchestration
 
 07 provider protocol (shipped in 0.72.0)
-13 sandbox execution
-19 plan execution orchestration
-bounded execution backends and operator setup
-  -> 17 experimental RecursiveMAS provider
+13 safe command execution (next)
+13B sandbox execution runtime (deferred, unplanned/)
 ```
 
 ## Speckit Readiness Checklist

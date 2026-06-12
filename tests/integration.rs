@@ -276,3 +276,6 @@ mod assistant_host_parity_paths;
 
 #[path = "integration/calibration_flow.rs"]
 mod calibration_flow;
+
+#[path = "integration/exec_command_integration.rs"]
+mod exec_command_integration;

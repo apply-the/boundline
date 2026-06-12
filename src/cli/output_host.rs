@@ -243,6 +243,7 @@ pub fn command_name(command: &DeveloperCommand) -> &'static str {
         DeveloperCommand::HelpNext(_) => "help-next",
         DeveloperCommand::Evals { .. } => "evals",
         DeveloperCommand::Trace { .. } => "trace",
+        DeveloperCommand::Exec { .. } => "exec",
     }
 }
 
