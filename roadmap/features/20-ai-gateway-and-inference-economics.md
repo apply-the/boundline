@@ -1,4 +1,4 @@
-# S19 - AI Gateway And Inference Economics
+# AI Gateway And Inference Economics
 
 ## Owner
 

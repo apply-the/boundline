@@ -38,6 +38,12 @@ use boundline::domain::cluster::{
     ClusterRouteOwner, ClusteredExecutionCondition, ClusteredExecutionKind,
     WorkspaceParticipationKind, WorkspaceParticipationRecord,
 };
+use boundline::domain::completion_verification::{
+    ClaimInferenceConfidence, CompletionClaim, CompletionClaimKind, CompletionClaimSource,
+    CompletionRequiredAction, CompletionVerificationFinding, CompletionVerificationFindingKind,
+    CompletionVerificationFindingSeverity, CompletionVerificationProjection,
+    CompletionVerificationScope, CompletionVerificationState,
+};
 use boundline::domain::configuration::{
     AdapterConfigValueRecord, AdapterSelectionRecord, AssistantHostKind, ConfigFile,
     InitConfigScope, ModelRoute, PersistedAdapterConfiguration, RoutingConfig, RuntimeKind,
@@ -851,6 +857,56 @@ fn render_run_trace_with_trace_events_includes_retry_and_replan_lines() {
     assert!(rendered.contains("retry for analyze: transient error, retrying"), "{rendered}");
     assert!(rendered.contains("replan after analyze: goal shifted, replanning"), "{rendered}");
     assert!(rendered.contains("next_command: /boundline-status"), "{rendered}");
+}
+
+#[test]
+fn render_run_trace_surfaces_completion_verification_projection() {
+    let mut response = minimal_response(TaskStatus::Running, "proof needs rerun");
+    let projection = CompletionVerificationProjection {
+        completion_verification_state: CompletionVerificationState::ProofRequired,
+        scope: CompletionVerificationScope::Task,
+        claim: Some(CompletionClaim {
+            claim_id: "claim-run-trace".to_string(),
+            kind: CompletionClaimKind::BugFixed,
+            scope: CompletionVerificationScope::Task,
+            source: CompletionClaimSource::RuntimeInference,
+            confidence: Some(ClaimInferenceConfidence::High),
+            summary: "bug fix remains unproven".to_string(),
+            supporting_signals: vec!["goal_text".to_string(), "changed_files".to_string()],
+        }),
+        completion_blocked_claims: vec![CompletionClaimKind::BugFixed],
+        completion_evidence_refs: vec!["proof-1".to_string()],
+        completion_verification_findings: vec![CompletionVerificationFinding {
+            kind: CompletionVerificationFindingKind::StaleProof,
+            severity: CompletionVerificationFindingSeverity::Blocking,
+            message: "The previously passing proof is stale because workspace content changed after proof execution.".to_string(),
+            proof_ref: Some("proof-20260612-abc123".to_string()),
+            task_id: Some("task-unit".to_string()),
+            changed_paths: vec!["src/lib.rs".to_string(), "Cargo.toml".to_string()],
+            required_action: CompletionRequiredAction::RerunProof,
+        }],
+        child_summary: None,
+    };
+    response
+        .final_context
+        .set_completion_verification_projection(&projection)
+        .expect("completion verification projection should attach");
+
+    let rendered = render_run_trace("run", None, &response, "/boundline-status");
+
+    assert!(rendered.contains("completion_verification_state: proof_required"), "{rendered}");
+    assert!(rendered.contains("completion_claim_kind: bug_fixed"), "{rendered}");
+    assert!(rendered.contains("completion_claim_source: runtime_inference"), "{rendered}");
+    assert!(rendered.contains("completion_blocked_claims: bug_fixed"), "{rendered}");
+    assert!(rendered.contains("completion_evidence_refs: proof-1"), "{rendered}");
+    assert!(
+        rendered.contains("completion_verification_changed_paths: src/lib.rs, Cargo.toml"),
+        "{rendered}"
+    );
+    assert!(
+        rendered.contains("completion_verification_required_action: rerun_proof"),
+        "{rendered}"
+    );
 }
 
 #[test]

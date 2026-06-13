@@ -56,10 +56,16 @@ Use `docs/evidence/` for durable outputs produced during or after a bounded deli
 - feature summaries
 - decision records that explain tradeoffs
 - validation writeups
+- completion-verification proof summaries, stale-path reports, and promoted
+  evidence refs when they should remain readable after closeout
 - links or references to promoted governed artifacts
 - handoff notes that should remain visible in the repository
 
 A common pattern is `docs/evidence/<feature-slug>/...` so each delivery slice has one readable evidence bundle.
+
+Fresh proof refs, fingerprints, and blocked findings remain runtime-owned while
+the session is active under `.boundline/`. Only promoted summaries or durable
+evidence bundles belong in `docs/evidence/`.
 
 ## Bootstrap Behavior
 

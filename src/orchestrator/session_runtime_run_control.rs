@@ -1,5 +1,6 @@
 use uuid::Uuid;
 
+use super::runtime_support::FrameworkAdapterClaimedStageRuntime;
 use super::{
     ActiveSessionRecord, FixtureRuntimeError, FlowStepMetadata, GovernanceLifecycleState,
     GovernanceRequestKind, GovernanceStepDecision, SessionCommand, SessionRuntime,
@@ -98,72 +99,131 @@ impl SessionRuntime {
         let checkpoint_projection =
             self.prepare_checkpoint_for_mutation(session, SessionCommand::Run)?;
         if session.goal_plan.is_some() {
-            let claimed_stage_outcome = self.maybe_execute_framework_adapter_run_stage(
-                session,
-                checkpoint_projection.clone(),
-            )?;
-            let (response, claimed_stage_runtime, not_claimed_routing) = match claimed_stage_outcome
-            {
-                super::FrameworkAdapterRunStageOutcome::NotClaimed { routing_record } => (
-                    self.run_native_goal_plan(session, checkpoint_projection.clone())?,
-                    None,
-                    routing_record,
-                ),
-                super::FrameworkAdapterRunStageOutcome::Completed { stage_runtime, response } => (
-                    self.persist_framework_adapter_run_stage_success(
-                        session,
-                        checkpoint_projection.clone(),
-                        &stage_runtime,
-                        response,
-                    )?,
-                    Some(stage_runtime),
-                    None,
-                ),
-                super::FrameworkAdapterRunStageOutcome::Blocked(blocked) => (
-                    self.persist_framework_adapter_run_stage_blocked(
-                        session,
-                        checkpoint_projection.clone(),
-                        blocked,
-                    )?,
-                    None,
-                    None,
-                ),
-                super::FrameworkAdapterRunStageOutcome::Terminal { stage_runtime, response } => {
-                    (*response, Some(stage_runtime), None)
-                }
-            };
-            if let Some(routing_record) = not_claimed_routing {
-                self.record_framework_adapter_run_stage_not_claimed_routing(
-                    session,
-                    &response.trace_location,
-                    response.plan_revision,
-                    routing_record,
-                )?;
-            }
-            if let Some(stage_runtime) = claimed_stage_runtime.as_ref() {
-                self.emit_framework_adapter_run_stage_hook(
-                    session,
-                    stage_runtime,
-                    response.terminal_status,
-                    &response.trace_location,
-                )?;
-            }
-            if let Some(projection) = checkpoint_projection.as_ref() {
-                self.refresh_checkpoint_projection(session, projection)?;
-            }
-            return Ok(response);
+            return self.run_goal_plan_to_terminal(session, checkpoint_projection);
         }
 
         let runtime = self.build_runtime(session)?;
 
         loop {
             if let Some(response) = self.execute_single_step(session, &runtime)? {
-                if let Some(projection) = checkpoint_projection.as_ref() {
-                    self.refresh_checkpoint_projection(session, projection)?;
-                }
+                self.refresh_checkpoint_projection_if_present(
+                    session,
+                    checkpoint_projection.as_ref(),
+                )?;
                 return Ok(response);
             }
         }
+    }
+
+    fn run_goal_plan_to_terminal(
+        &self,
+        session: &mut ActiveSessionRecord,
+        checkpoint_projection: Option<super::CheckpointProjectionState>,
+    ) -> Result<TaskRunResponse, SessionRuntimeError> {
+        if let Some(response) = self.maybe_resume_completion_verification(session)? {
+            self.refresh_checkpoint_projection_if_present(session, checkpoint_projection.as_ref())?;
+            return Ok(response);
+        }
+
+        let claimed_stage_outcome =
+            self.maybe_execute_framework_adapter_run_stage(session, checkpoint_projection.clone())?;
+        let (response, claimed_stage_runtime, not_claimed_routing) = self
+            .resolve_goal_plan_run_outcome(session, checkpoint_projection, claimed_stage_outcome)?;
+
+        self.record_not_claimed_run_stage_if_present(session, &response, not_claimed_routing)?;
+        self.emit_run_stage_hook_if_present(session, &response, claimed_stage_runtime.as_ref())?;
+        Ok(response)
+    }
+
+    fn resolve_goal_plan_run_outcome(
+        &self,
+        session: &mut ActiveSessionRecord,
+        checkpoint_projection: Option<super::CheckpointProjectionState>,
+        claimed_stage_outcome: super::FrameworkAdapterRunStageOutcome,
+    ) -> Result<
+        (
+            TaskRunResponse,
+            Option<FrameworkAdapterClaimedStageRuntime>,
+            Option<crate::domain::execution::StageRoutingDecisionRecord>,
+        ),
+        SessionRuntimeError,
+    > {
+        let outcome = match claimed_stage_outcome {
+            super::FrameworkAdapterRunStageOutcome::NotClaimed { routing_record } => (
+                self.run_native_goal_plan(session, checkpoint_projection.clone())?,
+                None,
+                routing_record,
+            ),
+            super::FrameworkAdapterRunStageOutcome::Completed { stage_runtime, response } => (
+                self.persist_framework_adapter_run_stage_success(
+                    session,
+                    checkpoint_projection.clone(),
+                    &stage_runtime,
+                    response,
+                )?,
+                Some(stage_runtime),
+                None,
+            ),
+            super::FrameworkAdapterRunStageOutcome::Blocked(blocked) => (
+                self.persist_framework_adapter_run_stage_blocked(
+                    session,
+                    checkpoint_projection.clone(),
+                    blocked,
+                )?,
+                None,
+                None,
+            ),
+            super::FrameworkAdapterRunStageOutcome::Terminal { stage_runtime, response } => {
+                (*response, Some(stage_runtime), None)
+            }
+        };
+        self.refresh_checkpoint_projection_if_present(session, checkpoint_projection.as_ref())?;
+        Ok(outcome)
+    }
+
+    fn record_not_claimed_run_stage_if_present(
+        &self,
+        session: &mut ActiveSessionRecord,
+        response: &TaskRunResponse,
+        routing_record: Option<crate::domain::execution::StageRoutingDecisionRecord>,
+    ) -> Result<(), SessionRuntimeError> {
+        if let Some(routing_record) = routing_record {
+            self.record_framework_adapter_run_stage_not_claimed_routing(
+                session,
+                &response.trace_location,
+                response.plan_revision,
+                routing_record,
+            )?;
+        }
+        Ok(())
+    }
+
+    fn emit_run_stage_hook_if_present(
+        &self,
+        session: &ActiveSessionRecord,
+        response: &TaskRunResponse,
+        stage_runtime: Option<&FrameworkAdapterClaimedStageRuntime>,
+    ) -> Result<(), SessionRuntimeError> {
+        if let Some(stage_runtime) = stage_runtime {
+            self.emit_framework_adapter_run_stage_hook(
+                session,
+                stage_runtime,
+                response.terminal_status,
+                &response.trace_location,
+            )?;
+        }
+        Ok(())
+    }
+
+    fn refresh_checkpoint_projection_if_present(
+        &self,
+        session: &mut ActiveSessionRecord,
+        checkpoint_projection: Option<&super::CheckpointProjectionState>,
+    ) -> Result<(), SessionRuntimeError> {
+        if let Some(projection) = checkpoint_projection {
+            self.refresh_checkpoint_projection(session, projection)?;
+        }
+        Ok(())
     }
 
     /// Refreshes governance state when a run is paused awaiting approval and a

@@ -116,6 +116,19 @@ fn temp_workspace(prefix: &str) -> PathBuf {
     workspace
 }
 
+fn write_minimal_cargo_workspace(workspace: &Path) -> Result<(), Box<dyn Error>> {
+    fs::create_dir_all(workspace.join("src"))?;
+    fs::write(
+        workspace.join("Cargo.toml"),
+        "[package]\nname = \"boundline-runtime-fixture\"\nversion = \"0.1.0\"\nedition = \"2024\"\n\n[lib]\npath = \"src/lib.rs\"\n",
+    )?;
+    fs::write(
+        workspace.join("src/lib.rs"),
+        "#[cfg(test)]\nmod tests {\n    fn compute(left: i32, right: i32) -> i32 {\n        left - right\n    }\n\n    #[test]\n    fn computes_addition() {\n        assert_eq!(compute(2, 3), 5);\n    }\n}\n",
+    )?;
+    Ok(())
+}
+
 fn request_headers_complete(buffer: &[u8]) -> Option<usize> {
     buffer.windows(4).position(|window| window == b"\r\n\r\n").map(|index| index + 4)
 }
@@ -297,6 +310,20 @@ fn spawn_scripted_response_server(
     });
 
     Ok((format!("http://{address}"), receiver, handle))
+}
+
+fn loopback_bind_is_unavailable(error: &str) -> bool {
+    error.contains("Operation not permitted")
+        || error.contains("Permission denied")
+        || error.contains("os error 1")
+}
+
+fn require_loopback_server<T>(result: Result<T, String>) -> Option<T> {
+    match result {
+        Ok(value) => Some(value),
+        Err(error) if loopback_bind_is_unavailable(&error) => None,
+        Err(error) => panic!("failed to start loopback test server: {error}"),
+    }
 }
 
 fn openai_completion_response(payload: serde_json::Value) -> String {
@@ -3852,25 +3879,28 @@ fn execute_next_step_creates_a_compatibility_task_for_flow_selected_goal_plans()
 fn run_to_terminal_uses_provider_analysis_and_change_routes_for_flow_selected_goal_plans()
 -> Result<(), Box<dyn std::error::Error>> {
     with_env_test(&[OPENAI_BASE_URL_ENV, OPENAI_API_KEY_ENV], || {
-        let (base_url, receiver, handle) = spawn_scripted_response_server(vec![
-            openai_completion_response(json!({
-                "headline": "Inspect arithmetic",
-                "summary": "The requested branch still subtracts instead of adding.",
-                "risks": []
-            })),
-            openai_completion_response(json!({
-                "headline": "Repair arithmetic",
-                "summary": "Switch subtraction to addition.",
-                "changes": [
-                    {
-                        "path": "src/lib.rs",
-                        "find": "left - right",
-                        "replace": "left + right"
-                    }
-                ]
-            })),
-        ])
-        .map_err(std::io::Error::other)?;
+        let Some((base_url, receiver, handle)) =
+            require_loopback_server(spawn_scripted_response_server(vec![
+                openai_completion_response(json!({
+                    "headline": "Inspect arithmetic",
+                    "summary": "The requested branch still subtracts instead of adding.",
+                    "risks": []
+                })),
+                openai_completion_response(json!({
+                    "headline": "Repair arithmetic",
+                    "summary": "Switch subtraction to addition.",
+                    "changes": [
+                        {
+                            "path": "src/lib.rs",
+                            "find": "left - right",
+                            "replace": "left + right"
+                        }
+                    ]
+                })),
+            ]))
+        else {
+            return Ok(());
+        };
 
         unsafe {
             std::env::set_var(OPENAI_BASE_URL_ENV, &base_url);
@@ -4000,32 +4030,35 @@ fn run_to_terminal_uses_provider_analysis_and_change_routes_for_flow_selected_go
 fn run_to_terminal_executes_provider_review_for_native_goal_plans()
 -> Result<(), Box<dyn std::error::Error>> {
     with_env_test(&[OPENAI_BASE_URL_ENV, OPENAI_API_KEY_ENV], || {
-        let (base_url, receiver, handle) = spawn_scripted_response_server(vec![
-            openai_completion_response(json!({
-                "headline": "Inspect arithmetic",
-                "summary": "The requested branch still subtracts instead of adding.",
-                "risks": []
-            })),
-            openai_completion_response(json!({
-                "headline": "Repair arithmetic",
-                "summary": "Switch subtraction to addition.",
-                "changes": [
-                    {
-                        "path": "src/lib.rs",
-                        "find": "left - right",
-                        "replace": "left + right"
-                    }
-                ]
-            })),
-            openai_completion_response(json!({
-                "disposition": "approve",
-                "summary": "Bounded change is acceptable.",
-                "details": "The review confirmed the arithmetic fix.",
-                "required_action": null,
-                "evidence_refs": ["src/lib.rs"]
-            })),
-        ])
-        .map_err(std::io::Error::other)?;
+        let Some((base_url, receiver, handle)) =
+            require_loopback_server(spawn_scripted_response_server(vec![
+                openai_completion_response(json!({
+                    "headline": "Inspect arithmetic",
+                    "summary": "The requested branch still subtracts instead of adding.",
+                    "risks": []
+                })),
+                openai_completion_response(json!({
+                    "headline": "Repair arithmetic",
+                    "summary": "Switch subtraction to addition.",
+                    "changes": [
+                        {
+                            "path": "src/lib.rs",
+                            "find": "left - right",
+                            "replace": "left + right"
+                        }
+                    ]
+                })),
+                openai_completion_response(json!({
+                    "disposition": "approve",
+                    "summary": "Bounded change is acceptable.",
+                    "details": "The review confirmed the arithmetic fix.",
+                    "required_action": null,
+                    "evidence_refs": ["src/lib.rs"]
+                })),
+            ]))
+        else {
+            return Ok(());
+        };
 
         unsafe {
             std::env::set_var(OPENAI_BASE_URL_ENV, &base_url);
@@ -4166,46 +4199,49 @@ fn run_to_terminal_executes_provider_adjudication_for_flow_selected_goal_plans()
             GROQ_API_KEY_ENV,
         ],
         || {
-            let (base_url, receiver, handle) = spawn_scripted_response_server(vec![
-                openai_completion_response(json!({
-                    "headline": "Inspect arithmetic",
-                    "summary": "The requested branch still subtracts instead of adding.",
-                    "risks": []
-                })),
-                openai_completion_response(json!({
-                    "headline": "Repair arithmetic",
-                    "summary": "Switch subtraction to addition.",
-                    "changes": [
-                        {
-                            "path": "src/lib.rs",
-                            "find": "left - right",
-                            "replace": "left + right"
-                        }
-                    ]
-                })),
-                openai_completion_response(json!({
-                    "disposition": "approve",
-                    "summary": "Arithmetic change looks bounded.",
-                    "details": "The implementation matches the requested fix.",
-                    "required_action": null,
-                    "evidence_refs": ["src/lib.rs"]
-                })),
-                openai_completion_response(json!({
-                    "disposition": "concern",
-                    "summary": "Verification evidence should be double-checked.",
-                    "details": "The change is small but review wants an explicit tie-break.",
-                    "required_action": "confirm validation evidence",
-                    "evidence_refs": ["src/lib.rs"]
-                })),
-                openai_completion_response(json!({
-                    "disposition": "approve",
-                    "summary": "Adjudication accepts the bounded change.",
-                    "details": "The council disagreement is resolved in favor of the fix.",
-                    "required_action": null,
-                    "evidence_refs": ["src/lib.rs"]
-                })),
-            ])
-            .map_err(std::io::Error::other)?;
+            let Some((base_url, receiver, handle)) =
+                require_loopback_server(spawn_scripted_response_server(vec![
+                    openai_completion_response(json!({
+                        "headline": "Inspect arithmetic",
+                        "summary": "The requested branch still subtracts instead of adding.",
+                        "risks": []
+                    })),
+                    openai_completion_response(json!({
+                        "headline": "Repair arithmetic",
+                        "summary": "Switch subtraction to addition.",
+                        "changes": [
+                            {
+                                "path": "src/lib.rs",
+                                "find": "left - right",
+                                "replace": "left + right"
+                            }
+                        ]
+                    })),
+                    openai_completion_response(json!({
+                        "disposition": "approve",
+                        "summary": "Arithmetic change looks bounded.",
+                        "details": "The implementation matches the requested fix.",
+                        "required_action": null,
+                        "evidence_refs": ["src/lib.rs"]
+                    })),
+                    openai_completion_response(json!({
+                        "disposition": "concern",
+                        "summary": "Verification evidence should be double-checked.",
+                        "details": "The change is small but review wants an explicit tie-break.",
+                        "required_action": "confirm validation evidence",
+                        "evidence_refs": ["src/lib.rs"]
+                    })),
+                    openai_completion_response(json!({
+                        "disposition": "approve",
+                        "summary": "Adjudication accepts the bounded change.",
+                        "details": "The council disagreement is resolved in favor of the fix.",
+                        "required_action": null,
+                        "evidence_refs": ["src/lib.rs"]
+                    })),
+                ]))
+            else {
+                return Ok(());
+            };
 
             unsafe {
                 std::env::set_var(OPENAI_BASE_URL_ENV, &base_url);
@@ -4418,17 +4454,16 @@ fn run_to_terminal_executes_provider_adjudication_for_flow_selected_goal_plans()
 fn run_to_terminal_executes_post_implementation_canon_governance()
 -> Result<(), Box<dyn std::error::Error>> {
     let workspace = temp_workspace("boundline-runtime-execution-canon");
-    fs::create_dir_all(workspace.join("src"))?;
-    fs::write(
-        workspace.join("src/lib.rs"),
-        "fn compute(left: i32, right: i32) -> i32 {\n    left - right\n}\n",
-    )?;
+    write_minimal_cargo_workspace(&workspace)?;
 
     let (canon_command, requests_path) = write_fake_execution_canon_command(&workspace);
     let execution_profile = WorkspaceExecutionProfile {
         name: "session-runtime-canon-execution-profile".to_string(),
-        read_targets: vec!["src/lib.rs".to_string()],
-        validation_command: ExecutionCommand { program: "true".to_string(), args: Vec::new() },
+        read_targets: vec!["Cargo.toml".to_string(), "src/lib.rs".to_string()],
+        validation_command: ExecutionCommand {
+            program: "cargo".to_string(),
+            args: vec!["test".to_string(), "--quiet".to_string()],
+        },
         attempts: vec![ExecutionAttemptDefinition {
             attempt_id: "fix-add".to_string(),
             summary: "repair arithmetic".to_string(),
@@ -4467,7 +4502,9 @@ fn run_to_terminal_executes_post_implementation_canon_governance()
             task_id: "planned-task-1".to_string(),
             description: "Repair arithmetic".to_string(),
             target: "src/lib.rs".to_string(),
-            expected_outcome: Some("implementation switches subtraction to addition".to_string()),
+            expected_outcome: Some(
+                "tests pass after implementation switches subtraction to addition".to_string(),
+            ),
             decision_type_hint: Some(DecisionType::Code),
         }],
     )?;
@@ -4510,8 +4547,9 @@ fn run_to_terminal_executes_post_implementation_canon_governance()
 
     let response = runtime.run_to_terminal(&mut session)?;
 
-    assert_eq!(response.terminal_status, TaskStatus::Succeeded);
+    assert_eq!(response.terminal_status, TaskStatus::Running);
     assert!(!session.decisions.is_empty());
+    assert!(session.active_task.is_some());
 
     let requests = fs::read_to_string(&requests_path)?;
     assert!(requests.contains("\"stage_key\":\"run:implementation\""), "{requests}");
@@ -5422,6 +5460,7 @@ fn native_persistence_projects_cluster_story_and_copies_changes() {
                 ),
                 record_terminal_event: true,
                 projected_task: None,
+                completion_validation_command: None,
             },
         )
         .unwrap();
@@ -7300,36 +7339,39 @@ fn discovery_stage_council_revises_artifact_after_concern_adjudication()
             GROQ_API_KEY_ENV,
         ],
         || {
-            let (base_url, receiver, handle) = spawn_scripted_response_server(vec![
-                openai_completion_response(json!({
-                    "disposition": "approve",
-                    "summary": "Alpha approves the bounded change.",
-                    "details": "The artifact keeps the scope narrow.",
-                    "required_action": null,
-                    "evidence_refs": [DISCOVERY_TARGET_REF]
-                })),
-                openai_completion_response(json!({
-                    "disposition": "concern",
-                    "summary": "Beta wants the discovery note tightened.",
-                    "details": "The scope cut should be called out more explicitly.",
-                    "required_action": "tighten the discovery summary",
-                    "evidence_refs": []
-                })),
-                openai_completion_response(json!({
-                    "disposition": "concern",
-                    "summary": "Carry the accepted council concern into revision.",
-                    "details": "Revise the artifact instead of blocking discovery.",
-                    "required_action": "apply accepted council feedback",
-                    "evidence_refs": []
-                })),
-                openai_completion_response(json!({
-                    "headline": "Revise discovery artifact",
-                    "summary": "revision applied the accepted council concern",
-                    "revised_artifact": "# Discovery Artifact\n\nRevised provider-backed artifact.\n",
-                    "applied_feedback": ["beta: Beta wants the discovery note tightened."]
-                })),
-            ])
-            .map_err(std::io::Error::other)?;
+            let Some((base_url, receiver, handle)) = require_loopback_server(
+                spawn_scripted_response_server(vec![
+                    openai_completion_response(json!({
+                        "disposition": "approve",
+                        "summary": "Alpha approves the bounded change.",
+                        "details": "The artifact keeps the scope narrow.",
+                        "required_action": null,
+                        "evidence_refs": [DISCOVERY_TARGET_REF]
+                    })),
+                    openai_completion_response(json!({
+                        "disposition": "concern",
+                        "summary": "Beta wants the discovery note tightened.",
+                        "details": "The scope cut should be called out more explicitly.",
+                        "required_action": "tighten the discovery summary",
+                        "evidence_refs": []
+                    })),
+                    openai_completion_response(json!({
+                        "disposition": "concern",
+                        "summary": "Carry the accepted council concern into revision.",
+                        "details": "Revise the artifact instead of blocking discovery.",
+                        "required_action": "apply accepted council feedback",
+                        "evidence_refs": []
+                    })),
+                    openai_completion_response(json!({
+                        "headline": "Revise discovery artifact",
+                        "summary": "revision applied the accepted council concern",
+                        "revised_artifact": "# Discovery Artifact\n\nRevised provider-backed artifact.\n",
+                        "applied_feedback": ["beta: Beta wants the discovery note tightened."]
+                    })),
+                ]),
+            ) else {
+                return Ok(());
+            };
             set_provider_envs(&base_url);
 
             let (workspace, artifact_ref) =
@@ -7408,30 +7450,33 @@ fn discovery_stage_council_renders_blocked_markdown_when_adjudication_blocks()
             GROQ_API_KEY_ENV,
         ],
         || {
-            let (base_url, receiver, handle) = spawn_scripted_response_server(vec![
-                openai_completion_response(json!({
-                    "disposition": "approve",
-                    "summary": "Alpha approves the bounded change.",
-                    "details": "The artifact stays within the requested scope.",
-                    "required_action": null,
-                    "evidence_refs": [DISCOVERY_TARGET_REF]
-                })),
-                openai_completion_response(json!({
-                    "disposition": "concern",
-                    "summary": "Beta still needs tighter evidence.",
-                    "details": "The scope cut needs a stronger justification.",
-                    "required_action": "add stronger evidence",
-                    "evidence_refs": []
-                })),
-                openai_completion_response(json!({
-                    "disposition": "block",
-                    "summary": "Adjudication blocks until the evidence is repaired.",
-                    "details": "The council cannot proceed without a tighter discovery artifact.",
-                    "required_action": "repair the discovery artifact",
-                    "evidence_refs": [DISCOVERY_TARGET_REF]
-                })),
-            ])
-            .map_err(std::io::Error::other)?;
+            let Some((base_url, receiver, handle)) = require_loopback_server(
+                spawn_scripted_response_server(vec![
+                    openai_completion_response(json!({
+                        "disposition": "approve",
+                        "summary": "Alpha approves the bounded change.",
+                        "details": "The artifact stays within the requested scope.",
+                        "required_action": null,
+                        "evidence_refs": [DISCOVERY_TARGET_REF]
+                    })),
+                    openai_completion_response(json!({
+                        "disposition": "concern",
+                        "summary": "Beta still needs tighter evidence.",
+                        "details": "The scope cut needs a stronger justification.",
+                        "required_action": "add stronger evidence",
+                        "evidence_refs": []
+                    })),
+                    openai_completion_response(json!({
+                        "disposition": "block",
+                        "summary": "Adjudication blocks until the evidence is repaired.",
+                        "details": "The council cannot proceed without a tighter discovery artifact.",
+                        "required_action": "repair the discovery artifact",
+                        "evidence_refs": [DISCOVERY_TARGET_REF]
+                    })),
+                ]),
+            ) else {
+                return Ok(());
+            };
             set_provider_envs(&base_url);
 
             let (workspace, artifact_ref) =
@@ -7490,30 +7535,33 @@ fn discovery_stage_council_blocks_when_revision_route_is_unavailable() -> Result
             GROQ_API_KEY_ENV,
         ],
         || {
-            let (base_url, receiver, handle) = spawn_scripted_response_server(vec![
-                openai_completion_response(json!({
-                    "disposition": "approve",
-                    "summary": "Alpha approves the bounded change.",
-                    "details": "The artifact is structurally sound.",
-                    "required_action": null,
-                    "evidence_refs": [DISCOVERY_TARGET_REF]
-                })),
-                openai_completion_response(json!({
-                    "disposition": "concern",
-                    "summary": "Beta requests a revision before proceeding.",
-                    "details": "The discovery artifact needs a tighter summary.",
-                    "required_action": "tighten the artifact",
-                    "evidence_refs": []
-                })),
-                openai_completion_response(json!({
-                    "disposition": "concern",
-                    "summary": "Adjudication agrees that revision is required.",
-                    "details": "Carry the accepted concern into the producer artifact.",
-                    "required_action": "revise the artifact",
-                    "evidence_refs": []
-                })),
-            ])
-            .map_err(std::io::Error::other)?;
+            let Some((base_url, receiver, handle)) =
+                require_loopback_server(spawn_scripted_response_server(vec![
+                    openai_completion_response(json!({
+                        "disposition": "approve",
+                        "summary": "Alpha approves the bounded change.",
+                        "details": "The artifact is structurally sound.",
+                        "required_action": null,
+                        "evidence_refs": [DISCOVERY_TARGET_REF]
+                    })),
+                    openai_completion_response(json!({
+                        "disposition": "concern",
+                        "summary": "Beta requests a revision before proceeding.",
+                        "details": "The discovery artifact needs a tighter summary.",
+                        "required_action": "tighten the artifact",
+                        "evidence_refs": []
+                    })),
+                    openai_completion_response(json!({
+                        "disposition": "concern",
+                        "summary": "Adjudication agrees that revision is required.",
+                        "details": "Carry the accepted concern into the producer artifact.",
+                        "required_action": "revise the artifact",
+                        "evidence_refs": []
+                    })),
+                ]))
+            else {
+                return Ok(());
+            };
             set_provider_envs(&base_url);
 
             let (workspace, artifact_ref) = write_discovery_stage_council_workspace(

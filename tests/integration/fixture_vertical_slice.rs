@@ -28,7 +28,7 @@ fn fixture_vertical_slice_drives_a_failing_test_to_green() {
         ),
         "{text}"
     );
-    assert!(text.contains("goal plan completed through the native decision loop"), "{text}");
+    assert!(text.contains("goal satisfied after fresh proof"), "{text}");
     assert!(text.contains("terminal_status: succeeded"), "{text}");
     assert!(trace_path.as_ref().is_some_and(|path| path.exists()), "{text}");
 

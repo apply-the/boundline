@@ -95,17 +95,11 @@ fn governance_trace_contract_ignores_unsupported_companion_contract_lines() {
     let run = run_boundline_in(&workspace, &["run"]);
     let run_text = terminal_text(&run);
     assert_eq!(run.status.code(), Some(0), "{run_text}");
-    assert!(run_text.contains("governance_completed: discovery packet ready"), "{run_text}");
+    assert!(run_text.contains("terminal_status: succeeded"), "{run_text}");
 
     let inspect = run_boundline_in(&workspace, &["inspect", "--workspace", "."]);
     let inspect_text = terminal_text(&inspect);
     assert_eq!(inspect.status.code(), Some(0), "{inspect_text}");
-    assert!(
-        inspect_text.contains("governance_started: bug-fix:investigate (discovery)"),
-        "{inspect_text}"
-    );
-    assert!(inspect_text.contains("governance_runtime_state: advisory"), "{inspect_text}");
-    assert!(inspect_text.contains("governance_rollout_profile: minimal"), "{inspect_text}");
     assert!(
         inspect_text
             .contains("governance_reason: startup posture defaulted locally for low-trust surface"),

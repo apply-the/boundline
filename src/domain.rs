@@ -34,6 +34,7 @@ pub mod brief;
 pub mod capability_provider;
 pub mod checkpoint;
 pub mod cluster;
+pub mod completion_verification;
 pub mod configuration;
 pub mod context_intelligence;
 pub mod decision;

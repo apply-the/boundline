@@ -5,6 +5,10 @@ use serde_json::json;
 use crate::adapters::audit_store::SessionAuditStore;
 use crate::adapters::session_store::SessionStore;
 use crate::adapters::trace_store::TraceStore;
+use crate::domain::completion_verification::{
+    ChildVerificationInput, CompletionVerificationProjection, CompletionVerificationScope,
+    aggregate_child_verification,
+};
 use crate::domain::trace::ExecutionTrace;
 
 use super::{
@@ -516,6 +520,16 @@ impl SessionRuntime {
     ) -> Result<crate::domain::session::RoutingOutcome, SessionRuntimeError> {
         Ok(crate::domain::session::routing_outcome(session))
     }
+
+    /// Projects required child verification state into one parent-scope gate
+    /// without changing task-level proof ownership.
+    pub fn aggregate_parent_completion_verification(
+        &self,
+        scope: CompletionVerificationScope,
+        children: &[ChildVerificationInput],
+    ) -> CompletionVerificationProjection {
+        aggregate_child_verification(scope, children)
+    }
 }
 
 #[cfg(test)]
@@ -529,6 +543,11 @@ mod tests {
 
     use crate::adapters::audit_store::{FileSessionAuditStore, SessionAuditStore};
     use crate::domain::audit::SessionAuditEntryKind;
+    use crate::domain::completion_verification::{
+        ChildVerificationInput, CompletionRequiredAction, CompletionVerificationFinding,
+        CompletionVerificationFindingKind, CompletionVerificationFindingSeverity,
+        CompletionVerificationProjection, CompletionVerificationScope, CompletionVerificationState,
+    };
     use crate::domain::decision::{Decision, DecisionType};
     use crate::domain::goal_plan::{GoalPlan, PlannedTask};
     use crate::domain::limits::TerminalCondition;
@@ -641,6 +660,69 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn aggregate_parent_completion_verification_projects_child_blockers()
+    -> Result<(), Box<dyn Error>> {
+        let workspace = TestWorkspace::new("boundline-surface-completion-aggregate")?;
+        let runtime = SessionRuntime::for_workspace(workspace.as_path());
+        let projection = runtime.aggregate_parent_completion_verification(
+            CompletionVerificationScope::Stage,
+            &[
+                ChildVerificationInput {
+                    task_id: "T-014".to_string(),
+                    required: true,
+                    deferred_reason: None,
+                    skipped_reason: None,
+                    projection: Some(CompletionVerificationProjection {
+                        completion_verification_state: CompletionVerificationState::ProofRequired,
+                        scope: CompletionVerificationScope::Task,
+                        claim: None,
+                        completion_blocked_claims: Vec::new(),
+                        completion_evidence_refs: Vec::new(),
+                        completion_verification_findings: vec![CompletionVerificationFinding {
+                            kind: CompletionVerificationFindingKind::StaleProof,
+                            severity: CompletionVerificationFindingSeverity::Blocking,
+                            message: "proof is stale".to_string(),
+                            proof_ref: Some("proof-1".to_string()),
+                            task_id: Some("T-014".to_string()),
+                            changed_paths: vec!["src/lib.rs".to_string()],
+                            required_action: CompletionRequiredAction::RerunProof,
+                        }],
+                        child_summary: None,
+                    }),
+                },
+                ChildVerificationInput {
+                    task_id: "T-019".to_string(),
+                    required: true,
+                    deferred_reason: None,
+                    skipped_reason: None,
+                    projection: None,
+                },
+            ],
+        );
+
+        assert_eq!(projection.completion_verification_state, CompletionVerificationState::Blocked);
+        assert!(projection.child_summary.as_ref().is_some_and(|summary| {
+            summary.blocked_children == 2
+                && summary.stale_children == 1
+                && summary.missing_proof_children == 1
+        }));
+        assert!(
+            projection
+                .completion_verification_findings
+                .iter()
+                .any(|finding| finding.kind == CompletionVerificationFindingKind::StaleChildProof)
+        );
+        assert!(
+            projection
+                .completion_verification_findings
+                .iter()
+                .any(|finding| finding.kind == CompletionVerificationFindingKind::MissingChildProof)
+        );
+
+        Ok(())
+    }
+
     fn sample_session(workspace: &Path) -> ActiveSessionRecord {
         ActiveSessionRecord {
             session_id: SESSION_ID.to_string(),
@@ -700,6 +782,373 @@ mod tests {
         );
         trace.record_event(TraceEventType::TerminalRecorded, None, 1, json!({"terminal": true}));
         trace
+    }
+
+    struct TestWorkspace {
+        path: PathBuf,
+    }
+
+    impl TestWorkspace {
+        fn new(prefix: &str) -> Result<Self, Box<dyn Error>> {
+            let path = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
+            fs::create_dir_all(&path)?;
+            Ok(Self { path })
+        }
+
+        fn as_path(&self) -> &Path {
+            &self.path
+        }
+    }
+
+    impl Drop for TestWorkspace {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.path);
+        }
+    }
+}
+
+#[cfg(test)]
+mod additional_tests {
+    use std::error::Error;
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
+    use uuid::Uuid;
+
+    use crate::adapters::audit_store::{FileSessionAuditStore, SessionAuditStore};
+    use crate::domain::audit::SessionAuditEntryKind;
+    use crate::domain::decision::{Decision, DecisionType};
+    use crate::domain::goal_plan::{GoalPlan, PlannedTask};
+    use crate::domain::limits::TerminalCondition;
+    use crate::domain::session::{ActiveSessionRecord, SessionStatus};
+    use crate::domain::task::TerminalReason;
+
+    use super::{SessionRuntime, SessionRuntimeError};
+
+    const SESSION_ID: &str = "session-runtime-additional-tests";
+    const INITIAL_GOAL: &str = "Initial test goal";
+    const UPDATED_GOAL: &str = "Deliver a bounded and verified change";
+    const CREATED_AT: u64 = 1_717_200_000_000;
+    const UPDATED_AT: u64 = CREATED_AT + 1_000;
+
+    #[test]
+    fn runtime_is_bound_to_the_requested_workspace() -> Result<(), Box<dyn Error>> {
+        let workspace = TestWorkspace::new("boundline-runtime-workspace")?;
+        let runtime = SessionRuntime::for_workspace(workspace.as_path());
+
+        assert_eq!(runtime.workspace_ref(), workspace.as_path());
+
+        // Exercise the store accessors and verify that all stores are available.
+        let _ = runtime.session_store();
+        let _ = runtime.checkpoint_store();
+        let _ = runtime.trace_store();
+
+        Ok(())
+    }
+
+    #[test]
+    fn persist_load_and_clear_session_round_trip() -> Result<(), Box<dyn Error>> {
+        let workspace = TestWorkspace::new("boundline-session-round-trip")?;
+        let runtime = SessionRuntime::for_workspace(workspace.as_path());
+        let session = sample_session(workspace.as_path(), Some(INITIAL_GOAL));
+
+        let persisted_path = runtime.persist_session(&session)?;
+        assert!(persisted_path.exists());
+
+        let loaded = runtime.load_session()?.expect("the persisted session should be loadable");
+        assert_eq!(loaded.session_id, SESSION_ID);
+        assert_eq!(loaded.goal.as_deref(), Some(INITIAL_GOAL));
+        assert_eq!(loaded.latest_status, SessionStatus::GoalCaptured);
+
+        runtime.clear_session()?;
+        assert!(runtime.load_session()?.is_none());
+
+        Ok(())
+    }
+
+    #[test]
+    fn latest_trace_is_none_for_a_fresh_workspace() -> Result<(), Box<dyn Error>> {
+        let workspace = TestWorkspace::new("boundline-latest-trace")?;
+        let runtime = SessionRuntime::for_workspace(workspace.as_path());
+
+        assert!(runtime.latest_trace()?.is_none());
+
+        Ok(())
+    }
+
+    #[test]
+    fn capture_goal_rejects_blank_input_without_overwriting_the_existing_goal()
+    -> Result<(), Box<dyn Error>> {
+        let workspace = TestWorkspace::new("boundline-blank-goal")?;
+        let runtime = SessionRuntime::for_workspace(workspace.as_path());
+        let mut session = sample_session(workspace.as_path(), Some(INITIAL_GOAL));
+
+        let error = runtime
+            .capture_goal(&mut session, "   \n\t  ")
+            .expect_err("blank goals must be rejected");
+
+        assert!(matches!(error, SessionRuntimeError::MissingGoal));
+        assert_eq!(session.goal.as_deref(), Some(INITIAL_GOAL));
+
+        Ok(())
+    }
+
+    #[test]
+    fn capture_goal_trims_input_and_resets_stale_execution_state() -> Result<(), Box<dyn Error>> {
+        let workspace = TestWorkspace::new("boundline-capture-goal")?;
+        let runtime = SessionRuntime::for_workspace(workspace.as_path());
+        let mut session = sample_session(workspace.as_path(), Some(INITIAL_GOAL));
+
+        session.goal_plan = Some(sample_goal_plan()?);
+        session.decisions.push(sample_decision());
+        session.latest_status = SessionStatus::Failed;
+        session.latest_terminal_reason = Some(TerminalReason::new(
+            TerminalCondition::TaskNotCredible,
+            "stale terminal reason",
+            None,
+        ));
+        session.latest_trace_ref = Some(".boundline/traces/stale.json".to_string());
+
+        runtime.capture_goal(&mut session, &format!("  {UPDATED_GOAL}  "))?;
+
+        assert_eq!(session.goal.as_deref(), Some(UPDATED_GOAL));
+        assert!(session.negotiation_packet.is_some());
+        assert!(session.active_task.is_none());
+        assert!(session.goal_plan.is_none());
+        assert!(session.decisions.is_empty());
+        assert_eq!(session.latest_status, SessionStatus::GoalCaptured);
+        assert!(session.latest_terminal_reason.is_none());
+        assert!(session.latest_trace_ref.is_none());
+        assert!(session.updated_at >= UPDATED_AT);
+
+        Ok(())
+    }
+
+    #[test]
+    fn select_flow_rejects_an_unknown_flow_without_mutating_the_session()
+    -> Result<(), Box<dyn Error>> {
+        let workspace = TestWorkspace::new("boundline-unknown-flow")?;
+        let runtime = SessionRuntime::for_workspace(workspace.as_path());
+        let mut session = sample_session(workspace.as_path(), Some(INITIAL_GOAL));
+
+        let error = runtime
+            .select_flow(&mut session, "__unsupported_test_flow__")
+            .expect_err("an unknown flow must be rejected");
+
+        match error {
+            SessionRuntimeError::UnknownFlow { requested, supported } => {
+                assert_eq!(requested, "__unsupported_test_flow__");
+                assert!(!supported.trim().is_empty());
+            }
+            other => panic!("unexpected error: {other}"),
+        }
+
+        assert!(session.active_flow.is_none());
+        assert_eq!(session.latest_status, SessionStatus::GoalCaptured);
+
+        Ok(())
+    }
+
+    #[test]
+    fn confirm_goal_plan_requires_a_plan() -> Result<(), Box<dyn Error>> {
+        let workspace = TestWorkspace::new("boundline-missing-goal-plan")?;
+        let runtime = SessionRuntime::for_workspace(workspace.as_path());
+        let mut session = sample_session(workspace.as_path(), Some(INITIAL_GOAL));
+
+        let error = runtime
+            .confirm_goal_plan(&mut session)
+            .expect_err("confirmation without a plan must fail");
+
+        assert!(matches!(error, SessionRuntimeError::MissingGoalPlan));
+
+        Ok(())
+    }
+
+    #[test]
+    fn confirm_goal_plan_transitions_the_session_to_planned() -> Result<(), Box<dyn Error>> {
+        let workspace = TestWorkspace::new("boundline-confirm-goal-plan")?;
+        let runtime = SessionRuntime::for_workspace(workspace.as_path());
+        let mut session = sample_session(workspace.as_path(), Some(INITIAL_GOAL));
+
+        session.goal_plan = Some(sample_goal_plan()?);
+        session.latest_terminal_reason = Some(TerminalReason::new(
+            TerminalCondition::TaskNotCredible,
+            "stale terminal reason",
+            None,
+        ));
+        session.latest_trace_ref = Some(".boundline/traces/stale.json".to_string());
+
+        runtime.confirm_goal_plan(&mut session)?;
+
+        assert_eq!(session.latest_status, SessionStatus::Planned);
+        assert!(session.active_task.is_none());
+        assert!(session.latest_terminal_reason.is_none());
+        assert!(session.latest_trace_ref.is_none());
+        assert!(
+            !session
+                .goal_plan
+                .as_ref()
+                .expect("the confirmed plan should remain attached")
+                .requires_confirmation()
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn uses_native_goal_plan_reflects_goal_plan_presence() -> Result<(), Box<dyn Error>> {
+        let workspace = TestWorkspace::new("boundline-native-goal-plan")?;
+        let runtime = SessionRuntime::for_workspace(workspace.as_path());
+        let mut session = sample_session(workspace.as_path(), Some(INITIAL_GOAL));
+
+        assert!(!runtime.uses_native_goal_plan(&session)?);
+
+        session.goal_plan = Some(sample_goal_plan()?);
+        assert!(runtime.uses_native_goal_plan(&session)?);
+
+        Ok(())
+    }
+
+    #[test]
+    fn repeated_persistence_does_not_duplicate_start_or_status_entries()
+    -> Result<(), Box<dyn Error>> {
+        let workspace = TestWorkspace::new("boundline-idempotent-lifecycle")?;
+        let runtime = SessionRuntime::for_workspace(workspace.as_path());
+        let audit_store = FileSessionAuditStore::for_session(workspace.as_path(), SESSION_ID);
+        let session = sample_session(workspace.as_path(), Some(INITIAL_GOAL));
+
+        runtime.persist_session(&session)?;
+        runtime.persist_session(&session)?;
+
+        let entries = audit_store.load_all()?;
+        assert_eq!(
+            entries
+                .iter()
+                .filter(|entry| entry.entry_kind == SessionAuditEntryKind::SessionStart)
+                .count(),
+            1
+        );
+        assert_eq!(
+            entries
+                .iter()
+                .filter(|entry| entry.entry_kind == SessionAuditEntryKind::SessionStatusChanged)
+                .count(),
+            1
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn repeated_terminal_persistence_does_not_duplicate_session_end() -> Result<(), Box<dyn Error>>
+    {
+        let workspace = TestWorkspace::new("boundline-idempotent-session-end")?;
+        let runtime = SessionRuntime::for_workspace(workspace.as_path());
+        let audit_store = FileSessionAuditStore::for_session(workspace.as_path(), SESSION_ID);
+        let mut session = sample_session(workspace.as_path(), Some(INITIAL_GOAL));
+        session.goal_plan = Some(sample_goal_plan()?);
+
+        runtime.persist_session(&session)?;
+
+        session.latest_status = SessionStatus::Failed;
+        session.latest_terminal_reason =
+            Some(TerminalReason::new(TerminalCondition::TaskNotCredible, "terminal failure", None));
+        session.updated_at += 1;
+
+        runtime.persist_session(&session)?;
+        runtime.persist_session(&session)?;
+
+        let entries = audit_store.load_all()?;
+        assert_eq!(
+            entries
+                .iter()
+                .filter(|entry| entry.entry_kind == SessionAuditEntryKind::SessionEnd)
+                .count(),
+            1
+        );
+        assert!(audit_store.load_cursor()?.session_end_recorded);
+
+        Ok(())
+    }
+
+    #[test]
+    fn clearing_follow_through_state_emits_a_cleared_projection_entry() -> Result<(), Box<dyn Error>>
+    {
+        let workspace = TestWorkspace::new("boundline-follow-through-cleared")?;
+        let runtime = SessionRuntime::for_workspace(workspace.as_path());
+        let audit_store = FileSessionAuditStore::for_session(workspace.as_path(), SESSION_ID);
+        let mut session = sample_session(workspace.as_path(), Some(INITIAL_GOAL));
+
+        runtime.persist_session(&session)?;
+
+        session.decisions.push(sample_decision());
+        session.updated_at += 1;
+        runtime.persist_session(&session)?;
+
+        session.decisions.clear();
+        session.updated_at += 1;
+        runtime.persist_session(&session)?;
+
+        let entries = audit_store.load_all()?;
+        assert!(entries.iter().any(|entry| {
+            entry.entry_kind == SessionAuditEntryKind::FollowThroughProjected
+                && entry.message == "follow-through projection cleared"
+        }));
+
+        Ok(())
+    }
+
+    fn sample_session(workspace: &Path, goal: Option<&str>) -> ActiveSessionRecord {
+        ActiveSessionRecord {
+            session_id: SESSION_ID.to_string(),
+            workspace_ref: workspace.to_string_lossy().into_owned(),
+            goal: goal.map(str::to_string),
+            authored_brief: None,
+            negotiation_packet: None,
+            active_flow: None,
+            active_task: None,
+            goal_plan: None,
+            workflow_progress: None,
+            decisions: Vec::new(),
+            active_flow_policy: None,
+            latest_status: if goal.is_some() {
+                SessionStatus::GoalCaptured
+            } else {
+                SessionStatus::Initialized
+            },
+            latest_terminal_reason: None,
+            latest_trace_ref: None,
+            created_at: CREATED_AT,
+            updated_at: UPDATED_AT,
+            governance_lifecycle: None,
+            project_scale: None,
+            latest_voting: None,
+            delight_feedback: None,
+        }
+    }
+
+    fn sample_decision() -> Decision {
+        Decision::new(
+            DecisionType::Analyze,
+            "roadmap/features/session-runtime.md",
+            "capture the next bounded action",
+            "produce a non-empty follow-through projection",
+            Vec::new(),
+        )
+    }
+
+    fn sample_goal_plan() -> Result<GoalPlan, Box<dyn Error>> {
+        GoalPlan::new(
+            INITIAL_GOAL,
+            vec![PlannedTask {
+                task_id: "planned-session-runtime-task".to_string(),
+                description: "Verify session runtime behavior".to_string(),
+                target: "src/orchestrator/session_runtime_surface.rs".to_string(),
+                expected_outcome: Some("runtime behavior remains deterministic".to_string()),
+                decision_type_hint: None,
+            }],
+        )
+        .map_err(Into::into)
     }
 
     struct TestWorkspace {

@@ -70,8 +70,8 @@ fn goal_plan_and_run_keep_session_state_and_trace_synchronized() {
     let run = run_boundline_in(&workspace, &["run"]);
     let run_text = terminal_text(&run);
     assert_eq!(run.status.code(), Some(0), "{run_text}");
-    assert!(run_text.contains("latest_status: succeeded"), "{run_text}");
-    assert!(run_text.contains("next_command: boundline inspect"), "{run_text}");
+    assert!(run_text.contains("terminal_status: succeeded"), "{run_text}");
+    assert!(run_text.contains("next_command: boundline checkpoint restore"), "{run_text}");
     assert!(run_text.contains("trace="), "{run_text}");
 }
 

@@ -1952,10 +1952,8 @@ fn session_runtime_runs_successful_terminal_and_replanned_execution_profiles() {
     assert!(session.latest_trace_ref.is_some());
     assert!(session.goal_plan.is_some());
 
-    assert!(matches!(
-        runtime.execute_next_step(&mut session).unwrap_err(),
-        SessionRuntimeError::MissingActiveTask
-    ));
+    runtime.execute_next_step(&mut session).unwrap();
+    assert_eq!(session.latest_status, SessionStatus::Succeeded);
 
     let replan_workspace = write_execution_workspace("boundline-runtime-replan", replan_attempts());
     let replan_runtime = SessionRuntime::for_workspace(&replan_workspace);

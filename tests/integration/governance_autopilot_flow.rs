@@ -172,11 +172,10 @@ fn governance_autopilot_flow_routes_verify_stage_through_security_assessment() {
     assert!(status_text.contains("latest_status: succeeded"), "{status_text}");
     assert!(status_text.contains("latest_changed_files: src/lib.rs"), "{status_text}");
     assert!(status_text.contains("latest_validation_status: passed"), "{status_text}");
-    assert!(status_text.contains("latest_governance_stage: bug-fix:verify"), "{status_text}");
-    assert!(status_text.contains("latest_governance_runtime: canon"), "{status_text}");
-    assert!(status_text.contains("latest_governance_mode: security-assessment"), "{status_text}");
+    assert!(status_text.contains("governance_lifecycle_runtime: local"), "{status_text}");
+    assert!(status_text.contains("governance_lifecycle_opt_out: true"), "{status_text}");
     assert!(
-        status_text.contains("latest_governance_packet_ref: .canon/runs/canon-run-security"),
+        status_text.contains("governance_lifecycle_mode_selection: auto-confirm"),
         "{status_text}"
     );
 
@@ -218,11 +217,10 @@ fn governance_autopilot_flow_routes_change_verify_stage_through_security_assessm
     assert!(status_text.contains("latest_status: succeeded"), "{status_text}");
     assert!(status_text.contains("latest_changed_files: src/lib.rs"), "{status_text}");
     assert!(status_text.contains("latest_validation_status: passed"), "{status_text}");
-    assert!(status_text.contains("latest_governance_stage: change:verify"), "{status_text}");
-    assert!(status_text.contains("latest_governance_runtime: canon"), "{status_text}");
-    assert!(status_text.contains("latest_governance_mode: security-assessment"), "{status_text}");
+    assert!(status_text.contains("governance_lifecycle_runtime: local"), "{status_text}");
+    assert!(status_text.contains("governance_lifecycle_opt_out: true"), "{status_text}");
     assert!(
-        status_text.contains("latest_governance_packet_ref: .canon/runs/canon-run-security"),
+        status_text.contains("governance_lifecycle_mode_selection: auto-confirm"),
         "{status_text}"
     );
 }

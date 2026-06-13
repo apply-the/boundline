@@ -306,6 +306,33 @@ pub fn temp_python_workspace(prefix: &str) -> PathBuf {
     fs::write(workspace.join("pyproject.toml"), FIXTURE_PYPROJECT_TOML).unwrap();
     fs::write(workspace.join("src/main.py"), FIXTURE_PYTHON_MAIN).unwrap();
     fs::write(workspace.join("tests/test_main.py"), FIXTURE_PYTHON_TEST).unwrap();
+    write_boundline_file(
+        &workspace,
+        "execution.json",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "name": "python-stack-neutral-execution",
+            "read_targets": ["pyproject.toml", "src/main.py", "tests/test_main.py"],
+            "validation_command": {
+                "program": "true",
+                "args": [],
+            },
+            "attempts": [
+                {
+                    "attempt_id": "fix-python-add",
+                    "summary": "Replace subtraction with addition in the Python fixture",
+                    "failure_mode": "terminal",
+                    "changes": [
+                        {
+                            "path": "src/main.py",
+                            "find": "return left - right",
+                            "replace": "return left + right",
+                        }
+                    ]
+                }
+            ],
+        }))
+        .unwrap(),
+    );
     workspace
 }
 
@@ -385,7 +412,7 @@ pub fn temp_canon_unsupported_companion_workspace(prefix: &str) -> PathBuf {
 }
 
 pub fn temp_workflow_layer_workspace(prefix: &str) -> PathBuf {
-    create_workflow_fixture_workspace(prefix, VALID_WORKFLOWS_TOML, false)
+    create_workflow_fixture_workspace(prefix, VALID_WORKFLOWS_TOML, true)
 }
 
 pub fn temp_invalid_workflow_layer_workspace(prefix: &str) -> PathBuf {
@@ -421,7 +448,7 @@ pub fn temp_workflow_follow_through_approval_workspace(prefix: &str) -> PathBuf 
 }
 
 pub fn temp_workflow_discovery_workspace(prefix: &str) -> PathBuf {
-    create_workflow_fixture_workspace(prefix, DISCOVERY_WORKFLOWS_TOML, false)
+    create_workflow_fixture_workspace(prefix, DISCOVERY_WORKFLOWS_TOML, true)
 }
 
 pub fn temp_workflow_discovery_compat_workspace(prefix: &str) -> PathBuf {
@@ -429,7 +456,7 @@ pub fn temp_workflow_discovery_compat_workspace(prefix: &str) -> PathBuf {
 }
 
 pub fn temp_workflow_follow_through_blocked_workspace(prefix: &str) -> PathBuf {
-    create_workflow_fixture_workspace(prefix, BLOCKED_GOVERN_WORKFLOW_TOML, false)
+    create_workflow_fixture_workspace(prefix, BLOCKED_GOVERN_WORKFLOW_TOML, true)
 }
 
 pub fn temp_workflow_governed_stage_workspace(prefix: &str) -> PathBuf {

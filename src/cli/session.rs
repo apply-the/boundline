@@ -1201,6 +1201,8 @@ pub fn execute_run_with_target(
         return Ok(report_with_session_status(exit_status_for_session(record.latest_status), view));
     }
 
+    runtime.refresh_completion_verification_state(&mut record).map_err(map_runtime_error)?;
+
     if let Some(explanation) = run_pause_explanation(&record, &workspace) {
         record.latest_status = SessionStatus::Blocked;
         record.latest_terminal_reason = None;
@@ -1215,12 +1217,32 @@ pub fn execute_run_with_target(
     runtime.persist_session(&record).map_err(map_runtime_error)?;
 
     if record.latest_status == SessionStatus::Blocked {
-        let mut view = build_status_view(
-            &record,
-            suggested_next_command(&record),
-            "framework-adapter blocked the claimed run stage and left the session incomplete"
-                .to_string(),
-        );
+        let blocked_explanation = record
+            .active_task
+            .as_ref()
+            .and_then(|task| task.context.completion_verification_projection().ok().flatten())
+            .map(|projection| match projection.completion_verification_state {
+                crate::domain::completion_verification::CompletionVerificationState::ProofRequired => {
+                    "completion verification requires a fresh proof run before the task can close"
+                        .to_string()
+                }
+                crate::domain::completion_verification::CompletionVerificationState::Blocked => {
+                    "completion verification blocked closeout because the claimed outcome has no usable proof path"
+                        .to_string()
+                }
+                crate::domain::completion_verification::CompletionVerificationState::Failed => {
+                    "completion verification failed and left the task incomplete".to_string()
+                }
+                crate::domain::completion_verification::CompletionVerificationState::Ready => {
+                    "completion verification remains ready".to_string()
+                }
+            })
+            .unwrap_or_else(|| {
+                "framework-adapter blocked the claimed run stage and left the session incomplete"
+                    .to_string()
+            });
+        let mut view =
+            build_status_view(&record, suggested_next_command(&record), blocked_explanation);
         if let Some(trace_ref) = record.latest_trace_ref.as_deref()
             && let Ok(trace) = runtime.trace_store().load(Path::new(trace_ref))
         {
@@ -1325,7 +1347,10 @@ pub fn execute_status_with_target(
         Ok(mut record) => {
             let refreshed =
                 runtime.refresh_governance_state(&mut record).map_err(map_runtime_error)?;
-            if refreshed {
+            let completion_refreshed = runtime
+                .refresh_completion_verification_state(&mut record)
+                .map_err(map_runtime_error)?;
+            if refreshed || completion_refreshed {
                 persist_resolved_session(&runtime, &record, session_id)?;
             }
             let compatibility_follow_up = latest_workspace_compatibility_follow_up(
@@ -1347,6 +1372,12 @@ pub fn execute_status_with_target(
                         "refreshed governance approval state for the selected workspace session"
                     } else {
                         "refreshed governance approval state for the active workspace session"
+                    }
+                } else if completion_refreshed {
+                    if session_id.is_some() {
+                        "refreshed completion verification state for the selected workspace session"
+                    } else {
+                        "refreshed completion verification state for the active workspace session"
                     }
                 } else if session_id.is_some() {
                     "current selected session state for the workspace"
@@ -1771,6 +1802,10 @@ pub(crate) fn build_status_view_with_follow_up(
     let governance_handoff = record.governance_lifecycle.as_ref().and_then(|lifecycle| {
         governance_confidence_handoff(lifecycle.latest_reasoning_profile.as_ref())
     });
+    let completion_verification = record
+        .active_task
+        .as_ref()
+        .and_then(|task| task.context.completion_verification_projection().ok().flatten());
     let workspace_path = Path::new(&record.workspace_ref);
     let goal_brief_ref =
         persisted_session_brief_ref(workspace_path, &session_goal_brief_ref(&record.session_id));
@@ -2268,6 +2303,24 @@ pub(crate) fn build_status_view_with_follow_up(
             .as_ref()
             .map(|vote| vote.next_action.clone()),
         delight_feedback: record.delight_feedback.clone(),
+        completion_verification_state: completion_verification
+            .as_ref()
+            .map(|projection| projection.completion_verification_state),
+        completion_claim: completion_verification
+            .as_ref()
+            .and_then(|projection| projection.claim.clone()),
+        completion_verification_findings: completion_verification.as_ref().and_then(|projection| {
+            (!projection.completion_verification_findings.is_empty())
+                .then_some(projection.completion_verification_findings.clone())
+        }),
+        completion_blocked_claims: completion_verification.as_ref().and_then(|projection| {
+            (!projection.completion_blocked_claims.is_empty())
+                .then_some(projection.completion_blocked_claims.clone())
+        }),
+        completion_evidence_refs: completion_verification.as_ref().and_then(|projection| {
+            (!projection.completion_evidence_refs.is_empty())
+                .then_some(projection.completion_evidence_refs.clone())
+        }),
         refinement_summary: None,
         next_command,
         explanation: explanation.into(),
@@ -2408,6 +2461,16 @@ fn suggested_next_command(record: &ActiveSessionRecord) -> Option<String> {
 
     if let Some(next_command) = delegation_next_command(record) {
         return Some(next_command);
+    }
+
+    if let Some(proof_command) = record
+        .active_task
+        .as_ref()
+        .and_then(|task| task.context.completion_proof_selection().ok().flatten())
+        .map(|selection| selection.command_line)
+        && record.latest_status == SessionStatus::Blocked
+    {
+        return Some(proof_command);
     }
 
     if record.goal_plan.as_ref().and_then(|goal_plan| goal_plan.context_pack.as_ref()).is_some_and(
@@ -3580,7 +3643,7 @@ fn red_to_green_addition() {
         let next = execute_next(Some(&workspace)).unwrap();
         assert_eq!(next.exit_status, CommandExitStatus::Succeeded);
         assert!(
-            next.terminal_output.contains("next_command: boundline inspect"),
+            next.terminal_output.contains("next_command: boundline checkpoint restore"),
             "{}",
             next.terminal_output
         );
@@ -3685,6 +3748,55 @@ fn red_to_green_addition() {
                 "expected active session {} to remain selected, got {}",
                 second_record.session_id, active_after.session_id
             ));
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn execute_status_refreshes_completion_verification_for_selected_sessions() -> Result<(), String>
+    {
+        let workspace = write_execution_workspace("boundline-cli-session-completion-refresh");
+
+        execute_goal(
+            Some(&workspace),
+            Some("Fix the failing add test"),
+            &[],
+            None,
+            None,
+            None,
+            None,
+        )
+        .map_err(|error| error.to_string())?;
+        execute_plan(Some(&workspace), Some("bug-fix"), false)
+            .map_err(|error| error.to_string())?;
+        let run = execute_run(Some(&workspace)).map_err(|error| error.to_string())?;
+        if run.exit_status != CommandExitStatus::Succeeded {
+            return Err(format!(
+                "expected successful run before staleness refresh, got {:?}",
+                run.exit_status
+            ));
+        }
+
+        let selected_record = load_active_session(&workspace).map_err(|error| error.to_string())?;
+        fs::write(
+            workspace.join("src/lib.rs"),
+            "pub fn add(left: i32, right: i32) -> i32 {\n    left + right + 1\n}\n",
+        )
+        .map_err(|error| error.to_string())?;
+
+        let status =
+            execute_status_with_target(Some(&workspace), None, Some(&selected_record.session_id))
+                .map_err(|error| error.to_string())?;
+        let output = status.terminal_output;
+        if !output.contains("explanation: refreshed completion verification state for the selected workspace session") {
+            return Err(output);
+        }
+        if !output.contains("completion_verification_state: proof_required") {
+            return Err(output);
+        }
+        if !output.contains("stale_proof") {
+            return Err(output);
         }
 
         Ok(())

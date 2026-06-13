@@ -154,6 +154,13 @@ Important trace and status fields can include:
 - `guardian_findings_summary`
 - `guardian_blocking_outcome`
 - `latest_checkpoint_restore_command`
+- `completion_verification_state`
+- `completion_claim_kind`
+- `completion_claim_source`
+- `completion_blocked_claims`
+- `completion_evidence_refs`
+- `completion_verification_finding`
+- `completion_verification_required_action`
 
 ## Glossary
 

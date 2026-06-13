@@ -4,6 +4,9 @@ mod workspace_fixture;
 #[path = "support/runtime_refoundation.rs"]
 mod runtime_refoundation;
 
+#[path = "support/completion_verification.rs"]
+mod completion_verification;
+
 #[path = "unit/step_state.rs"]
 mod step_state;
 
@@ -171,6 +174,18 @@ mod capability_provider_transport_runtime;
 
 #[path = "unit/capability_provider_orchestrator.rs"]
 mod capability_provider_orchestrator;
+
+#[path = "unit/completion_verification_model.rs"]
+mod completion_verification_model;
+
+#[path = "unit/completion_verification_selection.rs"]
+mod completion_verification_selection;
+
+#[path = "unit/completion_verification_fingerprint.rs"]
+mod completion_verification_fingerprint;
+
+#[path = "unit/completion_verification_status.rs"]
+mod completion_verification_status;
 
 #[allow(clippy::unwrap_used)]
 #[path = "unit/calibration_model.rs"]

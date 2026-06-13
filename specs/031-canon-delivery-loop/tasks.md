@@ -36,7 +36,7 @@ slice depends on.
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
 - [x] T003 Add governed delivery-completion gate helpers in `src/orchestrator/session_runtime.rs`
-- [ ] T004 [P] Project delivery-gate evidence through persisted session state and read-side views in `src/domain/session.rs`, `src/cli/session.rs`, `src/cli/output.rs`, and `src/cli/inspect.rs`
+- [x] T004 [P] Project delivery-gate evidence through persisted session state and read-side views in `src/domain/session.rs`, `src/cli/session.rs`, `src/cli/output.rs`, and `src/cli/inspect.rs`
 - [x] T005 [P] Add foundational unit coverage for governed delivery-completion gating in `tests/unit/coverage_additional.rs`
 
 **Checkpoint**: Native runs can only terminate successfully when the runtime can
@@ -61,9 +61,9 @@ trace story.
 
 ### Implementation for User Story 1
 
-- [ ] T008 [US1] Require governed change-framing continuity and verify-stage governed evidence on the native session path in `src/orchestrator/session_runtime.rs` and `src/orchestrator/governance.rs`
+- [x] T008 [US1] Require governed change-framing continuity and verify-stage governed evidence on the native session path in `src/orchestrator/session_runtime.rs` and `src/orchestrator/governance.rs`
 - [x] T009 [US1] Gate terminal success on material changed files plus passed validation evidence in `src/orchestrator/session_runtime.rs` and `src/fixture.rs`
-- [ ] T010 [US1] Keep governed completion evidence visible on `run`, `status`, `next`, and `inspect` in `src/domain/follow_through.rs`, `src/domain/session.rs`, `src/cli/output.rs`, and `src/cli/inspect.rs`
+- [x] T010 [US1] Keep governed completion evidence visible on `run`, `status`, `next`, and `inspect` in `src/domain/follow_through.rs`, `src/domain/session.rs`, `src/cli/output.rs`, and `src/cli/inspect.rs`
 
 **Checkpoint**: One governed native flow now proves real delivery instead of
 claiming success just because the final step finished.
@@ -82,13 +82,13 @@ evidence.
 
 ### Tests for User Story 2
 
-- [ ] T011 [P] [US2] Add integration coverage for explicit governed stop conditions in `tests/integration/governance_autopilot_flow.rs` and `tests/integration/canon_governance_flow.rs`
-- [ ] T012 [P] [US2] Add unit coverage for no-diff and no-validation stop conditions in `tests/unit/coverage_additional.rs`
+- [x] T011 [P] [US2] Add integration coverage for explicit governed stop conditions in `tests/integration/governance_autopilot_flow.rs` and `tests/integration/canon_governance_flow.rs`
+- [x] T012 [P] [US2] Add unit coverage for no-diff and no-validation stop conditions in `tests/unit/coverage_additional.rs`
 
 ### Implementation for User Story 2
 
 - [x] T013 [US2] Stop terminal completion when material diff or validation evidence is missing in `src/orchestrator/session_runtime.rs`
-- [ ] T014 [US2] Keep resume and follow-through guidance aligned with approval-gated governed delivery in `src/domain/session.rs`, `src/cli/session.rs`, `src/cli/output.rs`, and `src/cli/workflow.rs`
+- [x] T014 [US2] Keep resume and follow-through guidance aligned with approval-gated governed delivery in `src/domain/session.rs`, `src/cli/session.rs`, `src/cli/output.rs`, and `src/cli/workflow.rs`
 
 **Checkpoint**: Governed delivery stops explicitly when its delivery claim is
 not credible, and operators can see how to continue.
@@ -107,11 +107,11 @@ surfaces.
 
 ### Tests for User Story 3
 
-- [ ] T015 [P] [US3] Extend contract coverage for governed follow-through and compatibility separation in `tests/contract/trace_summary_contract.rs` and `tests/contract/assistant_session_continuity_contract.rs`
+- [x] T015 [P] [US3] Extend contract coverage for governed follow-through and compatibility separation in `tests/contract/trace_summary_contract.rs` and `tests/contract/assistant_session_continuity_contract.rs`
 
 ### Implementation for User Story 3
 
-- [ ] T016 [US3] Surface governed delivery gate cues without hiding explicit compatibility ownership in `src/domain/follow_through.rs`, `src/domain/session.rs`, `src/cli/output.rs`, and `src/cli/inspect.rs`
+- [x] T016 [US3] Surface governed delivery gate cues without hiding explicit compatibility ownership in `src/domain/follow_through.rs`, `src/domain/session.rs`, `src/cli/output.rs`, and `src/cli/inspect.rs`
 
 **Checkpoint**: Canon participation improves the same Boundline product story
 instead of creating a parallel one.

@@ -692,32 +692,18 @@ fn cli_plan_supports_explicit_no_flow_for_native_session() {
 
 #[test]
 fn cli_session_native_run_persists_decisions_and_applies_real_changes() {
-    let ws = temp_workspace("snf-cli-e2e");
-
-    fs::write(
-        ws.join("Cargo.toml"),
-        "[package]\nname = \"snf_cli_e2e\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
-    )
-    .unwrap();
-    fs::create_dir_all(ws.join("src")).unwrap();
-    fs::create_dir_all(ws.join("tests")).unwrap();
-    fs::write(
-        ws.join("src/lib.rs"),
-        "pub fn add(left: i32, right: i32) -> i32 {\n    left - right\n}\n",
-    )
-    .unwrap();
-    fs::write(
-        ws.join("tests/addition.rs"),
-        "#[test]\nfn red_to_green_addition() {\n    assert_eq!(snf_cli_e2e::add(2, 2), 4);\n}\n",
-    )
-    .unwrap();
+    let ws = temp_fixture_workspace("snf-cli-e2e");
 
     execute_goal(Some(&ws), Some("fix the failing add test"), &[], None, None, None, None).unwrap();
     execute_plan(Some(&ws), Some("bug-fix"), false).unwrap();
 
     let run = execute_run(Some(&ws)).unwrap();
     assert!(run.terminal_output.contains("terminal_status: succeeded"), "{}", run.terminal_output);
-    assert!(run.terminal_output.contains("decision "), "{}", run.terminal_output);
+    assert!(
+        run.terminal_output.contains("next_command: boundline checkpoint restore"),
+        "{}",
+        run.terminal_output
+    );
 
     let status = execute_status(Some(&ws)).unwrap();
     assert!(

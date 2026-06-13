@@ -23,7 +23,7 @@ fn demo_surface_is_not_exposed_as_a_cli_subcommand() {
 }
 
 #[test]
-fn run_uses_the_success_exit_code_for_a_simple_bounded_goal() {
+fn run_uses_the_success_exit_code_when_completion_verification_executes_fresh_proof() {
     let workspace = temp_fixture_workspace("boundline-cli-contract");
     let output = run_boundline(&[
         "run",
@@ -36,7 +36,8 @@ fn run_uses_the_success_exit_code_for_a_simple_bounded_goal() {
 
     assert_eq!(output.status.code(), Some(0), "{text}");
     assert!(text.contains("trace"), "{text}");
-    assert!(text.contains("terminal_status"), "{text}");
+    assert!(text.contains("terminal_status: succeeded"), "{text}");
+    assert!(text.contains("goal satisfied after fresh proof"), "{text}");
 }
 
 #[test]

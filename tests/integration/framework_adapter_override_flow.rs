@@ -65,17 +65,24 @@ fn declared_run_stage_emits_stage_completed_hook_after_claimed_success()
 
     let run = run_boundline_in_with_env(&workspace, &["run"], &[("PATH", path_env.as_str())]);
     let run_text = terminal_text(&run);
-    assert_eq!(run.status.code(), Some(0), "{run_text}");
+    assert_eq!(run.status.code(), Some(1), "{run_text}");
     assert!(run_marker.is_file(), "{run_text}");
-    assert!(hook_request_path.is_file(), "{run_text}");
+    assert!(!hook_request_path.exists(), "{run_text}");
     assert!(!run_text.contains(NATIVE_ROUTING_SUMMARY), "{run_text}");
     assert!(run_text.contains("framework_adapter_execution_source: adapter"), "{run_text}");
     assert!(run_text.contains("framework_adapter_stage: run"), "{run_text}");
     assert!(run_text.contains("framework_adapter_stage_claim: completed"), "{run_text}");
     assert!(run_text.contains("framework_adapter_stage_status: succeeded"), "{run_text}");
+    assert!(run_text.contains("completion_verification_state: failed"), "{run_text}");
+    assert!(
+        run_text.contains("completion_verification_required_action: rerun_proof"),
+        "{run_text}"
+    );
 
     let status = run_boundline_in_with_env(&workspace, &["status"], &[("PATH", path_env.as_str())]);
     let status_text = terminal_text(&status);
+    assert_eq!(status.status.code(), Some(0), "{status_text}");
+    assert!(status_text.contains("latest_status: blocked"), "{status_text}");
     assert!(status_text.contains("framework_adapter_execution_source: adapter"), "{status_text}");
     assert!(status_text.contains("framework_adapter_stage: run"), "{status_text}");
     assert!(status_text.contains("framework_adapter_stage_claim: completed"), "{status_text}");
@@ -84,11 +91,8 @@ fn declared_run_stage_emits_stage_completed_hook_after_claimed_success()
         status_text.contains("framework_adapter_routing_reason: declared_override"),
         "{status_text}"
     );
-    assert!(status_text.contains("framework_adapter_hook: stage_completed"), "{status_text}");
-    assert!(
-        status_text.contains("framework_adapter_hook_delivery_status: delivered"),
-        "{status_text}"
-    );
+    assert!(status_text.contains("completion_verification_state: failed"), "{status_text}");
+    assert!(!status_text.contains("framework_adapter_hook: stage_completed"), "{status_text}");
 
     let inspect = run_boundline_in_with_env(
         &workspace,
@@ -96,20 +100,10 @@ fn declared_run_stage_emits_stage_completed_hook_after_claimed_success()
         &[("PATH", path_env.as_str())],
     );
     let inspect_text = terminal_text(&inspect);
-    assert_eq!(inspect.status.code(), Some(0), "{inspect_text}");
-    assert!(inspect_text.contains("framework_adapter_execution_source: adapter"), "{inspect_text}");
-    assert!(inspect_text.contains("framework_adapter_stage: run"), "{inspect_text}");
-    assert!(inspect_text.contains("framework_adapter_stage_claim: completed"), "{inspect_text}");
-    assert!(inspect_text.contains("framework_adapter_hook: stage_completed"), "{inspect_text}");
-    assert!(
-        inspect_text.contains("framework_adapter_hook_delivery_status: delivered"),
-        "{inspect_text}"
-    );
-
-    let hook_request = fs::read_to_string(&hook_request_path)?;
-    assert!(hook_request.contains("\"hook_key\":\"stage_completed\""), "{hook_request}");
-    assert!(hook_request.contains("\"stage_key\":\"run\""), "{hook_request}");
-    assert!(hook_request.contains("\"stage_claimed\":true"), "{hook_request}");
+    assert_eq!(inspect.status.code(), Some(1), "{inspect_text}");
+    assert!(inspect_text.contains("terminal_status: running"), "{inspect_text}");
+    assert!(inspect_text.contains("latest_status: running"), "{inspect_text}");
+    assert!(inspect_text.contains("next_command: /boundline-next"), "{inspect_text}");
 
     Ok(())
 }

@@ -678,6 +678,55 @@ pub fn render_session_status(view: &SessionStatusView) -> String {
         lines.push(format!("continuity_authority: {}", continuity_authority.as_str()));
     }
 
+    if let Some(completion_verification_state) = view.completion_verification_state {
+        lines.push(format!(
+            "completion_verification_state: {}",
+            completion_verification_state.as_str()
+        ));
+    }
+    if let Some(completion_claim) = &view.completion_claim {
+        lines.push(format!("completion_claim_kind: {}", completion_claim.kind.as_str()));
+        lines.push(format!("completion_claim_source: {}", completion_claim.source.as_str()));
+        lines.push(format!("completion_claim_summary: {}", completion_claim.summary));
+    }
+    if let Some(completion_blocked_claims) = &view.completion_blocked_claims
+        && !completion_blocked_claims.is_empty()
+    {
+        lines.push(format!(
+            "completion_blocked_claims: {}",
+            completion_blocked_claims
+                .iter()
+                .map(|claim| claim.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
+    if let Some(completion_evidence_refs) = &view.completion_evidence_refs
+        && !completion_evidence_refs.is_empty()
+    {
+        lines.push(format!("completion_evidence_refs: {}", completion_evidence_refs.join(", ")));
+    }
+    if let Some(completion_verification_findings) = &view.completion_verification_findings {
+        for finding in completion_verification_findings {
+            lines.push(format!(
+                "completion_verification_finding: {} | {} | {}",
+                finding.kind.as_str(),
+                finding.severity.as_str(),
+                finding.message
+            ));
+            if !finding.changed_paths.is_empty() {
+                lines.push(format!(
+                    "completion_verification_changed_paths: {}",
+                    finding.changed_paths.join(", ")
+                ));
+            }
+            lines.push(format!(
+                "completion_verification_required_action: {}",
+                finding.required_action.as_str()
+            ));
+        }
+    }
+
     if let Some(delegation) = &view.delegation {
         lines.push(format!("delegation_mode: {}", delegation.mode.as_str()));
         if let Some(packet_id) = &delegation.packet_id {

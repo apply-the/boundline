@@ -4,6 +4,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use thiserror::Error;
 
+use crate::domain::completion_verification::{
+    CompletionClaim, CompletionVerificationProjection, ProofCommandSelection,
+    WorkspaceContentFingerprint,
+};
 use crate::domain::limits::RunLimits;
 use crate::domain::plan::{Plan, PlanError};
 use crate::domain::task_context::{TaskContext, TaskContextError};
@@ -223,6 +227,46 @@ impl Task {
         self.terminal_reason = Some(reason);
     }
 
+    /// Persists the active completion claim on the task context.
+    pub fn set_completion_claim(
+        &mut self,
+        claim: &CompletionClaim,
+    ) -> Result<(), TaskPersistenceError> {
+        self.context
+            .set_completion_claim(claim)
+            .map_err(|error| TaskPersistenceError::InvalidContext(error.to_string()))
+    }
+
+    /// Persists the selected proof command on the task context.
+    pub fn set_completion_proof_selection(
+        &mut self,
+        selection: &ProofCommandSelection,
+    ) -> Result<(), TaskPersistenceError> {
+        self.context
+            .set_completion_proof_selection(selection)
+            .map_err(|error| TaskPersistenceError::InvalidContext(error.to_string()))
+    }
+
+    /// Persists a completion proof fingerprint on the task context.
+    pub fn set_completion_proof_post_fingerprint(
+        &mut self,
+        fingerprint: &WorkspaceContentFingerprint,
+    ) -> Result<(), TaskPersistenceError> {
+        self.context
+            .set_completion_proof_post_fingerprint(fingerprint)
+            .map_err(|error| TaskPersistenceError::InvalidContext(error.to_string()))
+    }
+
+    /// Persists the additive completion-verification projection on the task context.
+    pub fn set_completion_verification_projection(
+        &mut self,
+        projection: &CompletionVerificationProjection,
+    ) -> Result<(), TaskPersistenceError> {
+        self.context
+            .set_completion_verification_projection(projection)
+            .map_err(|error| TaskPersistenceError::InvalidContext(error.to_string()))
+    }
+
     /// Validates the persisted task snapshot and nested state.
     pub fn validate_persisted_state(&self) -> Result<(), TaskPersistenceError> {
         if self.id.trim().is_empty() {
@@ -325,6 +369,12 @@ mod tests {
         ClarificationReasonKind, ClarificationRecord, ClarificationStatus, Task, TaskRunRequest,
         TaskStatus, TerminalReason,
     };
+    use crate::domain::completion_verification::{
+        ClaimInferenceConfidence, CompletionClaim, CompletionClaimKind, CompletionClaimSource,
+        CompletionRequiredAction, CompletionVerificationFinding, CompletionVerificationFindingKind,
+        CompletionVerificationFindingSeverity, CompletionVerificationProjection,
+        CompletionVerificationScope, CompletionVerificationState,
+    };
     use crate::domain::limits::{RunLimits, TerminalCondition};
     use crate::domain::plan::Plan;
     use crate::domain::step::Step;
@@ -418,5 +468,45 @@ mod tests {
         task.retry_count = 1;
         task.replan_count = 0;
         assert!(task.validate_persisted_state().is_err());
+    }
+
+    #[test]
+    fn task_persists_completion_verification_context_helpers() {
+        let request = valid_request();
+        let mut task = Task::new("task-1", &request, valid_plan()).unwrap();
+        let claim = CompletionClaim {
+            claim_id: "claim-1".to_string(),
+            kind: CompletionClaimKind::TestsPass,
+            scope: CompletionVerificationScope::Task,
+            source: CompletionClaimSource::RuntimeInference,
+            confidence: Some(ClaimInferenceConfidence::High),
+            summary: "tests pass".to_string(),
+            supporting_signals: vec!["expected_outcome:tests pass".to_string()],
+        };
+        let projection = CompletionVerificationProjection {
+            completion_verification_state: CompletionVerificationState::ProofRequired,
+            scope: CompletionVerificationScope::Task,
+            claim: Some(claim.clone()),
+            completion_blocked_claims: vec![CompletionClaimKind::TestsPass],
+            completion_evidence_refs: Vec::new(),
+            completion_verification_findings: vec![CompletionVerificationFinding {
+                kind: CompletionVerificationFindingKind::MissingProof,
+                severity: CompletionVerificationFindingSeverity::Blocking,
+                message: "proof command has not run yet".to_string(),
+                proof_ref: None,
+                task_id: Some("task-1".to_string()),
+                changed_paths: Vec::new(),
+                required_action: CompletionRequiredAction::RunProof,
+            }],
+            child_summary: None,
+        };
+
+        assert!(task.set_completion_claim(&claim).is_ok());
+        assert!(task.set_completion_verification_projection(&projection).is_ok());
+        assert_eq!(task.context.completion_claim().ok().flatten(), Some(claim));
+        assert_eq!(
+            task.context.completion_verification_projection().ok().flatten(),
+            Some(projection)
+        );
     }
 }

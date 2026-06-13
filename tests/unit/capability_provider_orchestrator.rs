@@ -229,9 +229,13 @@ fn write_provider_script(prefix: &str, body: impl AsRef<str>) -> Result<PathBuf,
         let mut f = std::fs::File::create(&script_path)?;
         f.write_all(body.as_ref().as_bytes())?;
         f.flush()?;
+        f.sync_all()?;
     }
     let mut permissions = fs::metadata(&script_path)?.permissions();
     permissions.set_mode(0o755);
     fs::set_permissions(&script_path, permissions)?;
+    // On Linux, ensure the inode is fully released before the provider
+    // orchestrator spawns the script as an executable.
+    std::thread::sleep(std::time::Duration::from_millis(10));
     Ok(script_path)
 }

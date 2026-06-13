@@ -20,7 +20,7 @@ fn workflow_run_surfaces_named_workflow_and_native_route() {
     );
     let text = terminal_text(&output);
 
-    assert_eq!(output.status.code(), Some(0), "{text}");
+    assert_eq!(output.status.code(), Some(1), "{text}");
     assert!(text.contains("workflow: default"), "{text}");
     assert!(text.contains("workflow_phase: inspect"), "{text}");
     assert!(text.contains("route_owner: workflow"), "{text}");
@@ -29,7 +29,10 @@ fn workflow_run_surfaces_named_workflow_and_native_route() {
         text.contains("routing: native (goal_plan) - goal plan is ready for native execution"),
         "{text}"
     );
-    assert!(text.contains("execution_condition: terminal - work completed successfully"), "{text}");
+    assert!(
+        text.contains("execution_condition: terminal - work stopped after a non-success result"),
+        "{text}"
+    );
     assert!(text.contains("next_command: boundline workflow inspect"), "{text}");
 }
 

@@ -37,17 +37,17 @@ Use the local Speckit templates as the source of truth when converting a seed:
 | Delivered | 06 / 070 | Large-repo safety | Shipped in 0.71.0 with typed fidelity tiers, omission findings, repository-map visibility, digest-backed compaction, and patch-safe edit guards. |
 | Delivered | 07 / 071 | Provider boundary and setup | Shipped in 0.72.0 with explicit operator registration, setup-requirement projection, fail-closed activation and permission admission, and additive evidence-first provider runtime projections. |
 | Next | 08 | Measurement substrate | Add local event schema plus a tiny golden eval corpus before expanding AI behavior. |
-| Next | 18 | Completion proof gate | Block task or stage closeout until a claim-matched proof command runs freshly. |
 | Next | 09 | Operator discoverability | Start with Boundline `help-next`; keep Canon help as Canon-owned. |
 | In Progress (spec 077) | 13 | Safe command execution | Add command intent classification, execution policy, evidence capture, artifact manifest, secret redaction, and mutation boundaries. No Docker required. |
 | Deferred | 13B | Sandbox execution runtime | Docker sandbox with mount/network/filesystem policy and secret handle inheritance. Depends on provider permissions (07) and execution evidence foundation (13A). Moved to `unplanned/`. |
-| Later | 19 | Execution control plane | Add one sequential task runner with checkpoint and resume after proof gating is stable. |
+| Delivered (spec 079) | 18 | Completion proof gate | Shipped in 0.78.0 with runtime-owned claim inference, fresh proof execution, stale-proof invalidation, and additive completion-verification projections. |
+| Next | 19 | Execution control plane | Add one sequential task runner with checkpoint and resume after proof gating is stable. |
+| Next | 20 | Route economics | Add route telemetry and budgets after provider protocol and evals exist. |
+| Next | 21 | Browser validation | Implement as a concrete provider over S10, not as core runtime. |
+| Next | 22 | Memory hygiene | Start with confirmation-first trace distillation; no autonomous memory. |
 | Later | 10, 11 | Governance hardening | Treat as deltas over shipped council/adaptive docs, not greenfield systems. |
 | Later | 12 | Recursive refinement | Add one bounded, inspectable sequential stage-refinement profile after council and adaptive-governance hardening. |
-| Later | 14 | Route economics | Add route telemetry and budgets after provider protocol and evals exist. |
-| Later | 15 | Browser validation | Implement as a concrete provider over S10, not as core runtime. |
-| Later | 16 | Memory hygiene | Start with confirmation-first trace distillation; no autonomous memory. |
-| Experimental | 17 | RecursiveMAS provider | Evaluate real latent-space recursion only as an external read-only provider after provider, eval, route-budget, and host-refinement boundaries exist. |
+| Experimental | 23 | RecursiveMAS provider | Evaluate real latent-space recursion only as an external read-only provider after provider, eval, route-budget, and host-refinement boundaries exist. |
 
 Seed 02 is intentionally not revised by this pass.
 
@@ -57,28 +57,35 @@ Seed 02 is intentionally not revised by this pass.
 03 plan gate
   -> 04 backlog gate
   -> 05 planning analysis
-   -> 18 completion verification runtime
+   -> 18 / 079 completion verification runtime
          -> 19 plan execution orchestration
+            -> 20 AI gateway economics
+               -> 21 browser provider
+                  -> 22 session memory
   -> 08 evals and observability
   -> 07 provider protocol
       -> 13 safe command execution
-      -> 15 browser provider
-      -> 14 AI gateway economics
+      -> 21 browser provider
+      -> 20 AI gateway economics
 
 08 evals and observability
   -> 10 council hardening
       -> 11 adaptive governance hardening
           -> 12 recursive stage refinement
-  -> 14 AI gateway economics
-  -> 16 session memory
+  -> 20 AI gateway economics
+  -> 22 session memory
 
 09 help-next can start after the probe/readiness surfaces are available.
 
-18 completion verification runtime
+18 completion verification runtime (delivered in spec 079 / 0.78.0)
    -> 19 plan execution orchestration
+      -> 20 AI gateway economics
+         -> 21 browser provider
+            -> 22 session memory
+               -> 23 recursiveMAS provider (experimental)
 
 07 provider protocol (shipped in 0.72.0)
-13 safe command execution (next)
+13 safe command execution (in progress)
 13B sandbox execution runtime (deferred, unplanned/)
 ```
 
@@ -101,14 +108,14 @@ new `spec.md`:
 | Cluster | Overlap | Ownership Decision |
 |---|---|---|
 | Planning gates | 03, 04, and 05 all repeat gate state, `phase_request`, and assistant routing language. | Keep the shared gate and handoff mechanics in one planning-readiness interface; 03 is now shipped, and 04/05 should add only their own validation fields and findings. |
-| Canon companion work | 04, 08, 09, and 15 all mention Canon-owned packets, help, evals, or project memory. | Boundline consumes stable Canon metadata. Canon schema, mode docs, packet-quality evals, and memory promotion need Canon Speckit features. |
-| Provider permissions | 07, 13, and 15 all describe path, network, secret, artifact, and evidence permissions. | 07 owns the request permission envelope and provider setup or activation surface; 13 enforces sandbox policy and secret-handle execution rules; 15 consumes the envelope as a browser provider. |
+| Canon companion work | 04, 08, 09, and 21 all mention Canon-owned packets, help, evals, or project memory. | Boundline consumes stable Canon metadata. Canon schema, mode docs, packet-quality evals, and memory promotion need Canon Speckit features. |
+| Provider permissions | 07, 13, and 21 all describe path, network, secret, artifact, and evidence permissions. | 07 owns the request permission envelope and provider setup or activation surface; 13 enforces sandbox policy and secret-handle execution rules; 21 consumes the envelope as a browser provider. |
 | Execution ownership | 18, 19, Canon completion or handoff seeds, and provider or sandbox execution surfaces all mention proof, task state, checkpointing, or blocked execution. | 18 owns proof execution and completion blocking; 19 owns task ordering, checkpoint, and resume; 07 and 13 provide provider and sandbox backends; Canon owns packet semantics and evidence consumption only. |
-| Telemetry | 08, 14, and 15 all list events, route metrics, artifacts, and latency/cost signals. | 08 owns event schema and eval fixtures; 14 owns route economics decisions; concrete providers emit events into 08. |
+| Telemetry | 08, 20, and 21 all list events, route metrics, artifacts, and latency/cost signals. | 08 owns event schema and eval fixtures; 20 owns route economics decisions; concrete providers emit events into 08. |
 | Councils and adaptive governance | 10 and 11 overlap with shipped docs under `docs/review-*`, `tech-docs/adaptive-governance.md`, `tech-docs/control-graduation-model.md`, and `tech-docs/runtime-confidence-and-calibration.md`. | Future specs must name the missing delta instead of reimplementing council profiles, voting, confidence, or degradation from scratch. |
-| Memory | 16 overlaps with `tech-docs/project-memory-and-evidence-structure.md` and Canon project memory. | 16 owns workspace-local, confirmation-first operational memory proposals. Durable governed knowledge remains docs/Canon-owned. |
+| Memory | 22 overlaps with `tech-docs/project-memory-and-evidence-structure.md` and Canon project memory. | 22 owns workspace-local, confirmation-first operational memory proposals. Durable governed knowledge remains docs/Canon-owned. |
 | Help and docs | 09 overlaps with README, wiki, getting-started, and Canon docs work. | Start with runtime `help-next` state diagnosis; documentation IA work should follow the command surface and avoid duplicating README prose. |
-| Recursive collaboration | 10, 11, 12, 14, and 17 all touch repeated reasoning, stop semantics, cost, and model execution. | 12 owns host-governed structured stage-refinement loops. 17 is an external latent-space provider experiment. Councils, calibration, and route economics remain owned by 10, 11, and 14. |
+| Recursive collaboration | 10, 11, 12, 20, and 23 all touch repeated reasoning, stop semantics, cost, and model execution. | 12 owns host-governed structured stage-refinement loops. 23 is an external latent-space provider experiment. Councils, calibration, and route economics remain owned by 10, 11, and 20. |
 
 ## Seed-to-Spec Template
 

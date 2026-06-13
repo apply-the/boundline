@@ -43,9 +43,14 @@ fn confirmed_goal_plan_takes_precedence_over_execution_profile_for_session_run()
     execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
 
     let run = execute_run(Some(&workspace)).unwrap();
-    assert!(run.terminal_output.contains("decision "), "{}", run.terminal_output);
     assert!(run.terminal_output.contains("routing: native (goal_plan)"), "{}", run.terminal_output);
     assert!(!run.terminal_output.contains("routing: compatibility"), "{}", run.terminal_output);
+    assert_eq!(run.exit_status, CommandExitStatus::Succeeded);
+    assert!(
+        run.terminal_output.contains("completion_verification_state: ready"),
+        "{}",
+        run.terminal_output
+    );
 }
 
 #[test]
@@ -485,8 +490,12 @@ fn claimed_run_stage_success_does_not_report_native_goal_plan_routing() {
         run.terminal_output
     );
     assert!(
+        run.terminal_output.contains("framework_adapter_stage_claim: completed"),
+        "{}",
         run.terminal_output
-            .contains("framework-adapter routed run: adapter / completed / declared_override"),
+    );
+    assert!(
+        run.terminal_output.contains("completion_verification_state: failed"),
         "{}",
         run.terminal_output
     );
@@ -519,7 +528,12 @@ fn adapter_without_run_override_leaves_run_stage_native() {
     execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
 
     let run = execute_run(Some(&workspace)).unwrap();
-    assert!(run.terminal_output.contains("terminal_status: succeeded"), "{}", run.terminal_output);
+    assert_eq!(run.exit_status, CommandExitStatus::Succeeded);
+    assert!(
+        run.terminal_output.contains("completion_verification_state: ready"),
+        "{}",
+        run.terminal_output
+    );
     assert!(!run_marker.exists(), "{}", run.terminal_output);
     assert!(
         run.terminal_output
@@ -536,6 +550,11 @@ fn adapter_without_run_override_leaves_run_stage_native() {
     );
     assert!(
         status.terminal_output.contains("framework_adapter_execution_source: built_in"),
+        "{}",
+        status.terminal_output
+    );
+    assert!(
+        status.terminal_output.contains("framework_adapter_stage: run"),
         "{}",
         status.terminal_output
     );
@@ -578,7 +597,11 @@ fn adapter_without_hook_subscription_skips_hook_delivery_after_claimed_success()
     execute_plan(Some(&workspace), Some("bug-fix"), false).unwrap();
 
     let run = execute_run(Some(&workspace)).unwrap();
-    assert!(run.terminal_output.contains("terminal_status: succeeded"), "{}", run.terminal_output);
+    assert!(
+        run.terminal_output.contains("completion_verification_state: failed"),
+        "{}",
+        run.terminal_output
+    );
     assert!(run_marker.is_file(), "{}", run.terminal_output);
     assert!(!hook_marker.exists(), "{}", run.terminal_output);
 }

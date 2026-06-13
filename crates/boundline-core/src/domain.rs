@@ -12,6 +12,8 @@ pub mod capability_provider;
 pub mod checkpoint;
 #[path = "../../../src/domain/cluster.rs"]
 pub mod cluster;
+#[path = "../../../src/domain/completion_verification.rs"]
+pub mod completion_verification;
 #[path = "../../../src/domain/configuration.rs"]
 pub mod configuration;
 #[path = "../../../src/domain/context_intelligence.rs"]

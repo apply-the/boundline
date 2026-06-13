@@ -18,6 +18,7 @@ use crate::domain::workflow::{
     WorkflowConditionKind, WorkflowDefinition, WorkflowDefinitionError, WorkflowLifecycleState,
     WorkflowPhase, WorkflowProgressState, WorkflowRegistry,
 };
+use crate::orchestrator::flow_inference::infer_flow;
 use crate::orchestrator::session_runtime::{SessionRuntime, SessionRuntimeError};
 use crate::orchestrator::terminal::build_terminal_reason;
 
@@ -290,17 +291,22 @@ fn advance_workflow(
             }
             WorkflowPhase::Plan => {
                 if record.goal_plan.is_none() {
+                    let inferred_flow_name =
+                        record.goal.as_deref().and_then(infer_flow).map(|flow| flow.flow_name);
                     runtime
-                        .plan_task(record, None, false)
+                        .plan_task(record, inferred_flow_name.as_deref(), false)
                         .map_err(WorkflowCommandError::SessionRuntime)?;
 
-                    if let Some(flow_name) = record
-                        .goal_plan
-                        .as_ref()
-                        .and_then(|goal_plan| goal_plan.flow.as_ref())
-                        .filter(|flow| !flow.confirmed)
-                        .map(|flow| flow.flow_name.clone())
+                    if inferred_flow_name.is_none()
+                        && let Some(flow_name) = record
+                            .goal_plan
+                            .as_ref()
+                            .and_then(|goal_plan| goal_plan.flow.as_ref())
+                            .filter(|flow| !flow.confirmed)
+                            .map(|flow| flow.flow_name.clone())
                     {
+                        record.latest_trace_ref = None;
+                        record.latest_terminal_reason = None;
                         runtime
                             .plan_task(record, Some(&flow_name), false)
                             .map_err(WorkflowCommandError::SessionRuntime)?;
@@ -980,9 +986,9 @@ mod tests {
     use uuid::Uuid;
 
     use super::{
-        WorkflowCommandError, advance_workflow, blocked_runtime_report, condition_is_met,
-        default_next_command, execute_inspect, execute_list, execute_resume, execute_run,
-        execute_status, goal_command, govern_phase_completed, governance_state_in,
+        WorkflowCommandError, advance_workflow, blocked_definition_report, blocked_runtime_report,
+        condition_is_met, default_next_command, execute_inspect, execute_list, execute_resume,
+        execute_run, execute_status, goal_command, govern_phase_completed, governance_state_in,
         initialize_session, latest_governance_blocked_reason, latest_governance_state,
         latest_review_outcome, latest_review_trigger, load_active_workflow_session,
         load_workflow_definition, next_pending_phase, push_completed_phase,
@@ -1844,5 +1850,529 @@ summary = "Default workflow"
         let initialized = initialize_session(workspace.path());
         assert_eq!(initialized.latest_status, SessionStatus::Initialized);
         assert_eq!(initialized.goal, None);
+    }
+
+    struct CoverageWorkspace {
+        path: std::path::PathBuf,
+    }
+
+    impl CoverageWorkspace {
+        fn new() -> Self {
+            let path = std::env::temp_dir()
+                .join(format!("boundline-workflow-coverage-{}", uuid::Uuid::new_v4()));
+            std::fs::create_dir_all(&path).unwrap();
+            Self { path }
+        }
+
+        fn path(&self) -> &std::path::Path {
+            &self.path
+        }
+
+        fn write_execution_fixture(&self) {
+            std::fs::create_dir_all(self.path.join("src")).unwrap();
+            std::fs::create_dir_all(self.path.join("tests")).unwrap();
+            std::fs::create_dir_all(self.path.join(".boundline")).unwrap();
+            std::fs::write(
+                self.path.join("Cargo.toml"),
+                "[package]\nname = \"workflow_coverage_fixture\"\nversion = \"0.1.0\"\nedition = \"2024\"\n",
+            )
+            .unwrap();
+            std::fs::write(
+                self.path.join("src/lib.rs"),
+                "pub fn add(left: i32, right: i32) -> i32 {\n    left - right\n}\n",
+            )
+            .unwrap();
+            std::fs::write(
+                self.path.join("tests/red_to_green.rs"),
+                "#[test]\nfn red_to_green_addition() {\n    assert_eq!(workflow_coverage_fixture::add(2, 2), 4);\n}\n",
+            )
+            .unwrap();
+            std::fs::write(
+                self.path.join(".boundline/execution.json"),
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "name": "workflow-execution",
+                    "read_targets": ["src/lib.rs", "tests/red_to_green.rs"],
+                    "validation_command": {
+                        "program": "cargo",
+                        "args": ["test", "--quiet"]
+                    },
+                    "attempts": [
+                        {
+                            "attempt_id": "fix-add",
+                            "summary": "Replace subtraction with addition",
+                            "failure_mode": "terminal",
+                            "changes": [
+                                {
+                                    "path": "src/lib.rs",
+                                    "find": "left - right",
+                                    "replace": "left + right"
+                                }
+                            ]
+                        }
+                    ]
+                }))
+                .unwrap(),
+            )
+            .unwrap();
+        }
+    }
+
+    impl Drop for CoverageWorkspace {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.path);
+        }
+    }
+
+    fn c_workflow_with_phases(
+        workflow_name: &str,
+        phases: Vec<WorkflowPhase>,
+    ) -> WorkflowDefinition {
+        WorkflowDefinition {
+            workflow_name: workflow_name.to_string(),
+            goal_source: WorkflowGoalSource::Session,
+            entry_phase: *phases.first().expect("workflow must contain a phase"),
+            allow_review: phases.contains(&WorkflowPhase::Review),
+            allow_governance: phases.contains(&WorkflowPhase::Govern),
+            phases,
+            conditional_phases: Vec::new(),
+            output_preferences: Default::default(),
+            summary: Some("Coverage workflow".to_string()),
+            recommended_when: None,
+        }
+    }
+
+    fn c_workflow_progress(workflow_name: &str, phase: WorkflowPhase) -> WorkflowProgressState {
+        WorkflowProgressState {
+            workflow_name: workflow_name.to_string(),
+            lifecycle_state: WorkflowLifecycleState::Active,
+            current_phase: Some(phase),
+            completed_phases: Vec::new(),
+            blocked_reason: None,
+            next_action: None,
+            routing_summary: None,
+        }
+    }
+
+    fn c_governed_ready_stage() -> GovernedStageRecord {
+        GovernedStageRecord {
+            stage_key: "coverage:govern".to_string(),
+            runtime: GovernanceRuntimeKind::Local,
+            lifecycle_state: GovernanceLifecycleState::GovernedReady,
+            required: true,
+            autopilot_enabled: false,
+            approval_state: ApprovalState::Requested,
+            canon_run_ref: None,
+            governance_attempt_id: "coverage-governance-attempt".to_string(),
+            previous_governance_attempt_id: None,
+            packet_ref: None,
+            decision_ref: None,
+            stage_council: None,
+            blocked_reason: None,
+        }
+    }
+
+    #[test]
+    fn execute_run_reports_an_invalid_registry_without_creating_a_session() {
+        let workspace = TestWorkspace::new();
+        workspace.write_registry("[workflow.default");
+
+        let report =
+            execute_run(Some(workspace.path()), "default", Some("Deliver the change")).unwrap();
+
+        assert_eq!(report.exit_status, CommandExitStatus::NonSuccess);
+        assert!(report.terminal_output.contains("workflow_phase: blocked"));
+        assert!(report.terminal_output.contains("did not start in workspace"));
+
+        let runtime = SessionRuntime::for_workspace(workspace.path());
+        assert!(runtime.load_session().unwrap().is_none());
+    }
+
+    #[test]
+    fn execute_run_without_a_goal_pauses_at_capture_and_persists_progress() {
+        let workspace = TestWorkspace::new();
+        workspace.write_registry(
+            r#"[workflow.capture_only]
+goal_source = "session"
+entry = "capture"
+phases = ["capture"]
+summary = "Capture a goal"
+"#,
+        );
+
+        let report = execute_run(Some(workspace.path()), "capture_only", None).unwrap();
+
+        assert_eq!(report.exit_status, CommandExitStatus::Succeeded);
+        assert!(report.terminal_output.contains("paused at the goal phase"));
+
+        let runtime = SessionRuntime::for_workspace(workspace.path());
+        let record = runtime.load_session().unwrap().unwrap();
+        let progress = record.workflow_progress.as_ref().unwrap();
+
+        assert_eq!(record.active_workflow_name().as_deref(), Some("capture_only"));
+        assert!(record.goal.is_none());
+        assert_eq!(progress.lifecycle_state, WorkflowLifecycleState::Paused);
+        assert_eq!(progress.current_phase, Some(WorkflowPhase::Capture));
+        assert!(
+            progress
+                .blocked_reason
+                .as_deref()
+                .is_some_and(|reason| { reason.contains("waiting for a goal") })
+        );
+        assert!(
+            progress
+                .next_action
+                .as_deref()
+                .is_some_and(|command| { command.contains("boundline goal --update") })
+        );
+    }
+
+    #[test]
+    fn execute_run_captures_and_normalizes_the_supplied_goal() {
+        let workspace = TestWorkspace::new();
+        workspace.write_registry(
+            r#"[workflow.capture_only]
+goal_source = "session"
+entry = "capture"
+phases = ["capture"]
+summary = "Capture a goal"
+"#,
+        );
+
+        let report = execute_run(
+            Some(workspace.path()),
+            "capture_only",
+            Some("  Deliver the workflow change  "),
+        )
+        .unwrap();
+
+        assert_eq!(report.exit_status, CommandExitStatus::Succeeded);
+        assert!(report.terminal_output.contains("updated the active session state"));
+
+        let runtime = SessionRuntime::for_workspace(workspace.path());
+        let record = runtime.load_session().unwrap().unwrap();
+        let progress = record.workflow_progress.as_ref().unwrap();
+
+        assert_eq!(record.goal.as_deref(), Some("Deliver the workflow change"));
+        assert_eq!(record.latest_status, SessionStatus::GoalCaptured);
+        assert_eq!(progress.lifecycle_state, WorkflowLifecycleState::Active);
+        assert_eq!(progress.current_phase, Some(WorkflowPhase::Capture));
+        assert_eq!(progress.completed_phases, vec![WorkflowPhase::Capture]);
+    }
+
+    #[test]
+    fn execute_status_and_resume_cover_a_valid_inspect_only_workflow() {
+        let workspace = TestWorkspace::new();
+        workspace.write_registry(
+            r#"[workflow.inspect_only]
+goal_source = "session"
+entry = "inspect"
+phases = ["inspect"]
+summary = "Inspect persisted evidence"
+"#,
+        );
+
+        let runtime = SessionRuntime::for_workspace(workspace.path());
+        let mut record = initialize_session(workspace.path());
+        record.workflow_progress =
+            Some(c_workflow_progress("inspect_only", WorkflowPhase::Inspect));
+        runtime.persist_session(&record).unwrap();
+
+        let status_report = execute_status(Some(workspace.path())).unwrap();
+        assert_eq!(status_report.exit_status, CommandExitStatus::Succeeded);
+        assert!(
+            status_report
+                .terminal_output
+                .contains("current persisted state for workflow `inspect_only`")
+        );
+
+        let resume_report = execute_resume(Some(workspace.path())).unwrap();
+        assert_eq!(resume_report.exit_status, CommandExitStatus::Succeeded);
+        assert!(
+            resume_report
+                .terminal_output
+                .contains("reached its inspect phase with the current session evidence")
+        );
+
+        let persisted = runtime.load_session().unwrap().unwrap();
+        let progress = persisted.workflow_progress.as_ref().unwrap();
+        assert_eq!(progress.current_phase, Some(WorkflowPhase::Inspect));
+        assert_eq!(progress.lifecycle_state, WorkflowLifecycleState::Active);
+        let next = progress.next_action.as_deref().unwrap();
+        assert!(next.contains("boundline workflow inspect --workspace"));
+    }
+
+    #[test]
+    fn load_workflow_definition_returns_the_requested_definition() {
+        let workspace = TestWorkspace::new();
+        workspace.write_registry(
+            r#"[workflow.default]
+goal_source = "session"
+entry = "capture"
+phases = ["capture", "inspect"]
+summary = "Default workflow"
+"#,
+        );
+
+        let workflow = load_workflow_definition(workspace.path(), "default").unwrap();
+
+        assert_eq!(workflow.workflow_name, "default");
+        assert_eq!(workflow.entry_phase, WorkflowPhase::Capture);
+        assert_eq!(workflow.phases, vec![WorkflowPhase::Capture, WorkflowPhase::Inspect]);
+    }
+
+    #[test]
+    fn advance_workflow_completes_review_when_an_outcome_already_exists() {
+        let workspace = TestWorkspace::new();
+        let runtime = SessionRuntime::for_workspace(workspace.path());
+        let workflow = c_workflow_with_phases("review_only", vec![WorkflowPhase::Review]);
+        let mut record = build_record(workspace.path());
+
+        record
+            .active_task
+            .as_mut()
+            .unwrap()
+            .context
+            .state
+            .insert("latest_review_outcome".to_string(), serde_json::json!("approved"));
+
+        let explanation = advance_workflow(&runtime, &mut record, &workflow, None).unwrap();
+
+        assert!(explanation.contains("updated the active session state"));
+
+        let progress = record.workflow_progress.as_ref().unwrap();
+        assert_eq!(progress.lifecycle_state, WorkflowLifecycleState::Active);
+        assert_eq!(progress.current_phase, Some(WorkflowPhase::Review));
+        assert_eq!(progress.completed_phases, vec![WorkflowPhase::Review]);
+        assert!(progress.blocked_reason.is_none());
+    }
+
+    #[test]
+    fn advance_workflow_marks_governed_ready_work_as_succeeded() {
+        let workspace = TestWorkspace::new();
+        let runtime = SessionRuntime::for_workspace(workspace.path());
+        let workflow = c_workflow_with_phases("govern_only", vec![WorkflowPhase::Govern]);
+        let mut record = build_record(workspace.path());
+        record.latest_status = SessionStatus::Running;
+
+        record.active_task.as_mut().unwrap().context.state.insert(
+            LATEST_GOVERNANCE_STAGE_KEY.to_string(),
+            serde_json::to_value(c_governed_ready_stage()).unwrap(),
+        );
+
+        let explanation = advance_workflow(&runtime, &mut record, &workflow, None).unwrap();
+
+        assert!(explanation.contains("updated the active session state"));
+        assert_eq!(record.latest_status, SessionStatus::Succeeded);
+        assert_eq!(terminal_reason(&record).as_deref(), Some("work completed successfully"));
+
+        let progress = record.workflow_progress.as_ref().unwrap();
+        assert_eq!(progress.lifecycle_state, WorkflowLifecycleState::Completed);
+        assert_eq!(progress.current_phase, Some(WorkflowPhase::Govern));
+        assert_eq!(progress.completed_phases, vec![WorkflowPhase::Govern]);
+    }
+
+    #[test]
+    fn advance_workflow_projects_the_inspect_phase_without_mutating_terminal_state() {
+        let workspace = TestWorkspace::new();
+        let runtime = SessionRuntime::for_workspace(workspace.path());
+        let workflow = c_workflow_with_phases("inspect_only", vec![WorkflowPhase::Inspect]);
+        let mut record = initialize_session(workspace.path());
+
+        let explanation = advance_workflow(&runtime, &mut record, &workflow, None).unwrap();
+
+        assert!(
+            explanation.contains("reached its inspect phase with the current session evidence")
+        );
+        assert_eq!(record.latest_status, SessionStatus::Initialized);
+        assert!(record.latest_terminal_reason.is_none());
+
+        let progress = record.workflow_progress.as_ref().unwrap();
+        assert_eq!(progress.lifecycle_state, WorkflowLifecycleState::Active);
+        assert_eq!(progress.current_phase, Some(WorkflowPhase::Inspect));
+        assert!(progress.completed_phases.is_empty());
+        assert_eq!(
+            progress.next_action.as_deref(),
+            Some(workflow_inspect_command(workspace.path()).as_str())
+        );
+    }
+
+    #[test]
+    fn conditional_phases_are_skipped_until_their_conditions_are_present() {
+        let workspace = TestWorkspace::new();
+        let mut record = build_record(workspace.path());
+        let mut workflow = c_workflow_with_phases(
+            "conditional",
+            vec![WorkflowPhase::Clarify, WorkflowPhase::Review, WorkflowPhase::Govern],
+        );
+        workflow.conditional_phases = vec![
+            ConditionalWorkflowPhase {
+                phase: WorkflowPhase::Clarify,
+                condition_kind: WorkflowConditionKind::MissingAuthoredInput,
+                enabled: true,
+            },
+            ConditionalWorkflowPhase {
+                phase: WorkflowPhase::Review,
+                condition_kind: WorkflowConditionKind::ReviewTriggered,
+                enabled: true,
+            },
+            ConditionalWorkflowPhase {
+                phase: WorkflowPhase::Govern,
+                condition_kind: WorkflowConditionKind::GovernanceRequired,
+                enabled: true,
+            },
+        ];
+
+        assert!(!condition_is_met(&record, WorkflowConditionKind::MissingAuthoredInput));
+        assert!(!condition_is_met(&record, WorkflowConditionKind::ReviewTriggered));
+        assert!(!condition_is_met(&record, WorkflowConditionKind::GovernanceRequired));
+
+        assert!(should_skip_phase(&workflow, WorkflowPhase::Clarify, &record));
+        assert!(should_skip_phase(&workflow, WorkflowPhase::Review, &record));
+        assert!(should_skip_phase(&workflow, WorkflowPhase::Govern, &record));
+        assert!(!should_skip_phase(&workflow, WorkflowPhase::Inspect, &record));
+
+        record
+            .active_task
+            .as_mut()
+            .unwrap()
+            .context
+            .state
+            .insert("latest_review_trigger".to_string(), serde_json::json!("requested"));
+        assert!(!should_skip_phase(&workflow, WorkflowPhase::Review, &record));
+
+        record.active_task.as_mut().unwrap().context.state.insert(
+            LATEST_GOVERNANCE_STAGE_KEY.to_string(),
+            serde_json::json!({"stage": "present"}),
+        );
+        assert!(!should_skip_phase(&workflow, WorkflowPhase::Govern, &record));
+
+        workflow.conditional_phases[0].enabled = false;
+        assert!(!should_skip_phase(&workflow, WorkflowPhase::Clarify, &record));
+    }
+
+    #[test]
+    fn phase_and_exit_status_helpers_cover_remaining_status_variants() {
+        let workspace = TestWorkspace::new();
+        let mut record = initialize_session(workspace.path());
+
+        for status in [
+            SessionStatus::Blocked,
+            SessionStatus::Failed,
+            SessionStatus::Exhausted,
+            SessionStatus::Aborted,
+        ] {
+            record.latest_status = status;
+            assert_eq!(workflow_exit_status(&record), CommandExitStatus::NonSuccess);
+        }
+
+        for status in [
+            SessionStatus::Initialized,
+            SessionStatus::GoalCaptured,
+            SessionStatus::Planned,
+            SessionStatus::Running,
+            SessionStatus::Succeeded,
+        ] {
+            record.latest_status = status;
+            assert_eq!(workflow_exit_status(&record), CommandExitStatus::Succeeded);
+        }
+
+        assert_eq!(terminal_lifecycle(SessionStatus::Initialized), WorkflowLifecycleState::Active);
+        assert_eq!(terminal_lifecycle(SessionStatus::GoalCaptured), WorkflowLifecycleState::Active);
+        assert_eq!(terminal_lifecycle(SessionStatus::Planned), WorkflowLifecycleState::Active);
+        assert_eq!(terminal_lifecycle(SessionStatus::Blocked), WorkflowLifecycleState::Active);
+        assert_eq!(terminal_lifecycle(SessionStatus::Running), WorkflowLifecycleState::Active);
+        assert_eq!(terminal_lifecycle(SessionStatus::Succeeded), WorkflowLifecycleState::Completed);
+
+        for status in [
+            SessionStatus::Failed,
+            SessionStatus::Exhausted,
+            SessionStatus::Aborted,
+            SessionStatus::Invalid,
+        ] {
+            assert_eq!(terminal_lifecycle(status), WorkflowLifecycleState::Failed);
+        }
+
+        record.latest_terminal_reason = None;
+        assert!(terminal_reason(&record).is_none());
+    }
+
+    #[test]
+    fn next_pending_phase_returns_none_after_all_phases_complete() {
+        let workflow = c_workflow_with_phases(
+            "two_phase",
+            vec![WorkflowPhase::Capture, WorkflowPhase::Inspect],
+        );
+
+        assert_eq!(
+            next_pending_phase(&workflow, &[WorkflowPhase::Capture, WorkflowPhase::Inspect]),
+            None
+        );
+    }
+
+    #[test]
+    fn blocked_definition_report_uses_the_inspect_command_as_recovery_action() {
+        let workspace = TestWorkspace::new();
+
+        let report = blocked_definition_report(
+            "default",
+            workspace.path(),
+            "definition validation failed".to_string(),
+        );
+
+        assert_eq!(report.exit_status, CommandExitStatus::NonSuccess);
+        assert!(
+            report
+                .terminal_output
+                .contains("execution_condition: blocked - definition validation failed")
+        );
+        assert!(
+            report.terminal_output.contains(workflow_inspect_command(workspace.path()).as_str())
+        );
+    }
+
+    #[test]
+    fn persisted_active_workflow_defaults_to_the_resume_command() {
+        let workspace = TestWorkspace::new();
+        let runtime = SessionRuntime::for_workspace(workspace.path());
+        let mut record = initialize_session(workspace.path());
+        record.workflow_progress = Some(c_workflow_progress("default", WorkflowPhase::Run));
+        record.workflow_progress.as_mut().unwrap().next_action =
+            Some(workflow_resume_command(workspace.path()));
+
+        runtime.persist_session(&record).unwrap();
+
+        let loaded = runtime.load_session().unwrap().unwrap();
+        assert_eq!(
+            loaded.active_workflow_next_action().as_deref(),
+            Some(workflow_resume_command(workspace.path()).as_str())
+        );
+    }
+
+    #[test]
+    fn advance_workflow_plan_replays_with_proposed_flow_when_inference_is_absent() {
+        let workspace = CoverageWorkspace::new();
+        workspace.write_execution_fixture();
+        let runtime = SessionRuntime::for_workspace(workspace.path());
+        let workflow = c_workflow_with_phases("plan_only", vec![WorkflowPhase::Plan]);
+        let mut record = initialize_session(workspace.path());
+        record.goal = Some("Increase workflow coverage".to_string());
+
+        let explanation = advance_workflow(&runtime, &mut record, &workflow, None).unwrap();
+
+        assert!(explanation.contains("updated the active session state"));
+        assert!(
+            record
+                .goal_plan
+                .as_ref()
+                .and_then(|goal_plan| goal_plan.flow.as_ref())
+                .is_some_and(|flow| flow.confirmed)
+        );
+        assert!(record.latest_trace_ref.is_some());
+        assert!(
+            record
+                .workflow_progress
+                .as_ref()
+                .is_some_and(|progress| progress.completed_phases == vec![WorkflowPhase::Plan])
+        );
     }
 }

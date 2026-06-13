@@ -60,10 +60,13 @@ fn workflow_resume_continues_after_goal_capture_without_replaying_completed_phas
     let output = run_boundline_in(&workspace, &["workflow", "resume", "--workspace", "."]);
     let text = terminal_text(&output);
 
-    assert_eq!(output.status.code(), Some(0), "{text}");
+    assert_eq!(output.status.code(), Some(1), "{text}");
     assert!(text.contains("workflow: default"), "{text}");
     assert!(text.contains("workflow_phase: inspect"), "{text}");
-    assert!(text.contains("execution_condition: terminal - work completed successfully"), "{text}");
+    assert!(
+        text.contains("execution_condition: terminal - work stopped after a non-success result"),
+        "{text}"
+    );
 
     let record = load_session_record(&workspace);
     record.validate().unwrap();
@@ -72,7 +75,7 @@ fn workflow_resume_continues_after_goal_capture_without_replaying_completed_phas
     assert!(workflow_progress.completed_phases.contains(&WorkflowPhase::Capture));
     assert!(workflow_progress.completed_phases.contains(&WorkflowPhase::Plan));
     assert!(workflow_progress.completed_phases.contains(&WorkflowPhase::Run));
-    assert_eq!(record.latest_status, SessionStatus::Succeeded);
+    assert_eq!(record.latest_status, SessionStatus::Failed);
 }
 
 #[test]
@@ -83,12 +86,12 @@ fn workflow_inspect_includes_workflow_projection_and_trace_summary() {
         &workspace,
         &["workflow", "run", "default", "--goal", "Fix the failing add test"],
     );
-    assert_eq!(run.status.code(), Some(0), "{}", terminal_text(&run));
+    assert_eq!(run.status.code(), Some(1), "{}", terminal_text(&run));
 
     let output = run_boundline_in(&workspace, &["workflow", "inspect", "--workspace", "."]);
     let text = terminal_text(&output);
 
-    assert_eq!(output.status.code(), Some(0), "{text}");
+    assert_eq!(output.status.code(), Some(1), "{text}");
     assert!(text.contains("workflow: default"), "{text}");
     assert!(text.contains("workflow_phase: inspect"), "{text}");
     assert!(text.contains("inspection_target:"), "{text}");

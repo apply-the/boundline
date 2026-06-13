@@ -66,24 +66,38 @@ fn write_workspace_file(workspace: &Path, relative_path: &str, contents: &str) {
 fn write_canon_stub(prefix: &str, stdout_json: &str) -> PathBuf {
     let dir = temp_workspace(prefix);
     let script_path = dir.join("canon-stub.sh");
-    fs::write(
-        &script_path,
-        format!("#!/bin/sh\n{DRAIN_STDIN_SCRIPT}\nprintf '%s' '{stdout_json}'\n"),
-    )
-    .unwrap();
+    {
+        use std::io::Write;
+        let mut f = std::fs::File::create(&script_path).unwrap();
+        f.write_all(
+            format!("#!/bin/sh\n{DRAIN_STDIN_SCRIPT}\nprintf '%s' '{stdout_json}'\n").as_bytes(),
+        )
+        .unwrap();
+        f.flush().unwrap();
+        f.sync_all().unwrap();
+    }
     let mut permissions = fs::metadata(&script_path).unwrap().permissions();
     permissions.set_mode(0o755);
     fs::set_permissions(&script_path, permissions).unwrap();
+    // On Linux, ensure the inode is released before the stub is executed.
+    std::thread::sleep(std::time::Duration::from_millis(10));
     script_path
 }
 
 fn write_shell_script(prefix: &str, body: &str) -> PathBuf {
     let dir = temp_workspace(prefix);
     let script_path = dir.join("canon-script.sh");
-    fs::write(&script_path, body).unwrap();
+    {
+        use std::io::Write;
+        let mut f = std::fs::File::create(&script_path).unwrap();
+        f.write_all(body.as_bytes()).unwrap();
+        f.flush().unwrap();
+        f.sync_all().unwrap();
+    }
     let mut permissions = fs::metadata(&script_path).unwrap().permissions();
     permissions.set_mode(0o755);
     fs::set_permissions(&script_path, permissions).unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(10));
     script_path
 }
 

@@ -1,6 +1,6 @@
 # boundline Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2026-06-05
+Auto-generated from all feature plans. Last updated: 2026-06-12
 
 ## Active Technologies
 - Rust 1.96.0, edition 2024 + existing workspace dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, `rusqlite` with bundled SQLite support), existing workspace crates (`boundline-core`, `boundline-adapters`, `boundline-cli`), and one optional trusted `sqlite-vec` extension-loading path for local vector tables (065-activate-sqlite-vec)
@@ -13,6 +13,8 @@ Auto-generated from all feature plans. Last updated: 2026-06-05
 - Existing workspace-local session and trace files plus governed (069-plan-analysis-contract)
 - Existing workspace-local `.boundline/session.json`, (070-large-codebase-context-substrate)
 - Existing workspace-local `.boundline/config.toml`, (071-capability-provider-protocol)
+- Rust 1.96.0, edition 2024 + Existing workspace crates and dependencies only; `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, `rusqlite`, `dialoguer`, `boundline-core`, `boundline-adapters`, `boundline-cli` (079-completion-verification-runtime)
+- Existing workspace-local `.boundline/session.json`, `.boundline/traces/`, `.boundline/execution.json`, and related session artifacts; additive completion-verification records embedded in existing session, task, and trace persistence surfaces; no new external persistence backend (079-completion-verification-runtime)
 
 - Rust 1.96.0, edition 2024 + `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, `rusqlite`, `dialoguer`
 - Workspace-local config and traces: `.boundline/session.json`, `.boundline/traces/`, `.boundline/config.toml`, `.boundline/execution.json`, `.boundline/workflows.toml`
@@ -45,9 +47,9 @@ Crate versioning follows Semantic Versioning.
 Before 1.0.0, breaking changes MAY occur in minor versions.
 
 ## Recent Changes
+- 079-completion-verification-runtime: Added Rust 1.96.0, edition 2024 + Existing workspace crates and dependencies only; `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, `rusqlite`, `dialoguer`, `boundline-core`, `boundline-adapters`, `boundline-cli`
 - 071-capability-provider-protocol: Added Rust 1.96.0, edition 2024 + Existing workspace crates and dependencies only;
 - 070-large-codebase-context-substrate: Added Rust 1.96.0, edition 2024 + Existing workspace crates and dependencies only;
-- 069-plan-analysis-contract: Added Rust 1.96.0, edition 2024 + Existing workspace crates and dependencies only;
 
 
 <!-- MANUAL ADDITIONS START -->

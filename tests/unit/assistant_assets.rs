@@ -163,6 +163,43 @@ fn test_documented_flows_match_the_assistant_asset_surface() {
     assert!(quickstart.contains("boundline inspect --workspace \"$PWD\""), "{quickstart}");
 }
 
+#[test]
+fn completion_verification_guidance_suppresses_success_language_before_proof_is_ready() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let run_assets = [
+        manifest_dir.join("assistant/codex/commands/boundline-run.md"),
+        manifest_dir.join("assistant/claude/commands/boundline-run.md"),
+        manifest_dir.join("assistant/copilot/prompts/boundline-run.prompt.md"),
+    ];
+    let status_assets = [
+        manifest_dir.join("assistant/codex/commands/boundline-status.md"),
+        manifest_dir.join("assistant/claude/commands/boundline-status.md"),
+        manifest_dir.join("assistant/copilot/prompts/boundline-status.prompt.md"),
+    ];
+
+    for path in run_assets {
+        let content = read_text(&path);
+        assert!(content.contains("completion_verification_state"), "{}", path.display());
+        assert!(content.contains("completion_blocked_claims"), "{}", path.display());
+        assert!(content.contains("completion_verification_required_action"), "{}", path.display());
+        assert!(content.contains("do not describe the run as successful"), "{}", path.display());
+        assert!(content.contains("Boundline owns proof execution"), "{}", path.display());
+    }
+
+    for path in status_assets {
+        let content = read_text(&path);
+        assert!(content.contains("completion_verification_state"), "{}", path.display());
+        assert!(content.contains("completion_blocked_claims"), "{}", path.display());
+        assert!(content.contains("completion_verification_required_action"), "{}", path.display());
+        assert!(
+            content.contains("do not describe the session as successful"),
+            "{}",
+            path.display()
+        );
+        assert!(content.contains("Boundline owns proof execution"), "{}", path.display());
+    }
+}
+
 fn collect_cargo_run_references(root: &Path, base: &Path, offenders: &mut Vec<String>) {
     for entry in fs::read_dir(root).unwrap_or_else(|error| {
         panic!("failed to read assistant asset root {}: {error}", root.display())

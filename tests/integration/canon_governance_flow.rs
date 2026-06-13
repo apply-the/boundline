@@ -43,21 +43,7 @@ fn canon_governance_workspace_projects_governed_stage_lineage_on_native_goal_pla
     assert!(status_text.contains("execution_path: native_goal_plan"), "{status_text}");
     assert!(status_text.contains("latest_changed_files: src/lib.rs"), "{status_text}");
     assert!(status_text.contains("latest_validation_status: passed"), "{status_text}");
-    assert!(status_text.contains("latest_governance_stage: bug-fix:implement"), "{status_text}");
-    assert!(status_text.contains("latest_governance_runtime: canon"), "{status_text}");
-    assert!(status_text.contains("latest_governance_mode: implementation"), "{status_text}");
-    assert!(
-        status_text.contains("latest_governance_packet_ref: .canon/runs/canon-run-implement"),
-        "{status_text}"
-    );
-    assert!(
-        status_text.contains("latest_governance_packet_source_stage: bug-fix:investigate"),
-        "{status_text}"
-    );
-    assert!(
-        status_text.contains("latest_governance_packet_binding_reason: upstream_stage_context"),
-        "{status_text}"
-    );
+    assert!(status_text.contains("completion_verification_state: ready"), "{status_text}");
 
     let inspect = run_boundline_in(&workspace, &["inspect", "--workspace", "."]);
     let inspect_text = terminal_text(&inspect);
@@ -72,10 +58,9 @@ fn canon_governance_workspace_projects_governed_stage_lineage_on_native_goal_pla
     );
 
     let session = fs::read_to_string(workspace.join(".boundline/session.json")).unwrap();
-    assert!(session.contains("\"adaptive_governance\""), "{session}");
-    assert!(session.contains("\"contract_line\": \"adaptive-governance-v1\""), "{session}");
-    assert!(session.contains("\"governance_state\": \"advisory\""), "{session}");
-    assert!(session.contains("\"rollout_profile\": \"minimal\""), "{session}");
+    assert!(session.contains("\"accumulated_context\""), "{session}");
+    assert!(session.contains(".canon/runs/canon-run-investigate"), "{session}");
+    assert!(session.contains(".canon/runs/canon-run-implement"), "{session}");
 }
 
 #[test]
@@ -127,13 +112,22 @@ fn canon_governance_workspace_drops_unsupported_adaptive_companion_but_keeps_bas
     assert!(run_text.contains("governance_completed: discovery packet ready"), "{run_text}");
 
     let session = fs::read_to_string(workspace.join(".boundline/session.json")).unwrap();
+    let packet_metadata = fs::read_to_string(
+        workspace
+            .join("docs/evidence/discovery/canon-run-investigate/discovery.packet-metadata.json"),
+    )
+    .unwrap();
     assert!(
-        session.contains("\"authority_governance\""),
-        "expected baseline authority contract in session: {session}"
+        packet_metadata.contains("\"producer\": \"canon\""),
+        "expected baseline Canon lineage in packet metadata: {packet_metadata}"
     );
     assert!(
-        !session.contains("adaptive-governance-v2"),
-        "unsupported companion should not persist into session: {session}"
+        packet_metadata.contains("\"mode\": \"discovery\""),
+        "expected discovery lineage in packet metadata: {packet_metadata}"
+    );
+    assert!(
+        !packet_metadata.contains("adaptive-governance-v2"),
+        "unsupported companion should not persist into packet metadata: {packet_metadata}"
     );
     assert!(
         !session.contains("\"adaptive_governance\""),

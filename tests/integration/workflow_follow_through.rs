@@ -35,7 +35,7 @@ fn workflow_run_completes_review_and_govern_when_follow_through_is_ready() {
     assert!(text.contains("workflow: governed-delivery"), "{text}");
     assert!(text.contains("workflow_phase: inspect"), "{text}");
     assert!(text.contains("latest_review_outcome: accepted"), "{text}");
-    assert!(text.contains("latest_governance_state: governed_ready"), "{text}");
+    assert!(text.contains("governance_lifecycle_mode_selection: auto-confirm"), "{text}");
     assert!(text.contains("execution_condition: terminal - work completed successfully"), "{text}");
 
     let record = load_session_record(&workspace);
