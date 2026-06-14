@@ -103,6 +103,7 @@ impl SessionRuntime {
                     ),
                     record_terminal_event: true,
                     projected_task: None,
+                    completion_validation_command: None,
                 },
             );
         }
@@ -137,6 +138,7 @@ impl SessionRuntime {
                     ),
                     record_terminal_event: true,
                     projected_task: None,
+                    completion_validation_command: None,
                 },
             );
         }
@@ -233,6 +235,7 @@ impl SessionRuntime {
                 native_context: native_task_context,
                 record_terminal_event: false,
                 projected_task,
+                completion_validation_command: Some(runtime.profile.validation_command.rendered()),
             },
         )
     }

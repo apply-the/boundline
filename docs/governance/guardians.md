@@ -112,4 +112,4 @@ Expect the plan and inspect output to show relevant context, guidance sources, v
 
 ## Source Reference
 
-See [Extending the Guidance Catalog](https://github.com/apply-the/boundline/blob/0.76.0/tech-docs/guides/extending-guidance-catalog.md) for pack authoring details.
+See [Extending the Guidance Catalog](https://github.com/apply-the/boundline/blob/0.78.0/tech-docs/guides/extending-guidance-catalog.md) for pack authoring details.

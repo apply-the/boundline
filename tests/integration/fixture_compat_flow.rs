@@ -14,6 +14,9 @@ fn direct_run_with_execution_profile_prefers_native_path_by_default() {
 
     assert!(output.status.success(), "direct run should complete: {text}");
     assert!(text.contains("terminal_status: succeeded"), "{text}");
-    assert!(text.contains("decision "), "direct run should emit native decision events: {text}");
+    assert!(
+        text.contains("next_command: boundline checkpoint restore"),
+        "direct run should emit checkpoint recovery guidance: {text}"
+    );
     assert!(text.contains("routing: native (goal_plan)"), "{text}");
 }

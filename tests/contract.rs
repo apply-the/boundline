@@ -225,3 +225,9 @@ mod guardian_index_contract;
 
 #[path = "contract/calibration_output_contract.rs"]
 mod calibration_output_contract;
+
+#[path = "contract/completion_verification_projection_contract.rs"]
+mod completion_verification_projection_contract;
+
+#[path = "contract/completion_verification_parent_scope_contract.rs"]
+mod completion_verification_parent_scope_contract;

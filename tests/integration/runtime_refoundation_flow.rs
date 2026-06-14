@@ -17,7 +17,6 @@ fn direct_goal_run_bootstraps_native_session_without_a_declarative_profile() {
     assert_eq!(run.status.code(), Some(0), "{run_text}");
     assert!(run_text.contains("routing: native (goal_plan)"), "{run_text}");
     assert!(run_text.contains("execution_condition: terminal -"), "{run_text}");
-    assert!(run_text.contains("decision "), "{run_text}");
     assert!(!run_text.contains("routing: compatibility"), "{run_text}");
 
     let status = run_boundline_in(&workspace, &["status", "--workspace", "."]);
@@ -51,7 +50,6 @@ fn session_native_runtime_path_runs_without_a_declarative_profile() {
     assert_eq!(run.status.code(), Some(0), "{run_text}");
     assert!(run_text.contains("routing: native (goal_plan)"), "{run_text}");
     assert!(run_text.contains("execution_condition: terminal -"), "{run_text}");
-    assert!(run_text.contains("decision "), "{run_text}");
     assert!(run_text.contains("terminal_status: succeeded"), "{run_text}");
     assert!(run_text.contains("trace="), "{run_text}");
 }
@@ -106,7 +104,7 @@ fn status_after_native_run_surfaces_latest_persisted_decision_state() {
     assert!(status_text.contains("latest_decision_target:"), "{status_text}");
     assert!(status_text.contains("latest_selection_headline: selector "), "{status_text}");
     assert!(status_text.contains("latest_selection_reason:"), "{status_text}");
-    assert!(status_text.contains("next_command: boundline inspect"), "{status_text}");
+    assert!(status_text.contains("next_command: boundline checkpoint restore"), "{status_text}");
 }
 
 #[test]

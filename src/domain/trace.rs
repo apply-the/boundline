@@ -160,6 +160,12 @@ pub struct ExecutionTrace {
     pub terminal_reason: Option<TerminalReason>,
     pub events: Vec<TraceEvent>,
     pub trace_location: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub completion_proof_refs: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub completion_fingerprint_refs: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub completion_evidence_refs: Vec<String>,
 }
 
 /// Inspect closure kinds synthesized from the flattened trace summary.
@@ -468,6 +474,9 @@ impl ExecutionTrace {
             terminal_reason: None,
             events: Vec::new(),
             trace_location: None,
+            completion_proof_refs: Vec::new(),
+            completion_fingerprint_refs: Vec::new(),
+            completion_evidence_refs: Vec::new(),
         }
     }
 
@@ -499,6 +508,18 @@ impl ExecutionTrace {
     /// Stores the persisted trace location after the trace has been written.
     pub fn set_trace_location(&mut self, trace_location: impl Into<String>) {
         self.trace_location = Some(trace_location.into());
+    }
+
+    /// Records additive completion-verification references without changing terminal state.
+    pub fn set_completion_verification_refs(
+        &mut self,
+        proof_refs: Vec<String>,
+        fingerprint_refs: Vec<String>,
+        evidence_refs: Vec<String>,
+    ) {
+        self.completion_proof_refs = proof_refs;
+        self.completion_fingerprint_refs = fingerprint_refs;
+        self.completion_evidence_refs = evidence_refs;
     }
 
     /// Returns the trace duration in milliseconds, if the trace is finalized.
@@ -741,5 +762,14 @@ mod tests {
         assert!(trace.terminal_reason.is_some());
         assert!(trace.ended_at.is_some());
         assert!(trace.duration_millis().is_some());
+
+        trace.set_completion_verification_refs(
+            vec!["proof-1".to_string()],
+            vec!["fingerprint-1".to_string()],
+            vec!["evidence-1".to_string()],
+        );
+        assert_eq!(trace.completion_proof_refs, vec!["proof-1".to_string()]);
+        assert_eq!(trace.completion_fingerprint_refs, vec!["fingerprint-1".to_string()]);
+        assert_eq!(trace.completion_evidence_refs, vec!["evidence-1".to_string()]);
     }
 }

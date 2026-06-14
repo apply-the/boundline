@@ -168,6 +168,13 @@ fn spawn_scripted_response_server(
     Ok((format!("http://{address}"), receiver, handle))
 }
 
+fn loopback_bind_is_unavailable(error: &str) -> bool {
+    let normalized = error.to_ascii_lowercase();
+    normalized.contains("operation not permitted")
+        || normalized.contains("permission denied")
+        || normalized.contains("address not available")
+}
+
 fn openai_completion_response(payload: serde_json::Value) -> String {
     serde_json::json!({
         "choices": [
@@ -181,7 +188,10 @@ fn openai_completion_response(payload: serde_json::Value) -> String {
     .to_string()
 }
 
-fn with_scripted_openai_reviews<T>(review_responses: usize, action: impl FnOnce(&str) -> T) -> T {
+fn with_scripted_openai_reviews<T>(
+    review_responses: usize,
+    action: impl FnOnce(&str) -> T,
+) -> Result<T, String> {
     let review_response = openai_completion_response(serde_json::json!({
         "disposition": "approve",
         "summary": "Bounded planning artifact is acceptable.",
@@ -190,9 +200,9 @@ fn with_scripted_openai_reviews<T>(review_responses: usize, action: impl FnOnce(
         "evidence_refs": [".boundline/governance/planning/discovery/brief.md"]
     }));
     let (base_url, _receiver, _handle) =
-        spawn_scripted_response_server(vec![review_response; review_responses]).unwrap();
+        spawn_scripted_response_server(vec![review_response; review_responses])?;
 
-    action(&base_url)
+    Ok(action(&base_url))
 }
 
 fn seed_planning_reviewer_routes(workspace: &Path) {
@@ -677,7 +687,7 @@ fn run_with_incomplete_canon_surface_stops_with_repair_guidance() {
     ignore = "coverage sandbox disallows loopback listener fixtures used by this governance flow"
 )]
 fn run_with_briefs_assembles_canon_governance_start_request() {
-    with_scripted_openai_reviews(6, |openai_base_url| {
+    let result = with_scripted_openai_reviews(6, |openai_base_url| {
         let workspace = temp_canon_default_workspace("brief-assembly");
         seed_planning_reviewer_routes(&workspace);
 
@@ -758,6 +768,11 @@ fn run_with_briefs_assembles_canon_governance_start_request() {
 
         let _ = fs::remove_dir_all(&workspace);
     });
+    if let Err(error) = result
+        && !loopback_bind_is_unavailable(&error)
+    {
+        panic!("failed to start loopback review server: {error}");
+    }
 }
 
 /// T082: Integration test verifying multi-stage governed forwarding: the first
@@ -770,7 +785,7 @@ fn run_with_briefs_assembles_canon_governance_start_request() {
     ignore = "coverage sandbox disallows loopback listener fixtures used by this governance flow"
 )]
 fn multi_stage_canon_run_reuses_prior_governed_packet() {
-    with_scripted_openai_reviews(6, |openai_base_url| {
+    let result = with_scripted_openai_reviews(6, |openai_base_url| {
         let workspace = temp_canon_default_workspace("multi-stage-reuse");
         seed_planning_reviewer_routes(&workspace);
         let docs_dir = workspace.join("docs");
@@ -855,6 +870,11 @@ fn multi_stage_canon_run_reuses_prior_governed_packet() {
         let _ = fs::remove_dir_all(&workspace);
         let _ = fs::remove_dir_all(&canon_path);
     });
+    if let Err(error) = result
+        && !loopback_bind_is_unavailable(&error)
+    {
+        panic!("failed to start loopback review server: {error}");
+    }
 }
 
 #[test]
@@ -864,7 +884,7 @@ fn multi_stage_canon_run_reuses_prior_governed_packet() {
     ignore = "coverage sandbox disallows loopback listener fixtures used by this governance flow"
 )]
 fn governed_ready_packet_is_promoted_to_docs_evidence() {
-    with_scripted_openai_reviews(6, |openai_base_url| {
+    let result = with_scripted_openai_reviews(6, |openai_base_url| {
         let workspace = temp_canon_default_workspace("evidence-promotion");
         seed_planning_reviewer_routes(&workspace);
         let docs_dir = workspace.join("docs");
@@ -952,6 +972,11 @@ fn governed_ready_packet_is_promoted_to_docs_evidence() {
         let _ = fs::remove_dir_all(&workspace);
         let _ = fs::remove_dir_all(&canon_path);
     });
+    if let Err(error) = result
+        && !loopback_bind_is_unavailable(&error)
+    {
+        panic!("failed to start loopback review server: {error}");
+    }
 }
 
 /// T039: Integration test verifying that when Canon returns `incomplete` with `missing_sections`,
@@ -963,7 +988,7 @@ fn governed_ready_packet_is_promoted_to_docs_evidence() {
     ignore = "coverage sandbox disallows loopback listener fixtures used by this governance flow"
 )]
 fn run_with_incomplete_canon_response_surfaces_clarification() {
-    with_scripted_openai_reviews(6, |openai_base_url| {
+    let result = with_scripted_openai_reviews(6, |openai_base_url| {
         let workspace = temp_canon_default_workspace("incomplete-response");
         seed_planning_reviewer_routes(&workspace);
         let docs_dir = workspace.join("docs");
@@ -1012,6 +1037,11 @@ fn run_with_incomplete_canon_response_surfaces_clarification() {
         let _ = fs::remove_dir_all(&workspace);
         let _ = fs::remove_dir_all(&bin_dir);
     });
+    if let Err(error) = result
+        && !loopback_bind_is_unavailable(&error)
+    {
+        panic!("failed to start loopback review server: {error}");
+    }
 }
 
 /// Blocked planning stage is retried with `refresh` on next `plan` invocation and
@@ -1023,7 +1053,7 @@ fn run_with_incomplete_canon_response_surfaces_clarification() {
     ignore = "coverage sandbox disallows loopback listener fixtures used by this governance flow"
 )]
 fn blocked_planning_stage_retries_with_refresh_and_progresses() {
-    with_scripted_openai_reviews(6, |openai_base_url| {
+    let result = with_scripted_openai_reviews(6, |openai_base_url| {
         let workspace = temp_canon_default_workspace("blocked-retry-refresh");
         seed_planning_reviewer_routes(&workspace);
         let docs_dir = workspace.join("docs");
@@ -1127,4 +1157,9 @@ fn blocked_planning_stage_retries_with_refresh_and_progresses() {
         let _ = fs::remove_dir_all(&workspace);
         let _ = fs::remove_dir_all(&bin_dir);
     });
+    if let Err(error) = result
+        && !loopback_bind_is_unavailable(&error)
+    {
+        panic!("failed to start loopback review server: {error}");
+    }
 }

@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use crate::workspace_fixture::target_test_cwd;
+use crate::workspace_fixture::{initialize_nested_git_repository, target_test_cwd};
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -40,25 +40,32 @@ const NO_ACTIONABLE_TEST_RS: &str = concat!(
 );
 
 pub fn temp_runtime_refoundation_workspace(prefix: &str) -> PathBuf {
-    create_runtime_workspace(prefix, RED_LIB_RS)
+    let workspace = create_runtime_workspace(prefix, RED_LIB_RS);
+    write_add_execution_profile(&workspace);
+    workspace
 }
 
 pub fn temp_runtime_refoundation_failure_workspace(prefix: &str) -> PathBuf {
-    create_runtime_workspace(prefix, MULTIPLY_LIB_RS)
+    let workspace = create_runtime_workspace(prefix, MULTIPLY_LIB_RS);
+    write_add_execution_profile(&workspace);
+    workspace
 }
 
 pub fn temp_runtime_refoundation_no_action_workspace(prefix: &str) -> PathBuf {
-    create_runtime_workspace(prefix, NO_ACTIONABLE_LIB_RS)
+    let workspace = create_runtime_workspace(prefix, NO_ACTIONABLE_LIB_RS);
+    write_summary_execution_profile(&workspace);
+    workspace
 }
 
 pub fn temp_runtime_refoundation_compat_workspace(prefix: &str) -> PathBuf {
     let workspace = create_runtime_workspace(prefix, RED_LIB_RS);
-    write_execution_profile(&workspace);
+    write_add_execution_profile(&workspace);
     workspace
 }
 
 pub fn temp_runtime_refoundation_governed_workspace(prefix: &str) -> PathBuf {
     let workspace = create_runtime_workspace(prefix, RED_LIB_RS);
+    write_add_execution_profile(&workspace);
     write_canon_artifact(
         &workspace,
         Path::new("requirements.md"),
@@ -103,10 +110,11 @@ fn create_runtime_workspace(prefix: &str, source_contents: &str) -> PathBuf {
             .unwrap();
     }
 
+    initialize_nested_git_repository(&workspace);
     workspace
 }
 
-fn write_execution_profile(workspace: &Path) {
+fn write_add_execution_profile(workspace: &Path) {
     write_boundline_file(
         workspace,
         "execution.json",
@@ -131,6 +139,23 @@ fn write_execution_profile(workspace: &Path) {
                     ]
                 }
             ]
+        }))
+        .unwrap(),
+    );
+}
+
+fn write_summary_execution_profile(workspace: &Path) {
+    write_boundline_file(
+        workspace,
+        "execution.json",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "name": "runtime-refoundation-summary-profile",
+            "read_targets": ["src/lib.rs", "tests/workspace_summary_output.rs"],
+            "validation_command": {
+                "program": "cargo",
+                "args": ["test", "--quiet"]
+            },
+            "attempts": []
         }))
         .unwrap(),
     );

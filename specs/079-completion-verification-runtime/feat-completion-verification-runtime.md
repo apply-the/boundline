@@ -9,6 +9,8 @@ owner of completion packet semantics, readiness, and approval metadata.
 Boundline owns proof selection, command execution, blocked-state projection,
 and evidence capture.
 
+Implementation status: delivered in Boundline `0.78.0`.
+
 ## Speckit Seed Notes
 
 - Seed role: runtime half of Canon completion-verification semantics.

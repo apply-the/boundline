@@ -30,7 +30,7 @@ fn workflow_run_creates_a_session_and_persists_workflow_progress() {
     );
     let text = terminal_text(&output);
 
-    assert_eq!(output.status.code(), Some(0), "{text}");
+    assert_eq!(output.status.code(), Some(1), "{text}");
 
     let record = load_session_record(&workspace);
     record.validate().unwrap();
@@ -40,7 +40,7 @@ fn workflow_run_creates_a_session_and_persists_workflow_progress() {
     assert!(workflow_progress.completed_phases.contains(&WorkflowPhase::Capture));
     assert!(workflow_progress.completed_phases.contains(&WorkflowPhase::Plan));
     assert!(workflow_progress.completed_phases.contains(&WorkflowPhase::Run));
-    assert_eq!(record.latest_status, SessionStatus::Succeeded);
+    assert_eq!(record.latest_status, SessionStatus::Failed);
     assert!(record.latest_trace_ref.is_some());
 }
 

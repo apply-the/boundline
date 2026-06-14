@@ -15,6 +15,10 @@ use thiserror::Error;
 
 use crate::domain::brief::AuthoredBriefBundle;
 use crate::domain::cluster::ClusterDeliveryStory;
+use crate::domain::completion_verification::{
+    CompletionClaim, CompletionClaimKind, CompletionVerificationFinding,
+    CompletionVerificationState,
+};
 use crate::domain::context_intelligence::AdvancedContextProjection;
 use crate::domain::decision::{Decision, DecisionStatus};
 use crate::domain::execution::StageRoutingDecisionRecord;
@@ -1342,6 +1346,16 @@ pub struct SessionStatusView {
     pub latest_voting_next_action: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub delight_feedback: Option<DelightFeedbackSignal>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub completion_verification_state: Option<CompletionVerificationState>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub completion_claim: Option<CompletionClaim>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub completion_verification_findings: Option<Vec<CompletionVerificationFinding>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub completion_blocked_claims: Option<Vec<CompletionClaimKind>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub completion_evidence_refs: Option<Vec<String>>,
     pub next_command: Option<String>,
     pub explanation: String,
 }
@@ -1476,6 +1490,11 @@ impl Default for SessionStatusView {
             latest_voting_blocking: None,
             latest_voting_next_action: None,
             delight_feedback: None,
+            completion_verification_state: None,
+            completion_claim: None,
+            completion_verification_findings: None,
+            completion_blocked_claims: None,
+            completion_evidence_refs: None,
             refinement_summary: None,
             next_command: None,
             explanation: String::new(),
@@ -1506,6 +1525,7 @@ impl SessionStatusView {
         self.validate_trace_and_decisions(record)?;
         self.validate_authored_brief(record)?;
         self.validate_task_state(record)?;
+        self.validate_completion_verification(record)?;
         self.validate_governance(record)?;
         self.validate_project_scale(record)?;
         self.validate_voting(record)?;
@@ -1919,6 +1939,77 @@ impl SessionStatusView {
                 actual: self.latest_review_headline.clone(),
             });
         }
+        Ok(())
+    }
+
+    fn validate_completion_verification(
+        &self,
+        record: &ActiveSessionRecord,
+    ) -> Result<(), SessionValidationError> {
+        let projection = record
+            .active_task
+            .as_ref()
+            .and_then(|task| task.context.completion_verification_projection().ok().flatten());
+        let expected_state = projection.as_ref().map(|value| value.completion_verification_state);
+        let expected_claim = projection.as_ref().and_then(|value| value.claim.clone());
+        let expected_findings = projection.as_ref().and_then(|value| {
+            (!value.completion_verification_findings.is_empty())
+                .then_some(value.completion_verification_findings.clone())
+        });
+        let expected_blocked_claims = projection.as_ref().and_then(|value| {
+            (!value.completion_blocked_claims.is_empty())
+                .then_some(value.completion_blocked_claims.clone())
+        });
+        let expected_evidence_refs = projection.as_ref().and_then(|value| {
+            (!value.completion_evidence_refs.is_empty())
+                .then_some(value.completion_evidence_refs.clone())
+        });
+
+        validate_status_view_field(
+            expected_state,
+            self.completion_verification_state,
+            |expected, actual| {
+                SessionValidationError::StatusViewCompletionVerificationStateMismatch {
+                    expected,
+                    actual,
+                }
+            },
+        )?;
+        validate_status_view_field(
+            expected_claim,
+            self.completion_claim.clone(),
+            |expected, actual| SessionValidationError::StatusViewCompletionClaimMismatch {
+                expected: expected.map(Box::new),
+                actual: actual.map(Box::new),
+            },
+        )?;
+        validate_status_view_field(
+            expected_findings,
+            self.completion_verification_findings.clone(),
+            |expected, actual| {
+                SessionValidationError::StatusViewCompletionVerificationFindingsMismatch {
+                    expected,
+                    actual,
+                }
+            },
+        )?;
+        validate_status_view_field(
+            expected_blocked_claims,
+            self.completion_blocked_claims.clone(),
+            |expected, actual| SessionValidationError::StatusViewCompletionBlockedClaimsMismatch {
+                expected,
+                actual,
+            },
+        )?;
+        validate_status_view_field(
+            expected_evidence_refs,
+            self.completion_evidence_refs.clone(),
+            |expected, actual| SessionValidationError::StatusViewCompletionEvidenceRefsMismatch {
+                expected,
+                actual,
+            },
+        )?;
+
         Ok(())
     }
 
@@ -2477,6 +2568,37 @@ pub enum SessionValidationError {
     },
     #[error("status view context staleness reason mismatch: expected {expected:?}, got {actual:?}")]
     StatusViewContextStalenessReasonMismatch { expected: Option<String>, actual: Option<String> },
+    #[error(
+        "status view completion verification state mismatch: expected {expected:?}, got {actual:?}"
+    )]
+    StatusViewCompletionVerificationStateMismatch {
+        expected: Option<CompletionVerificationState>,
+        actual: Option<CompletionVerificationState>,
+    },
+    #[error("status view completion claim mismatch")]
+    StatusViewCompletionClaimMismatch {
+        expected: Option<Box<CompletionClaim>>,
+        actual: Option<Box<CompletionClaim>>,
+    },
+    #[error(
+        "status view completion verification findings mismatch: expected {expected:?}, got {actual:?}"
+    )]
+    StatusViewCompletionVerificationFindingsMismatch {
+        expected: Option<Vec<CompletionVerificationFinding>>,
+        actual: Option<Vec<CompletionVerificationFinding>>,
+    },
+    #[error(
+        "status view completion blocked claims mismatch: expected {expected:?}, got {actual:?}"
+    )]
+    StatusViewCompletionBlockedClaimsMismatch {
+        expected: Option<Vec<CompletionClaimKind>>,
+        actual: Option<Vec<CompletionClaimKind>>,
+    },
+    #[error("status view completion evidence refs mismatch: expected {expected:?}, got {actual:?}")]
+    StatusViewCompletionEvidenceRefsMismatch {
+        expected: Option<Vec<String>>,
+        actual: Option<Vec<String>>,
+    },
     #[error("status view flow mismatch: expected {expected:?}, got {actual:?}")]
     StatusViewFlowMismatch { expected: Option<String>, actual: Option<String> },
     #[error("status view flow state mismatch: expected {expected:?}, got {actual:?}")]

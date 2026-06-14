@@ -131,7 +131,7 @@ release `0.70.0`.
 - [x] T027 Run focused tests with `cargo test --test unit`, `cargo test --test contract`, and `cargo test --test integration host_session_runtime_flow::`
 - [x] T028 Run release-surface regressions in `tests/assistant_plugin_packages.rs`, `tests/contract/canon_reasoning_posture_contract.rs`, `tests/contract/distribution_metadata_contract.rs`, and `tests/contract/distribution_release_surface_contract.rs`
 - [x] T029 Run the full regression suite with `cargo test` and resolve any failures
-- [ ] T030 Generate `lcov.info` with `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`
+- [x] T030 Generate `lcov.info` with `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`
 - [x] T031 Build an explicit repository-relative implementation-file list, run `scripts/common/coverage/intersect_patch_coverage.py` against every touched Rust implementation file, and add tests until changed-file coverage is at least 95 percent
 - [x] T032 Validate the isolated scenarios in `specs/069-plan-analysis-contract/quickstart.md` without running Boundline CLI commands against the repository root
 

@@ -210,8 +210,9 @@ fn chat_fallback_session_native_run_output_preserves_trace_and_next_step_cues() 
 
     assert_eq!(run_output.status.code(), Some(0), "{run_text}");
     assert!(run_text.contains("execution_condition: terminal -"), "{run_text}");
+    assert!(run_text.contains("latest_status: succeeded"), "{run_text}");
     assert!(run_text.contains("trace="), "{run_text}");
-    assert!(run_text.contains("next_command: boundline inspect"), "{run_text}");
+    assert!(run_text.contains("next_command: boundline checkpoint restore"), "{run_text}");
 
     let status_output = run_boundline(&["status", "--workspace", &workspace_ref]);
     let status_text = terminal_text(&status_output);
@@ -219,13 +220,13 @@ fn chat_fallback_session_native_run_output_preserves_trace_and_next_step_cues() 
     assert_eq!(status_output.status.code(), Some(0), "{status_text}");
     assert!(status_text.contains("latest_status: succeeded"), "{status_text}");
     assert!(status_text.contains("latest_trace_ref: "), "{status_text}");
-    assert!(status_text.contains("next_command: boundline inspect"), "{status_text}");
+    assert!(status_text.contains("next_command: boundline checkpoint restore"), "{status_text}");
 
     let next_output = run_boundline(&["next", "--workspace", &workspace_ref]);
     let next_text = terminal_text(&next_output);
 
     assert_eq!(next_output.status.code(), Some(0), "{next_text}");
-    assert!(next_text.contains("next_command: boundline inspect"), "{next_text}");
+    assert!(next_text.contains("next_command: boundline checkpoint restore"), "{next_text}");
 }
 
 #[test]

@@ -158,7 +158,7 @@
 - [X] T051 [P] Validate assistant plugin manifests, global package metadata, referenced paths, command names, unsupported-host claims, and version alignment with `scripts/validate-assistant-plugins.sh`.
 - [X] T052 [P] Validate winget and distribution metadata no longer expose stale active-version guidance under `distribution/winget/manifests/a/ApplyThe/Boundline/` and `distribution/channel-metadata.toml`.
 - [X] T053 Run the quickstart flows from `specs/049-project-scale-delivery-ux/quickstart.md` and record implementation evidence in `specs/049-project-scale-delivery-ux/validation-report.md`.
-- [ ] T054 Add or adjust tests until every Rust file created or modified by this feature has at least 95% coverage, then run `cargo fmt`, `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test`, and `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`, resolving all warnings/errors in the modified files.
+- [x] T054 Add or adjust tests until every Rust file created or modified by this feature has at least 95% coverage, then run `cargo fmt`, `cargo fmt --check`, `cargo clippy --workspace --all-targets --all-features -- -D warnings`, `cargo test`, and `cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info`, resolving all warnings/errors in the modified files.
 
 ---
 

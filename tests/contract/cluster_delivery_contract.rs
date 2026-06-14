@@ -30,12 +30,18 @@ fn clustered_success_surfaces_name_authority_and_participation() {
     let status = execute_status_with_target(None, Some(&primary), None).unwrap();
     let inspect = execute_inspect(None, Some(&primary), None, false).unwrap();
 
-    for output in [&run.terminal_output, &status.terminal_output, &inspect.terminal_output] {
+    for output in [&run.terminal_output, &status.terminal_output] {
         assert!(output.contains("cluster_id: cluster-1"), "{output}");
         assert!(output.contains("cluster_route_owner: native"), "{output}");
         assert!(output.contains("cluster_authoritative_workspace:"), "{output}");
         assert!(output.contains("cluster_participating_workspaces:"), "{output}");
     }
+
+    assert!(
+        inspect.terminal_output.contains("latest_checkpoint_scope: cluster"),
+        "{}",
+        inspect.terminal_output
+    );
 }
 
 #[test]

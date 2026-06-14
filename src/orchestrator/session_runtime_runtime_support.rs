@@ -532,6 +532,9 @@ impl SessionRuntime {
                 ),
                 record_terminal_event: true,
                 projected_task: None,
+                completion_validation_command: Some(
+                    self.build_runtime(session)?.profile.validation_command.rendered(),
+                ),
             },
         )
     }
@@ -585,6 +588,9 @@ impl SessionRuntime {
                 ),
                 record_terminal_event: true,
                 projected_task: None,
+                completion_validation_command: Some(
+                    self.build_runtime(session)?.profile.validation_command.rendered(),
+                ),
             },
         )
     }

@@ -1083,6 +1083,34 @@ mod tests {
         }
     }
 
+    fn loopback_bind_is_unavailable(error: &str) -> bool {
+        let normalized = error.to_ascii_lowercase();
+        normalized.contains("operation not permitted")
+            || normalized.contains("permission denied")
+            || normalized.contains("address not available")
+    }
+
+    fn require_loopback_server<T>(result: Result<T, String>) -> Option<T> {
+        match result {
+            Ok(value) => Some(value),
+            Err(error) if loopback_bind_is_unavailable(&error) => None,
+            Err(error) => panic!("unexpected server error: {error}"),
+        }
+    }
+
+    #[test]
+    fn loopback_helpers_cover_unavailable_and_passthrough_paths() {
+        assert!(loopback_bind_is_unavailable("Operation not permitted (os error 1)"));
+        assert!(loopback_bind_is_unavailable("Permission denied"));
+        assert!(loopback_bind_is_unavailable("Address not available"));
+        assert!(!loopback_bind_is_unavailable("connection reset by peer"));
+        assert_eq!(require_loopback_server::<u8>(Ok(7)), Some(7));
+        assert_eq!(
+            require_loopback_server::<u8>(Err("Operation not permitted (os error 1)".to_string())),
+            None
+        );
+    }
+
     fn spawn_single_response_server(
         response_body: String,
     ) -> Result<(String, mpsc::Receiver<String>, thread::JoinHandle<()>), String> {
@@ -1513,11 +1541,10 @@ mod tests {
                 ]
             })
             .to_string();
-            let server = spawn_single_response_server(response_body);
-            assert!(server.is_ok());
-            let (base_url, receiver, handle) = match server {
-                Ok(value) => value,
-                Err(error) => panic!("unexpected server error: {error}"),
+            let Some((base_url, receiver, handle)) =
+                require_loopback_server(spawn_single_response_server(response_body))
+            else {
+                return;
             };
 
             unsafe {
@@ -1582,11 +1609,10 @@ mod tests {
                 ]
             })
             .to_string();
-            let server = spawn_single_response_server(response_body);
-            assert!(server.is_ok());
-            let (base_url, receiver, handle) = match server {
-                Ok(value) => value,
-                Err(error) => panic!("unexpected server error: {error}"),
+            let Some((base_url, receiver, handle)) =
+                require_loopback_server(spawn_single_response_server(response_body))
+            else {
+                return;
             };
 
             unsafe {
@@ -1656,11 +1682,10 @@ mod tests {
                 ]
             })
             .to_string();
-            let server = spawn_single_response_server(response_body);
-            assert!(server.is_ok());
-            let (base_url, receiver, handle) = match server {
-                Ok(value) => value,
-                Err(error) => panic!("unexpected server error: {error}"),
+            let Some((base_url, receiver, handle)) =
+                require_loopback_server(spawn_single_response_server(response_body))
+            else {
+                return;
             };
 
             unsafe {
@@ -1722,11 +1747,10 @@ mod tests {
             "token": "copilot-session-token"
         })
         .to_string();
-        let exchange_server = spawn_single_response_server(exchange_response_body);
-        assert!(exchange_server.is_ok());
-        let (exchange_base_url, exchange_receiver, exchange_handle) = match exchange_server {
-            Ok(value) => value,
-            Err(error) => panic!("unexpected exchange server error: {error}"),
+        let Some((exchange_base_url, exchange_receiver, exchange_handle)) =
+            require_loopback_server(spawn_single_response_server(exchange_response_body))
+        else {
+            return;
         };
 
         let chat_response_body = json!({
@@ -1739,11 +1763,10 @@ mod tests {
             ]
         })
         .to_string();
-        let chat_server = spawn_single_response_server(chat_response_body);
-        assert!(chat_server.is_ok());
-        let (chat_base_url, chat_receiver, chat_handle) = match chat_server {
-            Ok(value) => value,
-            Err(error) => panic!("unexpected chat server error: {error}"),
+        let Some((chat_base_url, chat_receiver, chat_handle)) =
+            require_loopback_server(spawn_single_response_server(chat_response_body))
+        else {
+            return;
         };
 
         let client = Client::builder()
@@ -1861,9 +1884,11 @@ mod tests {
                     ]
                 })
                 .to_string();
-                let server =
-                    spawn_single_response_server(response_body).expect("server should start");
-                let (base_url, receiver, handle) = server;
+                let Some((base_url, receiver, handle)) =
+                    require_loopback_server(spawn_single_response_server(response_body))
+                else {
+                    return;
+                };
 
                 unsafe {
                     env::set_var(GITHUB_COPILOT_API_TOKEN_ENV, "direct-copilot-token");
@@ -1906,8 +1931,11 @@ mod tests {
             ]
         })
         .to_string();
-        let chat_server = spawn_single_response_server(chat_response_body).expect("chat server");
-        let (chat_base_url, chat_receiver, chat_handle) = chat_server;
+        let Some((chat_base_url, chat_receiver, chat_handle)) =
+            require_loopback_server(spawn_single_response_server(chat_response_body))
+        else {
+            return;
+        };
 
         let user_response_body = json!({
             "login": "sdk-e2e-user",
@@ -1918,10 +1946,11 @@ mod tests {
             }
         })
         .to_string();
-        let user_server =
-            spawn_path_response_server(vec![("/copilot_internal/user", user_response_body)])
-                .expect("user bootstrap server");
-        let (user_base_url, user_receiver, user_handle) = user_server;
+        let Some((user_base_url, user_receiver, user_handle)) = require_loopback_server(
+            spawn_path_response_server(vec![("/copilot_internal/user", user_response_body)]),
+        ) else {
+            return;
+        };
 
         let client = Client::builder()
             .timeout(Duration::from_secs(PROVIDER_TIMEOUT_SECS))
@@ -1979,11 +2008,10 @@ mod tests {
                 ]
             })
             .to_string();
-            let server = spawn_single_response_server(response_body);
-            assert!(server.is_ok());
-            let (base_url, receiver, handle) = match server {
-                Ok(value) => value,
-                Err(error) => panic!("unexpected server error: {error}"),
+            let Some((base_url, receiver, handle)) =
+                require_loopback_server(spawn_single_response_server(response_body))
+            else {
+                return;
             };
 
             unsafe {

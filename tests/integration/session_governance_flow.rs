@@ -51,18 +51,10 @@ fn run_in_optional_governance_workspace_uses_native_goal_plan_path() {
     assert_eq!(status.status.code(), Some(0), "{status_text}");
     assert!(status_text.contains("latest_status: succeeded"), "{status_text}");
     assert!(status_text.contains("execution_path: native_goal_plan"), "{status_text}");
-    assert!(status_text.contains("latest_governance_stage: bug-fix:investigate"), "{status_text}");
-    assert!(status_text.contains("latest_governance_runtime: local"), "{status_text}");
-    assert!(status_text.contains("latest_governance_runtime_state: advisory"), "{status_text}");
-    assert!(status_text.contains("latest_governance_rollout_profile: minimal"), "{status_text}");
+    assert!(status_text.contains("governance_lifecycle_runtime: local"), "{status_text}");
+    assert!(status_text.contains("governance_lifecycle_opt_out: true"), "{status_text}");
     assert!(
-        status_text.contains(
-            "latest_governance_reason: startup posture defaulted locally for low-trust surface"
-        ),
-        "{status_text}"
-    );
-    assert!(
-        status_text.contains("latest_governance_approval_provenance: approval not required"),
+        status_text.contains("governance_lifecycle_mode_selection: auto-confirm"),
         "{status_text}"
     );
 

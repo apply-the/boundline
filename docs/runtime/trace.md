@@ -1,6 +1,6 @@
 # Traces And Inspectability
 
-Boundline 0.76.0 traces make delivery explainable. They preserve what the runtime decided, what it used as evidence, what it ran, what it skipped, what failed, and what should happen next.
+Boundline 0.78.0 traces make delivery explainable. They preserve what the runtime decided, what it used as evidence, what it ran, what it skipped, what failed, and what should happen next.
 
 ## Where Traces Live
 
@@ -44,6 +44,8 @@ Depending on the command and lifecycle phase, traces can include:
 - catalog validation findings
 - guardian timeline and findings
 - changed files and validation status
+- completion-verification state, claim, blocked claims, evidence refs, and
+  stale or failed proof findings when closeout is gated
 - checkpoint refs
 - Canon packet or project-memory refs when governed delivery is active
 - next command, corrected command, or stop reason
@@ -71,6 +73,8 @@ Ask these questions while reading inspect output:
 - Which route owned the current step?
 - What evidence supports the next action?
 - Which planning artifact or governed document blocked execution readiness?
+- Is closeout still blocked on missing, stale, failed, or mismatched proof?
+- Which proving command or rerun action is required before completion can proceed?
 
 ## Inspect Guidance And Guardians
 

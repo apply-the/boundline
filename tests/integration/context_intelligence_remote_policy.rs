@@ -43,7 +43,7 @@ fn disabled_policy_surfaces_insufficient_state_without_remote_fallback() {
         assert!(!output.contains("retrieval_mode: remote"), "{output}");
     }
     assert!(
-        inspect.terminal_output.contains("advanced_context=mode=disabled, remote_policy=blocked"),
+        inspect.terminal_output.contains("retrieval_mode: disabled"),
         "{}",
         inspect.terminal_output
     );

@@ -94,7 +94,7 @@ consumption and trace recording.
 - [x] T020 [US2] Surface Canon project-memory summaries and artifact refs in session-native `status` and `next` output through the existing compacted Canon memory projection
 - [x] T021 [US2] Surface Canon project-memory summaries and artifact refs in session-native `inspect` output through the existing compacted Canon memory projection
 - [x] T022 [US2] Record consumed Canon memory summary, credibility, and artifact refs in execution trace through the existing compacted Canon memory projection
-- [ ] T023 [US2] Capture validation evidence
+- [x] T023 [US2] Capture validation evidence
 
 **Checkpoint**: Governed stages consume Canon evidence; status/inspect show Canon refs
 
@@ -115,7 +115,7 @@ version scenarios and verify consumer behavior.
 
 - [x] T025 [US3] Add bounded-stop behavior when `CompatibilityOutcome::Unsupported` is resolved during planning-context assembly: surface repair guidance in `src/orchestrator/session_runtime.rs`
 - [x] T026 [US3] Collapse the compatibility ladder to `Compatible` or `Unsupported` and surface update guidance for future contract lines in trace and status
-- [ ] T027 [US3] Capture validation evidence
+- [x] T027 [US3] Capture validation evidence
 
 **Checkpoint**: Incompatible contract versions produce explicit repair guidance
 
@@ -129,9 +129,9 @@ version scenarios and verify consumer behavior.
 - [x] T029 [P] Update `CHANGELOG.md` with 0.51.0 entry
 - [x] T030 [P] Update `ROADMAP.md` if applicable
 - [x] T031 Run `cargo fmt` and verify clean with `cargo fmt --check`
-- [ ] T032 Run `cargo clippy --workspace --all-targets --all-features -- -D warnings` and fix any issues
-- [ ] T033 Run `cargo nextest run` and verify all tests pass
-- [ ] T034 Increase coverage of modified files to ≥95% using `cargo llvm-cov`
+- [x] T032 Run `cargo clippy --workspace --all-targets --all-features -- -D warnings` and fix any issues
+- [x] T033 Run `cargo nextest run` and verify all tests pass
+- [x] T034 Increase coverage of modified files to ≥95% using `cargo llvm-cov`
 
 ---
 

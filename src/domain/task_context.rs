@@ -4,6 +4,10 @@ use serde_json::{Map, Value};
 use thiserror::Error;
 
 use crate::domain::cluster::{ClusterDeliveryStory, ClusterSessionProjection};
+use crate::domain::completion_verification::{
+    CompletionClaim, CompletionVerificationProjection, ProofCommandSelection,
+    WorkspaceContentFingerprint,
+};
 use crate::domain::context_intelligence::AdvancedContextProjection;
 use crate::domain::governance::{
     AutopilotDecisionRecord, CanonCapabilitySnapshot, CompactedCanonMemory, GovernedStagePacket,
@@ -34,6 +38,11 @@ pub const DELEGATION_CONTINUITY_STATE_KEY: &str = "delegation_continuity_state";
 pub const CLUSTER_SESSION_PROJECTION_KEY: &str = "cluster_session_projection";
 pub const CLUSTER_DELIVERY_STORY_KEY: &str = "cluster_delivery_story";
 pub const LATEST_ADVANCED_CONTEXT_KEY: &str = "latest_advanced_context";
+pub const COMPLETION_CLAIM_KEY: &str = "completion_claim";
+pub const COMPLETION_PROOF_SELECTION_KEY: &str = "completion_proof_selection";
+pub const COMPLETION_PROOF_PRE_FINGERPRINT_KEY: &str = "completion_proof_pre_fingerprint";
+pub const COMPLETION_PROOF_POST_FINGERPRINT_KEY: &str = "completion_proof_post_fingerprint";
+pub const COMPLETION_VERIFICATION_PROJECTION_KEY: &str = "completion_verification_projection";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TaskContext {
@@ -285,6 +294,79 @@ impl TaskContext {
         self.load_serialized(LATEST_ADVANCED_CONTEXT_KEY)
     }
 
+    /// Stores the active completion claim in typed form.
+    pub fn set_completion_claim(
+        &mut self,
+        claim: &CompletionClaim,
+    ) -> Result<(), TaskContextError> {
+        self.store_serialized(COMPLETION_CLAIM_KEY, claim)
+    }
+
+    /// Loads the active completion claim, when present.
+    pub fn completion_claim(&self) -> Result<Option<CompletionClaim>, TaskContextError> {
+        self.load_serialized(COMPLETION_CLAIM_KEY)
+    }
+
+    /// Stores the selected proof command for the active completion claim.
+    pub fn set_completion_proof_selection(
+        &mut self,
+        selection: &ProofCommandSelection,
+    ) -> Result<(), TaskContextError> {
+        self.store_serialized(COMPLETION_PROOF_SELECTION_KEY, selection)
+    }
+
+    /// Loads the selected proof command for the active completion claim.
+    pub fn completion_proof_selection(
+        &self,
+    ) -> Result<Option<ProofCommandSelection>, TaskContextError> {
+        self.load_serialized(COMPLETION_PROOF_SELECTION_KEY)
+    }
+
+    /// Stores the pre-proof workspace fingerprint.
+    pub fn set_completion_proof_pre_fingerprint(
+        &mut self,
+        fingerprint: &WorkspaceContentFingerprint,
+    ) -> Result<(), TaskContextError> {
+        self.store_serialized(COMPLETION_PROOF_PRE_FINGERPRINT_KEY, fingerprint)
+    }
+
+    /// Loads the pre-proof workspace fingerprint, when present.
+    pub fn completion_proof_pre_fingerprint(
+        &self,
+    ) -> Result<Option<WorkspaceContentFingerprint>, TaskContextError> {
+        self.load_serialized(COMPLETION_PROOF_PRE_FINGERPRINT_KEY)
+    }
+
+    /// Stores the post-proof workspace fingerprint.
+    pub fn set_completion_proof_post_fingerprint(
+        &mut self,
+        fingerprint: &WorkspaceContentFingerprint,
+    ) -> Result<(), TaskContextError> {
+        self.store_serialized(COMPLETION_PROOF_POST_FINGERPRINT_KEY, fingerprint)
+    }
+
+    /// Loads the post-proof workspace fingerprint, when present.
+    pub fn completion_proof_post_fingerprint(
+        &self,
+    ) -> Result<Option<WorkspaceContentFingerprint>, TaskContextError> {
+        self.load_serialized(COMPLETION_PROOF_POST_FINGERPRINT_KEY)
+    }
+
+    /// Stores the additive completion-verification projection.
+    pub fn set_completion_verification_projection(
+        &mut self,
+        projection: &CompletionVerificationProjection,
+    ) -> Result<(), TaskContextError> {
+        self.store_serialized(COMPLETION_VERIFICATION_PROJECTION_KEY, projection)
+    }
+
+    /// Loads the additive completion-verification projection, when present.
+    pub fn completion_verification_projection(
+        &self,
+    ) -> Result<Option<CompletionVerificationProjection>, TaskContextError> {
+        self.load_serialized(COMPLETION_VERIFICATION_PROJECTION_KEY)
+    }
+
     fn merge_into_state(&mut self, patch: &Map<String, Value>) {
         for (key, value) in patch {
             self.state.insert(key.clone(), value.clone());
@@ -355,6 +437,11 @@ pub enum TaskContextError {
 #[cfg(test)]
 mod tests {
     use super::TaskContext;
+    use crate::domain::completion_verification::{
+        CompletionClaim, CompletionClaimKind, CompletionClaimSource,
+        CompletionVerificationProjection, CompletionVerificationScope, CompletionVerificationState,
+        ProofCommandSelection, WorkspaceContentFingerprint,
+    };
     use crate::domain::limits::RunLimits;
     use crate::domain::session::{
         ContinuityAuthority, DelegationContinuityMode, DelegationContinuityState, DelegationPacket,
@@ -401,5 +488,66 @@ mod tests {
 
         assert_eq!(context.delegation_packet_history().unwrap(), vec![packet]);
         assert_eq!(context.delegation_continuity_state().unwrap(), Some(continuity));
+    }
+
+    #[test]
+    fn round_trips_completion_verification_state() {
+        let mut context = TaskContext::new(
+            "session-2",
+            "/tmp/boundline-task-context",
+            RunLimits::default(),
+            Map::new(),
+        );
+        let claim = CompletionClaim {
+            claim_id: "claim-1".to_string(),
+            kind: CompletionClaimKind::BuildClean,
+            scope: CompletionVerificationScope::Task,
+            source: CompletionClaimSource::ExplicitMetadata,
+            confidence: None,
+            summary: "build is clean".to_string(),
+            supporting_signals: Vec::new(),
+        };
+        let selection = ProofCommandSelection {
+            claim_id: "claim-1".to_string(),
+            command_ref: "cargo-build".to_string(),
+            command_line: "cargo build".to_string(),
+            selection_reason: "narrowest build proof".to_string(),
+            coverage_note: None,
+            documentation_relevant: false,
+        };
+        let fingerprint = WorkspaceContentFingerprint {
+            fingerprint_id: "fp-1".to_string(),
+            captured_at: 10,
+            content_digest: "deadbeef".to_string(),
+            tracked_path_count: 1,
+            untracked_path_count: 0,
+            included_roots: vec!["tracked".to_string()],
+            excluded_roots: vec![".boundline/traces".to_string()],
+            entries: Vec::new(),
+        };
+        let projection = CompletionVerificationProjection {
+            completion_verification_state: CompletionVerificationState::ProofRequired,
+            scope: CompletionVerificationScope::Task,
+            claim: Some(claim.clone()),
+            completion_blocked_claims: vec![CompletionClaimKind::BuildClean],
+            completion_evidence_refs: Vec::new(),
+            completion_verification_findings: Vec::new(),
+            child_summary: None,
+        };
+
+        assert!(context.set_completion_claim(&claim).is_ok());
+        assert!(context.set_completion_proof_selection(&selection).is_ok());
+        assert!(context.set_completion_proof_pre_fingerprint(&fingerprint).is_ok());
+        assert!(context.set_completion_proof_post_fingerprint(&fingerprint).is_ok());
+        assert!(context.set_completion_verification_projection(&projection).is_ok());
+
+        assert_eq!(context.completion_claim().ok().flatten(), Some(claim));
+        assert_eq!(context.completion_proof_selection().ok().flatten(), Some(selection));
+        assert_eq!(
+            context.completion_proof_pre_fingerprint().ok().flatten(),
+            Some(fingerprint.clone())
+        );
+        assert_eq!(context.completion_proof_post_fingerprint().ok().flatten(), Some(fingerprint));
+        assert_eq!(context.completion_verification_projection().ok().flatten(), Some(projection));
     }
 }

@@ -29,7 +29,7 @@ fn plan_status_and_inspect_surface_selected_local_evidence() {
         assert!(output.contains("tests/red_to_green.rs"), "{output}");
     }
     assert!(
-        inspect.terminal_output.contains("advanced_context=mode=local, remote_policy=local_only"),
+        inspect.terminal_output.contains("retrieval_mode: local"),
         "{}",
         inspect.terminal_output
     );

@@ -818,28 +818,37 @@ fn synthesize_goal_plan_execution_profile(
     workspace: &Path,
     goal_plan: &GoalPlan,
 ) -> Result<WorkspaceExecutionProfile, FixtureRuntimeError> {
-    let validation_command = if workspace.join("Cargo.toml").is_file() {
-        ExecutionCommand {
-            program: "cargo".to_string(),
-            args: vec!["test".to_string(), "--quiet".to_string()],
-        }
-    } else {
-        ExecutionCommand { program: "true".to_string(), args: Vec::new() }
-    };
+    let declared_profile = load_workspace_execution_profile(workspace).ok();
+    let validation_command = declared_profile
+        .as_ref()
+        .map(|profile| profile.validation_command.clone())
+        .unwrap_or_else(|| {
+            if workspace.join("Cargo.toml").is_file() {
+                ExecutionCommand {
+                    program: "cargo".to_string(),
+                    args: vec!["test".to_string(), "--quiet".to_string()],
+                }
+            } else {
+                ExecutionCommand { program: "true".to_string(), args: Vec::new() }
+            }
+        });
 
     let (path, find, replace) = infer_goal_plan_change(workspace, goal_plan)?;
-    let mut read_targets = goal_plan
-        .tasks
-        .iter()
-        .filter_map(|task| {
-            let target = task.target.trim();
-            if target.is_empty() || target == "test suite" {
-                return None;
-            }
-            let candidate = workspace.join(target);
-            candidate.is_file().then(|| target.to_string())
-        })
-        .collect::<Vec<_>>();
+    let mut read_targets =
+        declared_profile.map(|profile| profile.read_targets).unwrap_or_else(|| {
+            goal_plan
+                .tasks
+                .iter()
+                .filter_map(|task| {
+                    let target = task.target.trim();
+                    if target.is_empty() || target == "test suite" {
+                        return None;
+                    }
+                    let candidate = workspace.join(target);
+                    candidate.is_file().then(|| target.to_string())
+                })
+                .collect::<Vec<_>>()
+        });
     if !read_targets.iter().any(|target| target == &path) {
         read_targets.push(path.clone());
     }

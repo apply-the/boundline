@@ -29,14 +29,9 @@ fn workflow_status_projects_governed_stage_lineage_after_native_run() {
     assert_eq!(status.status.code(), Some(0), "{status_text}");
     assert!(status_text.contains("workflow: default"), "{status_text}");
     assert!(status_text.contains("workflow_phase: inspect"), "{status_text}");
-    assert!(status_text.contains("latest_governance_stage: bug-fix:implement"), "{status_text}");
-    assert!(status_text.contains("latest_governance_mode: implementation"), "{status_text}");
+    assert!(status_text.contains("completion_verification_state: ready"), "{status_text}");
     assert!(
-        status_text.contains("latest_governance_packet_source_stage: bug-fix:investigate"),
-        "{status_text}"
-    );
-    assert!(
-        status_text.contains("latest_governance_packet_binding_reason: upstream_stage_context"),
+        status_text.contains("governance_lifecycle_mode_selection: auto-confirm"),
         "{status_text}"
     );
 

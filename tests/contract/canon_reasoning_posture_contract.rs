@@ -15,7 +15,7 @@ const VERSION_ALIGNMENT_BRIEF_PATH: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/specs/061-reasoning-profile-contracts/contracts/reasoning-version-alignment-contract.md"
 );
-const SUPPORTED_BOUNDLINE_VERSION: &str = "0.77.0";
+const SUPPORTED_BOUNDLINE_VERSION: &str = "0.78.0";
 const SUPPORTED_BOUNDLINE_WINDOW: &str = "0.77.x";
 const SUPPORTED_CANON_VERSION: &str = "0.72.5";
 const SUPPORTED_CANON_WINDOW: &str = "0.71.x";

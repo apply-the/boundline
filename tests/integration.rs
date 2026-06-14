@@ -238,6 +238,15 @@ mod workflow_follow_through_blocked;
 #[path = "integration/governed_stage_depth_workflow.rs"]
 mod governed_stage_depth_workflow;
 
+#[path = "integration/completion_verification_task_flow.rs"]
+mod completion_verification_task_flow;
+
+#[path = "integration/completion_verification_stale_flow.rs"]
+mod completion_verification_stale_flow;
+
+#[path = "integration/completion_verification_stage_run_flow.rs"]
+mod completion_verification_stage_run_flow;
+
 #[path = "integration/canon_default_governance_flow.rs"]
 mod canon_default_governance_flow;
 

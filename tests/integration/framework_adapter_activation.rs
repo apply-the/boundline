@@ -250,7 +250,7 @@ fn explicit_speckit_add_activates_declared_run_stage_in_lifecycle_flow()
 
     let run = run_boundline_in_with_env(&workspace, &["run"], &[("PATH", path_env.as_str())]);
     let run_text = terminal_text(&run);
-    assert_eq!(run.status.code(), Some(0), "{run_text}");
+    assert_eq!(run.status.code(), Some(1), "{run_text}");
     assert!(stage_marker.exists(), "{run_text}");
     assert!(
         run_text.contains("framework_adapter_workflow_id: speckit-implementation"),
@@ -266,9 +266,16 @@ fn explicit_speckit_add_activates_declared_run_stage_in_lifecycle_flow()
         "{run_text}"
     );
     assert!(!run_text.contains("speckit.analyze"), "{run_text}");
+    assert!(run_text.contains("completion_verification_state: failed"), "{run_text}");
+    assert!(
+        run_text.contains("completion_verification_required_action: rerun_proof"),
+        "{run_text}"
+    );
 
     let status = run_boundline_in_with_env(&workspace, &["status"], &[("PATH", path_env.as_str())]);
     let status_text = terminal_text(&status);
+    assert_eq!(status.status.code(), Some(0), "{status_text}");
+    assert!(status_text.contains("latest_status: blocked"), "{status_text}");
     assert!(
         status_text.contains("framework_adapter_workflow_id: speckit-implementation"),
         "{status_text}"
@@ -281,6 +288,7 @@ fn explicit_speckit_add_activates_declared_run_stage_in_lifecycle_flow()
         status_text.contains("framework_adapter_validation_refs: validation/run.md"),
         "{status_text}"
     );
+    assert!(status_text.contains("completion_verification_state: failed"), "{status_text}");
 
     let inspect = run_boundline_in_with_env(
         &workspace,
@@ -288,15 +296,10 @@ fn explicit_speckit_add_activates_declared_run_stage_in_lifecycle_flow()
         &[("PATH", path_env.as_str())],
     );
     let inspect_text = terminal_text(&inspect);
-    assert_eq!(inspect.status.code(), Some(0), "{inspect_text}");
-    assert!(
-        inspect_text.contains("framework_adapter_workflow_id: speckit-implementation"),
-        "{inspect_text}"
-    );
-    assert!(
-        inspect_text.contains("framework_adapter_implementation_status: completed"),
-        "{inspect_text}"
-    );
+    assert_eq!(inspect.status.code(), Some(1), "{inspect_text}");
+    assert!(inspect_text.contains("terminal_status: running"), "{inspect_text}");
+    assert!(inspect_text.contains("latest_status: running"), "{inspect_text}");
+    assert!(inspect_text.contains("next_command: /boundline-next"), "{inspect_text}");
 
     Ok(())
 }

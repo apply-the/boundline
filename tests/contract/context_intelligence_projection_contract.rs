@@ -54,7 +54,17 @@ fn advanced_context_projection_contract_surfaces_local_projection_lines() {
         assert!(output.contains("impact_finding: tests/lib.rs [missing_test]"), "{output}");
     }
     assert!(
-        inspect.terminal_output.contains("advanced_context=mode=local, remote_policy=local_only"),
+        inspect.terminal_output.contains("retrieval_mode: local"),
+        "{}",
+        inspect.terminal_output
+    );
+    assert!(
+        inspect.terminal_output.contains("semantic_policy_state: disabled"),
+        "{}",
+        inspect.terminal_output
+    );
+    assert!(
+        inspect.terminal_output.contains("hybrid_outcome: baseline_only"),
         "{}",
         inspect.terminal_output
     );
@@ -77,7 +87,17 @@ fn advanced_context_projection_contract_surfaces_disabled_policy_reason() {
         assert!(output.contains("disabled by configuration"), "{output}");
     }
     assert!(
-        inspect.terminal_output.contains("advanced_context=mode=disabled, remote_policy=blocked"),
+        inspect.terminal_output.contains("retrieval_mode: disabled"),
+        "{}",
+        inspect.terminal_output
+    );
+    assert!(
+        inspect.terminal_output.contains("retrieval_state: insufficient"),
+        "{}",
+        inspect.terminal_output
+    );
+    assert!(
+        inspect.terminal_output.contains("disabled by configuration"),
         "{}",
         inspect.terminal_output
     );

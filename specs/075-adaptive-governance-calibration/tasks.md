@@ -75,15 +75,15 @@
 
 **Independent Test**: Simulate guardian historical performance data, run calibration evaluation, assert correct promotion/demotion.
 
-[x] - [ ] T035
+[x] - [x] T035
 - [x] [US3] Implement trust metric accumulation in `src/domain/calibration.rs`: after each council adjudication, update `GuardianTrustRecord` true/false positive counts (upheld → TP, rejected → FP, deferred → excluded) and persist in trace store
-[x] - [ ] T036
+[x] - [x] T036
 - [x] [US3] Implement calibration evaluation in `src/domain/calibration.rs`: after the evidence window (default 5 adjudicated sessions), compute TPR, check against `confidence_threshold`, evaluate promotion (advisory→catch, catch→rule), demotion (rule→catch, catch→advisory), and incident lock
-[x] - [ ] T037
+[x] - [x] T037
 - [x] [US3] Implement `control_level.graduated` structured event emission with before/after level, trigger (trust_promotion/trust_demotion/incident_lock/insufficient_evidence), and confidence metrics in `src/orchestrator/session_runtime_observability.rs`
-[x] - [ ] T038
+[x] - [x] T038
 - [x] [US3] Prevent promotion when eval pass rate is below confidence threshold or evidence is insufficient; emit `control_level.assigned` with reason `insufficient_evidence` in `src/domain/calibration.rs`
-[x] - [ ] T039
+[x] - [x] T039
 - [x] [P] [US3] Add trust metric unit tests: TP/FP counting, deferred exclusion, TPR computation with sufficient/insufficient sample, incident lock prevents promotion in `tests/unit/calibration_model.rs`
 - [x] T0*40 [P] [US3] Add calibration evaluation unit tests: promotion after window with high TPR, demotion after window with high FPR, no change with insufficient evidence, eval failure blocks promotion in `tests/unit/calibration_model.rs`
 - [x] T0*41 [US3] Add integration test: simulate 5 sessions with 100% TPR → guardian promotes from advisory to catch in `tests/integration/calibration_flow.rs`

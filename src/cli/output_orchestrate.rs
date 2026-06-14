@@ -85,6 +85,10 @@ pub fn render_human_orchestrate_report(report: &OrchestrateCommandReport) -> Str
         out.push_str(&format!("\n⚠ Blocked: {}\n", blocking));
     }
 
+    if let Some(status) = &report.session_status {
+        append_completion_verification_lines(&mut out, status);
+    }
+
     // Next action
     if let Some(last_event) = report.events.last() {
         if let Some(resume) = &last_event.resume_command {
@@ -95,6 +99,51 @@ pub fn render_human_orchestrate_report(report: &OrchestrateCommandReport) -> Str
     }
 
     out
+}
+
+fn append_completion_verification_lines(
+    out: &mut String,
+    status: &crate::domain::session::SessionStatusView,
+) {
+    let Some(state) = status.completion_verification_state else {
+        return;
+    };
+
+    out.push_str(&format!("\nCompletion Verification State: {}\n", state.as_str()));
+    if let Some(claim) = &status.completion_claim {
+        out.push_str(&format!("Claim: {} ({})\n", claim.kind.as_str(), claim.source.as_str()));
+        out.push_str(&format!("Claim Summary: {}\n", claim.summary));
+    }
+    if let Some(blocked_claims) = &status.completion_blocked_claims
+        && !blocked_claims.is_empty()
+    {
+        out.push_str(&format!(
+            "Blocked Claims: {}\n",
+            blocked_claims.iter().map(|claim| claim.as_str()).collect::<Vec<_>>().join(", ")
+        ));
+    }
+    if let Some(evidence_refs) = &status.completion_evidence_refs
+        && !evidence_refs.is_empty()
+    {
+        out.push_str(&format!("Evidence Refs: {}\n", evidence_refs.join(", ")));
+    }
+    if let Some(findings) = &status.completion_verification_findings {
+        for finding in findings {
+            out.push_str(&format!(
+                "Finding: {} | {} | {}\n",
+                finding.kind.as_str(),
+                finding.severity.as_str(),
+                finding.message
+            ));
+            if !finding.changed_paths.is_empty() {
+                out.push_str(&format!("Changed Paths: {}\n", finding.changed_paths.join(", ")));
+            }
+            out.push_str(&format!("Required Action: {}\n", finding.required_action.as_str()));
+        }
+    }
+    out.push_str(
+        "Boundary: Boundline owns proof execution and task-completion gating; Canon may consume emitted evidence refs later.\n",
+    );
 }
 
 #[cfg(test)]

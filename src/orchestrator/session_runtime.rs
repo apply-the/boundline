@@ -583,6 +583,7 @@ struct NativePersistenceInput {
     native_context: TaskContext,
     record_terminal_event: bool,
     projected_task: Option<Task>,
+    completion_validation_command: Option<String>,
 }
 
 enum NativeGovernanceProjection {

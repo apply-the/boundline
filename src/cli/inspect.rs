@@ -14,11 +14,12 @@ use serde_json::Value;
 use thiserror::Error;
 
 use crate::adapters::audit_store::SessionAuditStoreError;
-use crate::adapters::session_store::SessionStoreError;
+use crate::adapters::session_store::{FileSessionStore, SessionStore, SessionStoreError};
 use crate::adapters::trace_store::{FileTraceStore, TraceStore, TraceStoreError};
 use crate::cli::CommandExitStatus;
 use crate::cli::output;
 use crate::domain::cluster::ClusterDeliveryStory;
+use crate::domain::completion_verification::CompletionVerificationProjection;
 use crate::domain::context_intelligence::AdvancedContextProjection;
 use crate::domain::execution::StageRoutingDecisionRecord;
 use crate::domain::framework_adapter::AdapterExecutionSource;
@@ -150,32 +151,213 @@ pub fn execute_inspect(
     audit_only: bool,
 ) -> Result<InspectCommandReport, InspectCommandError> {
     let (inspection_target, trace_ref, trace) = load_trace(trace, workspace, session_id)?;
-    let summary = summarize_trace(&trace_ref, &trace)?;
+    let summary = match summarize_trace(&trace_ref, &trace) {
+        Ok(summary) => summary,
+        Err(
+            TraceSummaryError::MissingTerminalStatus | TraceSummaryError::MissingTerminalReason,
+        ) => fallback_trace_summary_for_active_completion_verification(
+            workspace, session_id, &trace_ref, &trace,
+        )?
+        .ok_or(InspectCommandError::Summary(TraceSummaryError::MissingTerminalStatus))?,
+        Err(error) => return Err(InspectCommandError::Summary(error)),
+    };
     let exit_status = if summary.terminal_status == TaskStatus::Succeeded {
         CommandExitStatus::Succeeded
     } else {
         CommandExitStatus::NonSuccess
     };
+    let mut terminal_output = if audit_only {
+        output::render_trace_audit_summary(
+            &summary,
+            inspection_target.as_str(),
+            output::next_command_after_inspect(summary.terminal_status),
+        )
+    } else {
+        output::render_trace_summary(
+            &summary,
+            inspection_target.as_str(),
+            output::next_command_after_inspect(summary.terminal_status),
+        )
+    };
+    let completion_lines =
+        inspect_completion_verification_lines(workspace, session_id, &trace_ref, &trace)?;
+    if !completion_lines.is_empty() {
+        terminal_output.push('\n');
+        terminal_output.push_str(&completion_lines.join("\n"));
+    }
 
     Ok(InspectCommandReport {
         exit_status,
-        terminal_output: if audit_only {
-            output::render_trace_audit_summary(
-                &summary,
-                inspection_target.as_str(),
-                output::next_command_after_inspect(summary.terminal_status),
-            )
-        } else {
-            output::render_trace_summary(
-                &summary,
-                inspection_target.as_str(),
-                output::next_command_after_inspect(summary.terminal_status),
-            )
-        },
+        terminal_output,
         inspection_target: Some(inspection_target.as_str().to_string()),
         trace_location: Some(trace_ref.to_string_lossy().into_owned()),
         trace_summary: Some(summary),
     })
+}
+
+fn fallback_trace_summary_for_active_completion_verification(
+    workspace: Option<&Path>,
+    session_id: Option<&str>,
+    trace_ref: &Path,
+    trace: &ExecutionTrace,
+) -> Result<Option<TraceSummaryView>, InspectCommandError> {
+    let resolved_workspace =
+        workspace.map(Path::to_path_buf).or_else(|| workspace_from_trace_ref(trace_ref));
+    let Some(workspace) = resolved_workspace.as_deref() else {
+        return Ok(None);
+    };
+    let store = FileSessionStore::for_workspace(workspace);
+    let session = if let Some(session_id) = session_id {
+        store.load_session(session_id).map_err(InspectCommandError::SessionStore)?
+    } else {
+        store.load().map_err(InspectCommandError::SessionStore)?
+    };
+    let Some(session) = session else {
+        return Ok(None);
+    };
+    let Some(latest_trace_ref) = session.latest_trace_ref.as_deref() else {
+        return Ok(None);
+    };
+    if latest_trace_ref != trace_ref.to_string_lossy() {
+        return Ok(None);
+    }
+    let Some(task) = session.active_task.as_ref() else {
+        return Ok(None);
+    };
+    let projection = task
+        .context
+        .completion_verification_projection()
+        .map_err(|error| InspectCommandError::InvalidSession(error.to_string()))?;
+    let Some(projection) = projection else {
+        return Ok(None);
+    };
+    let terminal_reason = TerminalReason::new(
+        crate::domain::limits::TerminalCondition::GoalSatisfied,
+        projection
+            .completion_verification_findings
+            .first()
+            .map(|finding| finding.message.clone())
+            .unwrap_or_else(|| "completion verification blocked closeout".to_string()),
+        None,
+    );
+
+    Ok(Some(TraceSummaryView {
+        trace_ref: trace_ref.to_string_lossy().into_owned(),
+        goal: trace.goal.clone(),
+        trace_started_at: Some(trace.started_at),
+        advanced_context: task
+            .context
+            .latest_advanced_context()
+            .map_err(|error| InspectCommandError::InvalidSession(error.to_string()))?,
+        cluster_delivery_story: task.context.cluster_delivery_story().ok().flatten(),
+        terminal_status: TaskStatus::Running,
+        terminal_reason,
+        duration: trace.duration_millis(),
+        ..TraceSummaryView::default()
+    }))
+}
+
+fn inspect_completion_verification_lines(
+    workspace: Option<&Path>,
+    session_id: Option<&str>,
+    trace_ref: &Path,
+    trace: &ExecutionTrace,
+) -> Result<Vec<String>, InspectCommandError> {
+    let resolved_workspace =
+        workspace.map(Path::to_path_buf).or_else(|| workspace_from_trace_ref(trace_ref));
+    let Some(workspace) = resolved_workspace.as_deref() else {
+        return Ok(Vec::new());
+    };
+    let store = FileSessionStore::for_workspace(workspace);
+    let session = if let Some(session_id) = session_id {
+        store.load_session(session_id).map_err(InspectCommandError::SessionStore)?
+    } else {
+        store.load().map_err(InspectCommandError::SessionStore)?
+    };
+    let Some(session) = session else {
+        return Ok(Vec::new());
+    };
+    let Some(latest_trace_ref) = session.latest_trace_ref.as_deref() else {
+        return Ok(Vec::new());
+    };
+    if latest_trace_ref != trace_ref.to_string_lossy() {
+        return Ok(Vec::new());
+    }
+    let Some(task) = session.active_task.as_ref() else {
+        return Ok(Vec::new());
+    };
+    let projection = task
+        .context
+        .completion_verification_projection()
+        .map_err(|error| InspectCommandError::InvalidSession(error.to_string()))?;
+    let Some(projection) = projection else {
+        return Ok(Vec::new());
+    };
+    Ok(render_completion_verification_lines(&projection, Some(&trace.task_id)))
+}
+
+fn workspace_from_trace_ref(trace_ref: &Path) -> Option<PathBuf> {
+    trace_ref.ancestors().find_map(|path| {
+        if path.file_name().is_some_and(|name| name == ".boundline") {
+            path.parent().map(Path::to_path_buf)
+        } else {
+            None
+        }
+    })
+}
+
+fn render_completion_verification_lines(
+    projection: &CompletionVerificationProjection,
+    default_task_id: Option<&str>,
+) -> Vec<String> {
+    let mut lines = vec![format!(
+        "completion_verification_state: {}",
+        projection.completion_verification_state.as_str()
+    )];
+    if let Some(claim) = projection.claim.as_ref() {
+        lines.push(format!("completion_claim_kind: {}", claim.kind.as_str()));
+        lines.push(format!("completion_claim_source: {}", claim.source.as_str()));
+        lines.push(format!("completion_claim_summary: {}", claim.summary));
+    }
+    if !projection.completion_blocked_claims.is_empty() {
+        lines.push(format!(
+            "completion_blocked_claims: {}",
+            projection
+                .completion_blocked_claims
+                .iter()
+                .map(|claim| claim.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
+    if !projection.completion_evidence_refs.is_empty() {
+        lines.push(format!(
+            "completion_evidence_refs: {}",
+            projection.completion_evidence_refs.join(", ")
+        ));
+    }
+    for finding in &projection.completion_verification_findings {
+        lines.push(format!(
+            "completion_verification_finding: {} | {} | {}",
+            finding.kind.as_str(),
+            finding.severity.as_str(),
+            finding.message
+        ));
+        if let Some(task_id) = finding.task_id.as_deref().or(default_task_id) {
+            lines.push(format!("completion_verification_task_id: {task_id}"));
+        }
+        if !finding.changed_paths.is_empty() {
+            lines.push(format!(
+                "completion_verification_changed_paths: {}",
+                finding.changed_paths.join(", ")
+            ));
+        }
+        lines.push(format!(
+            "completion_verification_required_action: {}",
+            finding.required_action.as_str()
+        ));
+    }
+    lines
 }
 
 /// Renders a user-facing inspect failure using the same target-resolution rules
@@ -1354,10 +1536,18 @@ mod tests {
     };
     use crate::adapters::session_store::{FileSessionStore, SessionStore, SessionStoreError};
     use crate::adapters::trace_store::{FileTraceStore, TraceStore};
+    use crate::domain::completion_verification::{
+        ClaimInferenceConfidence, CompletionClaim, CompletionClaimKind, CompletionClaimSource,
+        CompletionRequiredAction, CompletionVerificationFinding, CompletionVerificationFindingKind,
+        CompletionVerificationFindingSeverity, CompletionVerificationProjection,
+        CompletionVerificationScope, CompletionVerificationState,
+    };
     use crate::domain::guidance::GuidanceGuardianProjection;
-    use crate::domain::limits::TerminalCondition;
+    use crate::domain::limits::{RunLimits, TerminalCondition};
+    use crate::domain::plan::Plan;
     use crate::domain::session::{ActiveSessionRecord, SessionStatus};
-    use crate::domain::task::{TaskStatus, TerminalReason};
+    use crate::domain::step::Step;
+    use crate::domain::task::{Task, TaskRunRequest, TaskStatus, TerminalReason};
     use crate::domain::trace::{ExecutionTrace, TraceEventType};
 
     fn temp_workspace(prefix: &str) -> PathBuf {
@@ -2709,5 +2899,175 @@ time_limited = false
         assert!(parsed.get("policy_loaded").unwrap().as_bool().unwrap());
         assert_eq!(parsed.get("schema_version").unwrap().as_str().unwrap(), "1.0");
         assert_eq!(parsed.get("evidence_window").unwrap().as_u64().unwrap(), 100);
+    }
+
+    #[test]
+    fn execute_inspect_falls_back_to_active_completion_verification_summary() {
+        let workspace = temp_workspace("boundline-inspect-completion-fallback");
+        let session_id = "session-completion-fallback";
+        let mut trace = ExecutionTrace::new("task-completion-fallback", session_id, "Fix the bug");
+        trace.record_event(
+            TraceEventType::StepStarted,
+            Some("verify".to_string()),
+            1,
+            json!({"step_kind": "agent"}),
+        );
+        let trace_path = match FileTraceStore::for_workspace(&workspace).persist(&trace) {
+            Ok(path) => path,
+            Err(error) => panic!("failed to persist trace fixture: {error}"),
+        };
+
+        let mut task = completion_task(&workspace, session_id, "task-completion-fallback");
+        let projection = CompletionVerificationProjection {
+            completion_verification_state: CompletionVerificationState::ProofRequired,
+            scope: CompletionVerificationScope::Task,
+            claim: Some(CompletionClaim {
+                claim_id: "claim-fallback".to_string(),
+                kind: CompletionClaimKind::BugFixed,
+                scope: CompletionVerificationScope::Task,
+                source: CompletionClaimSource::RuntimeInference,
+                confidence: Some(ClaimInferenceConfidence::High),
+                summary: "bug fix remains unproven".to_string(),
+                supporting_signals: vec!["goal_text".to_string(), "changed_files".to_string()],
+            }),
+            completion_blocked_claims: vec![CompletionClaimKind::BugFixed],
+            completion_evidence_refs: vec!["evidence-proof-1".to_string()],
+            completion_verification_findings: vec![CompletionVerificationFinding {
+                kind: CompletionVerificationFindingKind::StaleProof,
+                severity: CompletionVerificationFindingSeverity::Blocking,
+                message: "The previously passing proof is stale because workspace content changed after proof execution.".to_string(),
+                proof_ref: Some("proof-1".to_string()),
+                task_id: Some("task-completion-fallback".to_string()),
+                changed_paths: vec!["src/lib.rs".to_string(), "Cargo.toml".to_string()],
+                required_action: CompletionRequiredAction::RerunProof,
+            }],
+            child_summary: None,
+        };
+        if let Err(error) = task.context.set_completion_verification_projection(&projection) {
+            panic!("failed to attach completion verification projection: {error}");
+        }
+
+        let session = ActiveSessionRecord {
+            session_id: session_id.to_string(),
+            workspace_ref: workspace.to_string_lossy().into_owned(),
+            goal: Some("Fix the bug".to_string()),
+            authored_brief: None,
+            negotiation_packet: None,
+            active_flow: None,
+            active_task: Some(task),
+            goal_plan: None,
+            workflow_progress: None,
+            decisions: Vec::new(),
+            active_flow_policy: None,
+            latest_status: SessionStatus::Blocked,
+            latest_terminal_reason: None,
+            latest_trace_ref: Some(trace_path.to_string_lossy().into_owned()),
+            created_at: 1,
+            updated_at: 2,
+            governance_lifecycle: None,
+            project_scale: None,
+            delight_feedback: None,
+            latest_voting: None,
+        };
+        if let Err(error) = FileSessionStore::for_workspace(&workspace).persist(&session) {
+            panic!("failed to persist session fixture: {error}");
+        }
+
+        let report = match super::execute_inspect(None, Some(&workspace), Some(session_id), false) {
+            Ok(report) => report,
+            Err(error) => panic!("inspect should succeed with fallback summary: {error}"),
+        };
+
+        assert_eq!(report.exit_status, crate::cli::CommandExitStatus::NonSuccess);
+        assert!(
+            report
+                .terminal_output
+                .contains("terminal_reason: The previously passing proof is stale because workspace content changed after proof execution."),
+            "{}",
+            report.terminal_output
+        );
+        assert!(
+            report.terminal_output.contains("completion_verification_state: proof_required"),
+            "{}",
+            report.terminal_output
+        );
+        assert!(
+            report
+                .terminal_output
+                .contains("completion_verification_changed_paths: src/lib.rs, Cargo.toml"),
+            "{}",
+            report.terminal_output
+        );
+    }
+
+    #[test]
+    fn render_completion_verification_lines_uses_default_task_id_and_evidence_refs() {
+        let projection = CompletionVerificationProjection {
+            completion_verification_state: CompletionVerificationState::Blocked,
+            scope: CompletionVerificationScope::Task,
+            claim: Some(CompletionClaim {
+                claim_id: "claim-render".to_string(),
+                kind: CompletionClaimKind::BuildClean,
+                scope: CompletionVerificationScope::Task,
+                source: CompletionClaimSource::OperatorConfirmed,
+                confidence: Some(ClaimInferenceConfidence::Medium),
+                summary: "build cleanliness still needs proof".to_string(),
+                supporting_signals: vec!["selected_proof_command".to_string()],
+            }),
+            completion_blocked_claims: vec![CompletionClaimKind::BuildClean],
+            completion_evidence_refs: vec!["evidence-1".to_string(), "evidence-2".to_string()],
+            completion_verification_findings: vec![CompletionVerificationFinding {
+                kind: CompletionVerificationFindingKind::MissingProof,
+                severity: CompletionVerificationFindingSeverity::Blocking,
+                message: "No proving command is available for the requested claim.".to_string(),
+                proof_ref: None,
+                task_id: None,
+                changed_paths: vec!["Cargo.toml".to_string()],
+                required_action: CompletionRequiredAction::RunProof,
+            }],
+            child_summary: None,
+        };
+
+        let lines =
+            super::render_completion_verification_lines(&projection, Some("task-render-default"));
+        let rendered = lines.join("\n");
+
+        assert!(rendered.contains("completion_verification_state: blocked"), "{rendered}");
+        assert!(rendered.contains("completion_claim_kind: build_clean"), "{rendered}");
+        assert!(
+            rendered.contains("completion_evidence_refs: evidence-1, evidence-2"),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains("completion_verification_task_id: task-render-default"),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains("completion_verification_required_action: run_proof"),
+            "{rendered}"
+        );
+    }
+
+    fn completion_task(workspace: &Path, session_id: &str, task_id: &str) -> Task {
+        let request = TaskRunRequest {
+            goal: "Fix the bug".to_string(),
+            input: json!({}),
+            session_id: session_id.to_string(),
+            workspace_ref: workspace.to_string_lossy().into_owned(),
+            limits: RunLimits::default(),
+            initial_context: None,
+        };
+        let step = match Step::agent("verify", "tester", json!({"goal": "Fix the bug"})) {
+            Ok(step) => step,
+            Err(error) => panic!("failed to build step fixture: {error}"),
+        };
+        let plan = match Plan::new(vec![step]) {
+            Ok(plan) => plan,
+            Err(error) => panic!("failed to build plan fixture: {error}"),
+        };
+        match Task::new(task_id, &request, plan) {
+            Ok(task) => task,
+            Err(error) => panic!("failed to build task fixture: {error}"),
+        }
     }
 }

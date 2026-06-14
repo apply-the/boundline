@@ -73,16 +73,16 @@ projection scaffolds required for contract-boundary work are ready.
 
 ### Tests for User Story 2
 
-- [ ] T016 [P] [US2] Add failing unit coverage for confidence levels, reviewer-credibility inputs, calibration-evidence handling, trust decay, and degradation-mode mapping in `tests/unit/governance_policy.rs`
-- [ ] T017 [P] [US2] Add failing integration coverage for low-confidence degradation and escalation flows in `tests/integration/session_governance_flow.rs`, `tests/integration/workflow_follow_through.rs`, and `tests/integration/workflow_follow_through_blocked.rs`
-- [ ] T018 [P] [US2] Add failing contract coverage for degraded and escalated execution projection in `tests/contract/governance_trace_contract.rs` and `tests/contract/governance_execution_profile_contract.rs`
+- [x] T016 [P] [US2] Add failing unit coverage for confidence levels, reviewer-credibility inputs, calibration-evidence handling, trust decay, and degradation-mode mapping in `tests/unit/governance_policy.rs`
+- [x] T017 [P] [US2] Add failing integration coverage for low-confidence degradation and escalation flows in `tests/integration/session_governance_flow.rs`, `tests/integration/workflow_follow_through.rs`, and `tests/integration/workflow_follow_through_blocked.rs`
+- [x] T018 [P] [US2] Add failing contract coverage for degraded and escalated execution projection in `tests/contract/governance_trace_contract.rs` and `tests/contract/governance_execution_profile_contract.rs`
 
 ### Implementation for User Story 2
 
-- [ ] T019 [US2] Implement confidence assessment, reviewer-credibility weighting, calibration-evidence persistence, trust evolution, and degradation selection in `src/domain/governance.rs` and `src/orchestrator/governance.rs`
-- [ ] T020 [US2] Implement escalation triggers, override recording, and blocked-governance handling in `src/orchestrator/governance.rs` and `src/orchestrator/decision_loop.rs`
-- [ ] T021 [US2] Persist calibration evidence together with degraded and escalated outcomes in `src/domain/session.rs`, `src/orchestrator/review_trace.rs`, and `src/fixture.rs`
-- [ ] T022 [US2] Surface degradation, escalation, override, and recovery rationale in `src/cli/session.rs`, `src/cli/output.rs`, and `src/cli/inspect.rs`
+- [x] T019 [US2] Implement confidence assessment, reviewer-credibility weighting, calibration-evidence persistence, trust evolution, and degradation selection in `src/domain/governance.rs` and `src/orchestrator/governance.rs`
+- [x] T020 [US2] Implement escalation triggers, override recording, and blocked-governance handling in `src/orchestrator/governance.rs` and `src/orchestrator/decision_loop.rs`
+- [x] T021 [US2] Persist calibration evidence together with degraded and escalated outcomes in `src/domain/session.rs`, `src/orchestrator/review_trace.rs`, and `src/fixture.rs`
+- [x] T022 [US2] Surface degradation, escalation, override, and recovery rationale in `src/cli/session.rs`, `src/cli/output.rs`, and `src/cli/inspect.rs`
 
 **Checkpoint**: User Stories 1 and 2 both work independently with explicit degradation and escalation behavior.
 
@@ -114,13 +114,13 @@ projection scaffolds required for contract-boundary work are ready.
 
 **Purpose**: Close documentation, validation, and coverage across all user stories.
 
-- [ ] T029 [P] Update operator documentation and release notes in `README.md`, `CHANGELOG.md`, `tech-docs/runtime-confidence-and-calibration.md`, and `tech-docs/degradation-and-escalation.md`
-- [ ] T030 [P] Refresh contributor and assistant guidance for the new governance surfaces in `AGENTS.md` and `assistant/README.md`
+- [x] T029 [P] Update operator documentation and release notes in `README.md`, `CHANGELOG.md`, `tech-docs/runtime-confidence-and-calibration.md`, and `tech-docs/degradation-and-escalation.md`
+- [x] T030 [P] Refresh contributor and assistant guidance for the new governance surfaces in `AGENTS.md` and `assistant/README.md`
 - [x] T031 Run focused and full validation for `tests/unit/governance_policy.rs`, `tests/unit/governance_runtime.rs`, `tests/integration/session_governance_flow.rs`, `cargo test --no-run --all-targets`, and `cargo nextest run --workspace --all-features`
-- [ ] T032 Validate the operator walkthrough and recorded runtime scenarios in `specs/057-adaptive-governance/quickstart.md` and `tech-docs/adaptive-governance.md`
-- [ ] T033 Increase the workspace version and release-facing references in `Cargo.toml`, `CHANGELOG.md`, `assistant/plugin-metadata.json`, and distribution metadata under `distribution/`
-- [ ] T034 Apply an appropriate design pattern to break up oversized files or functions in `src/orchestrator/governance.rs`, `src/domain/governance.rs`, `src/cli/output.rs`, and any newly expanded governance modules before final sign-off
-- [ ] T035 Ensure modified-file and feature-level coverage remains at 95% or higher by refreshing `lcov.info`, any package-scoped coverage artifacts, and the recorded evidence in `specs/057-adaptive-governance/quickstart.md`
+- [x] T032 Validate the operator walkthrough and recorded runtime scenarios in `specs/057-adaptive-governance/quickstart.md` and `tech-docs/adaptive-governance.md`
+- [x] T033 Increase the workspace version and release-facing references in `Cargo.toml`, `CHANGELOG.md`, `assistant/plugin-metadata.json`, and distribution metadata under `distribution/`
+- [x] T034 Apply an appropriate design pattern to break up oversized files or functions in `src/orchestrator/governance.rs`, `src/domain/governance.rs`, `src/cli/output.rs`, and any newly expanded governance modules before final sign-off
+- [x] T035 Ensure modified-file and feature-level coverage remains at 95% or higher by refreshing `lcov.info`, any package-scoped coverage artifacts, and the recorded evidence in `specs/057-adaptive-governance/quickstart.md`
 
 ---
 

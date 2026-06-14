@@ -54,7 +54,7 @@ fn status_and_inspect_surface_missing_test_impact_findings() {
         "{status_output}"
     );
     assert!(
-        inspect.terminal_output.contains("advanced_context=mode=local, remote_policy=local_only"),
+        inspect.terminal_output.contains("retrieval_mode: local"),
         "{}",
         inspect.terminal_output
     );

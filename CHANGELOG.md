@@ -21,9 +21,29 @@ No unreleased changes.
 
 Release metadata note:
 
-- The current Boundline release line is `0.77.0`; published package metadata,
+- The current Boundline release line is `0.78.0`; published package metadata,
   distribution metadata, assistant plugin manifests, and docs are aligned to
   that version while Canon compatibility remains `0.72.5`.
+
+## [0.78.0] - 2026-06-12
+
+Delivered specs:
+
+- `079` - Completion Verification Runtime
+
+Highlights:
+
+- Added runtime-owned completion verification that blocks unsafe task closeout
+  until a claim-matched proof command runs freshly in the current workspace
+  state.
+- Added claim inference, explicit claim recording, proof-command selection,
+  confidence gating, stale-proof invalidation, and additive proof findings.
+- Surfaced completion-verification state through `run`, `status`, `inspect`,
+  and orchestrate-facing output without handing proof ownership to Canon.
+- Added assistant asset guidance that suppresses pre-proof success language and
+  preserves the exact proving action for the operator.
+- Added parent-scope aggregation helpers for stage/run verification so blocked,
+  stale, failed, missing, deferred, and skipped child states remain visible.
 
 ## [0.77.0] - 2026-06-11
 

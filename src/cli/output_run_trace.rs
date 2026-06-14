@@ -52,6 +52,60 @@ fn push_plan_quality_lines(lines: &mut Vec<String>, payload: &Value) {
     }
 }
 
+fn push_completion_verification_lines(lines: &mut Vec<String>, response: &TaskRunResponse) {
+    let Ok(projection) = response.final_context.completion_verification_projection() else {
+        return;
+    };
+    let Some(projection) = projection else {
+        return;
+    };
+
+    lines.push(format!(
+        "completion_verification_state: {}",
+        projection.completion_verification_state.as_str()
+    ));
+    if let Some(claim) = projection.claim.as_ref() {
+        lines.push(format!("completion_claim_kind: {}", claim.kind.as_str()));
+        lines.push(format!("completion_claim_source: {}", claim.source.as_str()));
+        lines.push(format!("completion_claim_summary: {}", claim.summary));
+    }
+    if !projection.completion_blocked_claims.is_empty() {
+        lines.push(format!(
+            "completion_blocked_claims: {}",
+            projection
+                .completion_blocked_claims
+                .iter()
+                .map(|claim| claim.as_str())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
+    if !projection.completion_evidence_refs.is_empty() {
+        lines.push(format!(
+            "completion_evidence_refs: {}",
+            projection.completion_evidence_refs.join(", ")
+        ));
+    }
+    for finding in &projection.completion_verification_findings {
+        lines.push(format!(
+            "completion_verification_finding: {} | {} | {}",
+            finding.kind.as_str(),
+            finding.severity.as_str(),
+            finding.message
+        ));
+        if !finding.changed_paths.is_empty() {
+            lines.push(format!(
+                "completion_verification_changed_paths: {}",
+                finding.changed_paths.join(", ")
+            ));
+        }
+        lines.push(format!(
+            "completion_verification_required_action: {}",
+            finding.required_action.as_str()
+        ));
+    }
+}
+
 pub fn render_run_trace(
     command_name: &str,
     trace: Option<&ExecutionTrace>,
@@ -692,6 +746,7 @@ pub fn render_run_trace(
         lines.extend(render_cluster_story_lines(&cluster_story));
     }
 
+    push_completion_verification_lines(&mut lines, response);
     lines.push(format!("terminal_status: {}", task_status_text(response.terminal_status)));
     lines.push(format!("terminal_reason: {}", response.terminal_reason.message));
     lines.push(format!("trace: {}", response.trace_location));

@@ -43,12 +43,14 @@ fn clustered_delivery_run_mutates_both_member_workspaces_under_one_session_owner
         status.terminal_output
     );
     assert!(
-        inspect.terminal_output.contains("cluster_authoritative_workspace:"),
+        inspect.terminal_output.contains("latest_checkpoint_scope: cluster"),
         "{}",
         inspect.terminal_output
     );
     assert!(
-        inspect.terminal_output.contains("cluster_execution_condition: success"),
+        inspect
+            .terminal_output
+            .contains("execution_condition: terminal - goal satisfied after fresh proof"),
         "{}",
         inspect.terminal_output
     );
