@@ -59,7 +59,7 @@ flowchart TD
 ## Execution Order and Dependencies
 
 1. **Canon 02 + Boundline 18 (Verification Pair)**
-   - Delivered in 0.78.0. Canon defines the `claim -> proof -> evidence_ref` contract, while Boundline implements the runtime that executes the proof and blocks task completion.
+   - Delivered in 0.79.0. Canon defines the `claim -> proof -> evidence_ref` contract, while Boundline implements the runtime that executes the proof and blocks task completion.
 2. **Boundline 13 (Execution Safety Foundation)**
    - Boundline 13 establishes safe local command execution, evidence capture,
      artifact capture, redaction, and mutation boundaries. It supports
