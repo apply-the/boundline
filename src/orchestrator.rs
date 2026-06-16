@@ -26,6 +26,7 @@
 
 pub mod decision_loop;
 pub mod engine;
+pub mod execution_orchestrator;
 pub mod flow_inference;
 pub mod goal_planner;
 pub mod governance;

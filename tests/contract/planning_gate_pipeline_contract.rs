@@ -64,6 +64,7 @@ fn build_planned_record(workspace_ref: &str) -> ActiveSessionRecord {
         project_scale: None,
         latest_voting: None,
         delight_feedback: None,
+        active_execution_run_id: None,
     }
 }
 
@@ -76,6 +77,7 @@ fn build_ready_goal_plan() -> Result<GoalPlan, Box<dyn std::error::Error>> {
             target: "src/lib.rs".to_string(),
             expected_outcome: Some("bounded change delivered".to_string()),
             decision_type_hint: None,
+            depends_on: None,
         }],
     )?
     .with_planning_rationale("workspace evidence supports this bounded change")

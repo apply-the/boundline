@@ -627,6 +627,9 @@ pub struct PlannedTask {
     pub expected_outcome: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub decision_type_hint: Option<DecisionType>,
+    /// Ordered list of task IDs that must complete before this task can start.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub depends_on: Option<Vec<String>>,
 }
 
 impl PlannedTask {
@@ -1671,6 +1674,7 @@ mod tests {
                 target: "src/lib.rs".to_string(),
                 expected_outcome: Some("status explains the blocked continuation".to_string()),
                 decision_type_hint: None,
+                depends_on: None,
             }],
         )
         .unwrap()
@@ -1839,6 +1843,7 @@ mod tests {
                 target: "src/lib.rs".to_string(),
                 expected_outcome: Some("status reflects bounded context".to_string()),
                 decision_type_hint: None,
+                depends_on: None,
             }],
         )
         .unwrap()
@@ -2171,6 +2176,7 @@ mod tests {
                     target: "src/T001.rs".to_string(),
                     expected_outcome: Some("first slice verified".to_string()),
                     decision_type_hint: None,
+                    depends_on: None,
                 },
                 PlannedTask {
                     task_id: "T002".to_string(),
@@ -2178,6 +2184,7 @@ mod tests {
                     target: "src/T002.rs".to_string(),
                     expected_outcome: None,
                     decision_type_hint: None,
+                    depends_on: None,
                 },
             ],
         )?
@@ -2274,6 +2281,7 @@ mod tests {
                 target: "src/lib.rs".to_string(),
                 expected_outcome: Some("bounded implementation repaired".to_string()),
                 decision_type_hint: None,
+                depends_on: None,
             }],
         )
         .unwrap()
@@ -2343,6 +2351,7 @@ mod tests {
                 target: "src/lib.rs".to_string(),
                 expected_outcome: Some("first slice shipped".to_string()),
                 decision_type_hint: None,
+                depends_on: None,
             }],
         )?
         .with_planning_rationale("execute the first slice with governed evidence")

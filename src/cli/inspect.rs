@@ -2024,6 +2024,7 @@ mod tests {
             project_scale: None,
             latest_voting: None,
             delight_feedback: None,
+            active_execution_run_id: None,
         };
         store.persist(&record).unwrap();
 
@@ -2061,6 +2062,7 @@ mod tests {
             project_scale: None,
             latest_voting: None,
             delight_feedback: None,
+            active_execution_run_id: None,
         };
         let selected_record = ActiveSessionRecord {
             session_id: "selected-session".to_string(),
@@ -2083,6 +2085,7 @@ mod tests {
             project_scale: None,
             latest_voting: None,
             delight_feedback: None,
+            active_execution_run_id: None,
         };
 
         store.persist(&active_record).map_err(|error| error.to_string())?;
@@ -2167,6 +2170,7 @@ mod tests {
             project_scale: None,
             latest_voting: None,
             delight_feedback: None,
+            active_execution_run_id: None,
         };
         fs::write(
             workspace.join(".boundline/session.json"),
@@ -2968,6 +2972,7 @@ time_limited = false
             project_scale: None,
             delight_feedback: None,
             latest_voting: None,
+            active_execution_run_id: None,
         };
         if let Err(error) = FileSessionStore::for_workspace(&workspace).persist(&session) {
             panic!("failed to persist session fixture: {error}");

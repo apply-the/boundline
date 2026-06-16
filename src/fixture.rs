@@ -5795,6 +5795,7 @@ mod tests {
                     target: "src/lib.rs".to_string(),
                     expected_outcome: Some("tests pass".to_string()),
                     decision_type_hint: None,
+                    depends_on: None,
                 }],
             )
             .unwrap(),
@@ -5830,6 +5831,7 @@ mod tests {
                     target: "src/lib.rs".to_string(),
                     expected_outcome: Some("tests pass".to_string()),
                     decision_type_hint: None,
+                    depends_on: None,
                 }],
             )
             .unwrap(),
@@ -6432,6 +6434,7 @@ mod tests {
                 target: "src/lib.rs".to_string(),
                 expected_outcome: Some("summary marker updated".to_string()),
                 decision_type_hint: None,
+                depends_on: None,
             }],
         )
         .unwrap();
@@ -6465,6 +6468,7 @@ mod tests {
                 target: "nonexistent.rs".to_string(),
                 expected_outcome: None,
                 decision_type_hint: None,
+                depends_on: None,
             }],
         )
         .unwrap();

@@ -27,6 +27,7 @@ fn sample_task() -> PlannedTask {
         target: "src/lib.rs".to_string(),
         expected_outcome: Some("compiles".to_string()),
         decision_type_hint: None,
+        depends_on: None,
     }
 }
 

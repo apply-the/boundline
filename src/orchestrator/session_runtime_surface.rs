@@ -745,6 +745,7 @@ mod tests {
             project_scale: None,
             latest_voting: None,
             delight_feedback: None,
+            active_execution_run_id: None,
         }
     }
 
@@ -767,6 +768,7 @@ mod tests {
                 target: "src/orchestrator/session_runtime_surface.rs".to_string(),
                 expected_outcome: Some("surface coverage increases".to_string()),
                 decision_type_hint: None,
+                depends_on: None,
             }],
         )
         .map_err(Into::into)
@@ -1124,6 +1126,7 @@ mod additional_tests {
             project_scale: None,
             latest_voting: None,
             delight_feedback: None,
+            active_execution_run_id: None,
         }
     }
 
@@ -1146,6 +1149,7 @@ mod additional_tests {
                 target: "src/orchestrator/session_runtime_surface.rs".to_string(),
                 expected_outcome: Some("runtime behavior remains deterministic".to_string()),
                 decision_type_hint: None,
+                depends_on: None,
             }],
         )
         .map_err(Into::into)

@@ -54,6 +54,7 @@ fn build_goal_plan(confirmed: bool) -> GoalPlan {
             target: "src/lib.rs".to_string(),
             expected_outcome: Some("tests pass".to_string()),
             decision_type_hint: None,
+            depends_on: None,
         }],
     )
     .unwrap();
@@ -86,6 +87,7 @@ fn goal_plan_flow_state_reports_proposed_and_confirmed_modes() {
             target: "src/lib.rs".to_string(),
             expected_outcome: Some("summary added".to_string()),
             decision_type_hint: None,
+            depends_on: None,
         }],
     )
     .unwrap();
@@ -202,6 +204,7 @@ fn session_runtime_resolve_routing_outcome_routes_native_for_proposed_plan() {
         project_scale: None,
         latest_voting: None,
         delight_feedback: None,
+        active_execution_run_id: None,
     };
 
     let outcome = runtime.resolve_routing_outcome(&record).unwrap();
@@ -237,6 +240,7 @@ fn session_runtime_resolve_routing_outcome_uses_compatibility_when_only_task_exi
         project_scale: None,
         latest_voting: None,
         delight_feedback: None,
+        active_execution_run_id: None,
     };
 
     let outcome = runtime.resolve_routing_outcome(&record).unwrap();
@@ -271,6 +275,7 @@ fn plan_task_blocks_when_context_pack_is_not_credible() {
         project_scale: None,
         latest_voting: None,
         delight_feedback: None,
+        active_execution_run_id: None,
     };
 
     let err = runtime.plan_task(&mut record, None, false).unwrap_err();
@@ -315,6 +320,7 @@ fn plan_task_records_authored_brief_context_on_empty_workspace() {
         project_scale: None,
         latest_voting: None,
         delight_feedback: None,
+        active_execution_run_id: None,
     };
 
     let err = runtime.plan_task(&mut record, None, false).unwrap_err();
@@ -378,6 +384,7 @@ fn repeated_plan_task_revises_goal_plan_when_workspace_evidence_changes() {
         project_scale: None,
         latest_voting: None,
         delight_feedback: None,
+        active_execution_run_id: None,
     };
 
     runtime.plan_task(&mut record, None, false).unwrap();
@@ -449,6 +456,7 @@ fn plan_task_blocks_on_negotiation_and_authored_brief_clarifications() {
         project_scale: None,
         latest_voting: None,
         delight_feedback: None,
+        active_execution_run_id: None,
     };
 
     let negotiation_error = runtime.plan_task(&mut negotiation_record, None, false).unwrap_err();
@@ -511,6 +519,7 @@ fn plan_task_blocks_on_negotiation_and_authored_brief_clarifications() {
         project_scale: None,
         latest_voting: None,
         delight_feedback: None,
+        active_execution_run_id: None,
     };
 
     let authored_brief_error =

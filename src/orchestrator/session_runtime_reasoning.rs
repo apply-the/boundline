@@ -1504,6 +1504,7 @@ mod tests {
             project_scale: None,
             latest_voting: None,
             delight_feedback: None,
+            active_execution_run_id: None,
         }
     }
 }

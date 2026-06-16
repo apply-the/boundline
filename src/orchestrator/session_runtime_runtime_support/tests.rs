@@ -2786,6 +2786,7 @@ fn sample_session(workspace: &Path) -> ActiveSessionRecord {
         project_scale: None,
         latest_voting: None,
         delight_feedback: None,
+        active_execution_run_id: None,
     }
 }
 
@@ -2889,6 +2890,7 @@ fn sample_goal_plan_session(workspace: &Path) -> Result<ActiveSessionRecord, Box
         project_scale: None,
         latest_voting: None,
         delight_feedback: None,
+        active_execution_run_id: None,
     })
 }
 
@@ -2901,6 +2903,7 @@ fn sample_goal_plan() -> Result<GoalPlan, Box<dyn Error>> {
             target: "src/lib.rs".to_string(),
             expected_outcome: Some("tests pass".to_string()),
             decision_type_hint: None,
+            depends_on: None,
         }],
     )
     .map_err(Into::into)

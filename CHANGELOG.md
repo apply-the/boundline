@@ -21,9 +21,21 @@ No unreleased changes.
 
 Release metadata note:
 
-- The current Boundline release line is `0.78.0`; published package metadata,
+- The current Boundline release line is `0.79.0`; published package metadata,
   distribution metadata, assistant plugin manifests, and docs are aligned to
   that version while Canon compatibility remains `0.72.5`.
+
+## [0.79.0] - 2026-06-15
+
+Delivered specs:
+
+- **080-plan-execution-orchestration**: Multi-task plan execution with
+  dependency-ordered task scheduling (Kahn's algorithm), atomic checkpoint
+  persistence, blocked-task detection and downstream halt, resume from
+  checkpoint, and additive execution-state projection across `boundline
+  status` and `boundline inspect`. Extends `GoalPlan` with `depends_on`
+  edges and `SessionStatusView` with eight execution projection fields.
+  CLI flags: `--plan`, `--accepted-plan`, `--resume` on `boundline run`.
 
 ## [0.78.0] - 2026-06-12
 

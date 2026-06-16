@@ -244,6 +244,15 @@ pub enum DeveloperCommand {
         /// Opt out of Canon governance even when workspace has [canon] config.
         #[arg(long = "no-canon", conflicts_with = "mode")]
         no_canon: bool,
+        /// Path to an accepted plan JSON file for multi-task execution.
+        #[arg(long = "plan", conflicts_with_all = ["accepted_plan", "resume", "goal"])]
+        plan: Option<PathBuf>,
+        /// Use the session-attached accepted plan for multi-task execution.
+        #[arg(long = "accepted-plan", conflicts_with_all = ["plan", "resume", "goal"])]
+        accepted_plan: bool,
+        /// Resume a paused or blocked execution run by run ID.
+        #[arg(long = "resume", conflicts_with_all = ["plan", "accepted_plan", "goal"])]
+        resume: Option<String>,
     },
     Orchestrate {
         #[arg(long)]
@@ -1230,6 +1239,9 @@ impl DeveloperCommandSession {
                 owner,
                 mode,
                 no_canon,
+                plan: _,
+                accepted_plan: _,
+                resume: _,
             } => Self {
                 command_name: CommandName::Run,
                 workspace_ref: if *compatibility || goal.is_some() || !brief.is_empty() {
@@ -2431,10 +2443,24 @@ fn dispatch_run_command(command: &DeveloperCommand) -> DispatchOutcome {
         owner,
         mode,
         no_canon,
+        plan,
+        accepted_plan,
+        resume,
     } = command
     else {
         return dispatch_internal_command_mismatch(CommandName::Run);
     };
+
+    // Plan-based execution routes to the execution orchestrator stub.
+    if plan.is_some() || *accepted_plan || resume.is_some() {
+        return dispatch_plan_run(
+            workspace.as_deref(),
+            plan.as_deref(),
+            *accepted_plan,
+            resume.as_deref(),
+        );
+    }
+
     let custom = *compatibility
         || goal.is_some()
         || !brief.is_empty()
@@ -2463,6 +2489,47 @@ fn dispatch_run_command(command: &DeveloperCommand) -> DispatchOutcome {
             session::execute_run_with_target(workspace.as_deref(), cluster.as_deref()),
         )
     }
+}
+
+/// Plan-based execution stub for `--plan`, `--accepted-plan`, `--resume`.
+fn dispatch_plan_run(
+    workspace: Option<&Path>,
+    plan_path: Option<&Path>,
+    _accepted_plan: bool,
+    _resume_id: Option<&str>,
+) -> DispatchOutcome {
+    let _workspace = match workspace {
+        Some(w) => w.to_path_buf(),
+        None => match cli_workspace::resolve_workspace(None) {
+            Ok(w) => w,
+            Err(e) => {
+                return DispatchOutcome::text(
+                    CommandExitStatus::InvalidInvocation,
+                    format!("workspace resolution failed: {e}"),
+                    None,
+                );
+            }
+        },
+    };
+    if let Some(p) = plan_path
+        && !p.exists()
+    {
+        return DispatchOutcome::text(
+            CommandExitStatus::InvalidInvocation,
+            format!("plan file not found: {}", p.display()),
+            None,
+        );
+    }
+    let mut parts = vec!["plan-based execution requested".to_string()];
+    if let Some(p) = plan_path {
+        parts.push(format!("plan file: {}", p.display()));
+    } else if _accepted_plan {
+        parts.push("using session-attached accepted plan".to_string());
+    } else if let Some(id) = _resume_id {
+        parts.push(format!("resuming execution run: {id}"));
+    }
+    parts.push("full execution dispatch coming in a later phase".to_string());
+    DispatchOutcome::text(CommandExitStatus::Succeeded, parts.join("\n"), None)
 }
 
 fn dispatch_orchestrate_command(command: &DeveloperCommand) -> DispatchOutcome {
@@ -4255,6 +4322,9 @@ fn red_to_green_addition() {
             owner: None,
             mode: None,
             no_canon: false,
+            plan: None,
+            accepted_plan: false,
+            resume: None,
         });
         assert_eq!(custom_run.exit_status, CommandExitStatus::Succeeded);
         assert!(custom_run.output.contains("terminal_status: succeeded"), "{}", custom_run.output);
@@ -4301,6 +4371,9 @@ fn red_to_green_addition() {
             owner: None,
             mode: None,
             no_canon: false,
+            plan: None,
+            accepted_plan: false,
+            resume: None,
         });
         assert_eq!(run.exit_status, CommandExitStatus::Succeeded);
         assert!(run.output.contains("terminal_status: succeeded"), "{}", run.output);
@@ -4352,6 +4425,9 @@ fn red_to_green_addition() {
             owner: None,
             mode: None,
             no_canon: false,
+            plan: None,
+            accepted_plan: false,
+            resume: None,
         });
         assert_eq!(invalid.exit_status, CommandExitStatus::InvalidInvocation);
         assert!(invalid.output.contains("bounded context required"), "{}", invalid.output);
@@ -4375,6 +4451,9 @@ fn red_to_green_addition() {
             owner: None,
             mode: None,
             no_canon: false,
+            plan: None,
+            accepted_plan: false,
+            resume: None,
         });
 
         assert_eq!(run.exit_status, CommandExitStatus::Succeeded);
@@ -4430,6 +4509,9 @@ fn red_to_green_addition() {
             owner: None,
             mode: None,
             no_canon: false,
+            plan: None,
+            accepted_plan: false,
+            resume: None,
         });
         assert_eq!(run.exit_status, CommandExitStatus::Succeeded);
         assert!(run.output.contains("terminal_status: succeeded"), "{}", run.output);
@@ -5065,6 +5147,9 @@ fn red_to_green_addition() {
                 owner: None,
                 mode: None,
                 no_canon: false,
+                plan: None,
+                accepted_plan: false,
+                resume: None,
             })
             .exit_status,
             CommandExitStatus::InvalidInvocation
@@ -5484,6 +5569,9 @@ fn red_to_green_addition() {
             owner: None,
             mode: None,
             no_canon: false,
+            plan: None,
+            accepted_plan: false,
+            resume: None,
         });
         assert_eq!(session.command_name, CommandName::Run);
         assert_eq!(session.workspace_ref.as_deref(), Some(cluster.to_string_lossy().as_ref()));
@@ -5518,6 +5606,9 @@ fn red_to_green_addition() {
             owner: None,
             mode: None,
             no_canon: false,
+            plan: None,
+            accepted_plan: false,
+            resume: None,
         });
         assert_eq!(file_run.exit_status, CommandExitStatus::InvalidInvocation);
 
@@ -5536,6 +5627,9 @@ fn red_to_green_addition() {
             owner: None,
             mode: None,
             no_canon: false,
+            plan: None,
+            accepted_plan: false,
+            resume: None,
         });
         assert_eq!(bare_run.exit_status, CommandExitStatus::InvalidInvocation);
         assert!(bare_run.output.contains("bounded context required"), "{}", bare_run.output);
@@ -6315,6 +6409,7 @@ fn red_to_green_addition() {
                 project_scale: None,
                 latest_voting: None,
                 delight_feedback: None,
+                active_execution_run_id: None,
             })
             .unwrap();
 
@@ -6665,6 +6760,9 @@ fn red_to_green_addition() {
             owner: None,
             mode: None,
             no_canon: false,
+            plan: None,
+            accepted_plan: false,
+            resume: None,
         };
 
         let mut validation_session = DeveloperCommandSession::from_command(&run_command);
@@ -6940,6 +7038,9 @@ fn red_to_green_addition() {
             owner: None,
             mode: None,
             no_canon: false,
+            plan: None,
+            accepted_plan: false,
+            resume: None,
         };
 
         let session_mismatch = super::dispatch_session_command(&run_command);

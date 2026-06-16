@@ -22,6 +22,7 @@ fn build_goal_plan() -> GoalPlan {
             target: "/tmp/boundline-session-record/src/lib.rs".to_string(),
             expected_outcome: Some("routing gaps understood".to_string()),
             decision_type_hint: None,
+            depends_on: None,
         }],
     )
     .unwrap();
@@ -71,6 +72,7 @@ fn session_record_round_trips_and_status_values_serialize() {
         project_scale: None,
         latest_voting: None,
         delight_feedback: None,
+        active_execution_run_id: None,
     };
 
     record.validate().unwrap();
@@ -189,6 +191,7 @@ fn session_status_view_rejects_governance_stage_mismatch() {
         project_scale: None,
         latest_voting: None,
         delight_feedback: None,
+        active_execution_run_id: None,
     };
     let view = SessionStatusView {
         session_id: record.session_id.clone(),
@@ -246,6 +249,7 @@ fn session_record_validation_rejects_workspace_mismatches_and_external_traces() 
         project_scale: None,
         latest_voting: None,
         delight_feedback: None,
+        active_execution_run_id: None,
     };
 
     assert_eq!(
@@ -295,6 +299,7 @@ fn session_record_validation_allows_cluster_member_tasks_when_projection_is_pres
         project_scale: None,
         latest_voting: None,
         delight_feedback: None,
+        active_execution_run_id: None,
     };
 
     record.validate().unwrap();
@@ -335,6 +340,7 @@ fn terminal_session_requires_terminal_reason_and_consistent_view() {
         project_scale: None,
         latest_voting: None,
         delight_feedback: None,
+        active_execution_run_id: None,
     };
 
     assert_eq!(
@@ -366,6 +372,7 @@ fn goal_captured_sessions_require_a_goal_but_invalid_sessions_can_clear_context(
         project_scale: None,
         latest_voting: None,
         delight_feedback: None,
+        active_execution_run_id: None,
     };
 
     assert_eq!(
@@ -406,6 +413,7 @@ fn invalid_flow_state_is_rejected_by_session_validation() {
         project_scale: None,
         latest_voting: None,
         delight_feedback: None,
+        active_execution_run_id: None,
     };
 
     assert!(matches!(record.validate().unwrap_err(), SessionValidationError::InvalidFlowState(_)));
@@ -444,6 +452,7 @@ fn goal_captured_status_view_can_project_clarification_fields_from_authored_brie
         project_scale: None,
         latest_voting: None,
         delight_feedback: None,
+        active_execution_run_id: None,
     };
 
     let view = SessionStatusView {
@@ -548,6 +557,7 @@ fn planned_session_with_goal_plan_and_no_active_task_is_valid() {
         project_scale: None,
         latest_voting: None,
         delight_feedback: None,
+        active_execution_run_id: None,
     };
 
     record.validate().unwrap();
@@ -576,6 +586,7 @@ fn session_record_deserializes_plan_quality_fields() {
         project_scale: None,
         latest_voting: None,
         delight_feedback: None,
+        active_execution_run_id: None,
     };
 
     let mut plan = build_goal_plan();

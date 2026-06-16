@@ -1785,6 +1785,7 @@ mod tests {
             project_scale: None,
             delight_feedback: None,
             latest_voting: None,
+            active_execution_run_id: None,
         };
         set_lifecycle_awaiting_approval(
             &mut session,

@@ -33,6 +33,7 @@ fn capture_goal_derives_a_credible_negotiation_packet_from_direct_goal() {
         project_scale: None,
         latest_voting: None,
         delight_feedback: None,
+        active_execution_run_id: None,
     };
 
     runtime.capture_goal(&mut session, "Fix the failing add test").unwrap();
@@ -88,6 +89,7 @@ fn plan_task_respects_pending_negotiation_even_without_authored_brief() {
         project_scale: None,
         latest_voting: None,
         delight_feedback: None,
+        active_execution_run_id: None,
     };
 
     let error = runtime.plan_task(&mut session, None, false).unwrap_err();
@@ -120,6 +122,7 @@ fn plan_task_projects_negotiation_summary_into_goal_plan() {
         project_scale: None,
         latest_voting: None,
         delight_feedback: None,
+        active_execution_run_id: None,
     };
 
     runtime.capture_goal(&mut session, "Fix the failing add test").unwrap();

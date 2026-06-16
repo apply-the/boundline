@@ -680,6 +680,7 @@ mod tests {
                 target: "src/lib.rs".to_string(),
                 expected_outcome: Some("status reflects the boundary".to_string()),
                 decision_type_hint: None,
+                depends_on: None,
             }],
         )?)
     }

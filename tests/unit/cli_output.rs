@@ -249,6 +249,9 @@ fn command_names_render_from_subcommands() {
         owner: None,
         mode: None,
         no_canon: false,
+        plan: None,
+        accepted_plan: false,
+        resume: None,
     };
     assert_eq!(command_name(&command), "run");
     assert_eq!(command.name(), CommandName::Run);
@@ -345,6 +348,9 @@ fn run_session_requires_a_non_empty_goal() {
         owner: None,
         mode: None,
         no_canon: false,
+        plan: None,
+        accepted_plan: false,
+        resume: None,
     };
     let session = DeveloperCommandSession::from_command(&command);
 
@@ -365,6 +371,9 @@ fn run_without_legacy_flags_is_valid_for_session_native_execution() {
         owner: None,
         mode: None,
         no_canon: false,
+        plan: None,
+        accepted_plan: false,
+        resume: None,
     };
     let session = DeveloperCommandSession::from_command(&command);
 
@@ -2299,6 +2308,9 @@ fn command_names_render_for_all_four_subcommands() {
             owner: None,
             mode: None,
             no_canon: false,
+            plan: None,
+            accepted_plan: false,
+            resume: None,
         }),
         "run"
     );

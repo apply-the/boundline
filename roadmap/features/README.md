@@ -41,7 +41,7 @@ Use the local Speckit templates as the source of truth when converting a seed:
 | In Progress (spec 077) | 13 | Safe command execution | Add command intent classification, execution policy, evidence capture, artifact manifest, secret redaction, and mutation boundaries. No Docker required. |
 | Deferred | 13B | Sandbox execution runtime | Docker sandbox with mount/network/filesystem policy and secret handle inheritance. Depends on provider permissions (07) and execution evidence foundation (13A). Moved to `unplanned/`. |
 | Delivered (spec 079) | 18 | Completion proof gate | Shipped in 0.78.0 with runtime-owned claim inference, fresh proof execution, stale-proof invalidation, and additive completion-verification projections. |
-| Next | 19 | Execution control plane | Add one sequential task runner with checkpoint and resume after proof gating is stable. |
+| In Progress (spec 080) | 19 | Execution control plane | Add sequential task runner with dependency-ordered execution, checkpointing, resume, blocked-state handling, and additive status projection. |
 | Next | 20 | Route economics | Add route telemetry and budgets after provider protocol and evals exist. |
 | Next | 21 | Browser validation | Implement as a concrete provider over S10, not as core runtime. |
 | Next | 22 | Memory hygiene | Start with confirmation-first trace distillation; no autonomous memory. |

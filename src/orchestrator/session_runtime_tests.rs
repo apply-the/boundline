@@ -267,6 +267,7 @@ fn build_session(workspace: &Path, task: Task) -> ActiveSessionRecord {
         project_scale: None,
         delight_feedback: None,
         latest_voting: None,
+        active_execution_run_id: None,
     }
 }
 
@@ -965,6 +966,7 @@ fn guardian_phase_helpers_map_steps_and_decisions() {
                     target: "docs/brief.md".to_string(),
                     expected_outcome: None,
                     decision_type_hint: Some(DecisionType::Analyze),
+                    depends_on: None,
                 },
                 PlannedTask {
                     task_id: "task-2".to_string(),
@@ -972,6 +974,7 @@ fn guardian_phase_helpers_map_steps_and_decisions() {
                     target: "src/lib.rs".to_string(),
                     expected_outcome: None,
                     decision_type_hint: Some(DecisionType::Code),
+                    depends_on: None,
                 },
                 PlannedTask {
                     task_id: "task-3".to_string(),
@@ -979,6 +982,7 @@ fn guardian_phase_helpers_map_steps_and_decisions() {
                     target: "tests/red_to_green.rs".to_string(),
                     expected_outcome: None,
                     decision_type_hint: Some(DecisionType::Test),
+                    depends_on: None,
                 },
                 PlannedTask {
                     task_id: "task-4".to_string(),
@@ -986,6 +990,7 @@ fn guardian_phase_helpers_map_steps_and_decisions() {
                     target: "plan.md".to_string(),
                     expected_outcome: None,
                     decision_type_hint: Some(DecisionType::Replan),
+                    depends_on: None,
                 },
             ],
         )
@@ -1095,6 +1100,7 @@ fn guardian_request_helpers_collect_targets_and_deduplicate_evidence() {
                 target: "src/lib.rs".to_string(),
                 expected_outcome: None,
                 decision_type_hint: Some(DecisionType::Code),
+                depends_on: None,
             },
             PlannedTask {
                 task_id: "task-2".to_string(),
@@ -1102,6 +1108,7 @@ fn guardian_request_helpers_collect_targets_and_deduplicate_evidence() {
                 target: "tests/red_to_green.rs".to_string(),
                 expected_outcome: None,
                 decision_type_hint: Some(DecisionType::Test),
+                depends_on: None,
             },
         ],
     )
@@ -1268,6 +1275,7 @@ fn native_delegation_for_goal_plan_covers_mismatch_handoff_and_escalation_paths(
             target: "src/lib.rs".to_string(),
             expected_outcome: Some("tests pass".to_string()),
             decision_type_hint: Some(DecisionType::Code),
+            depends_on: None,
         }],
     )
     .unwrap()
@@ -1392,6 +1400,7 @@ fn native_delegation_for_goal_plan_covers_none_paths() {
             target: "src/lib.rs".to_string(),
             expected_outcome: Some("tests pass".to_string()),
             decision_type_hint: Some(DecisionType::Code),
+            depends_on: None,
         }],
     )
     .unwrap()
@@ -2293,6 +2302,7 @@ fn load_or_create_trace_and_flow_helpers_cover_private_flow_branches() {
         project_scale: None,
         delight_feedback: None,
         latest_voting: None,
+        active_execution_run_id: None,
     };
 
     let created = runtime.load_or_create_trace(&mut session, &task).unwrap();
@@ -2374,6 +2384,7 @@ fn session_lifecycle_helpers_cover_capture_selection_planning_and_cluster_projec
         project_scale: None,
         delight_feedback: None,
         latest_voting: None,
+        active_execution_run_id: None,
     };
 
     assert!(matches!(
@@ -2424,6 +2435,7 @@ fn session_lifecycle_helpers_cover_capture_selection_planning_and_cluster_projec
                 target: "src/lib.rs".to_string(),
                 expected_outcome: Some("tests pass".to_string()),
                 decision_type_hint: None,
+                depends_on: None,
             }],
         )
         .unwrap(),
@@ -2448,6 +2460,7 @@ fn session_lifecycle_helpers_cover_capture_selection_planning_and_cluster_projec
                 target: "src/lib.rs".to_string(),
                 expected_outcome: Some("tests pass".to_string()),
                 decision_type_hint: None,
+                depends_on: None,
             }],
         )
         .unwrap(),
@@ -2536,6 +2549,7 @@ fn broad_goal_planning_persists_project_scale_state_when_context_is_insufficient
         project_scale: None,
         delight_feedback: None,
         latest_voting: None,
+        active_execution_run_id: None,
     };
 
     runtime
@@ -2615,6 +2629,7 @@ fn plan_task_blocks_when_plan_quality_detects_stale_context() -> Result<(), Box<
         project_scale: None,
         delight_feedback: None,
         latest_voting: None,
+        active_execution_run_id: None,
     };
 
     runtime
@@ -2677,6 +2692,7 @@ fn persist_blocked_plan_quality_trace_records_blocked_and_ignores_ready_plans()
         project_scale: None,
         delight_feedback: None,
         latest_voting: None,
+        active_execution_run_id: None,
     };
 
     runtime.persist_blocked_plan_quality_trace(&mut session)?;
@@ -2690,6 +2706,7 @@ fn persist_blocked_plan_quality_trace_records_blocked_and_ignores_ready_plans()
             target: "src/lib.rs".to_string(),
             expected_outcome: Some("bounded change delivered".to_string()),
             decision_type_hint: None,
+            depends_on: None,
         }],
     )?
     .with_planning_rationale("workspace evidence supports this bounded change")
@@ -2709,6 +2726,7 @@ fn persist_blocked_plan_quality_trace_records_blocked_and_ignores_ready_plans()
             target: "src/blocked.rs".to_string(),
             expected_outcome: Some("blocked plan quality persisted".to_string()),
             decision_type_hint: None,
+            depends_on: None,
         }],
     )?
     .with_context_pack(ContextPack {
@@ -2804,6 +2822,7 @@ fn plan_goal_plan_populates_canon_mode_sequence_from_selected_flow() {
         project_scale: None,
         delight_feedback: None,
         latest_voting: None,
+        active_execution_run_id: None,
     };
 
     runtime.capture_goal(&mut session, "Deliver a governed feature").unwrap();
@@ -2908,6 +2927,7 @@ fn prepare_planning_governance_requests_materializes_stage_briefs_for_delivery_f
         project_scale: None,
         delight_feedback: None,
         latest_voting: None,
+        active_execution_run_id: None,
     };
 
     runtime.capture_goal(&mut session, "Deliver a governed feature").unwrap();
@@ -3061,6 +3081,7 @@ fn plan_task_executes_canon_planning_requests_and_persists_stage_records() {
         project_scale: None,
         delight_feedback: None,
         latest_voting: None,
+        active_execution_run_id: None,
     };
 
     runtime.capture_goal(&mut session, "Deliver a governed feature").unwrap();
@@ -3205,6 +3226,7 @@ fn plan_task_skips_canon_for_completed_planning_stages() {
         project_scale: None,
         delight_feedback: None,
         latest_voting: None,
+        active_execution_run_id: None,
     };
 
     runtime.capture_goal(&mut session, "Deliver a governed feature").unwrap();
@@ -3345,6 +3367,7 @@ fn plan_task_adopts_workspace_canon_governance_without_explicit_session_selectio
         project_scale: None,
         delight_feedback: None,
         latest_voting: None,
+        active_execution_run_id: None,
     };
 
     runtime.capture_goal(&mut session, "Deliver a governed feature").unwrap();
@@ -3473,6 +3496,7 @@ fn plan_task_blocks_nested_workspace_before_canon_targets_parent_git_root() {
         project_scale: None,
         delight_feedback: None,
         latest_voting: None,
+        active_execution_run_id: None,
     };
 
     runtime.capture_goal(&mut session, "Deliver a governed feature").unwrap();
@@ -3596,6 +3620,7 @@ fn plan_task_blocks_when_canon_is_selected_but_not_initialized() {
         project_scale: None,
         delight_feedback: None,
         latest_voting: None,
+        active_execution_run_id: None,
     };
 
     assert!(runtime.capture_goal(&mut session, "Deliver a governed feature").is_ok());
@@ -3659,6 +3684,7 @@ fn run_to_terminal_rejects_unresolved_planning_governance_for_confirmed_goal_pla
             target: "src/lib.rs".to_string(),
             expected_outcome: Some("tests pass".to_string()),
             decision_type_hint: None,
+            depends_on: None,
         }],
     )
     .unwrap();
@@ -3711,6 +3737,7 @@ fn run_to_terminal_rejects_unresolved_planning_governance_for_confirmed_goal_pla
         project_scale: None,
         delight_feedback: None,
         latest_voting: None,
+        active_execution_run_id: None,
     };
 
     assert!(matches!(
@@ -3836,6 +3863,7 @@ fn execute_next_step_creates_a_compatibility_task_for_flow_selected_goal_plans()
             target: "src/lib.rs".to_string(),
             expected_outcome: Some("tests pass".to_string()),
             decision_type_hint: None,
+            depends_on: None,
         }],
     )
     .unwrap();
@@ -3862,6 +3890,7 @@ fn execute_next_step_creates_a_compatibility_task_for_flow_selected_goal_plans()
         project_scale: None,
         delight_feedback: None,
         latest_voting: None,
+        active_execution_run_id: None,
     };
 
     runtime.execute_next_step(&mut session).unwrap();
@@ -3966,6 +3995,7 @@ fn run_to_terminal_uses_provider_analysis_and_change_routes_for_flow_selected_go
                         "analysis identifies the arithmetic mismatch".to_string(),
                     ),
                     decision_type_hint: Some(DecisionType::Analyze),
+                    depends_on: None,
                 },
                 PlannedTask {
                     task_id: "planned-task-2".to_string(),
@@ -3975,6 +4005,7 @@ fn run_to_terminal_uses_provider_analysis_and_change_routes_for_flow_selected_go
                         "implementation switches subtraction to addition".to_string(),
                     ),
                     decision_type_hint: Some(DecisionType::Code),
+                    depends_on: None,
                 },
             ],
         )?;
@@ -4001,6 +4032,7 @@ fn run_to_terminal_uses_provider_analysis_and_change_routes_for_flow_selected_go
             project_scale: None,
             delight_feedback: None,
             latest_voting: None,
+            active_execution_run_id: None,
         };
 
         let response = runtime.run_to_terminal(&mut session)?;
@@ -4103,6 +4135,7 @@ fn run_to_terminal_executes_provider_review_for_native_goal_plans()
                         "analysis identifies the arithmetic mismatch".to_string(),
                     ),
                     decision_type_hint: Some(DecisionType::Analyze),
+                    depends_on: None,
                 },
                 PlannedTask {
                     task_id: "planned-task-2".to_string(),
@@ -4112,6 +4145,7 @@ fn run_to_terminal_executes_provider_review_for_native_goal_plans()
                         "implementation switches subtraction to addition".to_string(),
                     ),
                     decision_type_hint: Some(DecisionType::Code),
+                    depends_on: None,
                 },
             ],
         )?;
@@ -4138,6 +4172,7 @@ fn run_to_terminal_executes_provider_review_for_native_goal_plans()
             project_scale: None,
             delight_feedback: None,
             latest_voting: None,
+            active_execution_run_id: None,
         };
 
         let response = runtime.run_to_terminal(&mut session)?;
@@ -4372,6 +4407,7 @@ fn run_to_terminal_executes_provider_adjudication_for_flow_selected_goal_plans()
                             "analysis identifies the arithmetic mismatch".to_string(),
                         ),
                         decision_type_hint: Some(DecisionType::Analyze),
+                        depends_on: None,
                     },
                     PlannedTask {
                         task_id: "planned-task-2".to_string(),
@@ -4381,6 +4417,7 @@ fn run_to_terminal_executes_provider_adjudication_for_flow_selected_goal_plans()
                             "implementation switches subtraction to addition".to_string(),
                         ),
                         decision_type_hint: Some(DecisionType::Code),
+                        depends_on: None,
                     },
                 ],
             )?;
@@ -4407,6 +4444,7 @@ fn run_to_terminal_executes_provider_adjudication_for_flow_selected_goal_plans()
                 project_scale: None,
                 delight_feedback: None,
                 latest_voting: None,
+                active_execution_run_id: None,
             };
 
             let response = runtime.run_to_terminal(&mut session)?;
@@ -4506,6 +4544,7 @@ fn run_to_terminal_executes_post_implementation_canon_governance()
                 "tests pass after implementation switches subtraction to addition".to_string(),
             ),
             decision_type_hint: Some(DecisionType::Code),
+            depends_on: None,
         }],
     )?;
     goal_plan.confirm()?;
@@ -4543,6 +4582,7 @@ fn run_to_terminal_executes_post_implementation_canon_governance()
         project_scale: None,
         delight_feedback: None,
         latest_voting: None,
+        active_execution_run_id: None,
     };
 
     let response = runtime.run_to_terminal(&mut session)?;
@@ -4603,6 +4643,7 @@ fn native_goal_plan_short_circuits_for_existing_delegation_continuity() {
             target: "src/lib.rs".to_string(),
             expected_outcome: Some("status explains the continuity boundary".to_string()),
             decision_type_hint: None,
+            depends_on: None,
         }],
     )
     .unwrap();
@@ -4643,6 +4684,7 @@ fn native_goal_plan_short_circuits_for_existing_delegation_continuity() {
         project_scale: None,
         delight_feedback: None,
         latest_voting: None,
+        active_execution_run_id: None,
     };
 
     let response = runtime.run_to_terminal(&mut session).unwrap();
@@ -4666,6 +4708,7 @@ fn native_goal_plan_confirms_and_short_circuits_for_existing_delegation_view() {
             target: "src/lib.rs".to_string(),
             expected_outcome: Some("status explains the continuity boundary".to_string()),
             decision_type_hint: None,
+            depends_on: None,
         }],
     )
     .unwrap()
@@ -4704,6 +4747,7 @@ fn native_goal_plan_confirms_and_short_circuits_for_existing_delegation_view() {
         project_scale: None,
         delight_feedback: None,
         latest_voting: None,
+        active_execution_run_id: None,
     };
 
     let response = runtime.run_native_goal_plan(&mut session, None).unwrap();
@@ -4725,6 +4769,7 @@ fn native_goal_plan_rejects_invalid_delegation_view() {
             target: "src/lib.rs".to_string(),
             expected_outcome: Some("status explains the invalid continuity".to_string()),
             decision_type_hint: None,
+            depends_on: None,
         }],
     )
     .unwrap();
@@ -4777,6 +4822,7 @@ fn native_goal_plan_short_circuits_for_new_delegation_packet_and_error_edges() {
         project_scale: None,
         delight_feedback: None,
         latest_voting: None,
+        active_execution_run_id: None,
     };
     assert!(matches!(
         runtime.run_native_goal_plan(&mut missing_goal_plan_session, None),
@@ -4800,6 +4846,7 @@ fn native_goal_plan_short_circuits_for_new_delegation_packet_and_error_edges() {
                     target: "src/lib.rs".to_string(),
                     expected_outcome: Some("status explains the continuity boundary".to_string()),
                     decision_type_hint: None,
+                    depends_on: None,
                 }],
             )
             .unwrap(),
@@ -4842,6 +4889,7 @@ fn native_goal_plan_short_circuits_for_new_delegation_packet_and_error_edges() {
         project_scale: None,
         delight_feedback: None,
         latest_voting: None,
+        active_execution_run_id: None,
     };
     assert!(matches!(
         runtime.run_native_goal_plan(&mut gated_session, None),
@@ -4898,6 +4946,7 @@ fn native_goal_plan_short_circuits_for_new_delegation_packet_and_error_edges() {
             target: "src/lib.rs".to_string(),
             expected_outcome: Some("status explains the continuity boundary".to_string()),
             decision_type_hint: None,
+            depends_on: None,
         }],
     )
     .unwrap()
@@ -4929,6 +4978,7 @@ fn native_goal_plan_short_circuits_for_new_delegation_packet_and_error_edges() {
         project_scale: None,
         delight_feedback: None,
         latest_voting: None,
+        active_execution_run_id: None,
     };
 
     let response = runtime.run_native_goal_plan(&mut session, None).unwrap();
@@ -5008,6 +5058,7 @@ fn execute_next_step_falls_back_to_local_governance_when_canon_is_optional() {
         project_scale: None,
         delight_feedback: None,
         latest_voting: None,
+        active_execution_run_id: None,
     };
 
     runtime.capture_goal(&mut session, "Drive governed bug fix").unwrap();
@@ -5102,6 +5153,7 @@ fn run_native_goal_plan_projects_local_governance_task_when_canon_is_optional() 
         project_scale: None,
         delight_feedback: None,
         latest_voting: None,
+        active_execution_run_id: None,
     };
 
     runtime.capture_goal(&mut session, "Drive governed bug fix").unwrap();
@@ -5115,6 +5167,7 @@ fn run_native_goal_plan_projects_local_governance_task_when_canon_is_optional() 
                 target: "src/lib.rs".to_string(),
                 expected_outcome: Some("tests pass".to_string()),
                 decision_type_hint: Some(DecisionType::Code),
+                depends_on: None,
             }],
         )
         .unwrap(),
@@ -5197,6 +5250,7 @@ fn execute_next_step_reassesses_reasoning_profile_after_routing_changes() {
         project_scale: None,
         delight_feedback: None,
         latest_voting: None,
+        active_execution_run_id: None,
     };
 
     runtime.capture_goal(&mut session, "Drive governed bug fix").unwrap();
@@ -5384,6 +5438,7 @@ fn native_persistence_projects_cluster_story_and_copies_changes() {
             target: "src/lib.rs".to_string(),
             expected_outcome: Some("cluster state records the authoritative route".to_string()),
             decision_type_hint: None,
+            depends_on: None,
         }],
     )
     .unwrap();
@@ -5436,6 +5491,7 @@ fn native_persistence_projects_cluster_story_and_copies_changes() {
         project_scale: None,
         delight_feedback: None,
         latest_voting: None,
+        active_execution_run_id: None,
     };
     let trace = ExecutionTrace::new("task-cluster", "session-runtime", "cluster goal");
     let response = runtime
@@ -5487,6 +5543,7 @@ fn cluster_change_propagation_covers_noop_and_read_error_paths() {
             target: "src/lib.rs".to_string(),
             expected_outcome: Some("cluster state records the authoritative route".to_string()),
             decision_type_hint: None,
+            depends_on: None,
         }],
     )
     .unwrap();
@@ -5735,6 +5792,7 @@ fn refresh_governance_state_handles_refreshable_and_non_refreshable_records() {
         project_scale: None,
         delight_feedback: None,
         latest_voting: None,
+        active_execution_run_id: None,
     };
     session
         .active_task
@@ -5850,6 +5908,7 @@ fn execute_next_step_blocks_when_required_canon_governance_is_unavailable() {
         project_scale: None,
         delight_feedback: None,
         latest_voting: None,
+        active_execution_run_id: None,
     };
 
     runtime.capture_goal(&mut session, "Drive governed bug fix").unwrap();
@@ -5910,6 +5969,7 @@ fn required_canon_governance_reports_missing_configuration_and_mode() {
         project_scale: None,
         delight_feedback: None,
         latest_voting: None,
+        active_execution_run_id: None,
     };
     let policy = StageGovernancePolicy {
         flow_name: "bug-fix".to_string(),
@@ -6077,6 +6137,7 @@ fn required_canon_governance_reports_missing_configuration_and_mode() {
         project_scale: None,
         delight_feedback: None,
         latest_voting: None,
+        active_execution_run_id: None,
     };
     runtime_missing_mode.capture_goal(&mut missing_mode_session, "Drive governed bug fix").unwrap();
     runtime_missing_mode.select_flow(&mut missing_mode_session, "bug-fix").unwrap();
@@ -6323,6 +6384,7 @@ fn reset_planning_governance_clears_blocked_records_on_retry_with_same_fingerpri
         project_scale: None,
         delight_feedback: None,
         latest_voting: None,
+        active_execution_run_id: None,
     };
 
     runtime.capture_goal(&mut session, "Deliver a governed feature").unwrap();
@@ -6467,6 +6529,7 @@ fn reset_planning_governance_preserves_completed_records_when_others_are_blocked
         project_scale: None,
         delight_feedback: None,
         latest_voting: None,
+        active_execution_run_id: None,
     };
 
     runtime.capture_goal(&mut session, "Deliver a governed feature").unwrap();
@@ -6612,6 +6675,7 @@ fn prepare_planning_requests_uses_refresh_when_stage_has_existing_run_ref() {
         project_scale: None,
         delight_feedback: None,
         latest_voting: None,
+        active_execution_run_id: None,
     };
 
     runtime.capture_goal(&mut session, "Deliver a governed feature").unwrap();
@@ -6976,6 +7040,7 @@ fn planning_runtime_helpers_cover_governance_resolution_upstream_briefs_and_adap
             target: "src/lib.rs".to_string(),
             expected_outcome: Some("planning artifacts exist".to_string()),
             decision_type_hint: None,
+            depends_on: None,
         }],
     )?;
     let context_sources = PlanningContextSources {
@@ -7235,6 +7300,7 @@ fn planning_runtime_helpers_cover_governance_resolution_upstream_briefs_and_adap
             target: "src/lib.rs".to_string(),
             expected_outcome: Some("fallback rationale recorded".to_string()),
             decision_type_hint: None,
+            depends_on: None,
         }],
     )?;
     super::planning_runtime::append_adapter_fallback_reason(&mut goal_plan, "preflight_blocked");

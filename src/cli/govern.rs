@@ -98,6 +98,7 @@ pub fn execute_govern(request: GovernRequest<'_>) -> Result<GovernCommandReport,
                 project_scale: None,
                 latest_voting: None,
                 delight_feedback: None,
+                active_execution_run_id: None,
             }
         }
     };
@@ -400,6 +401,7 @@ mod tests {
             project_scale: None,
             latest_voting: None,
             delight_feedback: None,
+            active_execution_run_id: None,
         };
         FileSessionStore::for_workspace(workspace).persist(&record).unwrap();
     }
@@ -546,6 +548,7 @@ mod tests {
             project_scale: None,
             latest_voting: None,
             delight_feedback: None,
+            active_execution_run_id: None,
         };
         FileSessionStore::for_workspace(&workspace).persist(&record).unwrap();
 
