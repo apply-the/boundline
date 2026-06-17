@@ -134,7 +134,8 @@ jobs:
           targets: ${{ matrix.target }}
       - name: Build release binary
         run: cargo build --locked --release --bin boundline --target ${{ matrix.target }}
-      - name: Package tarball
+      - id: package
+        name: Package tarball
         shell: bash
         env:
           VERSION: ${{ needs.prepare.outputs.version }}
