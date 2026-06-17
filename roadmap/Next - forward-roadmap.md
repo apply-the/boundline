@@ -39,8 +39,8 @@ feature under `specs/`.
 | **11** | [adaptive-governance-calibration.md](../specs/075-adaptive-governance-calibration/spec.md) | Delivered in 0.75.0: graduated control levels, trust evolution, override records, degradation & escalation |
 | **12** | [076-recursive-stage-refinement](../specs/076-recursive-stage-refinement/spec.md) | Delivered in 0.76.0: bounded stage-refinement loops, plan_refinement profile, compact round packets, closed stop-reason vocabulary |
 | **13** | [sandboxed-execution-and-secret-inheritance.md](features/13-sandboxed-execution-and-secret-inheritance.md) | Local safety boundaries |
-| **18** | [completion-verification-runtime.md](features/18-completion-verification-runtime.md) | Delivered in 0.79.0: fresh-proof gate before task or stage completion |
-| **19** | [plan-execution-orchestration.md](features/19-plan-execution-orchestration.md) | Next: sequential execution control plane with checkpoint and resume |
+| **18** | [completion-verification-runtime.md](features/18-completion-verification-runtime.md) | Delivered in 0.80.0: fresh-proof gate before task or stage completion |
+| **19** | [plan-execution-orchestration.md](features/19-plan-execution-orchestration.md) | In Progress (spec 080): sequential execution control plane with dependency ordering, checkpoint/restore, blocked-task handling, and additive status projection |
 | **20** | [ai-gateway-and-inference-economics.md](features/20-ai-gateway-and-inference-economics.md) | Next: route telemetry, cost budgets, tiered model routing |
 | **21** | [browser-and-visual-testing-provider.md](features/21-browser-and-visual-testing-provider.md) | Next: browser validation as a provider over the protocol |
 | **22** | [session-memory-and-repository-knowledge-distillation.md](features/22-session-memory-and-repository-knowledge-distillation.md) | Next: confirmation-first trace distillation |

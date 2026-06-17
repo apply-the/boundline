@@ -1074,6 +1074,7 @@ mod tests {
                 target: "src/orchestrator/session_runtime_briefs.rs".to_string(),
                 expected_outcome: Some("coverage should improve".to_string()),
                 decision_type_hint: None,
+                depends_on: None,
             }],
         )
         .map_err(Into::into)

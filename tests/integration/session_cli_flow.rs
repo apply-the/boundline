@@ -33,6 +33,7 @@ fn persist_initialized_session(workspace: &Path) {
         project_scale: None,
         latest_voting: None,
         delight_feedback: None,
+        active_execution_run_id: None,
     };
 
     fs::create_dir_all(workspace.join(".boundline")).unwrap();

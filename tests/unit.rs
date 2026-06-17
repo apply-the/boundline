@@ -43,6 +43,9 @@ mod session_store;
 #[path = "unit/execution_profile.rs"]
 mod execution_profile;
 
+#[path = "unit/execution_orchestrator.rs"]
+mod execution_orchestrator;
+
 #[path = "unit/adaptive_execution.rs"]
 mod adaptive_execution;
 

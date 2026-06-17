@@ -2345,6 +2345,7 @@ mod tests {
             project_scale: None,
             delight_feedback: None,
             latest_voting: None,
+            active_execution_run_id: None,
         }
     }
 
@@ -2379,6 +2380,7 @@ mod tests {
                 target: PLANNED_TASK_TARGET.to_string(),
                 expected_outcome: Some("tests pass".to_string()),
                 decision_type_hint: None,
+                depends_on: None,
             }],
         )
         .map_err(Into::into)

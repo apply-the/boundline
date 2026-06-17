@@ -6,6 +6,8 @@ pub mod context_intelligence;
 pub mod decision_loop;
 #[path = "../../../src/orchestrator/engine.rs"]
 pub mod engine;
+#[path = "../../../src/orchestrator/execution_orchestrator.rs"]
+pub mod execution_orchestrator;
 #[path = "../../../src/orchestrator/flow_inference.rs"]
 pub mod flow_inference;
 #[path = "../../../src/orchestrator/goal_planner.rs"]

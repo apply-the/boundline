@@ -587,6 +587,7 @@ fn persist_initialized_session_with_goal_hint(
         project_scale: None,
         latest_voting: None,
         delight_feedback: None,
+        active_execution_run_id: None,
     };
 
     activate_session_branch(workspace, &record.session_id)?;
@@ -1815,7 +1816,7 @@ pub(crate) fn build_status_view_with_follow_up(
         persisted_session_brief_ref(workspace_path, &session_run_brief_ref(&record.session_id));
     let backlog_quality = backlog_quality_for_record(record, workspace_path);
 
-    SessionStatusView {
+    let mut view = SessionStatusView {
         session_id: record.session_id.clone(),
         workspace_ref: record.workspace_ref.clone(),
         session_started_at: Some(record.created_at),
@@ -2321,10 +2322,33 @@ pub(crate) fn build_status_view_with_follow_up(
             (!projection.completion_evidence_refs.is_empty())
                 .then_some(projection.completion_evidence_refs.clone())
         }),
+        execution_run_id: record.active_execution_run_id.clone(),
+        execution_plan_state: None,
+        execution_current_task_id: None,
+        execution_next_task_id: None,
+        execution_completed_task_count: None,
+        execution_blocked_task_ids: None,
+        execution_checkpoint_ref: None,
+        execution_resume_command: None,
         refinement_summary: None,
         next_command,
         explanation: explanation.into(),
+    };
+
+    // Populate execution projection when an execution run is active.
+    let run_id_for_projection = view.execution_run_id.clone();
+    if let Some(ref run_id) = run_id_for_projection {
+        // Only overwrite if the fields weren't already set by the caller.
+        if view.execution_plan_state.is_none() {
+            crate::orchestrator::execution_orchestrator::populate_execution_projection_from_checkpoint(
+                workspace_path,
+                run_id,
+                &mut view,
+            );
+        }
     }
+
+    view
 }
 
 fn backlog_quality_for_record(
@@ -3208,6 +3232,7 @@ fn red_to_green_addition() {
                 target: "src/lib.rs".to_string(),
                 expected_outcome: Some("status surfaces adapter routing details".to_string()),
                 decision_type_hint: None,
+                depends_on: None,
             }],
         )
         .unwrap()
@@ -3460,6 +3485,7 @@ fn red_to_green_addition() {
                 project_scale: None,
                 latest_voting: None,
                 delight_feedback: None,
+                active_execution_run_id: None,
             }),
             Some("boundline goal --goal <goal>".to_string())
         );
@@ -4562,6 +4588,7 @@ fn red_to_green_addition() {
                 target: "src/lib.rs".to_string(),
                 expected_outcome: Some("planning governance clears".to_string()),
                 decision_type_hint: None,
+                depends_on: None,
             }],
         )
         .unwrap()
@@ -4615,6 +4642,7 @@ fn red_to_green_addition() {
             project_scale: None,
             latest_voting: None,
             delight_feedback: None,
+            active_execution_run_id: None,
         };
         FileSessionStore::for_workspace(&workspace).persist(&draft_record).unwrap();
 
@@ -4916,6 +4944,7 @@ fn red_to_green_addition() {
             project_scale: None,
             latest_voting: None,
             delight_feedback: None,
+            active_execution_run_id: None,
         };
 
         let view = build_status_view_with_follow_up(
@@ -4995,6 +5024,7 @@ fn red_to_green_addition() {
             project_scale: None,
             latest_voting: None,
             delight_feedback: None,
+            active_execution_run_id: None,
         };
 
         let view = build_status_view_with_follow_up(
@@ -5042,6 +5072,7 @@ fn red_to_green_addition() {
                 target: "src/lib.rs".to_string(),
                 expected_outcome: Some("tests pass".to_string()),
                 decision_type_hint: None,
+                depends_on: None,
             }],
         )
         .unwrap()
@@ -5084,6 +5115,7 @@ fn red_to_green_addition() {
             project_scale: None,
             latest_voting: None,
             delight_feedback: None,
+            active_execution_run_id: None,
         };
         assert_eq!(
             suggested_next_command(&base_record),
@@ -5098,6 +5130,7 @@ fn red_to_green_addition() {
                 target: "src/lib.rs".to_string(),
                 expected_outcome: Some("tests pass".to_string()),
                 decision_type_hint: None,
+                depends_on: None,
             }],
         )
         .unwrap()
@@ -5359,6 +5392,7 @@ fn red_to_green_addition() {
                 target: "src/lib.rs".to_string(),
                 expected_outcome: Some("review packet is ready".to_string()),
                 decision_type_hint: None,
+                depends_on: None,
             }],
         )
         .unwrap()
@@ -5447,6 +5481,7 @@ fn red_to_green_addition() {
                 next_action: "collect approval".to_string(),
             }),
             delight_feedback: None,
+            active_execution_run_id: None,
         };
 
         FileSessionStore::for_workspace(&workspace).persist(&record).unwrap();
@@ -5493,6 +5528,81 @@ fn red_to_green_addition() {
     }
 
     #[test]
+    fn build_status_view_projects_execution_fields_from_active_checkpoint() {
+        let workspace = write_execution_workspace("boundline-cli-session-execution-checkpoint");
+        let goal_plan = GoalPlan::new(
+            "Execute accepted plan",
+            vec![PlannedTask {
+                task_id: "planned-task-execution".to_string(),
+                description: "Execute the accepted plan task".to_string(),
+                target: "src/lib.rs".to_string(),
+                expected_outcome: Some("execution checkpoint is projected".to_string()),
+                decision_type_hint: None,
+                depends_on: None,
+            }],
+        )
+        .unwrap();
+
+        let mut orchestrator =
+            crate::orchestrator::execution_orchestrator::ExecutionOrchestrator::new();
+        let run_id = orchestrator
+            .start(&goal_plan, &workspace, "session-execution-checkpoint")
+            .unwrap()
+            .run_id
+            .clone();
+
+        let record = ActiveSessionRecord {
+            session_id: "session-execution-checkpoint".to_string(),
+            workspace_ref: workspace.to_string_lossy().into_owned(),
+            goal: Some("Execute accepted plan".to_string()),
+            authored_brief: None,
+            negotiation_packet: None,
+            active_flow: None,
+            active_task: None,
+            goal_plan: Some(goal_plan),
+            workflow_progress: None,
+            decisions: Vec::new(),
+            active_flow_policy: None,
+            latest_status: SessionStatus::Planned,
+            latest_terminal_reason: None,
+            latest_trace_ref: None,
+            created_at: 1,
+            updated_at: 2,
+            governance_lifecycle: None,
+            project_scale: None,
+            latest_voting: None,
+            delight_feedback: None,
+            active_execution_run_id: Some(run_id.clone()),
+        };
+
+        let view = build_status_view(
+            &record,
+            Some("boundline run".to_string()),
+            "execution checkpoint projection",
+        );
+
+        assert_eq!(view.execution_run_id.as_deref(), Some(run_id.as_str()));
+        assert_eq!(view.execution_plan_state.as_deref(), Some("ready"));
+        assert_eq!(view.execution_current_task_id, None);
+        assert_eq!(view.execution_next_task_id.as_deref(), Some("planned-task-execution"));
+        assert_eq!(view.execution_completed_task_count, Some(0));
+        assert_eq!(
+            view.execution_checkpoint_ref.as_deref(),
+            Some(
+                workspace
+                    .join(".boundline/execution/checkpoints")
+                    .join(format!("{run_id}.json"))
+                    .to_string_lossy()
+                    .as_ref(),
+            )
+        );
+        assert_eq!(
+            view.execution_resume_command.as_deref(),
+            Some(format!("boundline run --resume {run_id}").as_str())
+        );
+    }
+
+    #[test]
     fn build_status_view_falls_back_to_planning_governance_lifecycle() {
         let workspace = write_execution_workspace("boundline-cli-session-plan-governance");
         let canonical_workspace = fs::canonicalize(&workspace).unwrap();
@@ -5504,6 +5614,7 @@ fn red_to_green_addition() {
                 target: "src/lib.rs".to_string(),
                 expected_outcome: Some("planning governance clears".to_string()),
                 decision_type_hint: None,
+                depends_on: None,
             }],
         )
         .unwrap()
@@ -5562,6 +5673,7 @@ fn red_to_green_addition() {
             project_scale: None,
             delight_feedback: None,
             latest_voting: None,
+            active_execution_run_id: None,
         };
 
         let view = build_status_view(

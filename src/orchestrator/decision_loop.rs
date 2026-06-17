@@ -987,6 +987,7 @@ mod tests {
             target: target.to_string(),
             expected_outcome: expected_outcome.map(str::to_string),
             decision_type_hint: Some(decision_type_hint),
+            depends_on: None,
         }
     }
 

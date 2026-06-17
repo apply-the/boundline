@@ -460,6 +460,9 @@ pub struct ActiveSessionRecord {
     pub latest_voting: Option<VotingSessionState>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub delight_feedback: Option<DelightFeedbackSignal>,
+    /// Minimal linkage to the active execution orchestrator run.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_execution_run_id: Option<String>,
 }
 
 impl ActiveSessionRecord {
@@ -1356,6 +1359,22 @@ pub struct SessionStatusView {
     pub completion_blocked_claims: Option<Vec<CompletionClaimKind>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub completion_evidence_refs: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_run_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_plan_state: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_current_task_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_next_task_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_completed_task_count: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_blocked_task_ids: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_checkpoint_ref: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub execution_resume_command: Option<String>,
     pub next_command: Option<String>,
     pub explanation: String,
 }
@@ -1495,6 +1514,14 @@ impl Default for SessionStatusView {
             completion_verification_findings: None,
             completion_blocked_claims: None,
             completion_evidence_refs: None,
+            execution_run_id: None,
+            execution_plan_state: None,
+            execution_current_task_id: None,
+            execution_next_task_id: None,
+            execution_completed_task_count: None,
+            execution_blocked_task_ids: None,
+            execution_checkpoint_ref: None,
+            execution_resume_command: None,
             refinement_summary: None,
             next_command: None,
             explanation: String::new(),
@@ -3251,6 +3278,7 @@ mod tests {
             project_scale: None,
             delight_feedback: None,
             latest_voting: None,
+            active_execution_run_id: None,
         }
     }
 
@@ -3685,6 +3713,7 @@ mod tests {
                 target: "src/lib.rs".to_string(),
                 expected_outcome: Some("session runtime works".to_string()),
                 decision_type_hint: None,
+                depends_on: None,
             }],
         )
         .unwrap()
@@ -4686,6 +4715,7 @@ mod tests {
                 target: "src/lib.rs".to_string(),
                 expected_outcome: Some("session runtime works".to_string()),
                 decision_type_hint: None,
+                depends_on: None,
             }],
         )
         .unwrap()
@@ -4712,6 +4742,7 @@ mod tests {
                     target: "src/lib.rs".to_string(),
                     expected_outcome: Some("plan confirmed".to_string()),
                     decision_type_hint: None,
+                    depends_on: None,
                 }],
             )
             .unwrap(),

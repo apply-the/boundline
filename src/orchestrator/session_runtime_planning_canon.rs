@@ -742,6 +742,7 @@ mod tests {
                     explicit_no_canon: false,
                 }),
             )?),
+            active_execution_run_id: None,
             ..sample_session(workspace.as_path())
         };
         let overridden = runtime.resolve_planning_governance_defaults(
@@ -895,6 +896,7 @@ mod tests {
             project_scale: None,
             latest_voting: None,
             delight_feedback: None,
+            active_execution_run_id: None,
         }
     }
 
@@ -971,6 +973,7 @@ mod tests {
                 target: "src/lib.rs".to_string(),
                 expected_outcome: None,
                 decision_type_hint: None,
+                depends_on: None,
             }],
         )
         .map_err(Into::into)

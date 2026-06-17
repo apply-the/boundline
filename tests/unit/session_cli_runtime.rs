@@ -201,6 +201,7 @@ fn build_planned_record(workspace_ref: &str) -> ActiveSessionRecord {
         project_scale: None,
         latest_voting: None,
         delight_feedback: None,
+        active_execution_run_id: None,
     }
 }
 
@@ -213,6 +214,7 @@ fn build_ready_goal_plan() -> Result<GoalPlan, Box<dyn std::error::Error>> {
             target: "src/lib.rs".to_string(),
             expected_outcome: Some("bounded change delivered".to_string()),
             decision_type_hint: None,
+            depends_on: None,
         }],
     )?
     .with_planning_rationale("workspace evidence supports this bounded change")
@@ -390,6 +392,7 @@ fn build_started_session(workspace: &Path) -> ActiveSessionRecord {
         project_scale: None,
         latest_voting: None,
         delight_feedback: None,
+        active_execution_run_id: None,
     }
 }
 
@@ -588,6 +591,9 @@ fn developer_command_sessions_cover_variant_mapping_validation_and_completion() 
             owner: None,
             mode: None,
             no_canon: false,
+            plan: None,
+            accepted_plan: false,
+            resume: None,
         },
         DeveloperCommand::Inspect {
             trace: Some(trace.clone()),
@@ -668,6 +674,9 @@ fn developer_command_sessions_cover_variant_mapping_validation_and_completion() 
             owner: None,
             mode: None,
             no_canon: false,
+            plan: None,
+            accepted_plan: false,
+            resume: None,
         });
     assert!(direct_run_without_workspace.validate().is_ok());
 
@@ -684,6 +693,9 @@ fn developer_command_sessions_cover_variant_mapping_validation_and_completion() 
             owner: None,
             mode: None,
             no_canon: false,
+            plan: None,
+            accepted_plan: false,
+            resume: None,
         });
     assert_eq!(
         invalid_compatibility_run_workspace.validate().unwrap_err(),
@@ -702,6 +714,9 @@ fn developer_command_sessions_cover_variant_mapping_validation_and_completion() 
         owner: None,
         mode: None,
         no_canon: false,
+        plan: None,
+        accepted_plan: false,
+        resume: None,
     });
     assert_eq!(
         invalid_run_goal.validate().unwrap_err(),

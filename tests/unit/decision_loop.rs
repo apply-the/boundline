@@ -31,6 +31,7 @@ fn sample_task(id: &str, target: &str, hint: DecisionType) -> PlannedTask {
         target: target.to_string(),
         expected_outcome: Some("completed".to_string()),
         decision_type_hint: Some(hint),
+        depends_on: None,
     }
 }
 

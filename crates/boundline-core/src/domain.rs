@@ -30,6 +30,8 @@ pub mod domain_templates;
 pub mod evals;
 #[path = "../../../src/domain/execution.rs"]
 pub mod execution;
+#[path = "../../../src/domain/execution_orchestration.rs"]
+pub mod execution_orchestration;
 #[path = "../../../src/domain/flow.rs"]
 pub mod flow;
 #[path = "../../../src/domain/flow_policy.rs"]

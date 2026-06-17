@@ -369,6 +369,7 @@ fn decision_loop_with_flow_inference_and_policy() {
             target: "src/main.rs".to_string(),
             expected_outcome: Some("requirements understood".to_string()),
             decision_type_hint: Some(DecisionType::Analyze),
+            depends_on: None,
         }],
     )
     .unwrap();
@@ -395,6 +396,7 @@ fn decision_loop_recovery_on_failure() {
             target: "src/missing.rs".to_string(),
             expected_outcome: Some("contents read".to_string()),
             decision_type_hint: Some(DecisionType::Analyze),
+            depends_on: None,
         }],
     )
     .unwrap();
@@ -430,6 +432,7 @@ fn decision_loop_exhaustion_at_step_limit() {
                 target: "src/a.rs".to_string(),
                 expected_outcome: Some("done".to_string()),
                 decision_type_hint: Some(DecisionType::Analyze),
+                depends_on: None,
             },
             PlannedTask {
                 task_id: "t2".to_string(),
@@ -437,6 +440,7 @@ fn decision_loop_exhaustion_at_step_limit() {
                 target: "src/b.rs".to_string(),
                 expected_outcome: Some("done".to_string()),
                 decision_type_hint: Some(DecisionType::Analyze),
+                depends_on: None,
             },
         ],
     )

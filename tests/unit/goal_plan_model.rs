@@ -14,6 +14,7 @@ fn sample_task(id: &str) -> PlannedTask {
         target: format!("src/{id}.rs"),
         expected_outcome: Some("compiles".to_string()),
         decision_type_hint: Some(DecisionType::Code),
+        depends_on: None,
     }
 }
 
@@ -59,6 +60,7 @@ fn validation_rejects_task_with_empty_id() {
             target: "t".to_string(),
             expected_outcome: None,
             decision_type_hint: None,
+            depends_on: None,
         }],
     )
     .unwrap_err();
@@ -75,6 +77,7 @@ fn validation_rejects_task_with_empty_description() {
             target: "t".to_string(),
             expected_outcome: None,
             decision_type_hint: None,
+            depends_on: None,
         }],
     )
     .unwrap_err();
@@ -91,6 +94,7 @@ fn validation_rejects_task_with_empty_target() {
             target: String::new(),
             expected_outcome: None,
             decision_type_hint: None,
+            depends_on: None,
         }],
     )
     .unwrap_err();
@@ -344,6 +348,7 @@ fn planning_analysis_reports_missing_expected_outcomes_without_blocking() {
                 target: "src/T002.rs".to_string(),
                 expected_outcome: None,
                 decision_type_hint: Some(DecisionType::Code),
+                depends_on: None,
             },
         ],
     )

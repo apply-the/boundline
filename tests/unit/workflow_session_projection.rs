@@ -14,6 +14,7 @@ fn build_goal_plan() -> GoalPlan {
             target: "src/orchestrator/session_runtime.rs".to_string(),
             expected_outcome: Some("workflow progress is persisted".to_string()),
             decision_type_hint: None,
+            depends_on: None,
         }],
     )
     .unwrap()
@@ -53,6 +54,7 @@ fn build_record() -> ActiveSessionRecord {
         project_scale: None,
         latest_voting: None,
         delight_feedback: None,
+        active_execution_run_id: None,
     }
 }
 
@@ -204,6 +206,7 @@ fn session_status_view_accepts_session_owned_workflow_progress_without_goal_plan
         project_scale: None,
         latest_voting: None,
         delight_feedback: None,
+        active_execution_run_id: None,
     };
 
     let view = build_view(&record);

@@ -41,6 +41,7 @@ pub mod decision;
 pub mod distribution;
 pub mod domain_templates;
 pub mod execution;
+pub mod execution_orchestration;
 pub mod flow;
 pub mod flow_policy;
 pub mod follow_through;

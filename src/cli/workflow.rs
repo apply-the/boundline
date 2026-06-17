@@ -760,6 +760,7 @@ fn initialize_session(workspace: &Path) -> ActiveSessionRecord {
         project_scale: None,
         latest_voting: None,
         delight_feedback: None,
+        active_execution_run_id: None,
     }
 }
 
@@ -1073,6 +1074,7 @@ mod tests {
                 target: "src/cli/workflow.rs".to_string(),
                 expected_outcome: None,
                 decision_type_hint: None,
+                depends_on: None,
             }],
         )
         .unwrap()

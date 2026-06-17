@@ -2060,6 +2060,7 @@ pub fn derive_tasks(
         target: primary_target.clone(),
         expected_outcome: Some("understanding of current state and required changes".to_string()),
         decision_type_hint: Some(DecisionType::Analyze),
+        depends_on: None,
     });
 
     // Derive implementation tasks from goal keywords
@@ -2070,6 +2071,7 @@ pub fn derive_tasks(
             target: primary_target.clone(),
             expected_outcome: Some("issue resolved".to_string()),
             decision_type_hint: Some(DecisionType::Fix),
+            depends_on: None,
         });
     } else {
         tasks.push(PlannedTask {
@@ -2078,6 +2080,7 @@ pub fn derive_tasks(
             target: primary_target,
             expected_outcome: Some("changes applied".to_string()),
             decision_type_hint: Some(DecisionType::Code),
+            depends_on: None,
         });
     }
 
@@ -2089,6 +2092,7 @@ pub fn derive_tasks(
             target: "test suite".to_string(),
             expected_outcome: Some("all tests pass".to_string()),
             decision_type_hint: Some(DecisionType::Test),
+            depends_on: None,
         });
     }
 
@@ -2138,6 +2142,7 @@ fn derive_tasks_from_context(
                 context_pack.summary
             )),
             decision_type_hint: Some(DecisionType::Analyze),
+            depends_on: None,
         },
         PlannedTask {
             task_id: Uuid::new_v4().to_string(),
@@ -2147,6 +2152,7 @@ fn derive_tasks_from_context(
                 "bounded change applied to the selected implementation surface".to_string(),
             ),
             decision_type_hint: Some(implementation_decision),
+            depends_on: None,
         },
         PlannedTask {
             task_id: Uuid::new_v4().to_string(),
@@ -2154,6 +2160,7 @@ fn derive_tasks_from_context(
             target: verification_target,
             expected_outcome: Some("credible bounded verification evidence recorded".to_string()),
             decision_type_hint: Some(verification_decision),
+            depends_on: None,
         },
     ]
 }

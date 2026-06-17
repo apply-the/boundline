@@ -33,6 +33,7 @@ fn build_goal_plan(confirmed: bool) -> GoalPlan {
             target: "src/lib.rs".to_string(),
             expected_outcome: Some("tests pass".to_string()),
             decision_type_hint: None,
+            depends_on: None,
         }],
     )
     .unwrap();
@@ -70,6 +71,7 @@ fn execution_path_uses_native_goal_plan_for_proposed_plan() {
         project_scale: None,
         latest_voting: None,
         delight_feedback: None,
+        active_execution_run_id: None,
     };
 
     assert_eq!(execution_path_text(&record).as_deref(), Some("native_goal_plan"));
@@ -99,6 +101,7 @@ fn execution_path_uses_fixture_compatibility_when_only_task_state_exists() {
         project_scale: None,
         latest_voting: None,
         delight_feedback: None,
+        active_execution_run_id: None,
     };
 
     assert_eq!(execution_path_text(&record).as_deref(), Some("fixture_compatibility"));
@@ -127,6 +130,7 @@ fn execution_path_marks_goal_captured_sessions_as_pending_plan() {
         project_scale: None,
         latest_voting: None,
         delight_feedback: None,
+        active_execution_run_id: None,
     };
 
     assert_eq!(execution_path_text(&record).as_deref(), Some("native_session_pending_plan"));
@@ -155,6 +159,7 @@ fn routing_outcome_routes_native_when_plan_confirmation_is_pending() {
         project_scale: None,
         latest_voting: None,
         delight_feedback: None,
+        active_execution_run_id: None,
     };
 
     let outcome = routing_outcome(&record);
@@ -186,6 +191,7 @@ fn routing_outcome_prefers_native_goal_plan_when_plan_is_confirmed() {
         project_scale: None,
         latest_voting: None,
         delight_feedback: None,
+        active_execution_run_id: None,
     };
 
     let outcome = routing_outcome(&record);

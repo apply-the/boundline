@@ -976,6 +976,7 @@ mod tests {
             project_scale: None,
             latest_voting: None,
             delight_feedback: None,
+            active_execution_run_id: None,
         }
     }
 
@@ -988,6 +989,7 @@ mod tests {
                 target: CHANGE_PATH.to_string(),
                 expected_outcome: Some("governance helpers stay covered".to_string()),
                 decision_type_hint: None,
+                depends_on: None,
             }],
         )
         .map_err(Into::into)

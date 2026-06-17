@@ -9,6 +9,7 @@ fn build_plan() -> GoalPlan {
             target: "src/lib.rs".to_string(),
             expected_outcome: Some("tests pass".to_string()),
             decision_type_hint: None,
+            depends_on: None,
         }],
     )
     .unwrap()

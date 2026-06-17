@@ -21,11 +21,11 @@ No unreleased changes.
 
 Release metadata note:
 
-- The current Boundline release line is `0.79.0`; published package metadata,
+- The current Boundline release line is `0.80.0`; published package metadata,
   distribution metadata, assistant plugin manifests, and docs are aligned to
   that version while Canon compatibility remains `0.72.5`.
 
-## [0.79.0] - 2026-06-17
+## [0.80.0] - 2026-06-17
 
 Delivered specs:
 
@@ -37,7 +37,7 @@ Delivered specs:
   edges and `SessionStatusView` with eight execution projection fields.
   CLI flags: `--plan`, `--accepted-plan`, `--resume` on `boundline run`.
 
-## [0.78.0] - 2026-06-12
+## [0.79.0] - 2026-06-17
 
 Delivered specs:
 
@@ -53,6 +53,8 @@ Highlights:
 - Surfaced completion-verification state through `run`, `status`, `inspect`,
   and orchestrate-facing output without handing proof ownership to Canon.
 - Added assistant asset guidance that suppresses pre-proof success language and
+
+## [0.78.0] - 2026-06-12
   preserves the exact proving action for the operator.
 - Added parent-scope aggregation helpers for stage/run verification so blocked,
   stale, failed, missing, deferred, and skipped child states remain visible.

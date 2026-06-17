@@ -100,6 +100,9 @@ mod session_compatibility_continuity;
 #[path = "integration/flow_cli_run.rs"]
 mod flow_cli_run;
 
+#[path = "integration/execution_orchestration_flow.rs"]
+mod execution_orchestration_flow;
+
 #[path = "integration/session_governance_flow.rs"]
 mod session_governance_flow;
 

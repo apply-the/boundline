@@ -465,6 +465,7 @@ mod tests {
         let active_flow = built_in_flow("bug-fix").ok_or("missing bug-fix flow")?.initial_state();
         Ok(ActiveSessionRecord {
             active_flow: Some(active_flow),
+            active_execution_run_id: None,
             ..sample_session(workspace, Some(sample_goal_plan()?), SessionStatus::Planned)
         })
     }
@@ -495,6 +496,7 @@ mod tests {
             project_scale: None,
             latest_voting: None,
             delight_feedback: None,
+            active_execution_run_id: None,
         }
     }
 
@@ -507,6 +509,7 @@ mod tests {
                 target: "src/lib.rs".to_string(),
                 expected_outcome: Some("tests pass".to_string()),
                 decision_type_hint: None,
+                depends_on: None,
             }],
         )
         .map_err(Into::into)

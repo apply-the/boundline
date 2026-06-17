@@ -16,6 +16,9 @@ mod orchestrator_run;
 #[path = "contract/endpoint_execution.rs"]
 mod endpoint_execution;
 
+#[path = "contract/execution_orchestration_contract.rs"]
+mod execution_orchestration_contract;
+
 #[path = "contract/trace_record.rs"]
 mod trace_record;
 
