@@ -1,6 +1,6 @@
 # Plan
 
-Boundline 0.78.0 makes planning readiness a runtime gate, not a chat
+Boundline 0.80.0 makes planning readiness a runtime gate, not a chat
 convention.
 
 ## What `plan` Does

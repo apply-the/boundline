@@ -40,7 +40,7 @@ Use the local Speckit templates as the source of truth when converting a seed:
 | Next | 09 | Operator discoverability | Start with Boundline `help-next`; keep Canon help as Canon-owned. |
 | In Progress (spec 077) | 13 | Safe command execution | Add command intent classification, execution policy, evidence capture, artifact manifest, secret redaction, and mutation boundaries. No Docker required. |
 | Deferred | 13B | Sandbox execution runtime | Docker sandbox with mount/network/filesystem policy and secret handle inheritance. Depends on provider permissions (07) and execution evidence foundation (13A). Moved to `unplanned/`. |
-| Delivered (spec 079) | 18 | Completion proof gate | Shipped in 0.78.0 with runtime-owned claim inference, fresh proof execution, stale-proof invalidation, and additive completion-verification projections. |
+| Delivered (spec 079) | 18 | Completion proof gate | Shipped in 0.80.0 with runtime-owned claim inference, fresh proof execution, stale-proof invalidation, and additive completion-verification projections. |
 | In Progress (spec 080) | 19 | Execution control plane | Add sequential task runner with dependency-ordered execution, checkpointing, resume, blocked-state handling, and additive status projection. |
 | Next | 20 | Route economics | Add route telemetry and budgets after provider protocol and evals exist. |
 | Next | 21 | Browser validation | Implement as a concrete provider over S10, not as core runtime. |
@@ -77,7 +77,7 @@ Seed 02 is intentionally not revised by this pass.
 
 09 help-next can start after the probe/readiness surfaces are available.
 
-18 completion verification runtime (delivered in spec 079 / 0.78.0)
+18 completion verification runtime (delivered in spec 079 / 0.80.0)
    -> 19 plan execution orchestration
       -> 20 AI gateway economics
          -> 21 browser provider

@@ -48,7 +48,7 @@ activation, dry-run readiness before use, and keep provider output
 non-authoritative until Boundline validates the returned evidence or rejects
 the proposal.
 
-The 0.78.0 release adds completion verification before closeout. Boundline now
+The 0.80.0 release adds completion verification before closeout. Boundline now
 derives or records the claimed outcome, selects the narrowest proving command,
 requires a fresh proof in the current workspace state, marks stale proof when
 workspace content changes, and surfaces the resulting blocked claim, findings,
