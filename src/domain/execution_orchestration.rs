@@ -287,88 +287,162 @@ impl TaskDependencyGraph {
 /// entries are deduplicated and sorted. Returns the topological order
 /// or detected cycles.
 fn kahn_topological_sort(tasks: &[(String, Vec<String>)]) -> Result<Vec<String>, Vec<Vec<String>>> {
-    // Build adjacency list: task_id → set of tasks that depend on it.
-    let mut adjacency: std::collections::HashMap<&str, Vec<&str>> =
-        std::collections::HashMap::new();
-    // In-degree count per task.
-    let mut in_degree: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
-
-    for (tid, deps) in tasks {
-        in_degree.entry(tid.as_str()).or_insert(0);
-        for dep in deps {
-            adjacency.entry(dep.as_str()).or_default().push(tid.as_str());
-            *in_degree.entry(tid.as_str()).or_insert(0) += 1;
-        }
-    }
-
-    // Initialize queue with zero in-degree tasks, in plan order.
-    let mut queue: Vec<&str> = tasks
-        .iter()
-        .filter(|(tid, _)| in_degree.get(tid.as_str()).copied().unwrap_or(0) == 0)
-        .map(|(tid, _)| tid.as_str())
-        .collect();
-
-    let mut order: Vec<String> = Vec::with_capacity(tasks.len());
-
-    while let Some(current) = { if queue.is_empty() { None } else { Some(queue.remove(0)) } } {
-        order.push(current.to_string());
-        if let Some(dependents) = adjacency.get(current) {
-            for &dependent in dependents {
-                let deg = in_degree.get_mut(dependent).expect("in_degree entry");
-                *deg = deg.saturating_sub(1);
-                if *deg == 0 {
-                    queue.push(dependent);
-                }
-            }
-        }
-    }
+    let (adjacency, mut in_degree) = build_dependency_index(tasks);
+    let mut queue = build_zero_in_degree_queue(tasks, &in_degree);
+    let order = drain_topological_queue(tasks.len(), &adjacency, &mut in_degree, &mut queue);
 
     if order.len() == tasks.len() {
-        Ok(order)
-    } else {
-        // Detect cycles: collect remaining tasks with non-zero in-degree.
-        let remaining: std::collections::HashSet<&str> = tasks
-            .iter()
-            .filter(|(tid, _)| in_degree.get(tid.as_str()).copied().unwrap_or(0) > 0)
-            .map(|(tid, _)| tid.as_str())
-            .collect();
-
-        // Build a simple cycle report — for small graphs, report each
-        // strongly-connected component as a cycle group.
-        let mut cycles: Vec<Vec<String>> = Vec::new();
-        let mut visited: std::collections::HashSet<&str> = std::collections::HashSet::new();
-
-        for &start in &remaining {
-            if visited.contains(start) {
-                continue;
-            }
-            // Walk forward through dependency edges to find a cycle.
-            let mut path: Vec<String> = Vec::new();
-            let mut current = start;
-            let max_steps = remaining.len() * 2;
-            let mut steps = 0;
-            while remaining.contains(current) && steps < max_steps {
-                visited.insert(current);
-                path.push(current.to_string());
-                // Follow first dependency edge
-                if let Some((_, deps)) = tasks.iter().find(|(tid, _)| tid.as_str() == current) {
-                    if let Some(next_dep) = deps.first() {
-                        current = next_dep.as_str();
-                    } else {
-                        break;
-                    }
-                } else {
-                    break;
-                }
-                steps += 1;
-            }
-            if !path.is_empty() {
-                cycles.push(path);
-            }
-        }
-
-        Err(cycles)
+        return Ok(order);
     }
+
+    Err(detect_cycle_groups(tasks, &in_degree))
+}
+
+type TaskAdjacency<'a> = std::collections::HashMap<&'a str, Vec<&'a str>>;
+type TaskInDegree<'a> = std::collections::HashMap<&'a str, usize>;
+type RemainingTaskIds<'a> = std::collections::HashSet<&'a str>;
+type ReadyTaskQueue<'a> = std::collections::VecDeque<&'a str>;
+
+/// Multiplier used to cap degraded cycle walks in malformed graphs.
+const CYCLE_SCAN_STEP_MULTIPLIER: usize = 2;
+
+fn build_dependency_index<'a>(
+    tasks: &'a [(String, Vec<String>)],
+) -> (TaskAdjacency<'a>, TaskInDegree<'a>) {
+    let mut adjacency = TaskAdjacency::new();
+    let mut in_degree = TaskInDegree::new();
+
+    for (task_id, dependencies) in tasks {
+        in_degree.entry(task_id.as_str()).or_insert(0);
+        for dependency in dependencies {
+            adjacency.entry(dependency.as_str()).or_default().push(task_id.as_str());
+            *in_degree.entry(task_id.as_str()).or_insert(0) += 1;
+        }
+    }
+
+    (adjacency, in_degree)
+}
+
+fn build_zero_in_degree_queue<'a>(
+    tasks: &'a [(String, Vec<String>)],
+    in_degree: &TaskInDegree<'a>,
+) -> ReadyTaskQueue<'a> {
+    tasks
+        .iter()
+        .filter(|(task_id, _)| in_degree.get(task_id.as_str()).copied().unwrap_or(0) == 0)
+        .map(|(task_id, _)| task_id.as_str())
+        .collect()
+}
+
+fn drain_topological_queue<'a>(
+    task_count: usize,
+    adjacency: &TaskAdjacency<'a>,
+    in_degree: &mut TaskInDegree<'a>,
+    queue: &mut ReadyTaskQueue<'a>,
+) -> Vec<String> {
+    let mut order = Vec::with_capacity(task_count);
+
+    while let Some(current) = queue.pop_front() {
+        order.push(current.to_string());
+        release_dependents(current, adjacency, in_degree, queue);
+    }
+
+    order
+}
+
+fn release_dependents<'a>(
+    current: &'a str,
+    adjacency: &TaskAdjacency<'a>,
+    in_degree: &mut TaskInDegree<'a>,
+    queue: &mut ReadyTaskQueue<'a>,
+) {
+    let Some(dependents) = adjacency.get(current) else {
+        return;
+    };
+
+    for &dependent in dependents {
+        decrement_in_degree(dependent, in_degree, queue);
+    }
+}
+
+fn decrement_in_degree<'a>(
+    dependent: &'a str,
+    in_degree: &mut TaskInDegree<'a>,
+    queue: &mut ReadyTaskQueue<'a>,
+) {
+    let Some(degree) = in_degree.get_mut(dependent) else {
+        return;
+    };
+
+    *degree = degree.saturating_sub(1);
+    if *degree == 0 {
+        queue.push_back(dependent);
+    }
+}
+
+fn detect_cycle_groups<'a>(
+    tasks: &'a [(String, Vec<String>)],
+    in_degree: &TaskInDegree<'a>,
+) -> Vec<Vec<String>> {
+    let remaining = collect_remaining_tasks(tasks, in_degree);
+    let mut visited = RemainingTaskIds::new();
+    let mut cycles = Vec::new();
+
+    for &start in &remaining {
+        if let Some(path) = follow_cycle_group(tasks, &remaining, &mut visited, start) {
+            cycles.push(path);
+        }
+    }
+
+    cycles
+}
+
+fn collect_remaining_tasks<'a>(
+    tasks: &'a [(String, Vec<String>)],
+    in_degree: &TaskInDegree<'a>,
+) -> RemainingTaskIds<'a> {
+    tasks
+        .iter()
+        .filter(|(task_id, _)| in_degree.get(task_id.as_str()).copied().unwrap_or(0) > 0)
+        .map(|(task_id, _)| task_id.as_str())
+        .collect()
+}
+
+fn follow_cycle_group<'a>(
+    tasks: &'a [(String, Vec<String>)],
+    remaining: &RemainingTaskIds<'a>,
+    visited: &mut RemainingTaskIds<'a>,
+    start: &'a str,
+) -> Option<Vec<String>> {
+    if visited.contains(start) {
+        return None;
+    }
+
+    let mut path = Vec::new();
+    let mut current = start;
+    let max_steps = remaining.len() * CYCLE_SCAN_STEP_MULTIPLIER;
+    let mut steps = 0;
+
+    while remaining.contains(current) && steps < max_steps {
+        visited.insert(current);
+        path.push(current.to_string());
+
+        let Some(next_dependency) = first_dependency_for(tasks, current) else {
+            break;
+        };
+        current = next_dependency;
+        steps += 1;
+    }
+
+    (!path.is_empty()).then_some(path)
+}
+
+fn first_dependency_for<'a>(tasks: &'a [(String, Vec<String>)], task_id: &str) -> Option<&'a str> {
+    tasks
+        .iter()
+        .find(|(candidate_id, _)| candidate_id.as_str() == task_id)
+        .and_then(|(_, dependencies)| dependencies.first())
+        .map(String::as_str)
 }
 
 #[cfg(test)]

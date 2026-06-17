@@ -3491,6 +3491,7 @@ fn dispatch_models_command(command: &ModelsSubcommand) -> DispatchOutcome {
 
 #[cfg(test)]
 mod tests {
+    use std::ffi::OsString;
     use std::fs;
     use std::path::{Path, PathBuf};
 
@@ -3527,6 +3528,8 @@ version = "0.1.0"
 edition = "2024"
 "#;
 
+    const PWD_ENV_VAR: &str = "PWD";
+
     const RED_LIB_RS: &str = "pub fn add(left: i32, right: i32) -> i32 {\n    left - right\n}\n";
 
     const FIXTURE_TEST_RS: &str = r#"#[test]
@@ -3539,6 +3542,36 @@ fn red_to_green_addition() {
         let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
         fs::create_dir_all(&workspace).unwrap();
         workspace
+    }
+
+    struct PwdEnvGuard {
+        original: Option<OsString>,
+    }
+
+    impl PwdEnvGuard {
+        fn set(path: Option<&Path>) -> Self {
+            let original = std::env::var_os(PWD_ENV_VAR);
+            unsafe {
+                match path {
+                    Some(path) => std::env::set_var(PWD_ENV_VAR, path),
+                    None => std::env::remove_var(PWD_ENV_VAR),
+                }
+            }
+            Self { original }
+        }
+    }
+
+    impl Drop for PwdEnvGuard {
+        fn drop(&mut self) {
+            match self.original.as_ref() {
+                Some(value) => unsafe {
+                    std::env::set_var(PWD_ENV_VAR, value);
+                },
+                None => unsafe {
+                    std::env::remove_var(PWD_ENV_VAR);
+                },
+            }
+        }
     }
 
     #[test]
@@ -4530,6 +4563,222 @@ fn red_to_green_addition() {
         });
         assert_eq!(inspect.exit_status, CommandExitStatus::Succeeded);
         assert!(inspect.output.contains("inspection_target:"), "{}", inspect.output);
+    }
+
+    #[test]
+    fn run_plan_cli_parses_plan_accepted_plan_and_resume_modes() {
+        let plan_cli = Cli::try_parse_from([
+            "boundline",
+            "run",
+            "--workspace",
+            "/tmp/workspace",
+            "--plan",
+            "plans/accepted-plan.json",
+        ])
+        .expect("plan-based run CLI should parse");
+
+        let Some(DeveloperCommand::Run { workspace, plan, accepted_plan, resume, .. }) =
+            plan_cli.command
+        else {
+            panic!("expected run command");
+        };
+
+        assert_eq!(workspace, Some(PathBuf::from("/tmp/workspace")));
+        assert_eq!(plan, Some(PathBuf::from("plans/accepted-plan.json")));
+        assert!(!accepted_plan);
+        assert!(resume.is_none());
+
+        let accepted_plan_cli = Cli::try_parse_from([
+            "boundline",
+            "run",
+            "--workspace",
+            "/tmp/workspace",
+            "--accepted-plan",
+        ])
+        .expect("accepted-plan CLI should parse");
+
+        let Some(DeveloperCommand::Run { plan, accepted_plan, resume, .. }) =
+            accepted_plan_cli.command
+        else {
+            panic!("expected run command");
+        };
+
+        assert!(plan.is_none());
+        assert!(accepted_plan);
+        assert!(resume.is_none());
+
+        let resume_cli = Cli::try_parse_from([
+            "boundline",
+            "run",
+            "--workspace",
+            "/tmp/workspace",
+            "--resume",
+            "ER-20260617-abc123",
+        ])
+        .expect("resume run CLI should parse");
+
+        let Some(DeveloperCommand::Run { plan, accepted_plan, resume, .. }) = resume_cli.command
+        else {
+            panic!("expected run command");
+        };
+
+        assert!(plan.is_none());
+        assert!(!accepted_plan);
+        assert_eq!(resume.as_deref(), Some("ER-20260617-abc123"));
+    }
+
+    #[test]
+    fn run_plan_dispatch_reports_requested_variants_and_missing_plan() {
+        let workspace = write_execution_workspace("boundline-cli-run-plan-dispatch");
+        let plan_path = workspace.join("accepted-plan.json");
+        std::fs::write(&plan_path, "{}\n").unwrap();
+
+        let plan_run = dispatch(&DeveloperCommand::Run {
+            workspace: Some(workspace.clone()),
+            cluster: None,
+            goal: None,
+            compatibility: false,
+            brief: Vec::new(),
+            governance: None,
+            risk: None,
+            zone: None,
+            owner: None,
+            mode: None,
+            no_canon: false,
+            plan: Some(plan_path.clone()),
+            accepted_plan: false,
+            resume: None,
+        });
+        assert_eq!(plan_run.exit_status, CommandExitStatus::Succeeded);
+        assert!(plan_run.output.contains("plan-based execution requested"), "{}", plan_run.output);
+        assert!(
+            plan_run.output.contains(&format!("plan file: {}", plan_path.display())),
+            "{}",
+            plan_run.output
+        );
+        assert!(
+            plan_run.output.contains("full execution dispatch coming in a later phase"),
+            "{}",
+            plan_run.output
+        );
+
+        let accepted_plan_run = dispatch(&DeveloperCommand::Run {
+            workspace: Some(workspace.clone()),
+            cluster: None,
+            goal: None,
+            compatibility: false,
+            brief: Vec::new(),
+            governance: None,
+            risk: None,
+            zone: None,
+            owner: None,
+            mode: None,
+            no_canon: false,
+            plan: None,
+            accepted_plan: true,
+            resume: None,
+        });
+        assert_eq!(accepted_plan_run.exit_status, CommandExitStatus::Succeeded);
+        assert!(
+            accepted_plan_run.output.contains("using session-attached accepted plan"),
+            "{}",
+            accepted_plan_run.output
+        );
+
+        let resume_run = dispatch(&DeveloperCommand::Run {
+            workspace: Some(workspace.clone()),
+            cluster: None,
+            goal: None,
+            compatibility: false,
+            brief: Vec::new(),
+            governance: None,
+            risk: None,
+            zone: None,
+            owner: None,
+            mode: None,
+            no_canon: false,
+            plan: None,
+            accepted_plan: false,
+            resume: Some("ER-20260617-abc123".to_string()),
+        });
+        assert_eq!(resume_run.exit_status, CommandExitStatus::Succeeded);
+        assert!(
+            resume_run.output.contains("resuming execution run: ER-20260617-abc123"),
+            "{}",
+            resume_run.output
+        );
+
+        let missing_plan = dispatch(&DeveloperCommand::Run {
+            workspace: Some(workspace),
+            cluster: None,
+            goal: None,
+            compatibility: false,
+            brief: Vec::new(),
+            governance: None,
+            risk: None,
+            zone: None,
+            owner: None,
+            mode: None,
+            no_canon: false,
+            plan: Some(plan_path.with_file_name("missing-plan.json")),
+            accepted_plan: false,
+            resume: None,
+        });
+        assert_eq!(missing_plan.exit_status, CommandExitStatus::InvalidInvocation);
+        assert!(missing_plan.output.contains("plan file not found:"), "{}", missing_plan.output);
+    }
+
+    #[test]
+    fn run_plan_dispatch_defaults_workspace_to_current_directory() {
+        let workspace = write_execution_workspace("boundline-cli-run-plan-default-workspace");
+        let _current_dir_guard = CurrentDirGuard::change_to(&workspace);
+
+        let run = dispatch(&DeveloperCommand::Run {
+            workspace: None,
+            cluster: None,
+            goal: None,
+            compatibility: false,
+            brief: Vec::new(),
+            governance: None,
+            risk: None,
+            zone: None,
+            owner: None,
+            mode: None,
+            no_canon: false,
+            plan: None,
+            accepted_plan: true,
+            resume: None,
+        });
+
+        assert_eq!(run.exit_status, CommandExitStatus::Succeeded);
+        assert!(run.output.contains("plan-based execution requested"), "{}", run.output);
+        assert!(run.output.contains("using session-attached accepted plan"), "{}", run.output);
+    }
+
+    #[test]
+    fn run_dispatch_reports_internal_mismatch_for_non_run_command() {
+        let mismatch = super::dispatch_run_command(&DeveloperCommand::Status {
+            workspace: None,
+            cluster: None,
+            session: None,
+        });
+
+        assert_eq!(mismatch.exit_status, CommandExitStatus::NonSuccess);
+        assert!(mismatch.output.contains("internal dispatch mismatch for run"));
+    }
+
+    #[test]
+    fn run_plan_dispatch_reports_workspace_resolution_failure_when_current_directory_is_unavailable()
+     {
+        let broken_workspace = temp_workspace("boundline-cli-run-plan-broken-cwd");
+        let _current_dir_guard = CurrentDirGuard::change_to(&broken_workspace);
+        fs::remove_dir_all(&broken_workspace).unwrap();
+        let _pwd_guard = PwdEnvGuard::set(Some(Path::new("relative-pwd")));
+
+        let run = super::dispatch_plan_run(None, None, true, None);
+
+        assert_eq!(run.exit_status, CommandExitStatus::InvalidInvocation);
+        assert!(run.output.contains("workspace resolution failed:"), "{}", run.output);
     }
 
     #[test]

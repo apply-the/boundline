@@ -34,6 +34,14 @@ pub enum ExecutionOrchestratorError {
     CheckpointNotFound { path: String },
     #[error("Execution run already active: {run_id}")]
     RunAlreadyActive { run_id: String },
+    /// The orchestrator cannot complete the requested operation because
+    /// no active execution run is initialized.
+    #[error("execution run is not initialized")]
+    RunUnavailable,
+    /// The orchestrator cannot mutate task state because the validated
+    /// dependency graph is not initialized.
+    #[error("dependency graph is not initialized")]
+    DependencyGraphUnavailable,
     #[error("Degraded checkpoint: {path} — {reason}")]
     DegradedCheckpoint { path: String, reason: String },
 }
@@ -101,6 +109,10 @@ impl ExecutionOrchestrator {
         }
     }
 
+    fn require_run(&self) -> Result<&ExecutionRun, ExecutionOrchestratorError> {
+        self.run.as_ref().ok_or(ExecutionOrchestratorError::RunUnavailable)
+    }
+
     /// Start a new execution run from a validated goal plan.
     ///
     /// Builds the dependency graph, validates it, and writes an initial
@@ -153,7 +165,7 @@ impl ExecutionOrchestrator {
         };
         self.write_checkpoint(&params)?;
 
-        Ok(self.run.as_ref().expect("just set"))
+        self.require_run()
     }
 
     /// Advance execution by selecting the next runnable task.
@@ -205,7 +217,10 @@ impl ExecutionOrchestrator {
         // Scope the graph mutation to drop the mutable borrow before
         // calling write_checkpoint (which needs &self).
         {
-            let graph = self.graph.as_mut().expect("graph must exist");
+            let graph = self
+                .graph
+                .as_mut()
+                .ok_or(ExecutionOrchestratorError::DependencyGraphUnavailable)?;
 
             match outcome {
                 TaskOutcome::Completed => {
@@ -312,7 +327,7 @@ impl ExecutionOrchestrator {
         self.skipped_tasks = checkpoint.skipped_tasks.clone();
         self.last_terminal_outcome = checkpoint.last_terminal_outcome.clone();
 
-        Ok(self.run.as_ref().expect("just set"))
+        self.require_run()
     }
 
     /// Check whether completion-verification is available (spec 079).
@@ -460,7 +475,7 @@ impl ExecutionOrchestrator {
         &self,
         params: &CheckpointWriteParams<'_>,
     ) -> Result<(), ExecutionOrchestratorError> {
-        let run = self.run.as_ref().expect("run must be started before checkpoint");
+        let run = self.require_run()?;
         let workspace = Path::new(&run.workspace_ref);
 
         let checkpoint = ExecutionCheckpoint {

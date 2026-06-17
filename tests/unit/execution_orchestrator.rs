@@ -585,6 +585,26 @@ fn t037_status_projection_running_state() {
 }
 
 #[test]
+fn t037_status_projection_active_task_reports_running_state() {
+    let (_dir, workspace) = make_temp_workspace();
+    let workspace_path = Path::new(&workspace);
+    std::fs::create_dir_all(workspace_path.join(".boundline")).expect("create boundline dir");
+
+    let mut orchestrator = ExecutionOrchestrator::new();
+    let plan = make_plan(vec![make_task("T001", None)]);
+    orchestrator.start(&plan, workspace_path, "S-001").expect("start");
+
+    assert_eq!(orchestrator.advance().as_deref(), Some("T001"));
+
+    let mut view = boundline::domain::session::SessionStatusView::default();
+    orchestrator.project_status(&mut view);
+
+    assert_eq!(view.execution_plan_state.as_deref(), Some("running"));
+    assert_eq!(view.execution_current_task_id.as_deref(), Some("T001"));
+    assert_eq!(view.execution_completed_task_count, Some(0));
+}
+
+#[test]
 fn t037_status_projection_blocked_state() {
     let (_dir, workspace) = make_temp_workspace();
     let workspace_path = Path::new(&workspace);
@@ -736,4 +756,59 @@ fn t044_skipped_task_unblocks_dependents() {
     // T002 should become runnable since T001 was skipped.
     let task = orchestrator.advance();
     assert_eq!(task.as_deref(), Some("T002"), "T002 should be runnable after skip");
+}
+
+#[test]
+fn t044_completion_verification_defaults_to_unavailable() {
+    let orchestrator = ExecutionOrchestrator::new();
+    assert!(!orchestrator.completion_verification_available());
+}
+
+#[test]
+fn t044_failed_task_blocks_execution_with_default_reason() {
+    let (_dir, workspace) = make_temp_workspace();
+    let workspace_path = Path::new(&workspace);
+    std::fs::create_dir_all(workspace_path.join(".boundline")).expect("create boundline dir");
+
+    let mut orchestrator = ExecutionOrchestrator::new();
+    let plan = make_plan(vec![make_task("T001", None)]);
+    orchestrator.start(&plan, workspace_path, "S-001").expect("start");
+
+    assert_eq!(orchestrator.advance().as_deref(), Some("T001"));
+    orchestrator
+        .record_outcome("T001", TaskOutcome::Failed, None, Some("trace://failed"))
+        .expect("fail T001");
+
+    let blocked = orchestrator.blocked_tasks();
+    assert_eq!(blocked.len(), 1);
+    assert_eq!(blocked[0].task_id, "T001");
+    assert_eq!(blocked[0].reason, "task_failed");
+    assert_eq!(blocked[0].evidence_ref.as_deref(), Some("trace://failed"));
+}
+
+#[test]
+fn t044_deferred_task_blocks_execution_with_custom_reason() {
+    let (_dir, workspace) = make_temp_workspace();
+    let workspace_path = Path::new(&workspace);
+    std::fs::create_dir_all(workspace_path.join(".boundline")).expect("create boundline dir");
+
+    let mut orchestrator = ExecutionOrchestrator::new();
+    let plan = make_plan(vec![make_task("T001", None)]);
+    orchestrator.start(&plan, workspace_path, "S-001").expect("start");
+
+    assert_eq!(orchestrator.advance().as_deref(), Some("T001"));
+    orchestrator
+        .record_outcome(
+            "T001",
+            TaskOutcome::Deferred,
+            Some("verification_unavailable"),
+            Some("trace://deferred"),
+        )
+        .expect("defer T001");
+
+    let blocked = orchestrator.blocked_tasks();
+    assert_eq!(blocked.len(), 1);
+    assert_eq!(blocked[0].task_id, "T001");
+    assert_eq!(blocked[0].reason, "verification_unavailable");
+    assert_eq!(blocked[0].evidence_ref.as_deref(), Some("trace://deferred"));
 }

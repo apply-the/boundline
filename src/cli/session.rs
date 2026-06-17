@@ -5528,6 +5528,81 @@ fn red_to_green_addition() {
     }
 
     #[test]
+    fn build_status_view_projects_execution_fields_from_active_checkpoint() {
+        let workspace = write_execution_workspace("boundline-cli-session-execution-checkpoint");
+        let goal_plan = GoalPlan::new(
+            "Execute accepted plan",
+            vec![PlannedTask {
+                task_id: "planned-task-execution".to_string(),
+                description: "Execute the accepted plan task".to_string(),
+                target: "src/lib.rs".to_string(),
+                expected_outcome: Some("execution checkpoint is projected".to_string()),
+                decision_type_hint: None,
+                depends_on: None,
+            }],
+        )
+        .unwrap();
+
+        let mut orchestrator =
+            crate::orchestrator::execution_orchestrator::ExecutionOrchestrator::new();
+        let run_id = orchestrator
+            .start(&goal_plan, &workspace, "session-execution-checkpoint")
+            .unwrap()
+            .run_id
+            .clone();
+
+        let record = ActiveSessionRecord {
+            session_id: "session-execution-checkpoint".to_string(),
+            workspace_ref: workspace.to_string_lossy().into_owned(),
+            goal: Some("Execute accepted plan".to_string()),
+            authored_brief: None,
+            negotiation_packet: None,
+            active_flow: None,
+            active_task: None,
+            goal_plan: Some(goal_plan),
+            workflow_progress: None,
+            decisions: Vec::new(),
+            active_flow_policy: None,
+            latest_status: SessionStatus::Planned,
+            latest_terminal_reason: None,
+            latest_trace_ref: None,
+            created_at: 1,
+            updated_at: 2,
+            governance_lifecycle: None,
+            project_scale: None,
+            latest_voting: None,
+            delight_feedback: None,
+            active_execution_run_id: Some(run_id.clone()),
+        };
+
+        let view = build_status_view(
+            &record,
+            Some("boundline run".to_string()),
+            "execution checkpoint projection",
+        );
+
+        assert_eq!(view.execution_run_id.as_deref(), Some(run_id.as_str()));
+        assert_eq!(view.execution_plan_state.as_deref(), Some("ready"));
+        assert_eq!(view.execution_current_task_id, None);
+        assert_eq!(view.execution_next_task_id.as_deref(), Some("planned-task-execution"));
+        assert_eq!(view.execution_completed_task_count, Some(0));
+        assert_eq!(
+            view.execution_checkpoint_ref.as_deref(),
+            Some(
+                workspace
+                    .join(".boundline/execution/checkpoints")
+                    .join(format!("{run_id}.json"))
+                    .to_string_lossy()
+                    .as_ref(),
+            )
+        );
+        assert_eq!(
+            view.execution_resume_command.as_deref(),
+            Some(format!("boundline run --resume {run_id}").as_str())
+        );
+    }
+
+    #[test]
     fn build_status_view_falls_back_to_planning_governance_lifecycle() {
         let workspace = write_execution_workspace("boundline-cli-session-plan-governance");
         let canonical_workspace = fs::canonicalize(&workspace).unwrap();
