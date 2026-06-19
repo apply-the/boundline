@@ -41,7 +41,7 @@ feature under `specs/`.
 | **13** | [sandboxed-execution-and-secret-inheritance.md](features/13-sandboxed-execution-and-secret-inheritance.md) | Local safety boundaries |
 | **18** | [completion-verification-runtime.md](features/18-completion-verification-runtime.md) | Delivered in 0.80.0: fresh-proof gate before task or stage completion |
 | **19** | [plan-execution-orchestration.md](features/19-plan-execution-orchestration.md) | In Progress (spec 080): sequential execution control plane with dependency ordering, checkpoint/restore, blocked-task handling, and additive status projection |
-| **20** | [ai-gateway-and-inference-economics.md](features/20-ai-gateway-and-inference-economics.md) | Next: route telemetry, cost budgets, tiered model routing |
+| **20** | [ai-gateway-and-inference-economics.md](../specs/081-ai-gateway-economics/spec.md) | In Progress: route telemetry, cost budgets, tiered model routing, spend exception approval |
 | **21** | [browser-and-visual-testing-provider.md](features/21-browser-and-visual-testing-provider.md) | Next: browser validation as a provider over the protocol |
 | **22** | [session-memory-and-repository-knowledge-distillation.md](features/22-session-memory-and-repository-knowledge-distillation.md) | Next: confirmation-first trace distillation |
 | **23** | [experimental-recursivemas-provider-adapter.md](features/23-experimental-recursivemas-provider-adapter.md) | Experimental: external latent-space provider research track |

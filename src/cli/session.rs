@@ -135,6 +135,32 @@ fn report_with_session_guidance(
 ) -> SessionCommandReport {
     let trace_location = view.latest_trace_ref.clone();
     let mut terminal_output = output::render_session_status(&view);
+    // Append inference economics budget projection when available.
+    if let Some(ref budget_state) = view.budget_state {
+        terminal_output.push('\n');
+        terminal_output.push_str("─ Inference Economics ─\n");
+        terminal_output.push_str(&format!("  Budget state: {budget_state}\n"));
+        if let Some(ref currency) = view.budget_currency {
+            terminal_output.push_str(&format!("  Currency:      {currency}\n"));
+        }
+        if let Some(ref limit) = view.budget_limit {
+            terminal_output.push_str(&format!("  Limit:         {limit}\n"));
+        }
+        if let Some(ref spent) = view.budget_known_spent {
+            terminal_output.push_str(&format!("  Spent:         {spent}\n"));
+        }
+        if let Some(ref reserved) = view.budget_reserved {
+            terminal_output.push_str(&format!("  Reserved:      {reserved}\n"));
+        }
+        if let Some(ref remaining) = view.budget_remaining {
+            terminal_output.push_str(&format!("  Remaining:     {remaining}\n"));
+        }
+        if let Some(count) = view.budget_unknown_cost_call_count
+            && count > 0
+        {
+            terminal_output.push_str(&format!("  Unknown calls: {count}\n"));
+        }
+    }
     let guidance_lines =
         guidance_guardian.map(output::render_guidance_projection_lines).unwrap_or_default();
     if !guidance_lines.is_empty() {
@@ -2333,6 +2359,7 @@ pub(crate) fn build_status_view_with_follow_up(
         refinement_summary: None,
         next_command,
         explanation: explanation.into(),
+        ..Default::default()
     };
 
     // Populate execution projection when an execution run is active.

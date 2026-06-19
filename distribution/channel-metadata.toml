@@ -1,5 +1,5 @@
 # The latest published Boundline line is 0.76.0.
-boundline_version = "0.80.0"
+boundline_version = "0.81.0"
 # canon_version is the explicit Canon compatibility target for this release.
 # Keep it pinned so Boundline can be prepared before the Canon tag is public.
 canon_version = "0.72.5"

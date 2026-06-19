@@ -291,3 +291,6 @@ mod calibration_flow;
 
 #[path = "integration/exec_command_integration.rs"]
 mod exec_command_integration;
+
+#[path = "integration/inference_economics_cli.rs"]
+mod inference_economics_cli;
