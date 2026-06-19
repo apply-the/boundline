@@ -1,6 +1,6 @@
 # Phase Requests
 
-Boundline 0.80.0 uses `phase_request` as the single recovery handoff for goal
+Boundline 0.81.0 uses `phase_request` as the single recovery handoff for goal
 clarification, plan-quality clarification, backlog-quality clarification, and
 planning-stage artifact requests.
 

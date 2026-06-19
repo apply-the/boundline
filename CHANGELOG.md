@@ -17,7 +17,9 @@ recorded workspace version.
 
 ## [Unreleased]
 
-No unreleased changes.
+### Added
+
+- AI Gateway And Inference Economics (081-ai-gateway-economics): domain types for session budget enforcement with conservative reservation/reconciliation, authority-zone-based spend exception approval, operator-owned pricing snapshots, risk-aware route selection, and inference cost telemetry. Implementation in progress — domain logic and adapter layer complete.
 
 Release metadata note:
 

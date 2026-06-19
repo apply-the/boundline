@@ -1,9 +1,13 @@
 #[path = "../../../src/adapters/agent.rs"]
 pub mod agent;
+#[path = "../../../src/adapters/approval_manager.rs"]
+pub mod approval_manager;
 #[path = "../../../src/adapters/audit_store.rs"]
 pub mod audit_store;
 #[path = "../../../src/adapters/auth_profile_store.rs"]
 pub mod auth_profile_store;
+#[path = "../../../src/adapters/budget_enforcer.rs"]
+pub mod budget_enforcer;
 #[path = "../../../src/adapters/capability_provider_runtime.rs"]
 pub mod capability_provider_runtime;
 #[path = "../../../src/adapters/checkpoint_store.rs"]
@@ -18,8 +22,12 @@ pub mod env_layer;
 pub mod github_device_flow;
 #[path = "../../../src/adapters/governance_runtime.rs"]
 pub mod governance_runtime;
+#[path = "../../../src/adapters/pricing_resolver.rs"]
+pub mod pricing_resolver;
 #[path = "../../../src/adapters/provider_runtime.rs"]
 pub mod provider_runtime;
+#[path = "../../../src/adapters/route_selector.rs"]
+pub mod route_selector;
 #[path = "../../../src/adapters/session_store.rs"]
 pub mod session_store;
 #[path = "../../../src/adapters/tool.rs"]

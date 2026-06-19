@@ -50,6 +50,8 @@ pub mod guidance;
 pub mod guidance_catalog;
 #[path = "../../../src/domain/help_next.rs"]
 pub mod help_next;
+#[path = "../../../src/domain/inference_economics.rs"]
+pub mod inference_economics;
 #[path = "../../../src/domain/limits.rs"]
 pub mod limits;
 #[path = "../../../src/domain/negotiation.rs"]

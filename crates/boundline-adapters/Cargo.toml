@@ -17,6 +17,7 @@ boundline-core.workspace = true
 clap.workspace = true
 reqwest.workspace = true
 rusqlite.workspace = true
+rust_decimal.workspace = true
 sqlite-vec = { workspace = true, optional = true }
 serde.workspace = true
 serde_json.workspace = true
