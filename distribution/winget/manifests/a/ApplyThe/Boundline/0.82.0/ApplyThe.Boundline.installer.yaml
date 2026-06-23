@@ -1,0 +1,18 @@
+PackageIdentifier: ApplyThe.Boundline
+PackageVersion: 0.82.0
+InstallerType: zip
+NestedInstallerType: portable
+Commands:
+  - boundline
+  - canon
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/apply-the/boundline/releases/download/0.82.0/boundline-bundle-0.82.0-windows-x86_64.zip
+    InstallerSha256: REPLACE_WITH_WINDOWS_X86_64_SHA256
+    NestedInstallerFiles:
+      - RelativeFilePath: boundline.exe
+        PortableCommandAlias: boundline
+      - RelativeFilePath: canon.exe
+        PortableCommandAlias: canon
+ManifestType: installer
+ManifestVersion: 1.6.0

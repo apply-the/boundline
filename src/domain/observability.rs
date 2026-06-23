@@ -39,10 +39,11 @@ pub enum EventType {
     ControlDegraded,
     ControlEscalated,
     RefinementRoundCompleted,
+    BrowserValidationCompleted,
 }
 
 impl EventType {
-    pub const fn all() -> [Self; 15] {
+    pub const fn all() -> [Self; 16] {
         [
             Self::PlanningAnalysisCompleted,
             Self::GuardianFindingEmitted,
@@ -59,6 +60,7 @@ impl EventType {
             Self::ControlDegraded,
             Self::ControlEscalated,
             Self::RefinementRoundCompleted,
+            Self::BrowserValidationCompleted,
         ]
     }
 
@@ -79,6 +81,7 @@ impl EventType {
             Self::ControlDegraded => "control.degraded",
             Self::ControlEscalated => "control.escalated",
             Self::RefinementRoundCompleted => "refinement.round.completed",
+            Self::BrowserValidationCompleted => "browser.validation.completed",
         }
     }
 
@@ -99,6 +102,7 @@ impl EventType {
             Self::ControlDegraded => SCHEMA_VERSION_COUNCIL_DECISION,
             Self::ControlEscalated => SCHEMA_VERSION_COUNCIL_DECISION,
             Self::RefinementRoundCompleted => SCHEMA_VERSION_REFINEMENT_ROUND,
+            Self::BrowserValidationCompleted => "1.0",
         }
     }
 }

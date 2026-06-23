@@ -42,7 +42,7 @@ feature under `specs/`.
 | **18** | [completion-verification-runtime.md](features/18-completion-verification-runtime.md) | Delivered in 0.80.0: fresh-proof gate before task or stage completion |
 | **19** | [plan-execution-orchestration.md](features/19-plan-execution-orchestration.md) | In Progress (spec 080): sequential execution control plane with dependency ordering, checkpoint/restore, blocked-task handling, and additive status projection |
 | **20** | [ai-gateway-and-inference-economics.md](../specs/081-ai-gateway-economics/spec.md) | In Progress: route telemetry, cost budgets, tiered model routing, spend exception approval |
-| **21** | [browser-and-visual-testing-provider.md](features/21-browser-and-visual-testing-provider.md) | Next: browser validation as a provider over the protocol |
+| **21** | [browser-and-visual-testing-provider.md](../specs/082-browser-visual-testing-provider/spec.md) | In Spec: browser validation as a provider over the protocol |
 | **22** | [session-memory-and-repository-knowledge-distillation.md](features/22-session-memory-and-repository-knowledge-distillation.md) | Next: confirmation-first trace distillation |
 | **23** | [experimental-recursivemas-provider-adapter.md](features/23-experimental-recursivemas-provider-adapter.md) | Experimental: external latent-space provider research track |
 

@@ -6,6 +6,10 @@ pub mod approval_manager;
 pub mod audit_store;
 #[path = "../../../src/adapters/auth_profile_store.rs"]
 pub mod auth_profile_store;
+#[path = "../../../src/adapters/browser_artifact_store.rs"]
+pub mod browser_artifact_store;
+#[path = "../../../src/adapters/browser_provider_runtime.rs"]
+pub mod browser_provider_runtime;
 #[path = "../../../src/adapters/budget_enforcer.rs"]
 pub mod budget_enforcer;
 #[path = "../../../src/adapters/capability_provider_runtime.rs"]
