@@ -53,7 +53,9 @@ fn command_transport_uses_working_directory_when_configured() -> Result<(), Box<
     assert_eq!(health.checked_at, 7);
 
     let recorded = fs::read_to_string(output_path)?;
-    assert_eq!(Path::new(recorded.trim()), fs::canonicalize(&working_directory)?.as_path());
+    let recorded_canonical = fs::canonicalize(Path::new(recorded.trim()))?;
+    let expected_canonical = fs::canonicalize(&working_directory)?;
+    assert_eq!(recorded_canonical, expected_canonical);
     Ok(())
 }
 

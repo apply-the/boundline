@@ -178,7 +178,7 @@ impl BrowserArtifactStore {
 
 // -- helpers --
 
-fn sha256_hex(data: &[u8]) -> String {
+pub(crate) fn sha256_hex(data: &[u8]) -> String {
     use std::fmt::Write;
     let hash = sha256(data);
     let mut hex = String::with_capacity(64);
@@ -188,7 +188,7 @@ fn sha256_hex(data: &[u8]) -> String {
     hex
 }
 
-fn sha256(data: &[u8]) -> [u8; 32] {
+pub(crate) fn sha256(data: &[u8]) -> [u8; 32] {
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
     // Simplified: production should use a real SHA-256 crate.
@@ -225,5 +225,315 @@ fn media_type_for_kind(kind: ArtifactKind) -> &'static str {
         | ArtifactKind::AccessibilityOutput
         | ArtifactKind::EvidencePacket => "application/json",
         ArtifactKind::DomSnapshot => "text/html",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use boundline_core::domain::browser_provider::{
+        BrowserEvidencePacket, BrowserFinding, FindingKind, FindingSeverity, StepStatus, StepTiming,
+    };
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    fn temp_run_dir() -> PathBuf {
+        let n = COUNTER.fetch_add(1, Ordering::SeqCst);
+        let pid = std::process::id();
+        std::env::temp_dir().join(format!("boundline-artifact-test-{pid}-{n}"))
+    }
+
+    fn sample_evidence_packet(run_id: &str) -> BrowserEvidencePacket {
+        BrowserEvidencePacket {
+            validation_run_id: run_id.into(),
+            provider_id: "test-provider".into(),
+            status: StepStatus::Completed,
+            started_at: "2026-06-24T00:00:00Z".into(),
+            completed_at: "2026-06-24T00:00:01Z".into(),
+            page_title: Some("Test Page".into()),
+            http_status: Some(200),
+            artifacts: vec![],
+            findings: vec![BrowserFinding {
+                kind: FindingKind::ConsoleError,
+                severity: FindingSeverity::Warning,
+                message: "test finding".into(),
+                evidence_refs: vec![],
+                retryability: None,
+                confirmed_intermittent: false,
+            }],
+            timing: StepTiming {
+                queue_wait_ms: None,
+                navigation_ms: Some(100),
+                readiness_wait_ms: None,
+                script_execution_ms: None,
+                accessibility_ms: None,
+                total_ms: 100,
+            },
+            capabilities_active: vec!["screenshot".into()],
+            schema_version: 1,
+        }
+    }
+
+    #[test]
+    fn new_creates_all_subdirectories() {
+        let run_dir = temp_run_dir();
+        let store = BrowserArtifactStore::new(&run_dir).expect("create store");
+        assert!(run_dir.join("screenshots").is_dir());
+        assert!(run_dir.join("logs").is_dir());
+        assert!(run_dir.join("dom").is_dir());
+        assert!(run_dir.join("accessibility").is_dir());
+        // Cleanup
+        let _ = std::fs::remove_dir_all(&run_dir);
+        let _ = store;
+    }
+
+    #[test]
+    fn write_screenshot_artifact() {
+        let run_dir = temp_run_dir();
+        let store = BrowserArtifactStore::new(&run_dir).expect("create store");
+        let content = b"fake-png-data";
+        let artifact = store
+            .write_artifact(
+                ArtifactKind::Screenshot,
+                "test.png",
+                content,
+                RetentionClass::RequiredEvidence,
+                "run-1",
+            )
+            .expect("write ok");
+        assert_eq!(artifact.kind, ArtifactKind::Screenshot);
+        assert_eq!(artifact.byte_size, 13);
+        assert_eq!(artifact.retention_class, RetentionClass::RequiredEvidence);
+        assert_eq!(artifact.media_type, "image/png");
+        assert!(!artifact.content_hash.is_empty());
+        assert!(artifact.relative_path.contains("screenshots/test.png"));
+        assert!(run_dir.join("screenshots/test.png").exists());
+        let _ = std::fs::remove_dir_all(&run_dir);
+        let _ = store;
+    }
+
+    #[test]
+    fn write_console_log_artifact() {
+        let run_dir = temp_run_dir();
+        let store = BrowserArtifactStore::new(&run_dir).expect("create store");
+        let artifact = store
+            .write_artifact(
+                ArtifactKind::ConsoleLog,
+                "console.json",
+                b"[]",
+                RetentionClass::RequiredEvidence,
+                "run-2",
+            )
+            .expect("write ok");
+        assert_eq!(artifact.kind, ArtifactKind::ConsoleLog);
+        assert_eq!(artifact.media_type, "application/json");
+        assert!(artifact.relative_path.contains("logs/console.json"));
+        let _ = std::fs::remove_dir_all(&run_dir);
+        let _ = store;
+    }
+
+    #[test]
+    fn write_evidence_packet_produces_valid_json() {
+        let run_dir = temp_run_dir();
+        let store = BrowserArtifactStore::new(&run_dir).expect("create store");
+        let packet = sample_evidence_packet("run-evidence");
+        let artifact = store.write_evidence_packet(&packet, "run-evidence").expect("write ok");
+        assert_eq!(artifact.kind, ArtifactKind::EvidencePacket);
+        assert!(run_dir.join("evidence.json").exists());
+        // Verify it's valid JSON
+        let raw = std::fs::read_to_string(run_dir.join("evidence.json")).expect("read");
+        let _parsed: serde_json::Value = serde_json::from_str(&raw).expect("valid json");
+        let _ = std::fs::remove_dir_all(&run_dir);
+        let _ = store;
+    }
+
+    #[test]
+    fn screenshot_over_size_limit_rejected() {
+        let run_dir = temp_run_dir();
+        let store = BrowserArtifactStore::new(&run_dir).expect("create store");
+        // Screenshot limit is 50 MB, so 51 MB should fail
+        let big = vec![0u8; 51 * 1024 * 1024];
+        let err = store
+            .write_artifact(
+                ArtifactKind::Screenshot,
+                "big.png",
+                &big,
+                RetentionClass::RequiredEvidence,
+                "run-3",
+            )
+            .expect_err("should reject");
+        assert!(err.to_string().contains("exceeds size limit"));
+        let _ = std::fs::remove_dir_all(&run_dir);
+        let _ = store;
+    }
+
+    #[test]
+    fn log_over_10mb_rejected() {
+        let run_dir = temp_run_dir();
+        let store = BrowserArtifactStore::new(&run_dir).expect("create store");
+        let big = vec![0u8; 11 * 1024 * 1024];
+        let err = store
+            .write_artifact(
+                ArtifactKind::ConsoleLog,
+                "big.log",
+                &big,
+                RetentionClass::RequiredEvidence,
+                "run-4",
+            )
+            .expect_err("should reject");
+        assert!(err.to_string().contains("exceeds size limit"));
+        let _ = std::fs::remove_dir_all(&run_dir);
+        let _ = store;
+    }
+
+    #[test]
+    fn sha256_produces_stable_hash() {
+        let data = b"hello world";
+        let h1 = sha256_hex(data);
+        let h2 = sha256_hex(data);
+        assert_eq!(h1, h2);
+        assert_eq!(h1.len(), 64); // 32 bytes = 64 hex chars
+    }
+
+    #[test]
+    fn artifact_content_hash_differs_for_different_data() {
+        let h1 = sha256_hex(b"a");
+        let h2 = sha256_hex(b"b");
+        assert_ne!(h1, h2);
+    }
+
+    #[test]
+    fn run_dir_string_returns_valid_path() {
+        let run_dir = temp_run_dir();
+        let store = BrowserArtifactStore::new(&run_dir).expect("create store");
+        assert!(store.run_dir_string().is_some());
+        let _ = std::fs::remove_dir_all(&run_dir);
+        let _ = store;
+    }
+
+    #[test]
+    fn dom_snapshot_uses_text_html_media_type() {
+        let run_dir = temp_run_dir();
+        let store = BrowserArtifactStore::new(&run_dir).expect("create store");
+        let artifact = store
+            .write_artifact(
+                ArtifactKind::DomSnapshot,
+                "page.html",
+                b"<html></html>",
+                RetentionClass::Diagnostic,
+                "run-dom",
+            )
+            .expect("write ok");
+        assert_eq!(artifact.media_type, "text/html");
+        assert_eq!(artifact.retention_class, RetentionClass::Diagnostic);
+        let _ = std::fs::remove_dir_all(&run_dir);
+        let _ = store;
+    }
+
+    #[test]
+    fn accessibility_artifact_stored_in_accessibility_dir() {
+        let run_dir = temp_run_dir();
+        let store = BrowserArtifactStore::new(&run_dir).expect("create store");
+        let artifact = store
+            .write_artifact(
+                ArtifactKind::AccessibilityOutput,
+                "a11y.json",
+                b"{}",
+                RetentionClass::RequiredEvidence,
+                "run-a11y",
+            )
+            .expect("write ok");
+        assert!(artifact.relative_path.contains("accessibility/a11y.json"));
+        assert_eq!(artifact.media_type, "application/json");
+        let _ = std::fs::remove_dir_all(&run_dir);
+        let _ = store;
+    }
+
+    #[test]
+    fn network_log_stored_in_logs_dir() {
+        let run_dir = temp_run_dir();
+        let store = BrowserArtifactStore::new(&run_dir).expect("create store");
+        let artifact = store
+            .write_artifact(
+                ArtifactKind::NetworkLog,
+                "network.json",
+                b"[]",
+                RetentionClass::Verbose,
+                "run-net",
+            )
+            .expect("write ok");
+        assert!(artifact.relative_path.contains("logs/network.json"));
+        assert_eq!(artifact.retention_class, RetentionClass::Verbose);
+        let _ = std::fs::remove_dir_all(&run_dir);
+        let _ = store;
+    }
+
+    #[test]
+    fn diff_image_uses_image_png_media_type() {
+        let run_dir = temp_run_dir();
+        let store = BrowserArtifactStore::new(&run_dir).expect("create store");
+        let artifact = store
+            .write_artifact(
+                ArtifactKind::DiffImage,
+                "diff.png",
+                b"fake",
+                RetentionClass::RequiredEvidence,
+                "run-diff",
+            )
+            .expect("write ok");
+        assert_eq!(artifact.media_type, "image/png");
+        assert!(artifact.relative_path.contains("screenshots/diff.png"));
+        let _ = std::fs::remove_dir_all(&run_dir);
+        let _ = store;
+    }
+
+    #[test]
+    fn ephemeral_retention_class_preserved() {
+        let run_dir = temp_run_dir();
+        let store = BrowserArtifactStore::new(&run_dir).expect("create store");
+        let artifact = store
+            .write_artifact(
+                ArtifactKind::ConsoleLog,
+                "temp.log",
+                b"ephemeral",
+                RetentionClass::Ephemeral,
+                "run-eph",
+            )
+            .expect("write ok");
+        assert_eq!(artifact.retention_class, RetentionClass::Ephemeral);
+        let _ = std::fs::remove_dir_all(&run_dir);
+        let _ = store;
+    }
+
+    #[test]
+    fn evidence_packet_artifact_stored_in_root() {
+        let run_dir = temp_run_dir();
+        let store = BrowserArtifactStore::new(&run_dir).expect("create store");
+        let artifact = store
+            .write_artifact(
+                ArtifactKind::EvidencePacket,
+                "custom-evidence.json",
+                b"{}",
+                RetentionClass::RequiredEvidence,
+                "run-ep",
+            )
+            .expect("write ok");
+        // EvidencePacket goes in root, not a subdirectory
+        assert!(!artifact.relative_path.contains('/'));
+        assert_eq!(artifact.media_type, "application/json");
+        let _ = std::fs::remove_dir_all(&run_dir);
+        let _ = store;
+    }
+
+    #[test]
+    fn sha256_hex_is_64_chars_for_empty() {
+        assert_eq!(sha256_hex(b"").len(), 64);
+    }
+
+    #[test]
+    fn sha256_deterministic_across_same_input() {
+        let data = vec![0u8; 1024];
+        assert_eq!(sha256_hex(&data), sha256_hex(&data));
     }
 }
