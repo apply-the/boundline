@@ -26,6 +26,8 @@ pub mod index;
 pub mod init;
 #[path = "../../../src/cli/inspect.rs"]
 pub mod inspect;
+#[path = "../../../src/cli/inspect_browser.rs"]
+pub mod inspect_browser;
 #[path = "../../../src/cli/models_auth.rs"]
 pub mod models_auth;
 #[path = "../../../src/cli/orchestrate.rs"]
@@ -46,6 +48,8 @@ pub mod run;
 pub mod session;
 #[path = "../../../src/cli/trace_compaction.rs"]
 pub mod trace_compaction;
+#[path = "../../../src/cli/validate_browser.rs"]
+pub mod validate_browser;
 #[path = "../../../src/cli/workflow.rs"]
 pub mod workflow;
 #[path = "../../../src/cli/workspace.rs"]

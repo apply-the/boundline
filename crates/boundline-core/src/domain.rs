@@ -4,6 +4,8 @@ pub mod audit;
 pub mod auth_profile;
 #[path = "../../../src/domain/brief.rs"]
 pub mod brief;
+#[path = "../../../src/domain/browser_provider.rs"]
+pub mod browser_provider;
 #[path = "../../../src/domain/calibration.rs"]
 pub mod calibration;
 #[path = "../../../src/domain/capability_provider.rs"]

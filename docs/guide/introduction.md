@@ -1,9 +1,9 @@
 # Boundline
 
 > [!TIP]
-> This wiki is aligned with **Boundline 0.81.0**. For older versions, refer to the repository tags.
+> This wiki is aligned with **Boundline 0.82.0**. For older versions, refer to the repository tags.
 
-![Boundline - Bounded Delivery Runtime](https://github.com/apply-the/boundline/blob/0.81.0/tech-docs/images/boundline-banner.jpg?raw=true)
+![Boundline - Bounded Delivery Runtime](https://github.com/apply-the/boundline/blob/0.82.0/tech-docs/images/boundline-banner.jpg?raw=true)
 
 **The local delivery orchestrator for bounded engineering work.** Turn goals into executed plans safely, without losing control to an opaque AI loop.
 

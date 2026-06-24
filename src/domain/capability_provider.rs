@@ -579,9 +579,69 @@ pub struct CapabilityProviderProjection {
     pub summary: String,
 }
 
+// ---------------------------------------------------------------------------
+// Browser capability provider
+// ---------------------------------------------------------------------------
+
+/// Stable protocol line for the browser capability provider contract.
+pub const BROWSER_PROVIDER_PROTOCOL_LINE_V1: &str = "browser-provider-v1";
+
+/// Configuration for a registered browser capability provider.
+///
+/// Boundline uses this to spawn and communicate with an external
+/// browser-automation binary over JSON stdio. Browser automation is a
+/// provider capability, not core Boundline runtime.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BrowserProviderConfig {
+    /// Stable provider identifier.
+    pub provider_id: String,
+    /// Transport used to contact the provider (must be `"command"` for V1).
+    pub command: String,
+    /// CLI arguments passed to the provider binary.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub args: Vec<String>,
+    /// Optional working directory override.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub working_dir: Option<String>,
+    /// Environment variables inherited by the provider process (allowlist).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub env_inherit: Vec<String>,
+    /// Maximum seconds to wait for the provider startup handshake.
+    pub startup_timeout_seconds: u32,
+    /// Whether the provider is enabled for execution.
+    pub enabled: bool,
+    /// Maximum concurrent browser instances the provider may manage.
+    pub max_concurrency: u32,
+    /// Maximum requests allowed in the provider's internal queue.
+    pub max_queue_size: u32,
+    /// Maximum seconds a request may wait in the queue.
+    pub queue_timeout_seconds: u32,
+    /// Maximum seconds for a single validation step execution.
+    pub execution_timeout_seconds: u32,
+}
+
+impl Default for BrowserProviderConfig {
+    fn default() -> Self {
+        Self {
+            provider_id: String::new(),
+            command: String::new(),
+            args: Vec::new(),
+            working_dir: None,
+            env_inherit: vec!["PATH".into()],
+            startup_timeout_seconds: 10,
+            enabled: false,
+            max_concurrency: 1,
+            max_queue_size: 5,
+            queue_timeout_seconds: 60,
+            execution_timeout_seconds: 120,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
+        BROWSER_PROVIDER_PROTOCOL_LINE_V1, BrowserProviderConfig,
         CAPABILITY_PROVIDER_PROTOCOL_LINE_V1, CapabilityProviderActivationState,
         CapabilityProviderDiscoveryState, CapabilityProviderRegistration,
         CapabilityProviderRegistrationSource, CapabilityProviderTransportKind,
@@ -681,5 +741,44 @@ mod tests {
             http_registration.transport.transport_kind(),
             CapabilityProviderTransportKind::Http
         );
+    }
+
+    #[test]
+    fn browser_provider_config_defaults_are_sensible() {
+        let cfg = BrowserProviderConfig::default();
+        assert!(!cfg.enabled);
+        assert_eq!(cfg.max_concurrency, 1);
+        assert_eq!(cfg.max_queue_size, 5);
+        assert_eq!(cfg.queue_timeout_seconds, 60);
+        assert_eq!(cfg.execution_timeout_seconds, 120);
+        assert_eq!(cfg.startup_timeout_seconds, 10);
+        assert!(cfg.env_inherit.contains(&"PATH".to_string()));
+    }
+
+    #[test]
+    fn browser_provider_config_serialization_round_trip() {
+        let cfg = BrowserProviderConfig {
+            provider_id: "browser-playwright".into(),
+            command: "boundline-browser-provider".into(),
+            args: vec!["serve".into(), "--stdio".into()],
+            working_dir: None,
+            env_inherit: vec!["PATH".into(), "DISPLAY".into()],
+            startup_timeout_seconds: 15,
+            enabled: true,
+            max_concurrency: 2,
+            max_queue_size: 10,
+            queue_timeout_seconds: 30,
+            execution_timeout_seconds: 60,
+        };
+        let json = serde_json::to_string(&cfg).expect("serialize");
+        let parsed: BrowserProviderConfig = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(parsed.provider_id, cfg.provider_id);
+        assert_eq!(parsed.max_concurrency, 2);
+        assert!(parsed.enabled);
+    }
+
+    #[test]
+    fn browser_protocol_line_is_stable() {
+        assert_eq!(BROWSER_PROVIDER_PROTOCOL_LINE_V1, "browser-provider-v1");
     }
 }

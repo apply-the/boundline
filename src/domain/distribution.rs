@@ -8,7 +8,7 @@ use crate::domain::governance::{CANONICAL_MODES, CanonCapabilitySnapshot, CanonM
 
 // Keep the supported Canon companion target centralized so release metadata,
 // docs, and compatibility checks advance together.
-pub const SUPPORTED_CANON_VERSION: &str = "0.72.5";
+pub const SUPPORTED_CANON_VERSION: &str = "0.72.6";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

@@ -149,7 +149,7 @@ dependencies = [
 
 [[package]]
 name = "boundline"
-version = "0.81.0"
+version = "0.82.0"
 dependencies = [
  "boundline-adapters",
  "boundline-cli",
@@ -168,7 +168,7 @@ dependencies = [
 
 [[package]]
 name = "boundline-adapters"
-version = "0.81.0"
+version = "0.82.0"
 dependencies = [
  "boundline-core",
  "clap",
@@ -188,7 +188,7 @@ dependencies = [
 
 [[package]]
 name = "boundline-cli"
-version = "0.81.0"
+version = "0.82.0"
 dependencies = [
  "boundline-adapters",
  "boundline-core",
@@ -205,7 +205,7 @@ dependencies = [
 
 [[package]]
 name = "boundline-core"
-version = "0.81.0"
+version = "0.82.0"
 dependencies = [
  "clap",
  "rust_decimal",
