@@ -5695,7 +5695,7 @@ mod tests {
         let workspace = temp_workspace("boundline-init-canon-blocked");
         let mut blocked_status = blocked_canon_install_status(
             "Canon governance surface is unavailable",
-            "install or repair Canon 0.72.5 before rerunning init",
+            "install or repair Canon 0.72.6 before rerunning init",
         );
         if let Some(surface) = blocked_status.surface_verification.as_mut() {
             surface.operations_verified = false;
@@ -5745,7 +5745,7 @@ mod tests {
             report.terminal_output
         );
         assert!(
-            report.terminal_output.contains("install or repair Canon 0.72.5 before rerunning init"),
+            report.terminal_output.contains("install or repair Canon 0.72.6 before rerunning init"),
             "{}",
             report.terminal_output
         );
@@ -5759,8 +5759,8 @@ mod tests {
         // must say "blocked before planning" and no workspace files must exist.
         let workspace = temp_workspace("boundline-init-canon-preflight");
         let mut blocked_status = blocked_canon_install_status(
-            "Canon 0.10.0 is present but version 0.72.5 is required",
-            "upgrade Canon to 0.72.5 or later",
+            "Canon 0.10.0 is present but version 0.72.6 is required",
+            "upgrade Canon to 0.72.6 or later",
         );
         if let Some(surface) = blocked_status.surface_verification.as_mut() {
             surface.version_compatible = false;
@@ -5808,7 +5808,7 @@ mod tests {
             "expected 'blocked before planning' in output to confirm fail-fast path;\n{}",
             report.terminal_output
         );
-        assert!(report.terminal_output.contains("0.72.5"), "{}", report.terminal_output);
+        assert!(report.terminal_output.contains("0.72.6"), "{}", report.terminal_output);
         // No workspace files must be created by the blocked run.
         assert!(!workspace.join(".boundline").exists());
     }
