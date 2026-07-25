@@ -6844,6 +6844,142 @@ mod tests {
         Ok(())
     }
 
+    fn expect_catalog_validation_error(
+        catalog: BundledModelCatalog,
+        expected_fragment: &str,
+    ) -> Result<(), String> {
+        match catalog.validate() {
+            Err(error) if error.contains(expected_fragment) => Ok(()),
+            Err(error) => Err(format!(
+                "expected validation error containing {expected_fragment:?}, found {error:?}"
+            )),
+            Ok(()) => Err(format!(
+                "expected validation error containing {expected_fragment:?}, validation passed"
+            )),
+        }
+    }
+
+    #[test]
+    fn bundled_catalog_rejects_invalid_source_runtime_and_default_evidence() -> Result<(), String> {
+        let catalog = BundledModelCatalog::load().map_err(|error| error.to_string())?;
+
+        let mut missing_sources = catalog.clone();
+        missing_sources.sources.clear();
+        expect_catalog_validation_error(missing_sources, "must declare first-party")?;
+
+        let mut insecure_source = catalog.clone();
+        let source = insecure_source
+            .sources
+            .first_mut()
+            .ok_or_else(|| "catalog source fixture is missing".to_string())?;
+        source.source_url = "http://example.invalid/models".to_string();
+        expect_catalog_validation_error(insecure_source, "must use HTTPS")?;
+
+        let mut duplicate_source = catalog.clone();
+        let source = duplicate_source
+            .sources
+            .first()
+            .cloned()
+            .ok_or_else(|| "catalog source fixture is missing".to_string())?;
+        duplicate_source.sources.push(source);
+        expect_catalog_validation_error(duplicate_source, "duplicate catalog source")?;
+
+        let mut duplicate_model = catalog.clone();
+        let runtime = duplicate_model
+            .runtimes
+            .first_mut()
+            .ok_or_else(|| "catalog runtime fixture is missing".to_string())?;
+        let model = runtime
+            .models
+            .first()
+            .cloned()
+            .ok_or_else(|| "catalog model fixture is missing".to_string())?;
+        runtime.models.push(model);
+        expect_catalog_validation_error(duplicate_model, "duplicate model")?;
+
+        let mut unknown_source = catalog.clone();
+        let runtime = unknown_source
+            .runtimes
+            .first_mut()
+            .ok_or_else(|| "catalog runtime fixture is missing".to_string())?;
+        let model = runtime
+            .models
+            .first_mut()
+            .ok_or_else(|| "catalog model fixture is missing".to_string())?;
+        model.source_id = "missing-source".to_string();
+        expect_catalog_validation_error(unknown_source, "unknown catalog source")?;
+
+        let mut mismatched_namespace = catalog.clone();
+        let runtime = mismatched_namespace
+            .runtimes
+            .first_mut()
+            .ok_or_else(|| "catalog runtime fixture is missing".to_string())?;
+        runtime.provider_namespace = "other-provider".to_string();
+        expect_catalog_validation_error(mismatched_namespace, "does not match runtime namespace")?;
+
+        let mut missing_default = catalog.clone();
+        missing_default.default_routes.planning = None;
+        expect_catalog_validation_error(missing_default, "missing default route")?;
+
+        let mut unknown_default = catalog.clone();
+        unknown_default.default_routes.planning = Some(super::CatalogRouteReference {
+            runtime: RuntimeKind::Copilot,
+            model_id: "missing-model".to_string(),
+        });
+        expect_catalog_validation_error(unknown_default, "references an unknown model")?;
+
+        let mut retired_default = catalog;
+        retired_default.default_routes.planning = Some(super::CatalogRouteReference {
+            runtime: RuntimeKind::Copilot,
+            model_id: "gpt-4.1".to_string(),
+        });
+        expect_catalog_validation_error(retired_default, "references a retired model")
+    }
+
+    #[test]
+    fn catalog_model_lifecycle_validation_rejects_incomplete_metadata() -> Result<(), String> {
+        let catalog = BundledModelCatalog::load().map_err(|error| error.to_string())?;
+        let runtime = catalog
+            .runtime_entry(RuntimeKind::Claude)
+            .ok_or_else(|| "Claude runtime fixture is missing".to_string())?;
+
+        let mut deprecated = runtime
+            .models
+            .iter()
+            .find(|model| model.lifecycle == super::CatalogModelLifecycle::Deprecated)
+            .cloned()
+            .ok_or_else(|| "deprecated model fixture is missing".to_string())?;
+        deprecated.retirement_date = None;
+        match deprecated.validate_lifecycle() {
+            Err(error) if error.contains("require retirement date") => {}
+            other => return Err(format!("unexpected deprecated lifecycle result: {other:?}")),
+        }
+
+        let mut alias = runtime
+            .models
+            .iter()
+            .find(|model| model.identifier_kind == super::CatalogModelIdentifierKind::Alias)
+            .cloned()
+            .ok_or_else(|| "alias model fixture is missing".to_string())?;
+        alias.resolves_to = None;
+        match alias.validate_lifecycle() {
+            Err(error) if error.contains("must declare resolves_to") => {}
+            other => return Err(format!("unexpected alias lifecycle result: {other:?}")),
+        }
+
+        let mut pinned = runtime
+            .models
+            .iter()
+            .find(|model| model.identifier_kind == super::CatalogModelIdentifierKind::Pinned)
+            .cloned()
+            .ok_or_else(|| "pinned model fixture is missing".to_string())?;
+        pinned.resolves_to = Some("invented-alias-target".to_string());
+        match pinned.validate_lifecycle() {
+            Err(error) if error.contains("non-alias model") => Ok(()),
+            other => Err(format!("unexpected pinned lifecycle result: {other:?}")),
+        }
+    }
+
     #[test]
     fn select_canon_mode_covers_manual_and_auto_variants() {
         let catalog = BundledModelCatalog::load().unwrap();
