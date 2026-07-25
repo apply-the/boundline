@@ -10,6 +10,7 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  MSRV_TOOLCHAIN: 1.96.0
 
 jobs:
   fmt:
@@ -19,7 +20,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.96.0
+          toolchain: ${{ env.MSRV_TOOLCHAIN }}
           components: rustfmt
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all -- --check
@@ -34,18 +35,27 @@ jobs:
       - run: git diff --exit-code -- distribution/homebrew/Formula/boundline.rb distribution/winget/manifests
 
   test:
-    name: test
+    name: test (MSRV 1.96.0)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.96.0
+          toolchain: ${{ env.MSRV_TOOLCHAIN }}
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@v2
         with:
           tool: cargo-nextest
       - run: cargo nextest run --workspace --all-features
+
+  current-stable:
+    name: check (current stable)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check --workspace --all-targets --all-features
 
   deny:
     name: deny
@@ -54,7 +64,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.96.0
+          toolchain: ${{ env.MSRV_TOOLCHAIN }}
       - uses: Swatinem/rust-cache@v2
       - run: cargo install cargo-deny --locked
       - run: cargo deny check licenses bans sources
@@ -94,7 +104,7 @@ jobs:
         run: echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.96.0
+          toolchain: ${{ env.MSRV_TOOLCHAIN }}
           targets: ${{ matrix.target }}
       # Windows 2025 runners have shown cache-restore failures here before
       # cargo build starts; skip the optional cache on that slice.
