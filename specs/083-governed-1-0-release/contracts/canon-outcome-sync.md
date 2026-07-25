@@ -46,6 +46,30 @@ pr-review
 incident
 ```
 
+## M1A contract-crate boundary
+
+`canon-contracts` freezes exactly the nine profiles above. `implementation` is
+not a stable profile and unknown profiles, approval decisions, challenge
+tiers, verification kinds, projection kinds, operations, and contract
+versions fail closed during decoding. Public structs remain compatible with
+unknown additive fields.
+
+The contract distinguishes deterministic verification from external semantic
+review evidence. It contains no semantic-review executor, model route, code
+execution, workspace mutation, or persistence implementation.
+
+Deterministic verification evidence carries a stable check identity, its bound
+claims, a closed pass/fail status, and immutable evidence references.
+
+Stable governance publication is limited to governance-bundle,
+decision-memory, and evidence projections. The one-shot contract contains
+typed request/response envelopes and the six frozen operation identifiers, but
+no RPC dispatcher or CLI implementation.
+
+A governance publication carries the complete typed governance bundle
+alongside decision-memory, evidence, and approval projections so packet,
+authority, and evidence requirements survive the exchange.
+
 ## Authorization phase
 
 Canon deterministically validates packets, references, evidence declarations,

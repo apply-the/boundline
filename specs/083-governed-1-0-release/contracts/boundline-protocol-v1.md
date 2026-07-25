@@ -16,6 +16,26 @@ Processing order:
 
 Read-only requests are not promised mutation-style replay semantics.
 
+## M1A contract-crate boundary
+
+`boundline-protocol` serializes typed public DTOs only. Public structs accept
+unknown additive fields so a V1 consumer can read a compatible extended
+payload. Frozen schema-version, authority, status, and reason-code enums reject
+unknown values rather than granting authority or inferring success.
+
+Canonical JSON serialization recursively orders object keys and emits compact
+JSON. It provides deterministic bytes for T011 without hashing, storing, or
+replaying requests.
+
+The M1A adapter surface is descriptor-only: executable identity, transport,
+operation and stage identifiers, requested capabilities, route lineage, and
+proposal-only results. FrameworkAdapterV1 framing, invocation, and runtime
+operation types remain assigned to T060/T061.
+
+The crate does not expose repository identity, worktree lease, transaction
+ownership, execution lease, capability grant, executor-in-flight, publication
+lock, publication recovery, or Canon outbox persistence records.
+
 ## Stable reason codes
 
 The 1.0 line includes typed reason codes for:

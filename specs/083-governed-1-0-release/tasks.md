@@ -25,14 +25,14 @@ proceed in parallel. All Rust behavior tasks use test-first implementation.
 
 **Blocking prerequisite for every user story**
 
-- [ ] T009 Create typed public envelope, revision, lineage, evidence, projection, and reason-code contract tests in `boundline:crates/boundline-protocol/tests/protocol_v1.rs`
-- [ ] T010 Implement the public protocol crate without internal persistence records in `boundline:crates/boundline-protocol/src/lib.rs`
+- [x] T009 Create typed public envelope, revision, lineage, evidence, projection, and reason-code contract tests in `boundline:crates/boundline-protocol/tests/protocol_v1.rs`
+- [x] T010 Implement the public protocol crate without internal persistence records in `boundline:crates/boundline-protocol/src/lib.rs`
 - [ ] T011 Add idempotency tests proving lookup-before-revision, same-digest replay, different-digest conflict, and new-request revision validation in `boundline:crates/boundline-core/tests/idempotency.rs`
 - [ ] T012 Implement contract-line-and-operation-scoped canonical idempotency records in `boundline:crates/boundline-core/src/transaction/idempotency.rs`
 - [ ] T013 Add CLI snapshot tests for the frozen Boundline primary/admin command tree and removed duplicate commands in `boundline:tests/contract/cli_090.rs`
 - [ ] T014 Replace the Boundline command tree with the 0.90 stable surface and explicit preview classifications in `boundline:src/cli.rs` and `boundline:crates/boundline-cli/src/cli.rs`
-- [ ] T015 [P] Create Canon contract-crate tests for packets, profiles, deterministic evidence, decision-memory projections, and one-shot operations in `canon:crates/canon-contracts/tests/contracts.rs`
-- [ ] T016 [P] Implement the `canon-contracts` crate and nine-profile registry types in `canon:crates/canon-contracts/src/lib.rs`
+- [x] T015 [P] Create Canon contract-crate tests for packets, profiles, deterministic evidence, decision-memory projections, and one-shot operations in `canon:crates/canon-contracts/tests/contracts.rs`
+- [x] T016 [P] Implement the `canon-contracts` crate and nine-profile registry types in `canon:crates/canon-contracts/src/lib.rs`
 - [ ] T017 Add fixture-driven transactional migration tests for Boundline 0.82.0 and Canon 0.72.6, including forced termination and unsupported active-session archival, in `boundline:tests/migration/bridge_090.rs` and `canon:tests/migration/bridge_090.rs`
 - [ ] T018 Implement backup-first, idempotent, inspectable, atomic 0.90 bridge migrators and conversion reports in `boundline:crates/boundline-core/src/migration/mod.rs` and `canon:crates/canon-engine/src/policy/migration.rs`
 - [ ] T019 Set prerelease workspace versions to the roadmap’s explicit `0.90.0` train point in `boundline:Cargo.toml` and `canon:Cargo.toml`; after the `boundline-protocol` prerelease package exists, replace the adapter’s owned Boundline 0.66 bridge and update its supported prerelease range in `boundline-adapter-speckit:Cargo.toml`

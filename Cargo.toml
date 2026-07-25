@@ -4,6 +4,7 @@ members = [
 	"crates/boundline-core",
 	"crates/boundline-adapters",
 	"crates/boundline-cli",
+	"crates/boundline-protocol",
 ]
 resolver = "3"
 
@@ -32,6 +33,7 @@ rust_decimal = "1"
 boundline-core = { path = "crates/boundline-core" }
 boundline-adapters = { path = "crates/boundline-adapters" }
 boundline-cli = { path = "crates/boundline-cli" }
+boundline-protocol = { path = "crates/boundline-protocol" }
 
 [workspace.lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage)'] }
