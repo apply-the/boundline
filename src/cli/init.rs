@@ -469,6 +469,8 @@ struct SeededRouteSelection {
 struct BundledModelCatalog {
     metadata: CatalogMetadata,
     #[serde(default)]
+    sources: Vec<CatalogSourceEntry>,
+    #[serde(default)]
     runtimes: Vec<CatalogRuntimeEntry>,
     #[serde(default)]
     default_routes: CatalogDefaultRoutes,
@@ -479,12 +481,21 @@ struct CatalogMetadata {
     source_label: String,
     catalog_version: String,
     updated_at: String,
+    evidence_date: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct CatalogSourceEntry {
+    source_id: String,
+    provider_namespace: String,
+    source_url: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 struct CatalogRuntimeEntry {
     runtime: RuntimeKind,
     display_name: String,
+    provider_namespace: String,
     #[serde(default)]
     models: Vec<CatalogModelEntry>,
 }
@@ -493,6 +504,44 @@ struct CatalogRuntimeEntry {
 struct CatalogModelEntry {
     model_id: String,
     display_name: String,
+    lifecycle: CatalogModelLifecycle,
+    identifier_kind: CatalogModelIdentifierKind,
+    source_id: String,
+    retirement_date: Option<String>,
+    replacement_model_id: Option<String>,
+    resolves_to: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum CatalogModelLifecycle {
+    Stable,
+    Preview,
+    Deprecated,
+    Retired,
+}
+
+impl CatalogModelLifecycle {
+    const fn is_selectable(self) -> bool {
+        !matches!(self, Self::Retired)
+    }
+
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::Stable => "stable",
+            Self::Preview => "preview",
+            Self::Deprecated => "deprecated",
+            Self::Retired => "retired",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum CatalogModelIdentifierKind {
+    Canonical,
+    Alias,
+    Pinned,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -511,14 +560,19 @@ struct CatalogRouteReference {
 
 impl BundledModelCatalog {
     fn load() -> Result<Self, InitCommandError> {
-        toml::from_str(BUNDLED_MODEL_CATALOG)
-            .map_err(|source| InitCommandError::InvalidBundledCatalog(source.to_string()))
+        let catalog: Self = toml::from_str(BUNDLED_MODEL_CATALOG)
+            .map_err(|source| InitCommandError::InvalidBundledCatalog(source.to_string()))?;
+        catalog.validate().map_err(InitCommandError::InvalidBundledCatalog)?;
+        Ok(catalog)
     }
 
     fn summary_label(&self) -> String {
         format!(
-            "{} catalog {} ({})",
-            self.metadata.source_label, self.metadata.catalog_version, self.metadata.updated_at
+            "{} catalog {} (updated {}, evidence {})",
+            self.metadata.source_label,
+            self.metadata.catalog_version,
+            self.metadata.updated_at,
+            self.metadata.evidence_date
         )
     }
 
@@ -527,21 +581,15 @@ impl BundledModelCatalog {
     }
 
     fn default_route_for_runtime(&self, runtime: RuntimeKind) -> Option<ModelRoute> {
-        let entry = self.runtime_entry(runtime)?;
-        let model = entry.models.first()?;
+        let model = self.selectable_models_for_runtime(runtime).into_iter().next()?;
         Some(ModelRoute { runtime, model: model.model_id.clone() })
     }
 
     fn model_routes_for_runtime(&self, runtime: RuntimeKind) -> Vec<ModelRoute> {
-        self.runtime_entry(runtime)
-            .map(|entry| {
-                entry
-                    .models
-                    .iter()
-                    .map(|model| ModelRoute { runtime, model: model.model_id.clone() })
-                    .collect()
-            })
-            .unwrap_or_default()
+        self.selectable_models_for_runtime(runtime)
+            .into_iter()
+            .map(|model| ModelRoute { runtime, model: model.model_id.clone() })
+            .collect()
     }
 
     fn default_route_for_slot(&self, slot: RouteSlot) -> Option<ModelRoute> {
@@ -562,15 +610,126 @@ impl BundledModelCatalog {
     }
 
     fn model_labels_for_runtime(&self, runtime: RuntimeKind) -> Vec<String> {
+        self.selectable_models_for_runtime(runtime)
+            .into_iter()
+            .map(CatalogModelEntry::display_label)
+            .collect()
+    }
+
+    fn selectable_models_for_runtime(&self, runtime: RuntimeKind) -> Vec<&CatalogModelEntry> {
         self.runtime_entry(runtime)
             .map(|entry| {
-                entry
-                    .models
-                    .iter()
-                    .map(|model| format!("{} ({})", model.display_name, model.model_id))
-                    .collect()
+                entry.models.iter().filter(|model| model.lifecycle.is_selectable()).collect()
             })
             .unwrap_or_default()
+    }
+
+    fn validate(&self) -> Result<(), String> {
+        let source_ids = self.validate_sources()?;
+        for runtime in &self.runtimes {
+            self.validate_runtime(runtime, &source_ids)?;
+        }
+        for slot in [
+            RouteSlot::Planning,
+            RouteSlot::Implementation,
+            RouteSlot::Verification,
+            RouteSlot::Review,
+        ] {
+            self.validate_default_route(slot)?;
+        }
+        Ok(())
+    }
+
+    fn validate_sources(&self) -> Result<BTreeMap<&str, &str>, String> {
+        let mut sources = BTreeMap::new();
+        for source in &self.sources {
+            if !source.source_url.starts_with("https://") {
+                return Err(format!("catalog source {} must use HTTPS", source.source_id));
+            }
+            if sources
+                .insert(source.source_id.as_str(), source.provider_namespace.as_str())
+                .is_some()
+            {
+                return Err(format!("duplicate catalog source {}", source.source_id));
+            }
+        }
+        if sources.is_empty() {
+            return Err("catalog must declare first-party evidence sources".to_string());
+        }
+        Ok(sources)
+    }
+
+    fn validate_runtime(
+        &self,
+        runtime: &CatalogRuntimeEntry,
+        sources: &BTreeMap<&str, &str>,
+    ) -> Result<(), String> {
+        let mut model_ids = BTreeSet::new();
+        for model in &runtime.models {
+            if !model_ids.insert(model.model_id.as_str()) {
+                return Err(format!(
+                    "duplicate model {} in runtime {}",
+                    model.model_id,
+                    runtime.runtime.as_str()
+                ));
+            }
+            let source_namespace = sources
+                .get(model.source_id.as_str())
+                .ok_or_else(|| format!("unknown catalog source {}", model.source_id))?;
+            if *source_namespace != runtime.provider_namespace {
+                return Err(format!(
+                    "model {} source namespace {} does not match runtime namespace {}",
+                    model.model_id, source_namespace, runtime.provider_namespace
+                ));
+            }
+            model.validate_lifecycle()?;
+        }
+        Ok(())
+    }
+
+    fn validate_default_route(&self, slot: RouteSlot) -> Result<(), String> {
+        let route = self
+            .default_route_for_slot(slot)
+            .ok_or_else(|| format!("missing default route for {slot:?}"))?;
+        let model = self
+            .runtime_entry(route.runtime)
+            .and_then(|runtime| runtime.models.iter().find(|model| model.model_id == route.model))
+            .ok_or_else(|| format!("default route {slot:?} references an unknown model"))?;
+        if !model.lifecycle.is_selectable() {
+            return Err(format!("default route {slot:?} references a retired model"));
+        }
+        Ok(())
+    }
+}
+
+impl CatalogModelEntry {
+    fn display_label(&self) -> String {
+        format!("{} ({}) [{}]", self.display_name, self.model_id, self.lifecycle.as_str())
+    }
+
+    fn validate_lifecycle(&self) -> Result<(), String> {
+        if matches!(
+            self.lifecycle,
+            CatalogModelLifecycle::Deprecated | CatalogModelLifecycle::Retired
+        ) && (self.retirement_date.is_none() || self.replacement_model_id.is_none())
+        {
+            return Err(format!(
+                "{} models require retirement date and replacement: {}",
+                self.lifecycle.as_str(),
+                self.model_id
+            ));
+        }
+        match self.identifier_kind {
+            CatalogModelIdentifierKind::Alias if self.resolves_to.is_none() => {
+                Err(format!("alias model {} must declare resolves_to", self.model_id))
+            }
+            CatalogModelIdentifierKind::Canonical | CatalogModelIdentifierKind::Pinned
+                if self.resolves_to.is_some() =>
+            {
+                Err(format!("non-alias model {} cannot declare resolves_to", self.model_id))
+            }
+            _ => Ok(()),
+        }
     }
 }
 
@@ -4760,25 +4919,20 @@ fn edit_route_selection(
         return Ok(());
     }
 
-    let runtime_entry = &catalog.runtimes[runtime_choice];
-    let mut model_items = catalog.model_labels_for_runtime(runtime_entry.runtime);
+    let runtime = catalog.runtimes[runtime_choice].runtime;
+    let selectable_models = catalog.selectable_models_for_runtime(runtime);
+    let mut model_items = catalog.model_labels_for_runtime(runtime);
     model_items.push(CUSTOM_MODEL_ID_LABEL.to_string());
     let model_default = selection
         .route
         .as_ref()
-        .and_then(|route| {
-            catalog.runtime_entry(runtime_entry.runtime).and_then(|entry| {
-                entry.models.iter().position(|model| model.model_id == route.model)
-            })
-        })
+        .and_then(|route| selectable_models.iter().position(|model| model.model_id == route.model))
         .or_else(|| {
             bundled_default.as_ref().and_then(|route| {
-                if route.runtime != runtime_entry.runtime {
+                if route.runtime != runtime {
                     return None;
                 }
-                catalog.runtime_entry(runtime_entry.runtime).and_then(|entry| {
-                    entry.models.iter().position(|model| model.model_id == route.model)
-                })
+                selectable_models.iter().position(|model| model.model_id == route.model)
             })
         })
         .unwrap_or(0);
@@ -4801,13 +4955,13 @@ fn edit_route_selection(
         if custom_model.is_empty() {
             return Err("Custom model id cannot be empty.".to_string());
         }
-        selection.route = Some(ModelRoute { runtime: runtime_entry.runtime, model: custom_model });
+        selection.route = Some(ModelRoute { runtime, model: custom_model });
         selection.source = GuidedRouteSource::Custom;
         return Ok(());
     }
 
-    let model = runtime_entry.models[model_choice].model_id.clone();
-    selection.route = Some(ModelRoute { runtime: runtime_entry.runtime, model });
+    let model = selectable_models[model_choice].model_id.clone();
+    selection.route = Some(ModelRoute { runtime, model });
     selection.source = GuidedRouteSource::Bundled;
     Ok(())
 }
@@ -6122,8 +6276,7 @@ mod tests {
     #[test]
     fn guided_answers_can_choose_custom_models_without_freeform_route_entry() {
         let catalog = BundledModelCatalog::load().unwrap();
-        let claude_custom_model_index =
-            catalog.runtime_entry(RuntimeKind::Claude).map(|entry| entry.models.len()).unwrap();
+        let claude_custom_model_index = catalog.model_labels_for_runtime(RuntimeKind::Claude).len();
         let mut interactor = ScriptedInteractor {
             selects: VecDeque::from(vec![0, 1, 2, claude_custom_model_index, 0]),
             multi_selects: VecDeque::from(vec![vec![0]]),
@@ -6572,6 +6725,123 @@ mod tests {
         // summary_label
         let summary = catalog.summary_label();
         assert!(summary.contains("bundled"), "{summary}");
+    }
+
+    #[test]
+    fn bundled_catalog_declares_complete_model_lifecycle_evidence() -> Result<(), String> {
+        let catalog: toml::Value =
+            toml::from_str(super::BUNDLED_MODEL_CATALOG).map_err(|error| error.to_string())?;
+        let sources = catalog
+            .get("sources")
+            .and_then(toml::Value::as_array)
+            .ok_or_else(|| "catalog must declare first-party evidence sources".to_string())?;
+        if sources.len() != 4 {
+            return Err(format!("expected four provider sources, found {}", sources.len()));
+        }
+
+        let runtimes = catalog
+            .get("runtimes")
+            .and_then(toml::Value::as_array)
+            .ok_or_else(|| "catalog must declare runtime namespaces".to_string())?;
+        let mut lifecycle_states = BTreeSet::new();
+        let mut identifier_kinds = BTreeSet::new();
+        for runtime in runtimes {
+            if runtime.get("provider_namespace").and_then(toml::Value::as_str).is_none() {
+                return Err("every runtime must declare its provider namespace".to_string());
+            }
+            let models = runtime
+                .get("models")
+                .and_then(toml::Value::as_array)
+                .ok_or_else(|| "every runtime must declare models".to_string())?;
+            for model in models {
+                let lifecycle = model
+                    .get("lifecycle")
+                    .and_then(toml::Value::as_str)
+                    .ok_or_else(|| "every model must declare lifecycle".to_string())?;
+                lifecycle_states.insert(lifecycle.to_string());
+                let identifier_kind = model
+                    .get("identifier_kind")
+                    .and_then(toml::Value::as_str)
+                    .ok_or_else(|| "every model must declare identifier kind".to_string())?;
+                identifier_kinds.insert(identifier_kind.to_string());
+                if model.get("source_id").and_then(toml::Value::as_str).is_none() {
+                    return Err("every model must identify its first-party source".to_string());
+                }
+            }
+        }
+
+        let expected_lifecycle =
+            BTreeSet::from(["deprecated", "preview", "retired", "stable"].map(str::to_string));
+        if lifecycle_states != expected_lifecycle {
+            return Err(format!("unexpected lifecycle coverage: {lifecycle_states:?}"));
+        }
+        let expected_identifiers =
+            BTreeSet::from(["alias", "canonical", "pinned"].map(str::to_string));
+        if identifier_kinds != expected_identifiers {
+            return Err(format!("unexpected identifier coverage: {identifier_kinds:?}"));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn refreshed_catalog_changes_only_declared_direct_runtime_defaults() -> Result<(), String> {
+        let catalog = BundledModelCatalog::load().map_err(|error| error.to_string())?;
+        let cases = [
+            (RuntimeKind::Codex, "openai/gpt-5.6-sol"),
+            (RuntimeKind::Claude, "claude-opus-5"),
+            (RuntimeKind::Gemini, "gemini-3.6-flash"),
+        ];
+        for (runtime, expected_model) in cases {
+            let route = catalog
+                .default_route_for_runtime(runtime)
+                .ok_or_else(|| format!("missing default route for {}", runtime.as_str()))?;
+            if route.model != expected_model {
+                return Err(format!(
+                    "unexpected {} default: expected {expected_model}, found {}",
+                    runtime.as_str(),
+                    route.model
+                ));
+            }
+        }
+
+        let slot_defaults = [
+            (RouteSlot::Planning, "gpt-5.4"),
+            (RouteSlot::Implementation, "opus-4.6"),
+            (RouteSlot::Verification, "sonnet-4.6"),
+            (RouteSlot::Review, "gpt-5.4"),
+        ];
+        for (slot, expected_model) in slot_defaults {
+            let route = catalog
+                .default_route_for_slot(slot)
+                .ok_or_else(|| format!("missing default route for {slot:?}"))?;
+            if route.runtime != RuntimeKind::Copilot || route.model != expected_model {
+                return Err(format!(
+                    "M0 must preserve the explicit Copilot default for {slot:?}: {route:?}"
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn retired_catalog_entries_are_not_suggested_but_explicit_pins_remain_parseable()
+    -> Result<(), String> {
+        let catalog = BundledModelCatalog::load().map_err(|error| error.to_string())?;
+        let copilot_routes = catalog.model_routes_for_runtime(RuntimeKind::Copilot);
+        if copilot_routes.iter().any(|route| route.model == "gpt-4.1") {
+            return Err("retired Copilot models must not be suggested".to_string());
+        }
+        let gemini_labels = catalog.model_labels_for_runtime(RuntimeKind::Gemini);
+        if gemini_labels.iter().any(|label| label.contains("Gemini 3 Pro Preview")) {
+            return Err("retired Gemini models must not be offered in guided init".to_string());
+        }
+
+        let explicit = parse_model_route("planning=claude:claude-sonnet-4-20250514")
+            .map_err(|error| error.to_string())?;
+        if explicit.1.model != "claude-sonnet-4-20250514" {
+            return Err("an explicit user-pinned route was rewritten".to_string());
+        }
+        Ok(())
     }
 
     #[test]

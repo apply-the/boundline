@@ -1,139 +1,403 @@
 [metadata]
 source_label = "bundled"
-catalog_version = "0.72.0"
-updated_at = "2026-06-05"
+catalog_version = "0.83.0"
+updated_at = "2026-07-25"
+evidence_date = "2026-07-25"
+
+[[sources]]
+source_id = "github-copilot-models"
+provider_namespace = "copilot"
+source_url = "https://docs.github.com/en/copilot/reference/ai-models/supported-models"
+
+[[sources]]
+source_id = "openai-api-models"
+provider_namespace = "openai-api"
+source_url = "https://developers.openai.com/api/docs/models"
+
+[[sources]]
+source_id = "anthropic-api-models"
+provider_namespace = "anthropic-api"
+source_url = "https://platform.claude.com/docs/en/about-claude/models/overview"
+
+[[sources]]
+source_id = "gemini-api-models"
+provider_namespace = "gemini-api"
+source_url = "https://ai.google.dev/gemini-api/docs/models"
 
 [[runtimes]]
 runtime = "copilot"
 display_name = "GitHub Copilot"
+provider_namespace = "copilot"
+
+[[runtimes.models]]
+model_id = "gpt-5.6-sol"
+display_name = "GPT-5.6 Sol"
+lifecycle = "stable"
+identifier_kind = "canonical"
+source_id = "github-copilot-models"
+
+[[runtimes.models]]
+model_id = "gpt-5.6-terra"
+display_name = "GPT-5.6 Terra"
+lifecycle = "stable"
+identifier_kind = "canonical"
+source_id = "github-copilot-models"
+
+[[runtimes.models]]
+model_id = "gpt-5.6-luna"
+display_name = "GPT-5.6 Luna"
+lifecycle = "stable"
+identifier_kind = "canonical"
+source_id = "github-copilot-models"
 
 [[runtimes.models]]
 model_id = "gpt-5.5"
 display_name = "GPT-5.5"
+lifecycle = "stable"
+identifier_kind = "canonical"
+source_id = "github-copilot-models"
 
 [[runtimes.models]]
 model_id = "gpt-5.4"
 display_name = "GPT-5.4"
+lifecycle = "stable"
+identifier_kind = "canonical"
+source_id = "github-copilot-models"
 
 [[runtimes.models]]
 model_id = "gpt-5.4-mini"
 display_name = "GPT-5.4 Mini"
+lifecycle = "stable"
+identifier_kind = "canonical"
+source_id = "github-copilot-models"
 
 [[runtimes.models]]
 model_id = "gpt-5.4-nano"
 display_name = "GPT-5.4 Nano"
+lifecycle = "stable"
+identifier_kind = "canonical"
+source_id = "github-copilot-models"
 
 [[runtimes.models]]
 model_id = "gpt-5-mini"
 display_name = "GPT-5 Mini"
+lifecycle = "stable"
+identifier_kind = "canonical"
+source_id = "github-copilot-models"
+
+[[runtimes.models]]
+model_id = "fable-5"
+display_name = "Claude Fable 5"
+lifecycle = "stable"
+identifier_kind = "canonical"
+source_id = "github-copilot-models"
+
+[[runtimes.models]]
+model_id = "opus-5"
+display_name = "Claude Opus 5"
+lifecycle = "stable"
+identifier_kind = "canonical"
+source_id = "github-copilot-models"
 
 [[runtimes.models]]
 model_id = "opus-4.8"
 display_name = "Claude Opus 4.8"
-
-[[runtimes.models]]
-model_id = "sonnet-4.6"
-display_name = "Claude Sonnet 4.6"
-
-[[runtimes.models]]
-model_id = "sonnet-4.5"
-display_name = "Claude Sonnet 4.5"
+lifecycle = "stable"
+identifier_kind = "canonical"
+source_id = "github-copilot-models"
 
 [[runtimes.models]]
 model_id = "opus-4.7"
 display_name = "Claude Opus 4.7"
+lifecycle = "stable"
+identifier_kind = "canonical"
+source_id = "github-copilot-models"
 
 [[runtimes.models]]
 model_id = "opus-4.6"
 display_name = "Claude Opus 4.6"
+lifecycle = "stable"
+identifier_kind = "canonical"
+source_id = "github-copilot-models"
 
 [[runtimes.models]]
 model_id = "opus-4.5"
 display_name = "Claude Opus 4.5"
+lifecycle = "stable"
+identifier_kind = "canonical"
+source_id = "github-copilot-models"
 
 [[runtimes.models]]
-model_id = "haiku-4.5"
-display_name = "Claude Haiku 4.5"
-
-[[runtimes.models]]
-model_id = "gemini-2.5-pro"
-display_name = "Gemini 2.5 Pro"
-
-[[runtimes.models]]
-model_id = "gemini-3-flash-preview"
-display_name = "Gemini 3 Flash Preview"
-
-[[runtimes.models]]
-model_id = "gemini-3.1-pro-preview"
-display_name = "Gemini 3.1 Pro Preview"
-
-[[runtimes.models]]
-model_id = "gemini-3.5-flash"
-display_name = "Gemini 3.5 Flash"
-
-[[runtimes]]
-runtime = "codex"
-display_name = "Codex (OpenAI models)"
-
-[[runtimes.models]]
-model_id = "openai/gpt-5.5"
-display_name = "GPT-5.5"
-
-[[runtimes.models]]
-model_id = "openai/gpt-5.4"
-display_name = "GPT-5.4"
-
-[[runtimes.models]]
-model_id = "openai/gpt-5.4-mini"
-display_name = "GPT-5.4 Mini"
-
-[[runtimes]]
-runtime = "claude"
-display_name = "Claude"
-
-[[runtimes.models]]
-model_id = "opus-4.7"
-display_name = "Claude Opus 4.7"
+model_id = "sonnet-5"
+display_name = "Claude Sonnet 5"
+lifecycle = "stable"
+identifier_kind = "canonical"
+source_id = "github-copilot-models"
 
 [[runtimes.models]]
 model_id = "sonnet-4.6"
 display_name = "Claude Sonnet 4.6"
+lifecycle = "stable"
+identifier_kind = "canonical"
+source_id = "github-copilot-models"
+
+[[runtimes.models]]
+model_id = "sonnet-4.5"
+display_name = "Claude Sonnet 4.5"
+lifecycle = "stable"
+identifier_kind = "canonical"
+source_id = "github-copilot-models"
 
 [[runtimes.models]]
 model_id = "haiku-4.5"
 display_name = "Claude Haiku 4.5"
-
-[[runtimes]]
-runtime = "gemini"
-display_name = "Google Gemini"
+lifecycle = "stable"
+identifier_kind = "canonical"
+source_id = "github-copilot-models"
 
 [[runtimes.models]]
-model_id = "gemini-3.1-pro-preview"
-display_name = "Gemini 3.1 Pro Preview"
+model_id = "gemini-3.6-flash"
+display_name = "Gemini 3.6 Flash"
+lifecycle = "stable"
+identifier_kind = "canonical"
+source_id = "github-copilot-models"
 
 [[runtimes.models]]
 model_id = "gemini-3.5-flash"
 display_name = "Gemini 3.5 Flash"
+lifecycle = "stable"
+identifier_kind = "canonical"
+source_id = "github-copilot-models"
 
 [[runtimes.models]]
 model_id = "gemini-3-flash-preview"
-display_name = "Gemini 3 Flash Preview"
+display_name = "Gemini 3 Flash"
+lifecycle = "preview"
+identifier_kind = "canonical"
+source_id = "github-copilot-models"
 
 [[runtimes.models]]
-model_id = "gemini-3.1-flash-lite"
-display_name = "Gemini 3.1 Flash-Lite"
+model_id = "gemini-3.1-pro-preview"
+display_name = "Gemini 3.1 Pro"
+lifecycle = "preview"
+identifier_kind = "canonical"
+source_id = "github-copilot-models"
 
 [[runtimes.models]]
 model_id = "gemini-2.5-pro"
 display_name = "Gemini 2.5 Pro"
+lifecycle = "stable"
+identifier_kind = "canonical"
+source_id = "github-copilot-models"
+
+[[runtimes.models]]
+model_id = "gpt-4.1"
+display_name = "GPT-4.1"
+lifecycle = "retired"
+identifier_kind = "canonical"
+source_id = "github-copilot-models"
+retirement_date = "2026-06-01"
+replacement_model_id = "gpt-5.5"
+
+[[runtimes]]
+runtime = "codex"
+display_name = "OpenAI API"
+provider_namespace = "openai-api"
+
+[[runtimes.models]]
+model_id = "openai/gpt-5.6-sol"
+display_name = "GPT-5.6 Sol"
+lifecycle = "stable"
+identifier_kind = "canonical"
+source_id = "openai-api-models"
+
+[[runtimes.models]]
+model_id = "openai/gpt-5.6"
+display_name = "GPT-5.6"
+lifecycle = "stable"
+identifier_kind = "alias"
+source_id = "openai-api-models"
+resolves_to = "openai/gpt-5.6-sol"
+
+[[runtimes.models]]
+model_id = "openai/gpt-5.6-terra"
+display_name = "GPT-5.6 Terra"
+lifecycle = "stable"
+identifier_kind = "canonical"
+source_id = "openai-api-models"
+
+[[runtimes.models]]
+model_id = "openai/gpt-5.6-luna"
+display_name = "GPT-5.6 Luna"
+lifecycle = "stable"
+identifier_kind = "canonical"
+source_id = "openai-api-models"
+
+[[runtimes.models]]
+model_id = "openai/gpt-5.5"
+display_name = "GPT-5.5"
+lifecycle = "stable"
+identifier_kind = "canonical"
+source_id = "openai-api-models"
+
+[[runtimes.models]]
+model_id = "openai/gpt-5.4"
+display_name = "GPT-5.4"
+lifecycle = "stable"
+identifier_kind = "canonical"
+source_id = "openai-api-models"
+
+[[runtimes.models]]
+model_id = "openai/gpt-5.4-mini"
+display_name = "GPT-5.4 Mini"
+lifecycle = "stable"
+identifier_kind = "canonical"
+source_id = "openai-api-models"
+
+[[runtimes]]
+runtime = "claude"
+display_name = "Anthropic API"
+provider_namespace = "anthropic-api"
+
+[[runtimes.models]]
+model_id = "claude-opus-5"
+display_name = "Claude Opus 5"
+lifecycle = "stable"
+identifier_kind = "pinned"
+source_id = "anthropic-api-models"
+
+[[runtimes.models]]
+model_id = "claude-fable-5"
+display_name = "Claude Fable 5"
+lifecycle = "stable"
+identifier_kind = "pinned"
+source_id = "anthropic-api-models"
+
+[[runtimes.models]]
+model_id = "claude-sonnet-5"
+display_name = "Claude Sonnet 5"
+lifecycle = "stable"
+identifier_kind = "pinned"
+source_id = "anthropic-api-models"
+
+[[runtimes.models]]
+model_id = "claude-haiku-4-5-20251001"
+display_name = "Claude Haiku 4.5 (20251001)"
+lifecycle = "stable"
+identifier_kind = "pinned"
+source_id = "anthropic-api-models"
+
+[[runtimes.models]]
+model_id = "claude-haiku-4-5"
+display_name = "Claude Haiku 4.5"
+lifecycle = "stable"
+identifier_kind = "alias"
+source_id = "anthropic-api-models"
+resolves_to = "claude-haiku-4-5-20251001"
+
+[[runtimes.models]]
+model_id = "claude-opus-4-1-20250805"
+display_name = "Claude Opus 4.1"
+lifecycle = "deprecated"
+identifier_kind = "pinned"
+source_id = "anthropic-api-models"
+retirement_date = "2026-08-05"
+replacement_model_id = "claude-opus-4-8"
+
+[[runtimes.models]]
+model_id = "claude-sonnet-4-20250514"
+display_name = "Claude Sonnet 4"
+lifecycle = "retired"
+identifier_kind = "pinned"
+source_id = "anthropic-api-models"
+retirement_date = "2026-06-15"
+replacement_model_id = "claude-sonnet-4-6"
+
+[[runtimes]]
+runtime = "gemini"
+display_name = "Gemini API"
+provider_namespace = "gemini-api"
+
+[[runtimes.models]]
+model_id = "gemini-3.6-flash"
+display_name = "Gemini 3.6 Flash"
+lifecycle = "stable"
+identifier_kind = "canonical"
+source_id = "gemini-api-models"
+
+[[runtimes.models]]
+model_id = "gemini-3.5-flash"
+display_name = "Gemini 3.5 Flash"
+lifecycle = "stable"
+identifier_kind = "canonical"
+source_id = "gemini-api-models"
+
+[[runtimes.models]]
+model_id = "gemini-3.5-flash-lite"
+display_name = "Gemini 3.5 Flash-Lite"
+lifecycle = "stable"
+identifier_kind = "canonical"
+source_id = "gemini-api-models"
+
+[[runtimes.models]]
+model_id = "gemini-3.1-pro-preview"
+display_name = "Gemini 3.1 Pro Preview"
+lifecycle = "preview"
+identifier_kind = "canonical"
+source_id = "gemini-api-models"
+
+[[runtimes.models]]
+model_id = "gemini-3-flash-preview"
+display_name = "Gemini 3 Flash Preview"
+lifecycle = "preview"
+identifier_kind = "canonical"
+source_id = "gemini-api-models"
+replacement_model_id = "gemini-3.6-flash"
+
+[[runtimes.models]]
+model_id = "gemini-3.1-flash-lite"
+display_name = "Gemini 3.1 Flash-Lite"
+lifecycle = "deprecated"
+identifier_kind = "canonical"
+source_id = "gemini-api-models"
+retirement_date = "2027-05-07"
+replacement_model_id = "gemini-3.5-flash-lite"
+
+[[runtimes.models]]
+model_id = "gemini-2.5-pro"
+display_name = "Gemini 2.5 Pro"
+lifecycle = "deprecated"
+identifier_kind = "canonical"
+source_id = "gemini-api-models"
+retirement_date = "2026-10-16"
+replacement_model_id = "gemini-3.1-pro-preview"
 
 [[runtimes.models]]
 model_id = "gemini-2.5-flash"
 display_name = "Gemini 2.5 Flash"
+lifecycle = "deprecated"
+identifier_kind = "canonical"
+source_id = "gemini-api-models"
+retirement_date = "2026-10-16"
+replacement_model_id = "gemini-3.6-flash"
 
 [[runtimes.models]]
 model_id = "gemini-2.5-flash-lite"
 display_name = "Gemini 2.5 Flash-Lite"
+lifecycle = "deprecated"
+identifier_kind = "canonical"
+source_id = "gemini-api-models"
+retirement_date = "2026-10-16"
+replacement_model_id = "gemini-3.5-flash-lite"
+
+[[runtimes.models]]
+model_id = "gemini-3-pro-preview"
+display_name = "Gemini 3 Pro Preview"
+lifecycle = "retired"
+identifier_kind = "canonical"
+source_id = "gemini-api-models"
+retirement_date = "2026-03-09"
+replacement_model_id = "gemini-3.1-pro-preview"
 
 [default_routes]
 planning = { runtime = "copilot", model_id = "gpt-5.4" }
