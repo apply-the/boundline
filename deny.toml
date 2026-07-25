@@ -10,16 +10,12 @@ allow = [
     "ISC",
     "MIT",
     "Unicode-3.0",
-    "Zlib",
 ]
 confidence-threshold = 0.93
 private = { ignore = true }
 
 [advisories]
-ignore = [
-    # Transitive via ratatui; cargo-deny reports no safe upgrade path.
-    "RUSTSEC-2024-0436",
-]
+ignore = []
 version = 2
 yanked = "warn"
 
