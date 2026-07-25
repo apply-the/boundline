@@ -1,6 +1,6 @@
 # boundline Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2026-06-12
+Auto-generated from all feature plans. Last updated: 2026-07-25
 
 ## Active Technologies
 - Rust 1.96.0, edition 2024 + existing workspace dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, `rusqlite` with bundled SQLite support), existing workspace crates (`boundline-core`, `boundline-adapters`, `boundline-cli`), and one optional trusted `sqlite-vec` extension-loading path for local vector tables (065-activate-sqlite-vec)
@@ -15,6 +15,8 @@ Auto-generated from all feature plans. Last updated: 2026-06-12
 - Existing workspace-local `.boundline/config.toml`, (071-capability-provider-protocol)
 - Rust 1.96.0, edition 2024 + Existing workspace crates and dependencies only; `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, `rusqlite`, `dialoguer`, `boundline-core`, `boundline-adapters`, `boundline-cli` (079-completion-verification-runtime)
 - Existing workspace-local `.boundline/session.json`, `.boundline/traces/`, `.boundline/execution.json`, and related session artifacts; additive completion-verification records embedded in existing session, task, and trace persistence surfaces; no new external persistence backend (079-completion-verification-runtime)
+- Rust 1.96.0, edition 2024 + existing workspace dependencies (`clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, `rusqlite`) and contract crates published from the existing Boundline and Canon repositories (083-governed-1-0-release)
+- Existing workspace-local `.boundline/` projections plus a protected user-only external state root for persistent session worktrees, transaction journals, publication recovery, backups, and Canon outcome synchronization (083-governed-1-0-release)
 
 - Rust 1.96.0, edition 2024 + `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, `rusqlite`, `dialoguer`
 - Workspace-local config and traces: `.boundline/session.json`, `.boundline/traces/`, `.boundline/config.toml`, `.boundline/execution.json`, `.boundline/workflows.toml`
@@ -47,9 +49,9 @@ Crate versioning follows Semantic Versioning.
 Before 1.0.0, breaking changes MAY occur in minor versions.
 
 ## Recent Changes
+- 083-governed-1-0-release: Added the governed 1.0 release plan, stable contract boundaries, persistent execution model, crash-consistent publication, and Canon outcome synchronization
 - 079-completion-verification-runtime: Added Rust 1.96.0, edition 2024 + Existing workspace crates and dependencies only; `clap`, `serde`, `serde_json`, `thiserror`, `tracing`, `uuid`, `toml`, `rusqlite`, `dialoguer`, `boundline-core`, `boundline-adapters`, `boundline-cli`
 - 071-capability-provider-protocol: Added Rust 1.96.0, edition 2024 + Existing workspace crates and dependencies only;
-- 070-large-codebase-context-substrate: Added Rust 1.96.0, edition 2024 + Existing workspace crates and dependencies only;
 
 
 <!-- MANUAL ADDITIONS START -->
