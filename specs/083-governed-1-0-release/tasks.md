@@ -27,8 +27,8 @@ proceed in parallel. All Rust behavior tasks use test-first implementation.
 
 - [x] T009 Create typed public envelope, revision, lineage, evidence, projection, and reason-code contract tests in `boundline:crates/boundline-protocol/tests/protocol_v1.rs`
 - [x] T010 Implement the public protocol crate without internal persistence records in `boundline:crates/boundline-protocol/src/lib.rs`
-- [ ] T011 Add idempotency tests proving lookup-before-revision, same-digest replay, different-digest conflict, and new-request revision validation in `boundline:crates/boundline-core/tests/idempotency.rs`
-- [ ] T012 Implement contract-line-and-operation-scoped canonical idempotency records in `boundline:crates/boundline-core/src/transaction/idempotency.rs`
+- [x] T011 Add idempotency tests proving lookup-before-revision, same-digest replay, different-digest conflict, and new-request revision validation in `boundline:crates/boundline-core/tests/idempotency.rs`
+- [x] T012 Implement contract-line-and-operation-scoped canonical idempotency records in `boundline:crates/boundline-core/src/transaction/idempotency.rs`
 - [ ] T013 Add CLI snapshot tests for the frozen Boundline primary/admin command tree and removed duplicate commands in `boundline:tests/contract/cli_090.rs`
 - [ ] T014 Replace the Boundline command tree with the 0.90 stable surface and explicit preview classifications in `boundline:src/cli.rs` and `boundline:crates/boundline-cli/src/cli.rs`
 - [x] T015 [P] Create Canon contract-crate tests for packets, profiles, deterministic evidence, decision-memory projections, and one-shot operations in `canon:crates/canon-contracts/tests/contracts.rs`

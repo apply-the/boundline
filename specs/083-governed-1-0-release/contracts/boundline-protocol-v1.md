@@ -15,17 +15,43 @@ Processing order:
 5. Persist intent before effects and completion after validation.
 
 Read-only requests are not promised mutation-style replay semantics.
+Completed accepted results and completed business rejections are replayed
+exactly. An execution failure before terminal commit remains explicitly
+nonterminal: it is never reported as success and is not silently retried.
 
-## M1A contract-crate boundary
+## M1A contract correction and crate boundary
+
+M1B found that M1A's ordinary `serde_json` conversion was not sufficient to
+support its canonicalization claim. This narrow correction keeps the existing
+public `canonical_json` boundary, rejects floating-point and duplicate-key
+ambiguity in one serialization pass, and moves the named mutation preimage,
+version, and cryptographic digest into Boundline core. No unrelated stable
+protocol DTO is added.
 
 `boundline-protocol` serializes typed public DTOs only. Public structs accept
 unknown additive fields so a V1 consumer can read a compatible extended
 payload. Frozen schema-version, authority, status, and reason-code enums reject
 unknown values rather than granting authority or inferring success.
 
-Canonical JSON serialization recursively orders object keys and emits compact
-JSON. It provides deterministic bytes for T011 without hashing, storing, or
-replaying requests.
+Canonical JSON V1 recursively orders object keys, preserves sequence order,
+uses Serde's declared JSON representation for nulls, booleans, strings,
+integers, enums, and optional fields, and emits compact JSON. Floating-point
+values are outside the mutation contract and fail before digesting or
+mutation.
+
+The canonical mutation preimage includes protocol version, contract line,
+operation, request ID, expected state revision, and the complete typed
+payload. `canonical_request_digest` is the sole excluded envelope field
+because a digest cannot be part of its own preimage. The digest record carries
+the named canonicalization version separately and applies a versioned domain
+separator before cryptographic hashing.
+
+The M1B reference coordinator uses the focused `sha2` dependency and records
+its lowercase SHA-256
+`sha256:<hex>` value together with `canonical_json_v1`. It provides atomic
+process-local admission and completion semantics; crash-consistent SQLite
+persistence remains owned by the later durability milestone and is not
+claimed here.
 
 The M1A adapter surface is descriptor-only: executable identity, transport,
 operation and stage identifiers, requested capabilities, route lineage, and

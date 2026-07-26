@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+boundline-protocol.workspace = true
 clap.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -13,3 +14,4 @@ tracing.workspace = true
 uuid.workspace = true
 toml.workspace = true
 rust_decimal.workspace = true
+sha2.workspace = true

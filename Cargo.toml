@@ -30,6 +30,7 @@ tracing = "0.1"
 uuid = { version = "1", features = ["serde", "v4"] }
 dotenvy = "0.15.7"
 rust_decimal = "1"
+sha2 = "0.10"
 boundline-core = { path = "crates/boundline-core" }
 boundline-adapters = { path = "crates/boundline-adapters" }
 boundline-cli = { path = "crates/boundline-cli" }

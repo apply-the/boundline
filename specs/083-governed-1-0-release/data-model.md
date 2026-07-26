@@ -52,6 +52,22 @@ Any accepted-diff or fingerprint change transitions the binding to `stale`.
 
 ## Internal Boundline persistence
 
+### IdempotencyRecord
+
+- key: contract line, operation, and request ID
+- canonicalization version and trusted cryptographic request digest
+- execution state: `in_flight`, `terminal`, or `nonterminal`
+- exact terminal public result, evidence and trace references, and next actions
+- resulting state revision when terminal
+
+Lookup is atomic and precedes revision validation. A matching in-flight
+request waits for the single admitted execution and receives its exact
+terminal result. A completed business rejection is terminal and replayable.
+A process-local or incomplete execution failure is retained as explicit
+`nonterminal` state and cannot be replayed as success or silently retried.
+Stale new requests are rejected before intent admission and create no success
+record.
+
 ### RepositoryIdentityRecord
 
 - clone-local opaque identifier

@@ -11,8 +11,10 @@ use boundline_protocol::{
     RequestId, Revision, RouteDescriptor, SessionId, SessionLifecycle, StageId, TraceReference,
     canonical_json,
 };
+use serde::ser::{SerializeMap, SerializeStruct};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use std::collections::HashMap;
 use std::fmt::Debug;
 
 const CONTRACT_LINE: &str = "boundline.protocol";
@@ -51,6 +53,70 @@ struct AdvancePayload {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 struct AdvanceResult {
     accepted: bool,
+}
+
+struct DuplicateObjectKey;
+
+impl Serialize for DuplicateObjectKey {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut map = serializer.serialize_map(Some(2))?;
+        map.serialize_entry("same", &1_u64)?;
+        map.serialize_entry("same", &2_u64)?;
+        map.end()
+    }
+}
+
+struct SerializedBytes;
+
+impl Serialize for SerializedBytes {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_bytes(&[0, 127, 255])
+    }
+}
+
+struct CollectedDisplay;
+
+impl std::fmt::Display for CollectedDisplay {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("collected")
+    }
+}
+
+impl Serialize for CollectedDisplay {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(self)
+    }
+}
+
+struct MapValueWithoutKey;
+
+impl Serialize for MapValueWithoutKey {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut map = serializer.serialize_map(Some(1))?;
+        map.serialize_value(&1_u64)?;
+        map.end()
+    }
+}
+
+struct MapKeyWithoutValue;
+
+impl Serialize for MapKeyWithoutValue {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut map = serializer.serialize_map(Some(1))?;
+        map.serialize_key("key")?;
+        map.end()
+    }
+}
+
+struct DuplicateStructField;
+
+impl Serialize for DuplicateStructField {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut structure = serializer.serialize_struct("DuplicateStructField", 2)?;
+        structure.serialize_field("same", &1_u64)?;
+        structure.serialize_field("same", &2_u64)?;
+        structure.end()
+    }
 }
 
 fn request() -> MutationRequestEnvelope<AdvancePayload> {
@@ -145,7 +211,62 @@ fn additive_fields_are_ignored_by_v1_consumers() -> Result<(), Box<dyn std::erro
 }
 
 #[test]
-fn canonical_json_is_stable_across_object_key_order() -> Result<(), Box<dyn std::error::Error>> {
+fn canonical_request_v1_defines_json_values_and_preserves_sequence_order()
+-> Result<(), Box<dyn std::error::Error>> {
+    #[derive(Serialize)]
+    #[serde(rename_all = "snake_case")]
+    enum FixtureMode {
+        ExecuteStage,
+    }
+
+    #[derive(Serialize)]
+    struct CanonicalFixture {
+        null_value: Option<String>,
+        boolean: bool,
+        string: String,
+        signed_integer: i64,
+        unsigned_integer: u64,
+        mode: FixtureMode,
+        present_optional: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        omitted_optional: Option<String>,
+        map: HashMap<String, u64>,
+        sequence: Vec<String>,
+    }
+
+    let fixture = CanonicalFixture {
+        null_value: None,
+        boolean: true,
+        string: "line\n\"quoted\"".to_owned(),
+        signed_integer: -7,
+        unsigned_integer: 9,
+        mode: FixtureMode::ExecuteStage,
+        present_optional: Some("present".to_owned()),
+        omitted_optional: None,
+        map: HashMap::from([("z".to_owned(), 2), ("a".to_owned(), 1)]),
+        sequence: vec!["first".to_owned(), "second".to_owned()],
+    };
+    check_eq(
+        canonical_json(&fixture)?,
+        concat!(
+            r#"{"boolean":true,"map":{"a":1,"z":2},"mode":"execute_stage","#,
+            r#""null_value":null,"present_optional":"present","sequence":["first","second"],"#,
+            r#""signed_integer":-7,"string":"line\n\"quoted\"","unsigned_integer":9}"#
+        )
+        .to_owned(),
+        "canonical JSON value representation",
+    )?;
+
+    let reversed_sequence = json!(["second", "first"]);
+    check(
+        canonical_json(&fixture.sequence)? != canonical_json(&reversed_sequence)?,
+        "canonicalization changed sequence order",
+    )
+}
+
+#[test]
+fn canonical_json_is_stable_across_recursive_object_key_order()
+-> Result<(), Box<dyn std::error::Error>> {
     let left = json!({"z": [{"b": 2, "a": 1}], "a": {"d": 4, "c": 3}});
     let right = json!({"a": {"c": 3, "d": 4}, "z": [{"a": 1, "b": 2}]});
 
@@ -155,6 +276,145 @@ fn canonical_json_is_stable_across_object_key_order() -> Result<(), Box<dyn std:
         r#"{"a":{"c":3,"d":4},"z":[{"a":1,"b":2}]}"#.to_owned(),
         "canonical bytes",
     )?;
+    Ok(())
+}
+
+#[test]
+fn generic_canonical_json_does_not_omit_authored_fields() -> Result<(), Box<dyn std::error::Error>>
+{
+    check(
+        canonical_json(&request())?.contains("canonical_request_digest"),
+        "generic canonicalization unexpectedly omitted an authored field",
+    )
+}
+
+#[test]
+fn canonical_request_rejects_all_floating_point_values() -> Result<(), Box<dyn std::error::Error>> {
+    for value in [1.5_f64, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+        check(
+            canonical_json(&value)
+                .err()
+                .is_some_and(|error| error.to_string().contains("floating-point")),
+            "floating-point canonicalization result",
+        )?;
+    }
+    check(canonical_json(&1.5_f32).is_err(), "f32 canonicalization result")?;
+    Ok(())
+}
+
+#[test]
+fn canonical_request_rejects_duplicate_object_keys() -> Result<(), Box<dyn std::error::Error>> {
+    check(
+        canonical_json(&DuplicateObjectKey)
+            .err()
+            .is_some_and(|error| error.to_string().contains("duplicate object key")),
+        "duplicate object-key canonicalization result",
+    )
+}
+
+#[test]
+fn canonical_json_covers_serde_scalar_and_compound_representations()
+-> Result<(), Box<dyn std::error::Error>> {
+    #[derive(Serialize)]
+    struct UnitStruct;
+
+    #[derive(Serialize)]
+    struct TupleStruct(i8, u16);
+
+    #[derive(Serialize)]
+    struct NewtypeStruct(u8);
+
+    #[derive(Serialize)]
+    enum RichEnum {
+        Unit,
+        Newtype(u32),
+        Tuple(u8, u8),
+        Struct { enabled: bool },
+    }
+
+    #[derive(Serialize)]
+    struct ScalarFixture {
+        i8_value: i8,
+        i16_value: i16,
+        i32_value: i32,
+        i64_value: i64,
+        i128_value: i128,
+        u8_value: u8,
+        u16_value: u16,
+        u32_value: u32,
+        u64_value: u64,
+        u128_value: u128,
+        character: char,
+        bytes: SerializedBytes,
+        collected: CollectedDisplay,
+        unit: (),
+        unit_struct: UnitStruct,
+        tuple: (u8, bool),
+        tuple_struct: TupleStruct,
+        newtype_struct: NewtypeStruct,
+        variants: Vec<RichEnum>,
+        integer_keys: std::collections::BTreeMap<i16, bool>,
+        boolean_keys: std::collections::BTreeMap<bool, bool>,
+    }
+
+    let fixture = ScalarFixture {
+        i8_value: -8,
+        i16_value: -16,
+        i32_value: -32,
+        i64_value: -64,
+        i128_value: -128,
+        u8_value: 8,
+        u16_value: 16,
+        u32_value: 32,
+        u64_value: 64,
+        u128_value: 128,
+        character: 'é',
+        bytes: SerializedBytes,
+        collected: CollectedDisplay,
+        unit: (),
+        unit_struct: UnitStruct,
+        tuple: (1, true),
+        tuple_struct: TupleStruct(-1, 2),
+        newtype_struct: NewtypeStruct(9),
+        variants: vec![
+            RichEnum::Unit,
+            RichEnum::Newtype(3),
+            RichEnum::Tuple(4, 5),
+            RichEnum::Struct { enabled: true },
+        ],
+        integer_keys: std::collections::BTreeMap::from([(-2, true), (1, false)]),
+        boolean_keys: std::collections::BTreeMap::from([(false, true), (true, false)]),
+    };
+    let encoded = canonical_json(&fixture)?;
+
+    check(encoded.contains(r#""bytes":[0,127,255]"#), "byte representation")?;
+    check(encoded.contains(r#""collected":"collected""#), "collected string representation")?;
+    check(encoded.contains(r#""integer_keys":{"-2":true,"1":false}"#), "integer map keys")?;
+    check(encoded.contains(r#""boolean_keys":{"false":true,"true":false}"#), "boolean map keys")?;
+    check(
+        encoded.contains(
+            r#""variants":["Unit",{"Newtype":3},{"Tuple":[4,5]},{"Struct":{"enabled":true}}]"#,
+        ),
+        "enum representations",
+    )
+}
+
+#[test]
+fn canonical_json_rejects_out_of_range_keys_and_malformed_serializers()
+-> Result<(), Box<dyn std::error::Error>> {
+    let invalid_array_key = std::collections::BTreeMap::from([(vec![1_u8], true)]);
+    for failed in [
+        canonical_json(&i128::MAX).err(),
+        canonical_json(&u128::MAX).err(),
+        canonical_json(&invalid_array_key).err(),
+        canonical_json(&MapValueWithoutKey).err(),
+        canonical_json(&MapKeyWithoutValue).err(),
+        canonical_json(&DuplicateStructField).err(),
+    ] {
+        let error =
+            failed.ok_or_else(|| std::io::Error::other("ambiguous canonical input accepted"))?;
+        check(!error.to_string().is_empty(), "canonical error lacked diagnostic text")?;
+    }
     Ok(())
 }
 
