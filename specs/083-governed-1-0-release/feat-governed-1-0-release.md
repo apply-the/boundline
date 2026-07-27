@@ -111,29 +111,45 @@ executor or reviewer lineage
 
 Any later mutation-including formatting or code generation-marks the previous approval and proof stale and requires revalidation.
 
-### Stable CLIs
+### Boundline command-surface ownership
 
-Boundline stable primary commands:
+M1C was blocked because the roadmap named the whole 1.0 target as stable help
+before later tasks owned real command handlers. A parser-only command would be
+a stable stub, so it is rejected. The command surface therefore distinguishes
+two states:
+
+- **StableTargetPending**: planning and inventory state only. The command is
+  reserved for the 1.0 target but is not registered in the public parser,
+  stable help, completion metadata, or any operational compatibility claim.
+- **StableOperational**: parser, real operational handler, fail-closed
+  behavior, contract tests, help, completion metadata, and documentation are
+  complete. Only this state may appear in stable help.
+
+An owning implementation task may promote a command from
+StableTargetPending only in the same commit that adds its real handler,
+authority and failure semantics, contract tests, command tree, help,
+completions, and documentation. A placeholder or generic not-yet-implemented
+result is not operational.
+
+The 0.90 StableOperational/help surface is an additive subset of the final
+1.0 stable target inventory. The wider 0.90 command tree also contains
+explicit Preview and hidden Internal commands, so it is not itself a subset of
+that stable inventory. It removes overlapping legacy lifecycle entrypoints
+immediately without compatibility aliases. Later 0.90/0.95 tasks may promote
+reserved commands only with their real implementation. No StableOperational
+command may be removed after the 0.95 contract freeze, while preview commands
+remain outside the 1.0 compatibility promise.
+
+#### Current M1C StableOperational surface
 
 ```text
 boundline init
 boundline goal
 boundline plan
 boundline run
-boundline approve
 boundline status
 boundline inspect
-boundline recover inspect
-boundline recover complete
-boundline recover restore
 boundline doctor
-boundline rpc
-boundline serve --transport mcp-stdio
-```
-
-Stable administrative commands:
-
-```text
 boundline config
 boundline models
 boundline provider
@@ -142,31 +158,45 @@ boundline index
 boundline session
 boundline assistant
 boundline update
-boundline session abort <id>
-boundline session cleanup <id>
 ```
 
-Forced recovery abandonment is separate:
+#### Documented 1.0 StableTargetPending inventory
 
-```text
-boundline recover abandon --publication <id> --confirm <id>
-```
+| Command | Owning implementation |
+|---|---|
+| `boundline approve` | T037 |
+| `boundline session abort <id>` | T037 |
+| `boundline session cleanup <id>` | T037 |
+| `boundline recover inspect` | T047 and T048 |
+| `boundline recover complete` | T047 and T048 |
+| `boundline recover restore` | T047 and T048 |
+| `boundline recover abandon --publication <id> --confirm <id>` | T047 and T048 |
+| `boundline rpc` | T095 |
+| `boundline serve --transport mcp-stdio` | T096 |
 
-It records explicit abandonment and quarantine, does not modify unexplained files, and does not make a dirty or unexplained repository publishable.
+T076 qualifies host and projection behavior only. It must not create either
+the RPC or MCP stdio runtime handler.
 
-The 0.90 break removes duplicate lifecycle commands without compatibility aliases:
+#### 0.90 migration and command classification map
 
-```text
-orchestrate -> run --until
-step        -> run --one-step
-continue    -> run --resume
-next        -> status.next_actions
-probe       -> doctor/status
-help-next   -> doctor/status
-govern      -> plan/run/approve
-flow        -> preview
-workflow    -> preview
-```
+| Command | 0.90 | 1.0 | Rationale or transition |
+|---|---|---|---|
+| `orchestrate` | Removed | Removed | Migration diagnostic: `run --until`; no compatibility alias. |
+| `step` | Removed | Removed | Migration diagnostic: `run --one-step`; no compatibility alias. |
+| `continue` | Removed | Removed | Migration diagnostic: `run --resume`; no compatibility alias. |
+| `next` | Removed | Removed | Migration diagnostic: `status.next_actions`; no compatibility alias. |
+| `probe` | Removed | Removed | Migration diagnostic: `doctor` or `status`; no compatibility alias. |
+| `help-next` | Removed | Removed | Migration diagnostic: `doctor` or `status`; no compatibility alias. |
+| `govern` | Removed | Removed | Migration diagnostic: use `plan` or `run` now; add `approve` only after T037 promotes it to StableOperational. No compatibility alias. |
+| `flow` | Preview | Preview | Outside the 1.0 compatibility promise. |
+| `workflow` | Preview | Preview | Outside the 1.0 compatibility promise. |
+| `checkpoint` | Internal | Internal | Session/runtime machinery is surfaced through status, inspect, resume, and recovery rather than a stable root command. |
+| `cluster` | Preview | Preview / post-1.0 | Cluster and multi-agent orchestration are outside stable 1.0. |
+| `council` | Preview | Preview / post-1.0 | Council execution is an advanced reasoning capability and not a stable lifecycle entrypoint. |
+| `override` | Preview transitional | Removed, replacement `approve` | Final replacement: `boundline approve`. Remove only when T037 delivers operational approval and authority handling; never present it as stable. |
+| `evals` | Preview | Preview | Evaluation tooling is not part of the stable control-plane CLI. |
+| `trace` | Preview transitional | Removed as a root command | Final replacement: `boundline inspect` and read-only trace projections. Remove only when that replacement surface is operational; never present it as stable. |
+| `exec` | Internal | Internal | Direct execution bypasses the admitted lifecycle and cannot be a public stable entrypoint. |
 
 Canon stable CLI:
 

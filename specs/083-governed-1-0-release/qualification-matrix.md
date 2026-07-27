@@ -17,6 +17,21 @@ Coverage is computed from the committed baseline and the exact candidate diff.
 Generated code, examples, binaries, and unreachable platform adapters require
 an explicit policy; they are not silently removed from denominators.
 
+## Command-surface qualification
+
+| Surface state | Required evidence | Owner / disposition |
+|---|---|---|
+| StableOperational | Parser, real operational handler, fail-closed behavior, contract tests, stable help, completion metadata, and documentation are complete | Owning implementation task may promote atomically |
+| StableTargetPending | Documented target and explicit task ownership only; absent from parser registration, stable help, completion metadata, and operational compatibility claims | Remains hidden until its owner promotes it atomically |
+| Preview | Explicit preview placement and no 1.0 compatibility promise | M1C preserves preview status or a later task changes it explicitly |
+| Internal | Not shown in public stable help or completion metadata | M1C hides the command behind supported lifecycle and inspection surfaces |
+| Removed | Parser absence plus migration diagnostic when applicable | M1C removes the overlapping legacy lifecycle entrypoint without an alias |
+
+The 0.90 help surface is an additive subset of the final 1.0 target inventory,
+not proof that every future target command is operational. Parser-only stable
+commands, generic not-yet-implemented handlers, and placeholder handlers fail
+this qualification row.
+
 ## Platform and filesystem matrix
 
 Unqualified M0 rows are carried risks, not M1 prerequisites, when owner,

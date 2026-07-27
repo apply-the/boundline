@@ -89,29 +89,31 @@ canon_outcome_sync_failed
 unsupported_git_or_filesystem_state
 ```
 
-## Stable Boundline command groups
+## Boundline command inventory and promotion
 
-Primary:
+`StableOperational` is the only public stable command state. It requires a
+parser, real operational handler, fail-closed behavior, contract tests, help,
+completion metadata, and documentation. Stable help contains exactly the
+StableOperational surface for the current release milestone.
+
+`StableTargetPending` is planning and inventory state only. It is not a
+runtime command classification and must not appear in parser registration,
+stable help, completion metadata, or operational compatibility claims. Its
+owning implementation task promotes it atomically only after the real handler,
+authority and failure semantics, contract tests, command tree, help,
+completions, and documentation are complete. A placeholder or generic
+not-yet-implemented result cannot satisfy this rule.
+
+Current M1C StableOperational commands:
 
 ```text
 init
 goal
 plan
 run
-approve
 status
 inspect
-recover inspect
-recover complete
-recover restore
 doctor
-rpc
-serve --transport mcp-stdio
-```
-
-Administrative:
-
-```text
 config
 models
 provider
@@ -120,10 +122,30 @@ index
 session
 assistant
 update
-session abort <id>
-session cleanup <id>
-recover abandon --publication <id> --confirm <id>
 ```
+
+Documented 1.0 StableTargetPending commands and owners:
+
+| Command | Owner |
+|---|---|
+| `approve` | T037 |
+| `session abort <id>` | T037 |
+| `session cleanup <id>` | T037 |
+| `recover inspect` | T047 and T048 |
+| `recover complete` | T047 and T048 |
+| `recover restore` | T047 and T048 |
+| `recover abandon --publication <id> --confirm <id>` | T047 and T048 |
+| `rpc` | T095 |
+| `serve --transport mcp-stdio` | T096 |
+
+The 0.90 StableOperational/help surface is an additive subset of this final
+stable target inventory. The wider 0.90 command tree also contains explicit
+Preview and hidden Internal commands, so it is not itself a subset of the
+stable target inventory. It removes overlapping legacy lifecycle entrypoints
+immediately without compatibility aliases. Later 0.90/0.95 work may add a
+reserved command only when its real implementation is complete. No
+StableOperational command may be removed after the 0.95 contract freeze;
+preview commands remain outside the 1.0 compatibility promise.
 
 ## Semantic projection equivalence
 

@@ -144,6 +144,7 @@ As a maintainer, I can migrate supported recent releases and qualify the 1.0 rel
 - **FR-034**: Stable interfaces and supported host packs MUST produce semantically equivalent authoritative projections after normalization of declared volatile fields.
 - **FR-035**: Stable release surfaces MUST contain no stub, synthetic executor, placeholder, hidden fallback, or self-attested completion.
 - **FR-036**: Worktree cleanup MUST be prohibited until the session is terminal, its executor is terminated, and required trace, evidence, recovery, and outcome-synchronization records are durably finalized or explicitly archived with authority.
+- **FR-037**: A command may appear in stable help, stable completion metadata, or operational compatibility claims only when it is StableOperational: its parser, real operational handler, fail-closed behavior, contract tests, help, completion metadata, and documentation are complete. Preview commands may remain registered outside those stable surfaces, while Internal commands remain hidden. A StableTargetPending command is a planning and inventory state only; it MUST remain absent from parser registration, stable help, completion metadata, public runtime classifications, and operational compatibility claims, and must be promoted atomically by its owning implementation task.
 
 ### Key Entities
 
@@ -173,6 +174,7 @@ As a maintainer, I can migrate supported recent releases and qualify the 1.0 rel
 - **SC-010**: All supported migration fixtures complete without unexplained semantic loss and all unsupported active states are preserved as inspectable archives.
 - **SC-011**: All required formatting, linting, testing, dependency-policy, coverage, patch-coverage, platform, and packaging gates pass before 1.0.
 - **SC-012**: No nonterminal or unsynchronized session worktree can be removed through the stable cleanup surface.
+- **SC-013**: Stable help and completion metadata contain exactly the StableOperational surface for the current release milestone; the documented 1.0 target inventory separately records every StableTargetPending command without claiming operational availability.
 
 ## Assumptions
 

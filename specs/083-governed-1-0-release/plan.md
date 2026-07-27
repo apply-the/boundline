@@ -60,6 +60,31 @@ self-attested completion
 nine Canon profiles; one adapter per invocation; five tested host packs;
 separate local repository identity for each clone
 
+## M1C Command-Surface Promotion Policy
+
+M1C resolves the 0.90 command tree without creating parser-only stable
+commands. `StableTargetPending` is planning and inventory state only: it is
+not registered in the public parser, printed by stable help, emitted in
+completion metadata, or represented as a runtime command classification.
+`StableOperational` means that parser, real operational handler, fail-closed
+behavior, contract tests, help, completion metadata, and documentation are
+complete.
+
+A command moves from `StableTargetPending` to `StableOperational` only when
+its owning task explicitly promotes it in the same commit as the real handler,
+authority and failure semantics, contract tests, command tree, help,
+completions, and documentation. A placeholder or generic not-yet-implemented
+response is never a stable handler.
+
+The 0.90 StableOperational/help surface is an additive subset of the
+documented final 1.0 stable target inventory. The wider 0.90 command tree also
+contains explicit Preview and hidden Internal commands, so it is not itself a
+subset of that stable inventory. It removes overlapping legacy lifecycle
+entrypoints immediately and retains no compatibility aliases. Later 0.90/0.95
+work may promote reserved commands only with their real implementation; after
+the 0.95 contract freeze, no StableOperational command may be removed. Preview
+commands remain outside the 1.0 compatibility promise.
+
 ## Constitution Check
 
 *GATE: Passed before Phase 0 and re-checked after Phase 1 design.*
@@ -95,6 +120,8 @@ specs/083-governed-1-0-release/
 ├── research.md
 ├── data-model.md
 ├── quickstart.md
+├── decisions/
+│   └── m1c-command-surface-ownership.md
 ├── checklists/
 │   └── requirements.md
 └── contracts/

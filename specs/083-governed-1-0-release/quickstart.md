@@ -51,7 +51,23 @@ M0 -> M1 -> M2a
 M2b, M3, and M4 may proceed in parallel only after their frozen M1 contract
 dependencies exist.
 
-## 4. Exercise mutation in disposable fixtures
+## 4. Keep M1C help honest
+
+At 0.90, stable help and completion metadata list only StableOperational
+commands: commands with a parser, real operational handler, fail-closed
+behavior, contract tests, and matching documentation. `StableTargetPending`
+is a planning/inventory state only and is never a public parser or runtime
+classification.
+
+The 1.0 target inventory may reserve `approve`, `session abort`, `session
+cleanup`, recovery commands, `rpc`, and `serve --transport mcp-stdio`, but
+M1C must leave each hidden until its owner promotes it atomically with the
+real handler. Do not accept a parser-only command, placeholder handler, or
+generic not-yet-implemented response as a stable command. M1C removes legacy
+lifecycle entrypoints without aliases, keeps preview commands visibly preview,
+and keeps internal commands hidden.
+
+## 5. Exercise mutation in disposable fixtures
 
 Each transaction fixture must create:
 
@@ -72,7 +88,7 @@ surviving child -> reconciliation waits
 changed crash state -> uncommitted_candidate
 ```
 
-## 5. Exercise publication recovery
+## 6. Exercise publication recovery
 
 Inject termination:
 
@@ -86,7 +102,7 @@ between each per-path validation, replacement, index update, and ref update
 Every case must complete, restore the prior authoritative state, or preserve
 unexplained state without destructive action.
 
-## 6. Qualify cross-repository completion
+## 7. Qualify cross-repository completion
 
 The RC vertical slice must:
 
@@ -99,7 +115,7 @@ The RC vertical slice must:
 7. Verify exactly one decision-memory outcome.
 8. Compare normalized CLI, JSON-RPC, MCP, and five host-pack projections.
 
-## 7. Freeze the RC
+## 8. Freeze the RC
 
 After `1.0.0-rc.1`, accept only corrections required to satisfy an already
 frozen stable contract. Run the complete Linux, macOS, Windows, migration,
