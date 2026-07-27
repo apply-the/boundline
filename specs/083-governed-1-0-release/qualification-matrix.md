@@ -94,6 +94,25 @@ workspace coverage runs. The accepted diff/LCOV intersection measured:
 The frozen whole-repository M0 thresholds are unchanged. M1D did not claim a
 new whole-repository measurement or a waiver.
 
+## M1E package-readiness qualification
+
+| Package surface | Classification | Local qualification | Publication disposition |
+|---|---|---|---|
+| `boundline-protocol 0.90.0` | PublicPublishable | Reproducible package candidate, generated-manifest audit, extracted-package tests, public-registry dry run, and exact registry-shaped clean consumer pass | T020 `READY_TO_PUBLISH`; not yet published |
+| `canon-contracts 0.90.0` | PublicPublishable | Reproducible package candidate, generated-manifest audit, extracted-package tests, public-registry dry run, and exact registry-shaped clean consumer pass | T020 `READY_TO_PUBLISH`; not yet published |
+| `boundline-adapter-speckit 0.1.0` | BinaryOnly in M1 | Reproducible package candidate and registry-shaped consumer resolve exact `boundline-protocol = "=0.90.0"`; host range rejection tests pass | Publication remains T068/M4; no M1 publication claim |
+
+The remaining Boundline and Canon runtime crates are BinaryOnly,
+InternalNotPublished, or PrivateWorkspace as recorded in
+`evidence/m1e-package-readiness.md`. They are not implicit publication
+predecessors. The two public contract crates are independent roots; the
+adapter depends on `boundline-protocol`, but its publication is outside T020.
+
+The adapter Rust patch measured 96% patch coverage (24 of 25 executable changed
+lines). The single uncovered branch is the fail-closed guard for a statically
+owned, compile-time-validated version-range constant. No waiver or threshold
+change was created.
+
 ## Deterministic and probabilistic gates
 
 | Corpus | Gate |

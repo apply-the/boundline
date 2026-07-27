@@ -37,6 +37,11 @@ Release metadata note:
 - Aligned assistant and distribution package metadata with the prerelease
   train. Public registry publication and the matching signed tag remain gated
   by T020 and were not performed by this change.
+- Qualified a reproducible `boundline-protocol-0.90.0.crate` candidate from
+  source commit `860b7247d8343c63dca2940a923b58f3172632f9`, including
+  extracted-package tests and clean registry-shaped consumers. T020 is
+  `READY_TO_PUBLISH`, but the package and signed `0.90.0` tag do not yet exist
+  on the public release surfaces.
 
 ## [0.80.0] - 2026-06-17
 

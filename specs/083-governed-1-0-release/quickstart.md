@@ -126,7 +126,28 @@ Run the bridge and forced-termination matrix with:
 cargo test --test bridge_090 --all-features
 ```
 
-## 6. Exercise mutation in disposable fixtures
+## 6. Verify the M1E package candidates
+
+T019 aligns the Boundline and Canon workspaces to `0.90.0`, qualifies exact
+local candidates for `boundline-protocol` and `canon-contracts`, and replaces
+the adapter's full-runtime `0.66.0` Git bridge with:
+
+```toml
+boundline-protocol = "=0.90.0"
+```
+
+The adapter's separately tested host range is `>=0.90.0,<1.0.0`; versions
+outside that range fail preflight closed. Registry-shaped local consumers use
+only exact package requirements and an isolated Cargo home, with no path, Git,
+workspace, or patch source. This is package-readiness evidence, not proof of
+public-registry publication.
+
+T020 is `READY_TO_PUBLISH` but incomplete. A separately approved run must
+publish the exact reviewed contract artifacts, retrieve and test them from the
+real registry, create annotated cryptographically signed `0.90.0` tags at the
+reviewed source commits, verify the signatures, and push without force.
+
+## 7. Exercise mutation in disposable fixtures
 
 Each transaction fixture must create:
 
@@ -147,7 +168,7 @@ surviving child -> reconciliation waits
 changed crash state -> uncommitted_candidate
 ```
 
-## 7. Exercise publication recovery
+## 8. Exercise publication recovery
 
 Inject termination:
 
@@ -161,7 +182,7 @@ between each per-path validation, replacement, index update, and ref update
 Every case must complete, restore the prior authoritative state, or preserve
 unexplained state without destructive action.
 
-## 8. Qualify cross-repository completion
+## 9. Qualify cross-repository completion
 
 The RC vertical slice must:
 
@@ -174,7 +195,7 @@ The RC vertical slice must:
 7. Verify exactly one decision-memory outcome.
 8. Compare normalized CLI, JSON-RPC, MCP, and five host-pack projections.
 
-## 9. Freeze the RC
+## 10. Freeze the RC
 
 After `1.0.0-rc.1`, accept only corrections required to satisfy an already
 frozen stable contract. Run the complete Linux, macOS, Windows, migration,

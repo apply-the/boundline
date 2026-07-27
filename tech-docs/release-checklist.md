@@ -109,3 +109,33 @@ Or run the full contract suite:
 ```bash
 cargo nextest run --workspace --all-features
 ```
+
+## Governed Contract-Package Publication
+
+T019 prepares the `0.90.0` contract candidates; it does not authorize
+publication. T020 may begin only from the source commits and artifact digests
+recorded in
+`specs/083-governed-1-0-release/evidence/m1e-package-readiness.md`.
+
+The later T020 operator must:
+
+1. Rebuild both candidates from the recorded clean source commits and require
+   the reviewed SHA-256 and normalized payload digests to match.
+2. Re-run `cargo publish --dry-run --locked -p boundline-protocol` and the
+   equivalent `canon-contracts` command.
+3. Publish `boundline-protocol` and `canon-contracts` to crates.io. They are
+   independent roots; the recorded deterministic operator order is
+   Boundline first, Canon second.
+4. Retrieve each exact version from crates.io and repeat the clean-consumer,
+   metadata-source, build, test, and offline-repeat checks.
+5. Stop without tagging if upload, checksum, retrieval, resolution, build, or
+   test evidence differs from the reviewed candidate.
+6. Create the repository-local `0.90.0` tag only after registry verification.
+   Each tag must be annotated and cryptographically signed, target the recorded
+   source commit exactly, and include package/version identity plus its
+   provenance digest.
+7. Verify each tag signature locally, prove the tag is new, and push the tag
+   without force. There is no unsigned fallback and no tag reuse.
+
+Publication is irreversible. Package upload, final tag creation, commit push,
+and tag push always require a separate explicit approval.

@@ -35,8 +35,8 @@ proceed in parallel. All Rust behavior tasks use test-first implementation.
 - [x] T016 [P] Implement the `canon-contracts` crate and nine-profile registry types in `canon:crates/canon-contracts/src/lib.rs`
 - [x] T017 Add fixture-driven transactional migration tests for Boundline 0.82.0 and Canon 0.72.6, including forced termination and unsupported active-session archival, in `boundline:tests/migration/bridge_090.rs` and `canon:tests/migration/bridge_090.rs`
 - [x] T018 Implement backup-first, idempotent, inspectable, atomic 0.90 bridge migrators and conversion reports in `boundline:crates/boundline-core/src/migration/mod.rs` and `canon:crates/canon-engine/src/policy/migration.rs`
-- [ ] T019 Set prerelease workspace versions to the roadmap’s explicit `0.90.0` train point in `boundline:Cargo.toml` and `canon:Cargo.toml`; after the `boundline-protocol` prerelease package exists, replace the adapter’s owned Boundline 0.66 bridge and update its supported prerelease range in `boundline-adapter-speckit:Cargo.toml`
-- [ ] T020 Publish and verify immutable prerelease package fixtures plus matching signed-tag provenance metadata in `boundline:tech-docs/release-checklist.md` and `canon:CHANGELOG.md`
+- [x] T019 Set prerelease workspace versions to the roadmap’s explicit `0.90.0` train point in `boundline:Cargo.toml` and `canon:Cargo.toml`; after the `boundline-protocol` prerelease package exists, replace the adapter’s owned Boundline 0.66 bridge and update its supported prerelease range in `boundline-adapter-speckit:Cargo.toml`
+- [ ] T020 **READY_TO_PUBLISH** — Publish and verify the exact reviewed prerelease package candidates, then create and verify matching signed-tag provenance metadata as specified in `boundline:tech-docs/release-checklist.md`, `canon:CHANGELOG.md`, and `evidence/m1e-package-readiness.md`. No package, tag, commit, or remote state was published by T019.
 
 **Checkpoint**: Public contract lines, CLI break, and bridge migration are
 reviewed and frozen for M2–M4 implementation.
