@@ -23,9 +23,20 @@ recorded workspace version.
 
 Release metadata note:
 
-- The current Boundline release line is `0.80.0`; published package metadata,
-  distribution metadata, assistant plugin manifests, and docs are aligned to
-  that version while Canon compatibility remains `0.72.5`.
+- The prepared Boundline prerelease line is `0.90.0`; package metadata,
+  distribution metadata, and assistant plugin manifests are aligned to that
+  version while runtime Canon compatibility remains `0.72.6`.
+
+## [0.90.0] - 2026-07-27
+
+### Changed
+
+- Prepared the governed 1.0 prerelease package train at `0.90.0`, including
+  exact registry-compatible workspace dependency requirements and the public
+  `boundline-protocol` package metadata.
+- Aligned assistant and distribution package metadata with the prerelease
+  train. Public registry publication and the matching signed tag remain gated
+  by T020 and were not performed by this change.
 
 ## [0.80.0] - 2026-06-17
 

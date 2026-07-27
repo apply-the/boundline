@@ -158,7 +158,7 @@ dependencies = [
 
 [[package]]
 name = "boundline"
-version = "0.82.0"
+version = "0.90.0"
 dependencies = [
  "boundline-adapters",
  "boundline-cli",
@@ -177,7 +177,7 @@ dependencies = [
 
 [[package]]
 name = "boundline-adapters"
-version = "0.82.0"
+version = "0.90.0"
 dependencies = [
  "boundline-core",
  "clap",
@@ -197,7 +197,7 @@ dependencies = [
 
 [[package]]
 name = "boundline-cli"
-version = "0.82.0"
+version = "0.90.0"
 dependencies = [
  "boundline-adapters",
  "boundline-core",
@@ -214,7 +214,7 @@ dependencies = [
 
 [[package]]
 name = "boundline-core"
-version = "0.82.0"
+version = "0.90.0"
 dependencies = [
  "boundline-protocol",
  "clap",
@@ -230,7 +230,7 @@ dependencies = [
 
 [[package]]
 name = "boundline-protocol"
-version = "0.82.0"
+version = "0.90.0"
 dependencies = [
  "serde",
  "serde_json",

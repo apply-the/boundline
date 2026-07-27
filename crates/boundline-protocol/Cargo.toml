@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 description = "Stable public protocol contracts for Boundline."
+repository = "https://github.com/apply-the/boundline"
 rust-version = "1.96.0"
 
 [dependencies]
