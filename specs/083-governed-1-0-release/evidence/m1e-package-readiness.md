@@ -217,6 +217,7 @@ Commands were run from each repository root unless the row says otherwise.
 | Boundline | `cargo deny check licenses advisories bans sources` | PASS; pre-existing duplicate-version warnings only | <1 s |
 | Boundline | `cargo package --locked -p boundline-protocol` | PASS | 4 s |
 | Boundline | `cargo publish --dry-run --locked -p boundline-protocol` | PASS; no upload | 4 s |
+| Boundline | focused LLVM coverage plus accepted patch helper for the changed release-surface test | no uncovered executable changed line | PASS |
 | Canon | `cargo fmt --all -- --check` | PASS | <1 s |
 | Canon | `cargo clippy --workspace --all-targets --all-features -- -D warnings` | PASS | <1 s incremental |
 | Canon | `cargo test --workspace --all-features` | PASS | 217 s |
@@ -224,6 +225,7 @@ Commands were run from each repository root unless the row says otherwise.
 | Canon | `cargo deny check licenses advisories bans sources` | PASS | <1 s |
 | Canon | `cargo package --locked -p canon-contracts` | PASS | 2 s |
 | Canon | `cargo publish --dry-run --locked -p canon-contracts` | PASS; no upload | 2 s |
+| Canon | focused LLVM coverage plus accepted patch helper for the changed release-surface test | no uncovered executable changed line | PASS |
 | Speckit adapter | `cargo fmt --all -- --check` | PASS | <1 s |
 | Speckit adapter | `cargo clippy --workspace --all-targets --all-features -- -D warnings` | PASS | <1 s incremental |
 | Speckit adapter | `cargo test --workspace --all-features` | 23 tests passed | <1 s incremental |
