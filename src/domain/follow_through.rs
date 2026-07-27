@@ -719,11 +719,12 @@ mod tests {
         let governance_projection = FollowThroughProjection::from_trace_summary(
             &TraceSummaryView {
                 governance_next_action: Some(
-                    "resolve the governance blocker, then rerun boundline step".to_string(),
+                    "resolve the governance blocker, then rerun boundline run --one-step"
+                        .to_string(),
                 ),
                 ..TraceSummaryView::default()
             },
-            Some("boundline step"),
+            Some("boundline run --one-step"),
         );
         assert_eq!(governance_projection.evidence_source, Some("trace:governance".to_string()));
 

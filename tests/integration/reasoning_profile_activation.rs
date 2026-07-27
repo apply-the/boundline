@@ -35,7 +35,7 @@ fn bootstrap_bug_fix(workspace: &Path) {
             .code(),
         Some(0)
     );
-    assert_eq!(run_boundline_in(workspace, &["flow", "bug-fix"]).status.code(), Some(0));
+    assert_eq!(run_boundline_in(workspace, &["preview", "flow", "bug-fix"]).status.code(), Some(0));
     assert_eq!(run_boundline_in(workspace, &["plan"]).status.code(), Some(0));
 }
 

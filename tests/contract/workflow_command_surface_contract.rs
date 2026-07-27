@@ -16,7 +16,7 @@ fn workflow_run_surfaces_named_workflow_and_native_route() {
 
     let output = run_boundline_in(
         &workspace,
-        &["workflow", "run", "default", "--goal", "Fix the failing add test"],
+        &["preview", "workflow", "run", "default", "--goal", "Fix the failing add test"],
     );
     let text = terminal_text(&output);
 
@@ -33,7 +33,7 @@ fn workflow_run_surfaces_named_workflow_and_native_route() {
         text.contains("execution_condition: terminal - work stopped after a non-success result"),
         "{text}"
     );
-    assert!(text.contains("next_command: boundline workflow inspect"), "{text}");
+    assert!(text.contains("next_command: boundline preview workflow inspect"), "{text}");
 }
 
 #[test]
@@ -42,7 +42,7 @@ fn workflow_run_rejects_invalid_definitions_before_execution_starts() {
 
     let output = run_boundline_in(
         &workspace,
-        &["workflow", "run", "invalid-flow", "--goal", "Fix the failing add test"],
+        &["preview", "workflow", "run", "invalid-flow", "--goal", "Fix the failing add test"],
     );
     let text = terminal_text(&output);
 
@@ -60,5 +60,5 @@ fn workflow_run_rejects_invalid_definitions_before_execution_starts() {
         text.contains("execution_condition: blocked - workflow definitions could not be parsed"),
         "{text}"
     );
-    assert!(text.contains("next_command: boundline workflow inspect"), "{text}");
+    assert!(text.contains("next_command: boundline preview workflow inspect"), "{text}");
 }

@@ -14,6 +14,7 @@ fn cluster_status_classifies_missing_session_members_explicitly() {
     let init = run_boundline_in(
         &primary,
         &[
+            "preview",
             "cluster",
             "init",
             "--workspace",
@@ -42,7 +43,7 @@ fn cluster_status_classifies_missing_session_members_explicitly() {
 
     let status = run_boundline_in(
         &primary,
-        &["cluster", "status", "--workspace", primary.to_string_lossy().as_ref()],
+        &["preview", "cluster", "status", "--workspace", primary.to_string_lossy().as_ref()],
     );
     let text = terminal_text(&status);
     assert_eq!(status.status.code(), Some(0), "{text}");
@@ -59,6 +60,7 @@ fn cluster_inspect_surfaces_latest_trace_and_missing_trace_gaps() {
     let init = run_boundline_in(
         &primary,
         &[
+            "preview",
             "cluster",
             "init",
             "--workspace",
@@ -107,7 +109,7 @@ fn cluster_inspect_surfaces_latest_trace_and_missing_trace_gaps() {
 
     let inspect = run_boundline_in(
         &primary,
-        &["cluster", "inspect", "--workspace", primary.to_string_lossy().as_ref()],
+        &["preview", "cluster", "inspect", "--workspace", primary.to_string_lossy().as_ref()],
     );
     let text = terminal_text(&inspect);
     assert_eq!(inspect.status.code(), Some(1), "{text}");

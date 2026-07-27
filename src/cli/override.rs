@@ -1,7 +1,7 @@
 //! `boundline override` CLI command.
 //!
 //! Writes an explicit override record to `.boundline/overrides.json` that
-//! `boundline run` and `boundline continue` consume before adjudication.
+//! `boundline run` and `boundline run --resume` consume before adjudication.
 //! Overrides are tied to a specific finding, control, guardian, and operator.
 
 use std::path::Path;
@@ -13,7 +13,7 @@ use crate::domain::calibration::{ControlLevel, OverrideRecord, load_calibration_
 pub enum OverrideCliError {
     #[error("invalid control level '{0}': must be advisory, catch, or rule")]
     InvalidLevel(String),
-    #[error("hook-level findings cannot be overridden via `boundline override`")]
+    #[error("hook-level findings cannot be overridden through the preview override capability")]
     HookNotOverridable,
     #[error("missing required argument: {0}")]
     MissingArgument(String),
@@ -36,7 +36,7 @@ pub fn run(
 ) -> Result<i32, OverrideCliError> {
     let requested_level = parse_level(level)?;
 
-    // Hook bypass is not permitted via `boundline override`.
+    // Hook bypass is not permitted through the preview override capability.
     if requested_level == ControlLevel::Hook {
         return Err(OverrideCliError::HookNotOverridable);
     }

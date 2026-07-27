@@ -24,7 +24,7 @@ fn status_next_and_inspect_surface_adaptive_terminal_failure_cues() {
     assert!(run_text.contains("terminal_status: failed"), "{run_text}");
     assert!(run_text.contains("next_command: boundline inspect"), "{run_text}");
 
-    let next = run_boundline_in(&workspace, &["next"]);
+    let next = run_boundline_in(&workspace, &["status"]);
     let next_text = terminal_text(&next);
     assert_eq!(next.status.code(), Some(0), "{next_text}");
     assert!(next_text.contains("next_command: boundline inspect"), "{next_text}");
@@ -91,7 +91,7 @@ fn inspect_surfaces_validation_guided_adaptive_recovery_on_compatibility_route()
 
     let next = run_boundline_in(
         &workspace,
-        &["next", "--workspace", workspace.to_string_lossy().as_ref()],
+        &["status", "--workspace", workspace.to_string_lossy().as_ref()],
     );
     let next_text = terminal_text(&next);
     assert_eq!(next.status.code(), Some(0), "{next_text}");

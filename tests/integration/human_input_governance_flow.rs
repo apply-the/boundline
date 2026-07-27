@@ -64,7 +64,10 @@ fn explicit_canon_request_blocks_without_local_fallback() {
         .code(),
         Some(0)
     );
-    assert_eq!(run_boundline_in(&workspace, &["flow", "bug-fix"]).status.code(), Some(0));
+    assert_eq!(
+        run_boundline_in(&workspace, &["preview", "flow", "bug-fix"]).status.code(),
+        Some(0)
+    );
     let plan = run_boundline_in(&workspace, &["plan"]);
     let plan_text = terminal_text(&plan);
     assert_eq!(plan.status.code(), Some(1), "{plan_text}");
@@ -134,7 +137,10 @@ fn explicit_local_request_overrides_existing_canon_policy() {
         .code(),
         Some(0)
     );
-    assert_eq!(run_boundline_in(&workspace, &["flow", "bug-fix"]).status.code(), Some(0));
+    assert_eq!(
+        run_boundline_in(&workspace, &["preview", "flow", "bug-fix"]).status.code(),
+        Some(0)
+    );
     assert_eq!(run_boundline_in(&workspace, &["plan"]).status.code(), Some(0));
 
     let run = run_boundline_in(&workspace, &["run"]);
@@ -161,7 +167,10 @@ fn inspect_projects_requested_governance_intent_for_session_runs() {
         .code(),
         Some(0)
     );
-    assert_eq!(run_boundline_in(&workspace, &["flow", "bug-fix"]).status.code(), Some(0));
+    assert_eq!(
+        run_boundline_in(&workspace, &["preview", "flow", "bug-fix"]).status.code(),
+        Some(0)
+    );
     assert_eq!(run_boundline_in(&workspace, &["plan"]).status.code(), Some(0));
     assert_eq!(run_boundline_in(&workspace, &["run"]).status.code(), Some(0));
 

@@ -2360,7 +2360,7 @@ mod tests {
         );
         assert_eq!(
             summary.governance_next_action.as_deref(),
-            Some("resolve the governance blocker, then rerun boundline step")
+            Some("resolve the governance blocker, then rerun boundline run --one-step")
         );
     }
 

@@ -1,12 +1,13 @@
 use std::path::PathBuf;
 
-use boundline::cli::{Cli, ClusterSubcommand, DeveloperCommand};
+use boundline::cli::{Cli, ClusterSubcommand, DeveloperCommand, PreviewCommand};
 use clap::Parser;
 
 #[test]
 fn cluster_init_accepts_primary_workspace_cluster_id_and_members() {
     let cli = Cli::try_parse_from([
         "boundline",
+        "preview",
         "cluster",
         "init",
         "--workspace",
@@ -21,14 +22,16 @@ fn cluster_init_accepts_primary_workspace_cluster_id_and_members() {
     .unwrap();
 
     match cli.command {
-        Some(DeveloperCommand::Cluster { command }) => match command {
-            ClusterSubcommand::Init { workspace, cluster_id, member } => {
-                assert_eq!(workspace, PathBuf::from("/tmp/a"));
-                assert_eq!(cluster_id, "delivery-a");
-                assert_eq!(member, vec![PathBuf::from("/tmp/a"), PathBuf::from("/tmp/b")]);
+        Some(DeveloperCommand::Preview { command: PreviewCommand::Cluster { command } }) => {
+            match command {
+                ClusterSubcommand::Init { workspace, cluster_id, member } => {
+                    assert_eq!(workspace, PathBuf::from("/tmp/a"));
+                    assert_eq!(cluster_id, "delivery-a");
+                    assert_eq!(member, vec![PathBuf::from("/tmp/a"), PathBuf::from("/tmp/b")]);
+                }
+                other => panic!("expected Init, got {other:?}"),
             }
-            other => panic!("expected Init, got {other:?}"),
-        },
+        }
         other => panic!("expected Cluster, got {other:?}"),
     }
 }
@@ -36,12 +39,20 @@ fn cluster_init_accepts_primary_workspace_cluster_id_and_members() {
 #[test]
 fn cluster_status_and_inspect_accept_primary_workspace() {
     let status =
-        Cli::try_parse_from(["boundline", "cluster", "status", "--workspace", "/tmp/a"]).unwrap();
-    let inspect =
-        Cli::try_parse_from(["boundline", "cluster", "inspect", "--workspace", "/tmp/a"]).unwrap();
+        Cli::try_parse_from(["boundline", "preview", "cluster", "status", "--workspace", "/tmp/a"])
+            .unwrap();
+    let inspect = Cli::try_parse_from([
+        "boundline",
+        "preview",
+        "cluster",
+        "inspect",
+        "--workspace",
+        "/tmp/a",
+    ])
+    .unwrap();
 
     match status.command {
-        Some(DeveloperCommand::Cluster { command }) => {
+        Some(DeveloperCommand::Preview { command: PreviewCommand::Cluster { command } }) => {
             assert!(
                 matches!(command, ClusterSubcommand::Status { workspace } if workspace == std::path::Path::new("/tmp/a"))
             );
@@ -50,7 +61,7 @@ fn cluster_status_and_inspect_accept_primary_workspace() {
     }
 
     match inspect.command {
-        Some(DeveloperCommand::Cluster { command }) => {
+        Some(DeveloperCommand::Preview { command: PreviewCommand::Cluster { command } }) => {
             assert!(
                 matches!(command, ClusterSubcommand::Inspect { workspace } if workspace == std::path::Path::new("/tmp/a"))
             );

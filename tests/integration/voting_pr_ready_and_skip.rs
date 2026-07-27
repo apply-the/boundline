@@ -1,50 +1,66 @@
+use boundline::cli::govern::{GovernRequest, execute_govern};
+use boundline::domain::governance::CanonMode;
+
 use crate::workspace_fixture::{run_boundline_in, temp_fixture_workspace, terminal_text};
 
+fn govern<'a>(
+    workspace: &'a std::path::Path,
+    mode: CanonMode,
+    goal: &'a str,
+    risk: Option<&'a str>,
+    pr_ready: bool,
+    preserved_behavior_evidence: bool,
+) -> GovernRequest<'a> {
+    GovernRequest {
+        workspace: Some(workspace),
+        mode: Some(mode),
+        goal: Some(goal),
+        brief: &[],
+        base: None,
+        head: None,
+        risk,
+        structural_impact: false,
+        public_contract_change: false,
+        validation_exhausted: false,
+        pr_ready,
+        preserved_behavior_evidence,
+    }
+}
+
 #[test]
-fn pr_ready_triggers_voting_but_low_risk_refactor_with_evidence_skips_it() {
+fn pr_ready_triggers_voting_but_low_risk_refactor_with_evidence_skips_it() -> Result<(), String> {
     let workspace = temp_fixture_workspace("boundline-voting-pr-ready");
-
-    let pr_ready = run_boundline_in(
+    execute_govern(govern(
         &workspace,
-        &[
-            "govern",
-            "--mode",
-            "pr-review",
-            "--goal",
-            "Review the merge-ready onboarding diff",
-            "--pr-ready",
-        ],
-    );
-    let pr_text = terminal_text(&pr_ready);
-    assert_eq!(pr_ready.status.code(), Some(0), "{pr_text}");
+        CanonMode::PrReview,
+        "Review the merge-ready onboarding diff",
+        None,
+        true,
+        false,
+    ))
+    .map_err(|error| error.to_string())?;
+    let status = terminal_text(&run_boundline_in(&workspace, &["status"]));
+    if !status.contains("latest_voting_trigger: pr_ready")
+        || !status.contains("latest_voting_blocking: true")
+    {
+        return Err(format!("PR voting projection changed: {status}"));
+    }
 
-    let status = run_boundline_in(&workspace, &["status"]);
-    let status_text = terminal_text(&status);
-    assert!(status_text.contains("latest_voting_trigger: pr_ready"), "{status_text}");
-    assert!(status_text.contains("latest_voting_blocking: true"), "{status_text}");
-
-    let refactor = run_boundline_in(
+    execute_govern(govern(
         &workspace,
-        &[
-            "govern",
-            "--mode",
-            "refactor",
-            "--goal",
-            "Refactor the local helper without behavior changes",
-            "--risk",
-            "low",
-            "--preserved-behavior-evidence",
-        ],
-    );
-    let refactor_text = terminal_text(&refactor);
-    assert_eq!(refactor.status.code(), Some(0), "{refactor_text}");
-
-    let skipped = run_boundline_in(&workspace, &["status"]);
-    let skipped_text = terminal_text(&skipped);
-    assert!(
-        skipped_text.contains("latest_voting_trigger: low_risk_preserved_behavior"),
-        "{skipped_text}"
-    );
-    assert!(skipped_text.contains("latest_voting_result: skipped"), "{skipped_text}");
-    assert!(skipped_text.contains("latest_voting_blocking: false"), "{skipped_text}");
+        CanonMode::Refactor,
+        "Refactor the local helper without behavior changes",
+        Some("low"),
+        false,
+        true,
+    ))
+    .map_err(|error| error.to_string())?;
+    let skipped = terminal_text(&run_boundline_in(&workspace, &["status"]));
+    if !skipped.contains("latest_voting_trigger: low_risk_preserved_behavior")
+        || !skipped.contains("latest_voting_result: skipped")
+        || !skipped.contains("latest_voting_blocking: false")
+    {
+        return Err(format!("low-risk voting skip projection changed: {skipped}"));
+    }
+    Ok(())
 }

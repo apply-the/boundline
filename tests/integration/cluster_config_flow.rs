@@ -8,6 +8,7 @@ fn cluster_scope_config_is_used_for_effective_resolution_until_workspace_overrid
     let init = run_boundline_in(
         &primary,
         &[
+            "preview",
             "cluster",
             "init",
             "--workspace",

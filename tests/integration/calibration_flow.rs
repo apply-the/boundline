@@ -15,7 +15,7 @@ fn full_cycle_calibration_defaults_to_advisory() {
 
     // Run council with no calibration policy — should default all to advisory.
     let output = Command::new(env!("CARGO_BIN_EXE_boundline"))
-        .args(["council", "adjudicate"])
+        .args(["preview", "council", "adjudicate"])
         .current_dir(&dir)
         .output()
         .unwrap();
@@ -37,7 +37,7 @@ fn trust_records_persist_after_adjudication() {
 
     // First adjudication — creates trust records.
     let output = Command::new(env!("CARGO_BIN_EXE_boundline"))
-        .args(["council", "adjudicate"])
+        .args(["preview", "council", "adjudicate"])
         .current_dir(&dir)
         .output()
         .unwrap();
@@ -58,6 +58,7 @@ fn override_and_readback_flow() {
     // Write an override.
     let override_out = Command::new(env!("CARGO_BIN_EXE_boundline"))
         .args([
+            "preview",
             "override",
             "--workspace",
             dir.to_str().unwrap(),

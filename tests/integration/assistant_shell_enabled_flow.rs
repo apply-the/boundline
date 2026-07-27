@@ -88,7 +88,7 @@ fn shell_enabled_session_native_run_status_next_and_workspace_inspect_include_as
     assert!(status_text.contains("latest_trace_ref: "), "{status_text}");
     assert!(status_text.contains("next_command: boundline checkpoint restore"), "{status_text}");
 
-    let next_output = run_boundline(&["next", "--workspace", &workspace_ref]);
+    let next_output = run_boundline(&["status", "--workspace", &workspace_ref]);
     let next_text = terminal_text(&next_output);
 
     assert_eq!(next_output.status.code(), Some(0), "{next_text}");
@@ -128,7 +128,7 @@ fn shell_enabled_status_and_next_surface_session_outcomes_for_routing() {
     assert!(status_text.contains("latest_trace_ref: "), "{status_text}");
     assert!(status_text.contains("next_command: boundline checkpoint restore"), "{status_text}");
 
-    let next_output = run_boundline(&["next", "--workspace", &workspace_ref]);
+    let next_output = run_boundline(&["status", "--workspace", &workspace_ref]);
     let next_text = terminal_text(&next_output);
 
     assert_eq!(next_output.status.code(), Some(0), "{next_text}");

@@ -105,14 +105,14 @@ pub fn install_global_assistant_package(
             "/boundline:doctor",
             "/boundline:help",
             "/boundline:status",
-            "/boundline:continue",
+            "/boundline:run",
         ],
         contextual_commands: &["/boundline:explain-plan", "/boundline:doctor-context"],
         cli_fallback_commands: vec![
             "boundline init --workspace <workspace> --assistant <host>".to_string(),
             "boundline doctor --workspace <workspace>".to_string(),
             "boundline status --workspace <workspace>".to_string(),
-            "boundline continue --workspace <workspace>".to_string(),
+            "boundline run --resume --workspace <workspace>".to_string(),
         ],
         note: host.fallback_note(),
     }

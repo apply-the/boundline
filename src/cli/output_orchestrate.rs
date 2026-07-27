@@ -202,7 +202,9 @@ mod tests {
                     "answer this question before planning continues: Which persistence store is authoritative for the first slice?"
                         .to_string(),
                 ),
-                resume_command: Some("boundline orchestrate --json-stream".to_string()),
+                resume_command: Some(
+                    "boundline run --until continue-until-terminal --json-stream".to_string(),
+                ),
                 assistant_resume_command: None,
                 next_command: None,
                 assistant_next_command: None,

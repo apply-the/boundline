@@ -9,7 +9,8 @@ fn continue_ignores_chat_history_when_session_json_is_absent() {
     )
     .unwrap();
 
-    let output = run_boundline(&["continue", "--workspace", workspace.to_string_lossy().as_ref()]);
+    let output =
+        run_boundline(&["run", "--resume", "--workspace", workspace.to_string_lossy().as_ref()]);
     let text = terminal_text(&output);
 
     assert_eq!(output.status.code(), Some(0), "{text}");

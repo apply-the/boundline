@@ -252,6 +252,7 @@ fn command_names_render_from_subcommands() {
         plan: None,
         accepted_plan: false,
         resume: None,
+        route: boundline::cli::RunRouteArgs::default(),
     };
     assert_eq!(command_name(&command), "run");
     assert_eq!(command.name(), CommandName::Run);
@@ -351,6 +352,7 @@ fn run_session_requires_a_non_empty_goal() {
         plan: None,
         accepted_plan: false,
         resume: None,
+        route: boundline::cli::RunRouteArgs::default(),
     };
     let session = DeveloperCommandSession::from_command(&command);
 
@@ -374,6 +376,7 @@ fn run_without_legacy_flags_is_valid_for_session_native_execution() {
         plan: None,
         accepted_plan: false,
         resume: None,
+        route: boundline::cli::RunRouteArgs::default(),
     };
     let session = DeveloperCommandSession::from_command(&command);
 
@@ -2259,7 +2262,7 @@ fn session_error_renderer_covers_trace_summary_and_cluster_config_guidance() {
             .contains("reason: `run` requires a valid cluster config in /tmp/cluster-owner"),
         "{cluster_config}"
     );
-    assert!(cluster_config.contains("next_command: boundline cluster init --workspace <primary> --cluster-id <id> --member <workspace> --member <workspace>"), "{cluster_config}");
+    assert!(cluster_config.contains("next_command: boundline preview cluster init --workspace <primary> --cluster-id <id> --member <workspace> --member <workspace>"), "{cluster_config}");
 
     let session_store = render_session_error(
         "plan",
@@ -2311,6 +2314,7 @@ fn command_names_render_for_all_four_subcommands() {
             plan: None,
             accepted_plan: false,
             resume: None,
+            route: boundline::cli::RunRouteArgs::default(),
         }),
         "run"
     );

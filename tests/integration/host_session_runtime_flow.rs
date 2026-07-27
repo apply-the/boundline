@@ -233,7 +233,7 @@ fn structured_session_output_preserves_continuation_state_across_goal_plan_statu
         "{status_text}"
     );
 
-    let next = run_boundline_in(&workspace, &["next", "--json"]);
+    let next = run_boundline_in(&workspace, &["status", "--json"]);
     let next_text = terminal_text(&next);
     assert_eq!(next.status.code(), Some(0), "{next_text}");
     let next_json: Value = stdout_json(&next);
@@ -250,10 +250,10 @@ fn orchestrate_stream_can_run_to_terminal_from_goal_input() {
     let orchestrate = run_boundline_in(
         &workspace,
         &[
-            "orchestrate",
+            "run",
             "--goal",
             "Fix the failing add test",
-            "--intent",
+            "--until",
             "continue-until-terminal",
             "--json-stream",
         ],
@@ -286,7 +286,7 @@ fn orchestrate_staged_planning_resume_can_handoff_backlog_into_terminal_executio
     let first = run_boundline_in(
         &workspace,
         &[
-            "orchestrate",
+            "run",
             "--goal",
             "Deliver a governed feature",
             "--brief",
@@ -301,7 +301,7 @@ fn orchestrate_staged_planning_resume_can_handoff_backlog_into_terminal_executio
             "engineering",
             "--owner",
             "platform",
-            "--intent",
+            "--until",
             "continue-until-phase-request",
             "--json-stream",
         ],
@@ -320,10 +320,10 @@ fn orchestrate_staged_planning_resume_can_handoff_backlog_into_terminal_executio
     let second = run_boundline_in(
         &workspace,
         &[
-            "orchestrate",
+            "run",
             "--planning-stage-complete",
             "plan:requirements",
-            "--intent",
+            "--until",
             "continue-until-phase-request",
             "--json-stream",
         ],
@@ -342,10 +342,10 @@ fn orchestrate_staged_planning_resume_can_handoff_backlog_into_terminal_executio
     let third = run_boundline_in(
         &workspace,
         &[
-            "orchestrate",
+            "run",
             "--planning-stage-complete",
             "plan:architecture",
-            "--intent",
+            "--until",
             "continue-until-phase-request",
             "--json-stream",
         ],
@@ -366,10 +366,10 @@ fn orchestrate_staged_planning_resume_can_handoff_backlog_into_terminal_executio
     let fourth = run_boundline_in(
         &workspace,
         &[
-            "orchestrate",
+            "run",
             "--planning-stage-complete",
             "plan:backlog",
-            "--intent",
+            "--until",
             "continue-until-terminal",
             "--json-stream",
         ],

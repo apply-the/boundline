@@ -137,7 +137,16 @@ fn init_vscode_read_only_auto_approve_merges_existing_settings() {
     fs::create_dir_all(workspace.join(".vscode")).unwrap();
     fs::write(
         workspace.join(".vscode/settings.json"),
-        "{\n  \"editor.tabSize\": 2,\n  \"chat.tools.terminal.autoApprove\": {\"npm\": false}\n}\n",
+        concat!(
+            "{\n",
+            "  \"editor.tabSize\": 2,\n",
+            "  \"chat.tools.terminal.autoApprove\": {\n",
+            "    \"npm\": false,\n",
+            "    \"/^boundline workflow (list|status|inspect)\\\\b/\": true,\n",
+            "    \"/^boundline workflow (run|resume)\\\\b/\": true\n",
+            "  }\n",
+            "}\n"
+        ),
     )
     .unwrap();
 
@@ -167,11 +176,16 @@ fn init_vscode_read_only_auto_approve_merges_existing_settings() {
     assert_eq!(auto.get("npm").unwrap(), false);
     assert_eq!(auto.get("boundline").unwrap(), false);
     assert_eq!(auto.get("canon").unwrap(), false);
-    assert!(auto.contains_key("/^boundline (doctor|status|next|inspect|orchestrate)\\b/"));
+    assert!(auto.contains_key("/^boundline (doctor|status|inspect)\\b/"));
     assert!(auto.contains_key("/^boundline update\\b(?!.*\\s--(apply|force|adopt|prune)\\b)/"));
-    assert!(auto.contains_key(
-        "/^boundline (init|run|step|workflow (run|resume)|config (set|unset|bind-context|unbind-context)|cluster init)\\b/"
-    ));
+    assert!(
+        auto.contains_key(
+            "/^boundline (init|run|config (set|unset|bind-context|unbind-context))\\b/"
+        )
+    );
+    assert!(auto.contains_key("/^boundline preview (workflow (run|resume)|cluster init)\\b/"));
+    assert!(!auto.contains_key("/^boundline workflow (list|status|inspect)\\b/"));
+    assert!(!auto.contains_key("/^boundline workflow (run|resume)\\b/"));
 
     let manifest = fs::read_to_string(workspace.join(".boundline/scaffold-manifest.json")).unwrap();
     assert!(manifest.contains("\"target\": \"ide\""), "{manifest}");
@@ -230,14 +244,14 @@ fn init_vscode_session_safe_auto_approve_allows_session_commands() {
     let auto = settings["chat.tools.terminal.autoApprove"].as_object().unwrap();
     assert_eq!(auto.get("boundline").unwrap(), false);
     assert_eq!(auto.get("canon").unwrap(), false);
-    assert!(auto.contains_key("/^boundline (doctor|status|next|inspect|orchestrate)\\b/"));
+    assert!(auto.contains_key("/^boundline (doctor|status|inspect)\\b/"));
     assert!(auto.contains_key("/^boundline goal\\b/"));
     assert!(auto.contains_key("/^boundline plan\\b/"));
     assert!(auto.contains_key("/^boundline run\\b/"));
     assert!(auto.contains_key("/^boundline init\\b/"));
-    assert!(auto.contains_key("/^boundline workflow (run|resume)\\b/"));
+    assert!(auto.contains_key("/^boundline preview workflow (run|resume)\\b/"));
     assert!(auto.contains_key("/^boundline config (set|unset|bind-context|unbind-context)\\b/"));
-    assert!(auto.contains_key("/^boundline cluster init\\b/"));
+    assert!(auto.contains_key("/^boundline preview cluster init\\b/"));
 }
 
 #[test]

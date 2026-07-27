@@ -52,7 +52,8 @@ fn global_bootstrap_commands_are_actionable_before_workspace_init() {
 #[test]
 fn global_continue_does_not_invent_a_session_before_init_or_goal() {
     let workspace = temp_empty_workspace("boundline-global-continue");
-    let output = run_boundline(&["continue", "--workspace", workspace.to_string_lossy().as_ref()]);
+    let output =
+        run_boundline(&["run", "--resume", "--workspace", workspace.to_string_lossy().as_ref()]);
     let text = terminal_text(&output);
 
     assert_eq!(output.status.code(), Some(0), "{text}");

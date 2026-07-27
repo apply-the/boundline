@@ -19,7 +19,7 @@ fn workflow_run_rejects_review_phase_when_review_is_not_allowed() {
 
     let output = run_boundline_in(
         &workspace,
-        &["workflow", "run", "default", "--goal", "Fix the failing add test"],
+        &["preview", "workflow", "run", "default", "--goal", "Fix the failing add test"],
     );
     let text = terminal_text(&output);
 
@@ -51,7 +51,7 @@ fn workflow_run_rejects_govern_phase_when_governance_is_not_allowed() {
 
     let output = run_boundline_in(
         &workspace,
-        &["workflow", "run", "default", "--goal", "Fix the failing add test"],
+        &["preview", "workflow", "run", "default", "--goal", "Fix the failing add test"],
     );
     let text = terminal_text(&output);
 

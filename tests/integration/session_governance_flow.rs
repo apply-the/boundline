@@ -32,7 +32,10 @@ fn run_in_optional_governance_workspace_uses_native_goal_plan_path() {
             .code(),
         Some(0)
     );
-    assert_eq!(run_boundline_in(&workspace, &["flow", "bug-fix"]).status.code(), Some(0));
+    assert_eq!(
+        run_boundline_in(&workspace, &["preview", "flow", "bug-fix"]).status.code(),
+        Some(0)
+    );
     assert_eq!(run_boundline_in(&workspace, &["plan"]).status.code(), Some(0));
 
     let run = run_boundline_in(&workspace, &["run"]);
@@ -83,7 +86,10 @@ fn required_governance_workspace_blocks_on_native_goal_plan_path() {
             .code(),
         Some(0)
     );
-    assert_eq!(run_boundline_in(&workspace, &["flow", "bug-fix"]).status.code(), Some(0));
+    assert_eq!(
+        run_boundline_in(&workspace, &["preview", "flow", "bug-fix"]).status.code(),
+        Some(0)
+    );
     assert_eq!(run_boundline_in(&workspace, &["plan"]).status.code(), Some(0));
 
     let run = run_boundline_in(&workspace, &["run"]);
@@ -125,7 +131,10 @@ fn approval_workspace_waits_on_investigate_governance_before_execution() {
             .code(),
         Some(0)
     );
-    assert_eq!(run_boundline_in(&workspace, &["flow", "bug-fix"]).status.code(), Some(0));
+    assert_eq!(
+        run_boundline_in(&workspace, &["preview", "flow", "bug-fix"]).status.code(),
+        Some(0)
+    );
     assert_eq!(run_boundline_in(&workspace, &["plan"]).status.code(), Some(0));
 
     let run = run_boundline_in(&workspace, &["run"]);
@@ -151,7 +160,10 @@ fn approval_workspace_run_resumes_after_operator_grant() {
             .code(),
         Some(0)
     );
-    assert_eq!(run_boundline_in(&workspace, &["flow", "bug-fix"]).status.code(), Some(0));
+    assert_eq!(
+        run_boundline_in(&workspace, &["preview", "flow", "bug-fix"]).status.code(),
+        Some(0)
+    );
     assert_eq!(run_boundline_in(&workspace, &["plan"]).status.code(), Some(0));
 
     let initial_run = run_boundline_in(&workspace, &["run"]);
@@ -188,7 +200,10 @@ fn approval_workspace_next_refreshes_and_step_graduates_requested_adaptive_postu
             .code(),
         Some(0)
     );
-    assert_eq!(run_boundline_in(&workspace, &["flow", "bug-fix"]).status.code(), Some(0));
+    assert_eq!(
+        run_boundline_in(&workspace, &["preview", "flow", "bug-fix"]).status.code(),
+        Some(0)
+    );
     assert_eq!(run_boundline_in(&workspace, &["plan"]).status.code(), Some(0));
 
     let initial_run = run_boundline_in(&workspace, &["run"]);
@@ -226,7 +241,7 @@ fn approval_workspace_next_refreshes_and_step_graduates_requested_adaptive_postu
 
     fs::write(workspace.join(".canon/approval-state.txt"), "granted\n").unwrap();
 
-    let next = run_boundline_in(&workspace, &["next"]);
+    let next = run_boundline_in(&workspace, &["status"]);
     let next_text = terminal_text(&next);
     assert_eq!(next.status.code(), Some(0), "{next_text}");
     assert!(next_text.contains("latest_governance_state: governed_ready"), "{next_text}");
@@ -244,9 +259,9 @@ fn approval_workspace_next_refreshes_and_step_graduates_requested_adaptive_postu
         ),
         "{next_text}"
     );
-    assert!(next_text.contains("next_command: boundline step"), "{next_text}");
+    assert!(next_text.contains("next_command: boundline run --one-step"), "{next_text}");
 
-    let step = run_boundline_in(&workspace, &["step"]);
+    let step = run_boundline_in(&workspace, &["run", "--one-step"]);
     let step_text = terminal_text(&step);
     assert_eq!(step.status.code(), Some(0), "{step_text}");
     assert!(

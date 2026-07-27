@@ -53,7 +53,7 @@ fn next_without_active_session_recommends_workspace_inspect_for_latest_compatibi
     let run_text = terminal_text(&run);
     assert_eq!(run.status.code(), Some(0), "{run_text}");
 
-    let next = run_boundline_in(&workspace, &["next", "--workspace", "."]);
+    let next = run_boundline_in(&workspace, &["status", "--workspace", "."]);
     let next_text = terminal_text(&next);
     assert_eq!(next.status.code(), Some(0), "{next_text}");
     assert!(next_text.contains("continuity_authority: compatibility_trace"), "{next_text}");

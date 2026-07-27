@@ -11,7 +11,7 @@ fn council_without_calibration_policy_defaults_all_advisory() {
     let dir = std::env::temp_dir().join(format!("boundline-calib-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&dir).unwrap();
     let output = Command::new(env!("CARGO_BIN_EXE_boundline"))
-        .args(["council", "adjudicate"])
+        .args(["preview", "council", "adjudicate"])
         .current_dir(&dir)
         .output()
         .unwrap();
@@ -27,7 +27,7 @@ fn council_with_json_output_includes_calibration_fields() {
     let dir = std::env::temp_dir().join(format!("boundline-calib-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&dir).unwrap();
     let output = Command::new(env!("CARGO_BIN_EXE_boundline"))
-        .args(["council", "adjudicate", "--json"])
+        .args(["preview", "council", "adjudicate", "--json"])
         .current_dir(&dir)
         .output()
         .unwrap();
@@ -43,6 +43,7 @@ fn override_rejects_hook_level() {
     std::fs::create_dir_all(&dir).unwrap();
     let output = Command::new(env!("CARGO_BIN_EXE_boundline"))
         .args([
+            "preview",
             "override",
             "--workspace",
             dir.to_str().unwrap(),
@@ -68,6 +69,7 @@ fn override_writes_record() {
     fs::create_dir_all(boundline_dir).unwrap();
     let output = Command::new(env!("CARGO_BIN_EXE_boundline"))
         .args([
+            "preview",
             "override",
             "--workspace",
             dir.to_str().unwrap(),

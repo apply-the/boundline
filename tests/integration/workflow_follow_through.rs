@@ -27,7 +27,14 @@ fn workflow_run_completes_review_and_govern_when_follow_through_is_ready() {
 
     let output = run_boundline_in(
         &workspace,
-        &["workflow", "run", "governed-delivery", "--goal", "Fix the failing checkout flow"],
+        &[
+            "preview",
+            "workflow",
+            "run",
+            "governed-delivery",
+            "--goal",
+            "Fix the failing checkout flow",
+        ],
     );
     let text = terminal_text(&output);
 
@@ -55,7 +62,14 @@ fn workflow_run_advances_review_and_pauses_at_govern_when_approval_is_pending() 
 
     let output = run_boundline_in(
         &workspace,
-        &["workflow", "run", "governed-delivery", "--goal", "Fix the failing checkout flow"],
+        &[
+            "preview",
+            "workflow",
+            "run",
+            "governed-delivery",
+            "--goal",
+            "Fix the failing checkout flow",
+        ],
     );
     let text = terminal_text(&output);
 
@@ -68,7 +82,10 @@ fn workflow_run_advances_review_and_pauses_at_govern_when_approval_is_pending() 
     );
     assert!(text.contains("latest_governance_state: awaiting_approval"), "{text}");
     assert!(text.contains("execution_condition: waiting - governance approval is still pending before execution can continue"), "{text}");
-    assert!(text.contains("next_command: boundline workflow resume --workspace "), "{text}");
+    assert!(
+        text.contains("next_command: boundline preview workflow resume --workspace "),
+        "{text}"
+    );
 
     let record = load_session_record(&workspace);
     let progress = record.workflow_progress.expect("workflow progress should exist");
@@ -86,13 +103,21 @@ fn workflow_resume_finishes_after_governance_approval_refresh() {
 
     let start = run_boundline_in(
         &workspace,
-        &["workflow", "run", "governed-delivery", "--goal", "Fix the failing checkout flow"],
+        &[
+            "preview",
+            "workflow",
+            "run",
+            "governed-delivery",
+            "--goal",
+            "Fix the failing checkout flow",
+        ],
     );
     assert_eq!(start.status.code(), Some(0), "{}", terminal_text(&start));
 
     fs::write(workspace.join(".canon/approval-state.txt"), "granted\n").unwrap();
 
-    let output = run_boundline_in(&workspace, &["workflow", "resume", "--workspace", "."]);
+    let output =
+        run_boundline_in(&workspace, &["preview", "workflow", "resume", "--workspace", "."]);
     let text = terminal_text(&output);
 
     assert_eq!(output.status.code(), Some(0), "{text}");

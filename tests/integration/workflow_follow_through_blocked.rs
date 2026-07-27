@@ -25,7 +25,7 @@ fn workflow_run_blocks_when_govern_phase_has_no_bounded_governance_evidence() {
 
     let output = run_boundline_in(
         &workspace,
-        &["workflow", "run", "blocked-delivery", "--goal", "Fix the failing add test"],
+        &["preview", "workflow", "run", "blocked-delivery", "--goal", "Fix the failing add test"],
     );
     let text = terminal_text(&output);
 
@@ -36,7 +36,10 @@ fn workflow_run_blocks_when_govern_phase_has_no_bounded_governance_evidence() {
         text.contains("execution_condition: terminal - work stopped after a non-success result"),
         "{text}"
     );
-    assert!(text.contains("next_command: boundline workflow inspect --workspace "), "{text}");
+    assert!(
+        text.contains("next_command: boundline preview workflow inspect --workspace "),
+        "{text}"
+    );
 
     let record = load_session_record(&workspace);
     let progress = record.workflow_progress.expect("workflow progress should exist");

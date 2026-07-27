@@ -436,8 +436,7 @@ fn extend_workspace_context_diagnostics(report: &mut DiagnosticsReport, workspac
             },
             message: project_memory_message,
         },
-        (!project_memory_available)
-            .then(|| format!("boundline govern --workspace {workspace_ref}")),
+        (!project_memory_available).then(|| format!("boundline plan --workspace {workspace_ref}")),
     );
 
     let expert_pack_ready = [
@@ -1237,7 +1236,7 @@ mod tests {
             report
                 .suggested_actions
                 .iter()
-                .any(|action| action.contains("boundline govern --workspace"))
+                .any(|action| action.contains("boundline plan --workspace"))
         );
         assert!(
             report

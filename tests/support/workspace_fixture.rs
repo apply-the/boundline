@@ -23,7 +23,7 @@ use boundline::domain::configuration::{ConfigFile, ModelRoute, RoutingConfig, Ru
 use serde::de::DeserializeOwned;
 use uuid::Uuid;
 
-const PROVIDER_ENV_KEYS: &[&str] = &[
+pub(crate) const PROVIDER_ENV_KEYS: &[&str] = &[
     OPENAI_API_KEY_ENV,
     OPENAI_BASE_URL_ENV,
     DEEPSEEK_API_KEY_ENV,
@@ -48,6 +48,31 @@ const PROVIDER_ENV_KEYS: &[&str] = &[
 ];
 
 const FULL_CANON_CAPABILITIES: &str = include_str!("../fixtures/canon_capabilities_full.json");
+
+pub fn verify_removed_command(
+    workspace: &Path,
+    args: &[&str],
+    command_name: &str,
+    replacement: &str,
+) -> Result<(), String> {
+    let session_path = workspace.join(".boundline/session.json");
+    let session_before = fs::read(&session_path).ok();
+    let output = run_boundline_in(workspace, args);
+    let rendered = terminal_text(&output);
+    if output.status.success() {
+        return Err(format!("removed command `{command_name}` unexpectedly succeeded: {rendered}"));
+    }
+    if !rendered.contains(&format!("`{command_name}` was removed in Boundline 0.90.")) {
+        return Err(format!("removed command diagnostic was missing: {rendered}"));
+    }
+    if !rendered.contains(replacement) {
+        return Err(format!("removed command replacement was missing: {rendered}"));
+    }
+    if fs::read(&session_path).ok() != session_before {
+        return Err(format!("removed command `{command_name}` changed session state"));
+    }
+    Ok(())
+}
 
 const FIXTURE_CARGO_TOML: &str = concat!(
     "[package]\n",

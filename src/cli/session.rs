@@ -2565,9 +2565,9 @@ fn suggested_next_command(record: &ActiveSessionRecord) -> Option<String> {
                 return Some("boundline run".to_string());
             }
 
-            Some("boundline step".to_string())
+            Some("boundline run --one-step".to_string())
         }
-        SessionStatus::Running => Some("boundline step".to_string()),
+        SessionStatus::Running => Some("boundline run --one-step".to_string()),
         SessionStatus::Succeeded
         | SessionStatus::Failed
         | SessionStatus::Exhausted
@@ -3035,7 +3035,7 @@ impl SessionCommandError {
                 }
                 _ => Some("boundline plan".to_string()),
             },
-            Self::UnknownFlow { .. } => Some("boundline flow bug-fix".to_string()),
+            Self::UnknownFlow { .. } => Some("boundline preview flow bug-fix".to_string()),
             Self::FlowReplacementRequiresReset { .. } => {
                 Some("boundline goal --goal <goal>".to_string())
             }
@@ -3057,7 +3057,7 @@ impl SessionCommandError {
             | Self::GitBranchCreateFailed { .. } => None,
             Self::TraceSummary(_) => None,
             Self::BriefIngestion(_) => Some("boundline goal --goal <goal>".to_string()),
-            Self::MissingClusterConfig { .. } => Some("boundline cluster init --workspace <primary> --cluster-id <id> --member <workspace> --member <workspace>".to_string()),
+            Self::MissingClusterConfig { .. } => Some("boundline preview cluster init --workspace <primary> --cluster-id <id> --member <workspace> --member <workspace>".to_string()),
         }
     }
 }
@@ -3570,7 +3570,7 @@ fn red_to_green_addition() {
             supported: "bug-fix, change, delivery".to_string(),
         };
         let text = render_error("flow", &unknown_flow);
-        assert!(text.contains("boundline flow bug-fix"), "{text}");
+        assert!(text.contains("boundline preview flow bug-fix"), "{text}");
 
         let reset_required = SessionCommandError::FlowReplacementRequiresReset {
             current: "bug-fix".to_string(),
@@ -5348,7 +5348,7 @@ fn red_to_green_addition() {
         };
         let cluster_text = render_error("status", &cluster_error);
         assert!(
-            cluster_text.contains("boundline cluster init --workspace <primary>"),
+            cluster_text.contains("boundline preview cluster init --workspace <primary>"),
             "{cluster_text}"
         );
     }

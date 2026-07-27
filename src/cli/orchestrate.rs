@@ -1351,7 +1351,7 @@ fn resume_command(
     intent: OrchestrateIntent,
     request_id: Option<&str>,
 ) -> String {
-    let mut parts = vec!["boundline orchestrate".to_string()];
+    let mut parts = vec!["boundline run".to_string()];
     if let Some(workspace) = workspace {
         parts.push(format!("--workspace {}", workspace.display()));
     }
@@ -1377,7 +1377,7 @@ fn planning_stage_resume_command(
     intent: OrchestrateIntent,
     request_id: Option<&str>,
 ) -> String {
-    let mut parts = vec!["boundline orchestrate".to_string()];
+    let mut parts = vec!["boundline run".to_string()];
     if let Some(workspace) = workspace {
         parts.push(format!("--workspace {}", workspace.display()));
     }
@@ -2217,16 +2217,10 @@ fn assistant_command_for_cli(
         Some("/boundline-plan".to_string())
     } else if cli_command.starts_with("boundline run") {
         Some("/boundline-run".to_string())
-    } else if cli_command.starts_with("boundline step") {
-        Some("/boundline-step".to_string())
-    } else if cli_command.starts_with("boundline next") {
-        Some("/boundline-next".to_string())
     } else if cli_command.starts_with("boundline status") {
         Some("/boundline-status".to_string())
     } else if cli_command.starts_with("boundline inspect") {
         Some("/boundline-inspect".to_string())
-    } else if cli_command.starts_with("boundline govern") {
-        Some("/boundline-govern".to_string())
     } else if cli_command.starts_with("boundline update") {
         Some("/boundline-update".to_string())
     } else {

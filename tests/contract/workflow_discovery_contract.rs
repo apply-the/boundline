@@ -14,7 +14,7 @@ fn run_boundline_in(workspace: &std::path::Path, args: &[&str]) -> std::process:
 fn workflow_list_contract_exposes_available_workflows_and_invocation_guidance() {
     let workspace = temp_workflow_discovery_workspace("workflow-discovery-contract-ready");
 
-    let output = run_boundline_in(&workspace, &["workflow", "list", "--workspace", "."]);
+    let output = run_boundline_in(&workspace, &["preview", "workflow", "list", "--workspace", "."]);
     let text = terminal_text(&output);
 
     assert_eq!(output.status.code(), Some(0), "{text}");
@@ -26,7 +26,7 @@ fn workflow_list_contract_exposes_available_workflows_and_invocation_guidance() 
         "{text}"
     );
     assert!(
-        text.contains("invoke_with: boundline workflow run governed-delivery --workspace "),
+        text.contains("invoke_with: boundline preview workflow run governed-delivery --workspace "),
         "{text}"
     );
     assert!(text.contains("primary Boundline workflow surface"), "{text}");
@@ -36,7 +36,7 @@ fn workflow_list_contract_exposes_available_workflows_and_invocation_guidance() 
 fn workflow_list_contract_reports_invalid_registry_state_without_silence() {
     let workspace = temp_invalid_workflow_layer_workspace("workflow-discovery-contract-invalid");
 
-    let output = run_boundline_in(&workspace, &["workflow", "list", "--workspace", "."]);
+    let output = run_boundline_in(&workspace, &["preview", "workflow", "list", "--workspace", "."]);
     let text = terminal_text(&output);
 
     assert_eq!(output.status.code(), Some(1), "{text}");

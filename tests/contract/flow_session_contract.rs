@@ -85,7 +85,7 @@ fn load_session_record(workspace: &std::path::Path) -> ActiveSessionRecord {
 fn delivery_flow_plan_persists_stage_tagged_steps_and_active_flow_state() {
     let workspace = temp_workspace();
     run_boundline(&workspace, &["goal", "--goal", "Deliver the checkout fix"]);
-    run_boundline(&workspace, &["flow", "delivery"]);
+    run_boundline(&workspace, &["preview", "flow", "delivery"]);
     run_boundline(&workspace, &["plan"]);
 
     let record = load_session_record(&workspace);

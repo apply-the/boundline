@@ -1,116 +1,64 @@
-//! Integration tests for `boundline exec` — full pipeline from CLI through
-//! classification, policy, evidence capture, and redaction.
+//! Internal-handler integration coverage for the non-public exec capability.
 
-use std::process::Command;
+use boundline::cli::{
+    CommandExitStatus,
+    exec::{ExecArgs, execute},
+};
 
-fn boundline_binary() -> String {
-    env!("CARGO_BIN_EXE_boundline").to_string()
-}
+use crate::workspace_fixture::temp_empty_workspace;
 
-struct TempDir {
-    path: std::path::PathBuf,
-}
-
-impl TempDir {
-    fn new(prefix: &str) -> Self {
-        let mut path = std::env::temp_dir();
-        path.push(format!("boundline-exec-test-{}-{}", prefix, std::process::id()));
-        let _ = std::fs::remove_dir_all(&path);
-        std::fs::create_dir_all(&path).expect("create temp dir");
-        Self { path }
-    }
-    fn path(&self) -> &std::path::Path {
-        &self.path
+fn exec_args(command: impl Into<String>) -> ExecArgs {
+    ExecArgs {
+        command: command.into(),
+        dry_run: false,
+        no_mutation: false,
+        classify_only: false,
+        zone: None,
+        json: false,
     }
 }
 
-impl Drop for TempDir {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.path);
-    }
-}
-
-fn run_exec(cmd: &str) -> std::process::Output {
-    Command::new(boundline_binary())
-        .arg("exec")
-        .arg(cmd)
-        .output()
-        .expect("failed to execute boundline exec")
-}
-
-fn run_exec_with(cmd: &str, flags: &[&str]) -> std::process::Output {
-    let mut c = Command::new(boundline_binary());
-    c.arg("exec");
-    for f in flags {
-        c.arg(f);
-    }
-    c.arg(cmd).output().expect("failed to execute boundline exec")
-}
-
-fn stderr_of(output: &std::process::Output) -> String {
-    String::from_utf8_lossy(&output.stderr).to_string()
-}
-
-/// Extracts the EvidencePacket from a `--json` host envelope.
-fn extract_evidence(output: &std::process::Output) -> serde_json::Value {
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let envelope: serde_json::Value =
-        serde_json::from_str(&stdout).expect("valid JSON host envelope");
-    let rendered = envelope["rendered_output"].as_str().expect("rendered_output field");
-    serde_json::from_str(rendered).expect("valid JSON evidence packet")
+fn ensure(condition: bool, message: impl Into<String>) -> Result<(), String> {
+    if condition { Ok(()) } else { Err(message.into()) }
 }
 
 #[test]
-fn t024_exec_echo_hello_produces_evidence() {
-    let output = run_exec("echo hello");
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(output.status.success(), "stdout: {}\nstderr: {}", stdout, stderr_of(&output));
-    assert!(stdout.contains("intent=read"), "{}", stdout);
-    assert!(stdout.contains("mode=allow"), "{}", stdout);
-    assert!(stdout.contains("exit_code=0"), "{}", stdout);
-    assert!(stdout.contains("trace_id="), "{}", stdout);
+fn t024_exec_echo_hello_produces_evidence() -> Result<(), String> {
+    let report = execute(exec_args("echo hello"), None);
+    ensure(report.exit_status == CommandExitStatus::Succeeded, &report.terminal_output)?;
+    ensure(report.terminal_output.contains("intent=read"), &report.terminal_output)?;
+    ensure(report.terminal_output.contains("mode=allow"), &report.terminal_output)?;
+    ensure(report.evidence.is_some(), "internal exec omitted evidence")
 }
 
 #[test]
-fn t061_dry_run_rm_does_not_delete() {
-    let dir = TempDir::new("dry-run");
-    let test_file = dir.path().join("test.txt");
-    std::fs::write(&test_file, "keep me").expect("write test file");
-    assert!(test_file.exists());
-
-    let cmd = format!("rm {}", test_file.display());
-    let output = run_exec_with(&cmd, &["--dry-run"]);
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(output.status.success(), "stdout: {}\nstderr: {}", stdout, stderr_of(&output));
-    assert!(stdout.contains("dry_run_status=plan_only"), "{}", stdout);
-    assert!(test_file.exists(), "file was deleted by dry-run!");
+fn t061_dry_run_rm_does_not_delete() -> Result<(), String> {
+    let workspace = temp_empty_workspace("boundline-exec-internal-dry-run");
+    let target = workspace.join("test.txt");
+    std::fs::write(&target, "keep me").map_err(|error| error.to_string())?;
+    let mut args = exec_args(format!("rm {}", target.display()));
+    args.dry_run = true;
+    let report = execute(args, Some(&workspace));
+    ensure(report.exit_status == CommandExitStatus::Succeeded, &report.terminal_output)?;
+    ensure(report.terminal_output.contains("dry_run_status=plan_only"), &report.terminal_output)?;
+    ensure(target.exists(), "internal dry-run deleted its target")
 }
 
 #[test]
-fn t062_redacted_evidence_hides_secret() {
-    let output = run_exec_with("echo secret: ghp_abc12345678901234567890123456", &["--json"]);
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(output.status.success(), "stdout: {}\nstderr: {}", stdout, stderr_of(&output));
-    let evidence = extract_evidence(&output);
-    // The evidence packet's stdout field must not contain the raw token.
-    let captured_stdout = evidence["stdout"].as_str().unwrap();
-    assert!(
-        !captured_stdout.contains("ghp_abc"),
-        "secret leaked in evidence stdout: {}",
-        captured_stdout
-    );
-    // Redaction audit should be non-empty.
-    let audit = &evidence["redaction_audit"];
-    assert!(!audit.as_array().unwrap().is_empty(), "no redaction recorded");
+fn t062_redacted_evidence_hides_secret() -> Result<(), String> {
+    let report = execute(exec_args("echo secret: ghp_abc12345678901234567890123456"), None);
+    let evidence = report.evidence.ok_or_else(|| "internal exec omitted evidence".to_string())?;
+    ensure(!evidence.stdout.contains("ghp_abc"), "secret leaked in evidence")?;
+    ensure(!evidence.redaction_audit.is_empty(), "redaction audit was empty")
 }
 
 #[test]
-fn t063_json_evidence_packet_has_required_fields() {
-    let output = run_exec_with("echo data", &["--json"]);
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(output.status.success(), "stdout: {}\nstderr: {}", stdout, stderr_of(&output));
-    let evidence = extract_evidence(&output);
-    assert_eq!(evidence["intent"].as_str().unwrap(), "read");
-    assert!(evidence["trace_id"].as_str().is_some());
-    assert_eq!(evidence["exit_code"].as_i64().unwrap(), 0);
+fn t063_json_evidence_packet_has_required_fields() -> Result<(), String> {
+    let mut args = exec_args("echo data");
+    args.json = true;
+    let report = execute(args, None);
+    let evidence = report.evidence.ok_or_else(|| "internal exec omitted evidence".to_string())?;
+    ensure(report.exit_status == CommandExitStatus::Succeeded, &report.terminal_output)?;
+    ensure(!evidence.trace_id.is_empty(), "evidence trace ID was empty")?;
+    ensure(evidence.exit_code == Some(0), "evidence exit code was not zero")
 }

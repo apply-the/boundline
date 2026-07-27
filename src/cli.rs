@@ -5,7 +5,16 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use clap::{CommandFactory, Parser, Subcommand};
+use clap::{Args, CommandFactory, Parser, Subcommand};
+
+#[path = "cli/command_surface.rs"]
+mod command_surface;
+
+pub use command_surface::{
+    CommandClassification, CommandSurfaceEntry, command_names, command_surface,
+    preview_command_names, removed_command_diagnostic, stable_command_names,
+    stable_completion_command_names,
+};
 
 use crate::adapters::env_layer;
 use crate::domain::configuration::{
@@ -30,7 +39,8 @@ use init::OllamaProfile;
 #[command(
     name = "boundline",
     about = "Local delivery orchestrator for bounded engineering work",
-    version
+    version,
+    disable_help_subcommand = true
 )]
 pub struct Cli {
     #[arg(
@@ -143,12 +153,14 @@ pub enum CommandExitStatus {
 /// Top-level developer commands exposed by the CLI.
 #[derive(Debug, Subcommand)]
 pub enum DeveloperCommand {
+    #[command(display_order = 7)]
     Doctor {
         #[arg(long, conflicts_with = "install", required_unless_present = "install")]
         workspace: Option<PathBuf>,
         #[arg(long, conflicts_with = "workspace")]
         install: bool,
     },
+    #[command(display_order = 2)]
     Goal {
         #[arg(long)]
         workspace: Option<PathBuf>,
@@ -176,6 +188,7 @@ pub enum DeveloperCommand {
         #[arg(long)]
         slug: Option<String>,
     },
+    #[command(skip)]
     Flow {
         name: String,
         #[arg(long)]
@@ -183,6 +196,7 @@ pub enum DeveloperCommand {
         #[arg(long)]
         cluster: Option<PathBuf>,
     },
+    #[command(display_order = 3)]
     Plan {
         #[arg(long)]
         workspace: Option<PathBuf>,
@@ -208,16 +222,19 @@ pub enum DeveloperCommand {
         max_rounds: Option<u32>,
     },
     /// Lightweight preflight check for assistant hosts.
+    #[command(skip)]
     Probe {
         #[arg(long)]
         workspace: Option<PathBuf>,
     },
+    #[command(skip)]
     Step {
         #[arg(long)]
         workspace: Option<PathBuf>,
         #[arg(long)]
         cluster: Option<PathBuf>,
     },
+    #[command(display_order = 4)]
     Run {
         #[arg(long)]
         workspace: Option<PathBuf>,
@@ -244,16 +261,20 @@ pub enum DeveloperCommand {
         /// Opt out of Canon governance even when workspace has [canon] config.
         #[arg(long = "no-canon", conflicts_with = "mode")]
         no_canon: bool,
-        /// Path to an accepted plan JSON file for multi-task execution.
-        #[arg(long = "plan", conflicts_with_all = ["accepted_plan", "resume", "goal"])]
+        /// Legacy internal field retained only for non-parser test construction.
+        #[arg(skip)]
         plan: Option<PathBuf>,
-        /// Use the session-attached accepted plan for multi-task execution.
-        #[arg(long = "accepted-plan", conflicts_with_all = ["plan", "resume", "goal"])]
+        /// Legacy internal field retained only for non-parser test construction.
+        #[arg(skip)]
         accepted_plan: bool,
-        /// Resume a paused or blocked execution run by run ID.
-        #[arg(long = "resume", conflicts_with_all = ["plan", "accepted_plan", "goal"])]
+        /// Legacy placeholder field retained only for non-parser test construction.
+        #[arg(skip)]
         resume: Option<String>,
+        /// Operational lifecycle routing that replaces overlapping legacy roots.
+        #[command(flatten)]
+        route: RunRouteArgs,
     },
+    #[command(skip)]
     Orchestrate {
         #[arg(long)]
         workspace: Option<PathBuf>,
@@ -297,18 +318,22 @@ pub enum DeveloperCommand {
         #[arg(long)]
         slug: Option<String>,
     },
+    #[command(skip)]
     Workflow {
         #[command(subcommand)]
         command: WorkflowSubcommand,
     },
+    #[command(display_order = 12)]
     Index {
         #[command(subcommand)]
         command: IndexSubcommand,
     },
+    #[command(skip)]
     Checkpoint {
         #[command(subcommand)]
         command: CheckpointSubcommand,
     },
+    #[command(display_order = 6)]
     Inspect {
         #[arg(long)]
         trace: Option<PathBuf>,
@@ -321,6 +346,7 @@ pub enum DeveloperCommand {
         #[arg(long)]
         audit: bool,
     },
+    #[command(display_order = 5)]
     Status {
         #[arg(long)]
         workspace: Option<PathBuf>,
@@ -329,6 +355,7 @@ pub enum DeveloperCommand {
         #[arg(long)]
         session: Option<String>,
     },
+    #[command(skip)]
     Next {
         #[arg(long)]
         workspace: Option<PathBuf>,
@@ -337,6 +364,7 @@ pub enum DeveloperCommand {
         #[arg(long)]
         session: Option<String>,
     },
+    #[command(skip)]
     Continue {
         #[arg(long)]
         workspace: Option<PathBuf>,
@@ -345,10 +373,12 @@ pub enum DeveloperCommand {
         #[arg(long)]
         session: Option<String>,
     },
+    #[command(display_order = 13)]
     Session {
         #[command(subcommand)]
         command: SessionSubcommand,
     },
+    #[command(skip)]
     Govern {
         #[arg(long)]
         workspace: Option<PathBuf>,
@@ -375,11 +405,13 @@ pub enum DeveloperCommand {
         #[arg(long = "preserved-behavior-evidence")]
         preserved_behavior_evidence: bool,
     },
+    #[command(display_order = 14)]
     Assistant {
         #[command(subcommand)]
         command: AssistantSubcommand,
     },
     #[command(
+        display_order = 1,
         about = "Bootstrap install-global defaults, workspace files, and default routing",
         after_long_help = "Guided mode tips:\n  - leave --assistant unset to skip repository-local assistant packs\n  - leave guided routes blank to let selected assistants seed defaults for planning, implementation, verification, and review\n  - use --ollama-profile small|medium|large to pin local Ollama routes for every delivery slot\n\nScope selection:\n  - --scope workspace keeps the existing repo bootstrap behavior\n  - --scope global writes install-wide defaults under the global Boundline config directory\n  - --scope both writes install-wide defaults first and then repo-local overrides\n\nWorkspace selection:\n  - omit --workspace to target the nearest initialized .boundline/ root\n  - if no .boundline/ exists, Boundline falls back to the nearest .git root\n  - use --workspace <path> only when you need to bootstrap another repository explicitly\n\nDocs export policy:\n  - --export-docs is create-only by default; existing target files stop the command\n  - use --refresh to update generated docs in place\n  - use --diff to preview docs changes without writing\n  - use --to <path> to export generated docs under another root\n\nExamples:\n  boundline init --assistant copilot\n  boundline init --scope global --assistant copilot\n  boundline init --scope both --assistant codex --assistant copilot\n  boundline init --ollama-profile small\n  boundline init --assistant copilot --route planning=copilot:gpt-4o\n  boundline init --assistant codex --assistant copilot --route review=claude:sonnet-4\n  boundline init --export-docs\n  boundline init --export-docs --refresh\n  boundline init --workspace ../other-repo --export-docs --to docs/reference/boundline"
     )]
@@ -458,6 +490,7 @@ pub enum DeveloperCommand {
         force: bool,
     },
     #[command(
+        display_order = 15,
         about = "Preview or apply updates to the current Boundline-managed workspace scaffold",
         after_long_help = "Default behavior:\n  - `boundline update` is preview-only and does not write files\n  - rerun with `--apply` to mutate the workspace\n  - rerun with `--force --apply` to overwrite changed replace-owned scaffold files\n\nTargets:\n  - omit `--target` to refresh the default workspace-managed surfaces: config, assistant assets, and hygiene files\n  - add `--target docs` to refresh exported docs under docs/boundline/ when they are already present or when you want them created\n  - add `--target execution --template <template>` to refresh `.boundline/execution.json` from an explicit template\n\nExamples:\n  boundline update\n  boundline update --apply\n  boundline update --force --apply\n  boundline update --target docs\n  boundline update --target execution --template change --apply"
     )]
@@ -496,32 +529,39 @@ pub enum DeveloperCommand {
         #[arg(long)]
         force: bool,
     },
+    #[command(display_order = 8)]
     Config {
         #[command(subcommand)]
         command: ConfigSubcommand,
     },
+    #[command(display_order = 11)]
     Adapter {
         #[command(subcommand)]
         command: AdapterSubcommand,
     },
+    #[command(display_order = 10)]
     Provider {
         #[command(subcommand)]
         command: ProviderSubcommand,
     },
+    #[command(skip)]
     Cluster {
         #[command(subcommand)]
         command: ClusterSubcommand,
     },
+    #[command(display_order = 9)]
     Models {
         #[command(subcommand)]
         command: ModelsSubcommand,
     },
     /// Run council adjudication over guardian findings.
+    #[command(skip)]
     Council {
         #[command(subcommand)]
         command: CouncilCommand,
     },
     /// Write an explicit override record to bypass a catch or rule block.
+    #[command(skip)]
     Override {
         #[arg(long)]
         workspace: Option<PathBuf>,
@@ -537,18 +577,22 @@ pub enum DeveloperCommand {
         expiry: Option<String>,
     },
     /// Inspect the current workspace and recommend the next action.
+    #[command(skip)]
     HelpNext(help_next::HelpNextArgs),
     /// Evaluate outputs and runs against fixtures.
+    #[command(skip)]
     Evals {
         #[command(subcommand)]
         command: evals::EvalsSubcommand,
     },
     /// Manage session trace lifecycle and compaction.
+    #[command(skip)]
     Trace {
         #[command(subcommand)]
         command: trace_compaction::TraceSubcommand,
     },
     /// Execute a shell command with safety classification, policy enforcement, and evidence capture.
+    #[command(skip)]
     Exec {
         /// The shell command to execute.
         #[arg(value_name = "COMMAND")]
@@ -568,6 +612,143 @@ pub enum DeveloperCommand {
         /// Output evidence as JSON to stdout.
         #[arg(long)]
         json: bool,
+    },
+    /// Access explicitly unstable commands outside the stable compatibility promise.
+    #[command(
+        hide = true,
+        about = "PREVIEW: commands outside the stable compatibility promise",
+        long_about = "PREVIEW COMMANDS\n\nThese commands are outside the stable compatibility promise and may change or be removed before Boundline 1.0."
+    )]
+    Preview {
+        #[command(subcommand)]
+        command: PreviewCommand,
+    },
+}
+
+/// Operational routing flags consolidated under the stable `run` entrypoint.
+#[derive(Debug, Args, Default)]
+pub struct RunRouteArgs {
+    /// Continue orchestration until the selected boundary.
+    #[arg(
+        long,
+        value_enum,
+        num_args = 0..=1,
+        default_missing_value = "continue-until-phase-request",
+        conflicts_with_all = ["one_step", "resume_session", "mode", "compatibility"]
+    )]
+    pub until: Option<orchestrate::OrchestrateIntent>,
+    /// Advance the current session by one existing lifecycle step.
+    #[arg(
+        long = "one-step",
+        conflicts_with_all = [
+            "until",
+            "resume_session",
+            "goal",
+            "brief",
+            "governance",
+            "risk",
+            "zone",
+            "owner",
+            "mode",
+            "compatibility",
+            "no_canon"
+        ]
+    )]
+    pub one_step: bool,
+    /// Resume the current paused or blocked session.
+    #[arg(
+        long = "resume",
+        conflicts_with_all = [
+            "until",
+            "one_step",
+            "goal",
+            "brief",
+            "governance",
+            "risk",
+            "zone",
+            "owner",
+            "mode",
+            "compatibility",
+            "no_canon"
+        ]
+    )]
+    pub resume_session: bool,
+    /// Select a session for `--resume`.
+    #[arg(long, requires = "resume_session")]
+    pub session: Option<String>,
+    /// Select the preview flow used by `--until`.
+    #[arg(long, requires = "until")]
+    pub flow: Option<String>,
+    /// Record completion of a planning stage before continuing orchestration.
+    #[arg(long = "planning-stage-complete", requires = "until")]
+    pub planning_stage_complete: Option<String>,
+    /// Bind a planning-stage completion response to its request.
+    #[arg(long = "request-id", requires = "until")]
+    pub request_id: Option<String>,
+    /// Supply a planning-stage clarification answer.
+    #[arg(long = "answer", requires = "until")]
+    pub answer: Option<String>,
+    /// Select the assistant host used for orchestration guidance.
+    #[arg(long = "assistant-host", value_enum, requires = "until")]
+    pub assistant_host: Option<assistant_assets::AssistantHost>,
+    /// Emit the existing orchestration event stream.
+    #[arg(long = "json-stream", requires = "until")]
+    pub json_stream: bool,
+    /// Set the semantic session slug for orchestrated execution.
+    #[arg(long, requires = "until")]
+    pub slug: Option<String>,
+}
+
+/// Commands available only through the explicit preview gateway.
+#[derive(Debug, Subcommand)]
+pub enum PreviewCommand {
+    /// Select an existing preview flow for the active session.
+    Flow {
+        name: String,
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        #[arg(long)]
+        cluster: Option<PathBuf>,
+    },
+    /// Use the existing preview workflow registry and runtime.
+    Workflow {
+        #[command(subcommand)]
+        command: WorkflowSubcommand,
+    },
+    /// Use the existing preview cluster administration runtime.
+    Cluster {
+        #[command(subcommand)]
+        command: ClusterSubcommand,
+    },
+    /// Run preview council adjudication.
+    Council {
+        #[command(subcommand)]
+        command: CouncilCommand,
+    },
+    /// Evaluate outputs and runs against fixtures.
+    Evals {
+        #[command(subcommand)]
+        command: evals::EvalsSubcommand,
+    },
+    /// Write a transitional preview override record.
+    Override {
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+        #[arg(long)]
+        guardian_id: String,
+        #[arg(long)]
+        control_id: String,
+        #[arg(long)]
+        level: String,
+        #[arg(long)]
+        reason: String,
+        #[arg(long)]
+        expiry: Option<String>,
+    },
+    /// Manage transitional preview trace compaction.
+    Trace {
+        #[command(subcommand)]
+        command: trace_compaction::TraceSubcommand,
     },
 }
 
@@ -681,7 +862,7 @@ pub enum CheckpointSubcommand {
 #[derive(Debug, Subcommand)]
 pub enum ClusterSubcommand {
     Init {
-        #[arg(long)]
+        #[arg(long, default_value = ".")]
         workspace: PathBuf,
         #[arg(long = "cluster-id")]
         cluster_id: String,
@@ -689,11 +870,11 @@ pub enum ClusterSubcommand {
         member: Vec<PathBuf>,
     },
     Status {
-        #[arg(long)]
+        #[arg(long, default_value = ".")]
         workspace: PathBuf,
     },
     Inspect {
-        #[arg(long)]
+        #[arg(long, default_value = ".")]
         workspace: PathBuf,
     },
 }
@@ -884,6 +1065,7 @@ pub enum ConfigSubcommand {
         reference: String,
     },
     /// Run council adjudication over guardian findings.
+    #[command(skip)]
     Council {
         #[command(subcommand)]
         command: CouncilCommand,
@@ -1035,6 +1217,22 @@ impl DeveloperCommand {
             Self::Evals { .. } => CommandName::Evals,
             Self::Trace { .. } => CommandName::Trace,
             Self::Exec { .. } => CommandName::Exec,
+            Self::Preview { command } => command.name(),
+        }
+    }
+}
+
+impl PreviewCommand {
+    /// Returns the existing capability name selected through the preview gateway.
+    pub const fn name(&self) -> CommandName {
+        match self {
+            Self::Flow { .. } => CommandName::Flow,
+            Self::Workflow { .. } => CommandName::Workflow,
+            Self::Cluster { .. } => CommandName::Cluster,
+            Self::Council { .. } => CommandName::Council,
+            Self::Evals { .. } => CommandName::Evals,
+            Self::Override { .. } => CommandName::Override,
+            Self::Trace { .. } => CommandName::Trace,
         }
     }
 }
@@ -1242,6 +1440,7 @@ impl DeveloperCommandSession {
                 plan: _,
                 accepted_plan: _,
                 resume: _,
+                route: _,
             } => Self {
                 command_name: CommandName::Run,
                 workspace_ref: if *compatibility || goal.is_some() || !brief.is_empty() {
@@ -1604,6 +1803,22 @@ impl DeveloperCommandSession {
                 exit_status: None,
                 trace_location: None,
             },
+            DeveloperCommand::Preview { command } => Self {
+                command_name: command.name(),
+                workspace_ref: preview_workspace(command)
+                    .map(|path| path.to_string_lossy().into_owned()),
+                requires_workspace_ref: false,
+                install_check: false,
+                goal: match command {
+                    PreviewCommand::Flow { name, .. } => Some(name.clone()),
+                    _ => None,
+                },
+                trace_ref: None,
+                started_at: current_timestamp_millis(),
+                completed_at: None,
+                exit_status: None,
+                trace_location: None,
+            },
         }
     }
 
@@ -1942,6 +2157,11 @@ impl DispatchOutcome {
 
 /// Parses the CLI, dispatches the selected command, and returns the process exit code.
 pub fn execute() -> i32 {
+    if let Some(diagnostic) = removed_diagnostic_from_process_args(std::env::args_os()) {
+        eprintln!("{diagnostic}");
+        return output::CommandExitCode::for_status(CommandExitStatus::InvalidInvocation).code();
+    }
+
     let cli = Cli::parse();
 
     let Some(command) = cli.command.as_ref() else {
@@ -1985,6 +2205,16 @@ pub fn execute() -> i32 {
             exit_code.code()
         }
     }
+}
+
+fn removed_diagnostic_from_process_args(
+    args: impl IntoIterator<Item = std::ffi::OsString>,
+) -> Option<&'static str> {
+    args.into_iter()
+        .skip(1)
+        .filter_map(|argument| argument.into_string().ok())
+        .find(|argument| argument != "--json" && argument != "--verbose")
+        .and_then(|command| removed_command_diagnostic(&command))
 }
 
 fn render_help_exit_code() -> i32 {
@@ -2109,6 +2339,55 @@ fn command_environment_workspace(command: &DeveloperCommand) -> Option<PathBuf> 
         }
         DeveloperCommand::Override { workspace, .. } => {
             resolve_command_workspace(workspace.as_deref())
+        }
+        DeveloperCommand::Preview { command } => preview_environment_workspace(command),
+    }
+}
+
+fn preview_environment_workspace(command: &PreviewCommand) -> Option<PathBuf> {
+    match command {
+        PreviewCommand::Flow { workspace, cluster, .. } => {
+            resolve_command_workspace(workspace.as_deref().or(cluster.as_deref()))
+        }
+        PreviewCommand::Workflow { command } => workflow_command_environment_workspace(command),
+        PreviewCommand::Cluster { command } => cluster_command_environment_workspace(command),
+        PreviewCommand::Council { command: CouncilCommand::Adjudicate { workspace, .. } }
+        | PreviewCommand::Override { workspace, .. } => {
+            resolve_command_workspace(workspace.as_deref())
+        }
+        PreviewCommand::Evals { command: evals::EvalsSubcommand::Run(args) } => {
+            resolve_command_workspace(args.workspace.as_deref())
+        }
+        PreviewCommand::Trace { command: trace_compaction::TraceSubcommand::Compact(args) } => {
+            resolve_command_workspace(args.workspace.as_deref())
+        }
+    }
+}
+
+fn preview_workspace(command: &PreviewCommand) -> Option<&Path> {
+    match command {
+        PreviewCommand::Flow { workspace, cluster, .. } => {
+            workspace.as_deref().or(cluster.as_deref())
+        }
+        PreviewCommand::Workflow { command } => match command {
+            WorkflowSubcommand::List { workspace }
+            | WorkflowSubcommand::Run { workspace, .. }
+            | WorkflowSubcommand::Status { workspace }
+            | WorkflowSubcommand::Resume { workspace }
+            | WorkflowSubcommand::Inspect { workspace } => workspace.as_deref(),
+        },
+        PreviewCommand::Cluster { command } => match command {
+            ClusterSubcommand::Init { workspace, .. }
+            | ClusterSubcommand::Status { workspace }
+            | ClusterSubcommand::Inspect { workspace } => Some(workspace.as_path()),
+        },
+        PreviewCommand::Council { command: CouncilCommand::Adjudicate { workspace, .. } }
+        | PreviewCommand::Override { workspace, .. } => workspace.as_deref(),
+        PreviewCommand::Evals { command: evals::EvalsSubcommand::Run(args) } => {
+            args.workspace.as_deref()
+        }
+        PreviewCommand::Trace { command: trace_compaction::TraceSubcommand::Compact(args) } => {
+            args.workspace.as_deref()
         }
     }
 }
@@ -2323,6 +2602,58 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
             let report = exec::execute(args, None);
             DispatchOutcome::text(report.exit_status, report.terminal_output, None)
         }
+        DeveloperCommand::Preview { command } => dispatch_preview_command(command),
+    }
+}
+
+fn dispatch_preview_command(command: &PreviewCommand) -> DispatchOutcome {
+    match command {
+        PreviewCommand::Flow { name, workspace, cluster } => {
+            dispatch_session_command(&DeveloperCommand::Flow {
+                name: name.clone(),
+                workspace: workspace.clone(),
+                cluster: cluster.clone(),
+            })
+        }
+        PreviewCommand::Workflow { command } => dispatch_workflow_command(command),
+        PreviewCommand::Cluster { command } => dispatch_cluster_command(command),
+        PreviewCommand::Council { command } => dispatch_council_command(command),
+        PreviewCommand::Evals { command } => dispatch_evals_command(command),
+        PreviewCommand::Override { workspace, guardian_id, control_id, level, reason, expiry } => {
+            dispatch_override_command(
+                workspace.as_deref(),
+                guardian_id,
+                control_id,
+                level,
+                reason,
+                expiry.as_deref(),
+            )
+        }
+        PreviewCommand::Trace { command } => dispatch_trace_command(command),
+    }
+}
+
+fn dispatch_override_command(
+    workspace: Option<&Path>,
+    guardian_id: &str,
+    control_id: &str,
+    level: &str,
+    reason: &str,
+    expiry: Option<&str>,
+) -> DispatchOutcome {
+    let workspace = workspace.map(Path::to_path_buf).unwrap_or_else(|| PathBuf::from("."));
+    match override_cmd::run(&workspace, guardian_id, control_id, level, reason, expiry) {
+        Ok(code) => {
+            let status = if code == 0 {
+                CommandExitStatus::Succeeded
+            } else {
+                CommandExitStatus::NonSuccess
+            };
+            DispatchOutcome::text(status, String::new(), None)
+        }
+        Err(error) => {
+            DispatchOutcome::text(CommandExitStatus::InvalidInvocation, error.to_string(), None)
+        }
     }
 }
 
@@ -2446,18 +2777,43 @@ fn dispatch_run_command(command: &DeveloperCommand) -> DispatchOutcome {
         plan,
         accepted_plan,
         resume,
+        route,
     } = command
     else {
         return dispatch_internal_command_mismatch(CommandName::Run);
     };
 
-    // Plan-based execution routes to the execution orchestrator stub.
+    // Legacy test construction cannot restore parser routes that were placeholders.
     if plan.is_some() || *accepted_plan || resume.is_some() {
-        return dispatch_plan_run(
-            workspace.as_deref(),
-            plan.as_deref(),
-            *accepted_plan,
-            resume.as_deref(),
+        return DispatchOutcome::text(
+            CommandExitStatus::InvalidInvocation,
+            "legacy plan-based run placeholders are not part of the Boundline 0.90 command surface"
+                .to_string(),
+            None,
+        );
+    }
+
+    if let Some(intent) = route.until {
+        return dispatch_run_until(
+            workspace, cluster, goal, brief, governance, risk, zone, owner, no_canon, route, intent,
+        );
+    }
+
+    if route.one_step {
+        return dispatch_session_result(
+            CommandName::Run,
+            session::execute_step_with_target(workspace.as_deref(), cluster.as_deref()),
+        );
+    }
+
+    if route.resume_session {
+        return dispatch_session_result(
+            CommandName::Run,
+            session::execute_continue_with_target(
+                workspace.as_deref(),
+                cluster.as_deref(),
+                route.session.as_deref(),
+            ),
         );
     }
 
@@ -2491,45 +2847,39 @@ fn dispatch_run_command(command: &DeveloperCommand) -> DispatchOutcome {
     }
 }
 
-/// Plan-based execution stub for `--plan`, `--accepted-plan`, `--resume`.
-fn dispatch_plan_run(
-    workspace: Option<&Path>,
-    plan_path: Option<&Path>,
-    _accepted_plan: bool,
-    _resume_id: Option<&str>,
+#[allow(clippy::too_many_arguments)]
+fn dispatch_run_until(
+    workspace: &Option<PathBuf>,
+    cluster: &Option<PathBuf>,
+    goal: &Option<String>,
+    brief: &[PathBuf],
+    governance: &Option<GovernanceRuntimeKind>,
+    risk: &Option<String>,
+    zone: &Option<String>,
+    owner: &Option<String>,
+    no_canon: &bool,
+    route: &RunRouteArgs,
+    intent: orchestrate::OrchestrateIntent,
 ) -> DispatchOutcome {
-    let _workspace = match workspace {
-        Some(w) => w.to_path_buf(),
-        None => match cli_workspace::resolve_workspace(None) {
-            Ok(w) => w,
-            Err(e) => {
-                return DispatchOutcome::text(
-                    CommandExitStatus::InvalidInvocation,
-                    format!("workspace resolution failed: {e}"),
-                    None,
-                );
-            }
-        },
-    };
-    if let Some(p) = plan_path
-        && !p.exists()
-    {
-        return DispatchOutcome::text(
-            CommandExitStatus::InvalidInvocation,
-            format!("plan file not found: {}", p.display()),
-            None,
-        );
-    }
-    let mut parts = vec!["plan-based execution requested".to_string()];
-    if let Some(p) = plan_path {
-        parts.push(format!("plan file: {}", p.display()));
-    } else if _accepted_plan {
-        parts.push("using session-attached accepted plan".to_string());
-    } else if let Some(id) = _resume_id {
-        parts.push(format!("resuming execution run: {id}"));
-    }
-    parts.push("full execution dispatch coming in a later phase".to_string());
-    DispatchOutcome::text(CommandExitStatus::Succeeded, parts.join("\n"), None)
+    dispatch_orchestrate_command(&DeveloperCommand::Orchestrate {
+        workspace: workspace.clone(),
+        cluster: cluster.clone(),
+        goal: goal.clone(),
+        brief: brief.to_vec(),
+        flow: route.flow.clone(),
+        governance: *governance,
+        risk: risk.clone(),
+        zone: zone.clone(),
+        owner: owner.clone(),
+        intent,
+        planning_stage_complete: route.planning_stage_complete.clone(),
+        request_id: route.request_id.clone(),
+        answer: route.answer.clone(),
+        assistant_host: route.assistant_host,
+        json_stream: route.json_stream,
+        no_canon: *no_canon,
+        slug: route.slug.clone(),
+    })
 }
 
 fn dispatch_orchestrate_command(command: &DeveloperCommand) -> DispatchOutcome {
@@ -3491,7 +3841,6 @@ fn dispatch_models_command(command: &ModelsSubcommand) -> DispatchOutcome {
 
 #[cfg(test)]
 mod tests {
-    use std::ffi::OsString;
     use std::fs;
     use std::path::{Path, PathBuf};
 
@@ -3504,7 +3853,7 @@ mod tests {
         AdapterSubcommand, AssistantSubcommand, CheckpointSubcommand, Cli, ClusterSubcommand,
         CommandExitStatus, CommandName, ConfigSubcommand, DeveloperCommand,
         DeveloperCommandSession, IndexSubcommand, ModelsAuthSubcommand, ModelsSubcommand,
-        ProviderSubcommand, SessionSubcommand, WorkflowSubcommand,
+        ProviderSubcommand, RunRouteArgs, SessionSubcommand, WorkflowSubcommand,
         command_environment_workspace_for_provider, dispatch, dispatch_provider_command,
         dispatch_serialized_index_report,
     };
@@ -3528,8 +3877,6 @@ version = "0.1.0"
 edition = "2024"
 "#;
 
-    const PWD_ENV_VAR: &str = "PWD";
-
     const RED_LIB_RS: &str = "pub fn add(left: i32, right: i32) -> i32 {\n    left - right\n}\n";
 
     const FIXTURE_TEST_RS: &str = r#"#[test]
@@ -3542,36 +3889,6 @@ fn red_to_green_addition() {
         let workspace = std::env::temp_dir().join(format!("{prefix}-{}", Uuid::new_v4()));
         fs::create_dir_all(&workspace).unwrap();
         workspace
-    }
-
-    struct PwdEnvGuard {
-        original: Option<OsString>,
-    }
-
-    impl PwdEnvGuard {
-        fn set(path: Option<&Path>) -> Self {
-            let original = std::env::var_os(PWD_ENV_VAR);
-            unsafe {
-                match path {
-                    Some(path) => std::env::set_var(PWD_ENV_VAR, path),
-                    None => std::env::remove_var(PWD_ENV_VAR),
-                }
-            }
-            Self { original }
-        }
-    }
-
-    impl Drop for PwdEnvGuard {
-        fn drop(&mut self) {
-            match self.original.as_ref() {
-                Some(value) => unsafe {
-                    std::env::set_var(PWD_ENV_VAR, value);
-                },
-                None => unsafe {
-                    std::env::remove_var(PWD_ENV_VAR);
-                },
-            }
-        }
     }
 
     #[test]
@@ -3944,21 +4261,17 @@ fn red_to_green_addition() {
             assert_eq!(session_id, "session-123");
         }
 
-        let next = Cli::try_parse_from(["boundline", "next", "--session", "session-123"])
-            .expect("expected next CLI to parse");
-        let next_command = next.command.expect("expected parsed next command");
-        assert!(matches!(&next_command, DeveloperCommand::Next { session: Some(_), .. }));
-        if let DeveloperCommand::Next { session: Some(session_id), .. } = next_command {
-            assert_eq!(session_id, "session-123");
-        }
-
-        let cont = Cli::try_parse_from(["boundline", "continue", "--session", "session-123"])
-            .expect("expected continue CLI to parse");
-        let cont_command = cont.command.expect("expected parsed continue command");
-        assert!(matches!(&cont_command, DeveloperCommand::Continue { session: Some(_), .. }));
-        if let DeveloperCommand::Continue { session: Some(session_id), .. } = cont_command {
-            assert_eq!(session_id, "session-123");
-        }
+        let resume =
+            Cli::try_parse_from(["boundline", "run", "--resume", "--session", "session-123"])
+                .expect("expected run resume CLI to parse");
+        let resume_command = resume.command.expect("expected parsed run command");
+        assert!(matches!(
+            &resume_command,
+            DeveloperCommand::Run {
+                route: RunRouteArgs { resume_session: true, session: Some(_), .. },
+                ..
+            }
+        ));
 
         let inspect = Cli::try_parse_from(["boundline", "inspect", "--session", "session-123"])
             .expect("expected inspect CLI to parse");
@@ -3968,48 +4281,11 @@ fn red_to_green_addition() {
             assert_eq!(session_id, "session-123");
         }
 
-        let checkpoint_list =
+        assert!(Cli::try_parse_from(["boundline", "next", "--session", "session-123"]).is_err());
+        assert!(
             Cli::try_parse_from(["boundline", "checkpoint", "list", "--session", "session-123"])
-                .expect("expected checkpoint list CLI to parse");
-        let checkpoint_list_command =
-            checkpoint_list.command.expect("expected parsed checkpoint list command");
-        assert!(matches!(
-            &checkpoint_list_command,
-            DeveloperCommand::Checkpoint {
-                command: CheckpointSubcommand::List { session: Some(_), .. },
-            }
-        ));
-        if let DeveloperCommand::Checkpoint {
-            command: CheckpointSubcommand::List { session: Some(session_id), .. },
-        } = checkpoint_list_command
-        {
-            assert_eq!(session_id, "session-123");
-        }
-
-        let checkpoint_restore = Cli::try_parse_from([
-            "boundline",
-            "checkpoint",
-            "restore",
-            "checkpoint-1",
-            "--session",
-            "session-123",
-        ])
-        .expect("expected checkpoint restore CLI to parse");
-        let checkpoint_restore_command =
-            checkpoint_restore.command.expect("expected parsed checkpoint restore command");
-        assert!(matches!(
-            &checkpoint_restore_command,
-            DeveloperCommand::Checkpoint {
-                command: CheckpointSubcommand::Restore { session: Some(_), .. },
-            }
-        ));
-        if let DeveloperCommand::Checkpoint {
-            command: CheckpointSubcommand::Restore { checkpoint_id, session: Some(session_id), .. },
-        } = checkpoint_restore_command
-        {
-            assert_eq!(checkpoint_id, "checkpoint-1");
-            assert_eq!(session_id, "session-123");
-        }
+                .is_err()
+        );
     }
 
     #[test]
@@ -4358,6 +4634,7 @@ fn red_to_green_addition() {
             plan: None,
             accepted_plan: false,
             resume: None,
+            route: RunRouteArgs::default(),
         });
         assert_eq!(custom_run.exit_status, CommandExitStatus::Succeeded);
         assert!(custom_run.output.contains("terminal_status: succeeded"), "{}", custom_run.output);
@@ -4407,6 +4684,7 @@ fn red_to_green_addition() {
             plan: None,
             accepted_plan: false,
             resume: None,
+            route: RunRouteArgs::default(),
         });
         assert_eq!(run.exit_status, CommandExitStatus::Succeeded);
         assert!(run.output.contains("terminal_status: succeeded"), "{}", run.output);
@@ -4461,6 +4739,7 @@ fn red_to_green_addition() {
             plan: None,
             accepted_plan: false,
             resume: None,
+            route: RunRouteArgs::default(),
         });
         assert_eq!(invalid.exit_status, CommandExitStatus::InvalidInvocation);
         assert!(invalid.output.contains("bounded context required"), "{}", invalid.output);
@@ -4487,6 +4766,7 @@ fn red_to_green_addition() {
             plan: None,
             accepted_plan: false,
             resume: None,
+            route: RunRouteArgs::default(),
         });
 
         assert_eq!(run.exit_status, CommandExitStatus::Succeeded);
@@ -4545,6 +4825,7 @@ fn red_to_green_addition() {
             plan: None,
             accepted_plan: false,
             resume: None,
+            route: RunRouteArgs::default(),
         });
         assert_eq!(run.exit_status, CommandExitStatus::Succeeded);
         assert!(run.output.contains("terminal_status: succeeded"), "{}", run.output);
@@ -4574,19 +4855,8 @@ fn red_to_green_addition() {
             "/tmp/workspace",
             "--plan",
             "plans/accepted-plan.json",
-        ])
-        .expect("plan-based run CLI should parse");
-
-        let Some(DeveloperCommand::Run { workspace, plan, accepted_plan, resume, .. }) =
-            plan_cli.command
-        else {
-            panic!("expected run command");
-        };
-
-        assert_eq!(workspace, Some(PathBuf::from("/tmp/workspace")));
-        assert_eq!(plan, Some(PathBuf::from("plans/accepted-plan.json")));
-        assert!(!accepted_plan);
-        assert!(resume.is_none());
+        ]);
+        assert!(plan_cli.is_err());
 
         let accepted_plan_cli = Cli::try_parse_from([
             "boundline",
@@ -4594,18 +4864,8 @@ fn red_to_green_addition() {
             "--workspace",
             "/tmp/workspace",
             "--accepted-plan",
-        ])
-        .expect("accepted-plan CLI should parse");
-
-        let Some(DeveloperCommand::Run { plan, accepted_plan, resume, .. }) =
-            accepted_plan_cli.command
-        else {
-            panic!("expected run command");
-        };
-
-        assert!(plan.is_none());
-        assert!(accepted_plan);
-        assert!(resume.is_none());
+        ]);
+        assert!(accepted_plan_cli.is_err());
 
         let resume_cli = Cli::try_parse_from([
             "boundline",
@@ -4614,17 +4874,19 @@ fn red_to_green_addition() {
             "/tmp/workspace",
             "--resume",
             "ER-20260617-abc123",
-        ])
-        .expect("resume run CLI should parse");
+        ]);
+        assert!(resume_cli.is_err());
+    }
 
-        let Some(DeveloperCommand::Run { plan, accepted_plan, resume, .. }) = resume_cli.command
-        else {
-            panic!("expected run command");
-        };
-
-        assert!(plan.is_none());
-        assert!(!accepted_plan);
-        assert_eq!(resume.as_deref(), Some("ER-20260617-abc123"));
+    #[test]
+    fn run_plan_dispatch_reports_workspace_resolution_failure_when_current_directory_is_unavailable()
+    -> Result<(), String> {
+        if Cli::try_parse_from(["boundline", "run", "--plan", "plans/accepted-plan.json"]).is_err()
+        {
+            Ok(())
+        } else {
+            Err("removed run --plan placeholder remained registered".to_string())
+        }
     }
 
     #[test]
@@ -4648,19 +4910,10 @@ fn red_to_green_addition() {
             plan: Some(plan_path.clone()),
             accepted_plan: false,
             resume: None,
+            route: RunRouteArgs::default(),
         });
-        assert_eq!(plan_run.exit_status, CommandExitStatus::Succeeded);
-        assert!(plan_run.output.contains("plan-based execution requested"), "{}", plan_run.output);
-        assert!(
-            plan_run.output.contains(&format!("plan file: {}", plan_path.display())),
-            "{}",
-            plan_run.output
-        );
-        assert!(
-            plan_run.output.contains("full execution dispatch coming in a later phase"),
-            "{}",
-            plan_run.output
-        );
+        assert_eq!(plan_run.exit_status, CommandExitStatus::InvalidInvocation);
+        assert!(plan_run.output.contains("not part of the Boundline 0.90 command surface"));
 
         let accepted_plan_run = dispatch(&DeveloperCommand::Run {
             workspace: Some(workspace.clone()),
@@ -4677,13 +4930,9 @@ fn red_to_green_addition() {
             plan: None,
             accepted_plan: true,
             resume: None,
+            route: RunRouteArgs::default(),
         });
-        assert_eq!(accepted_plan_run.exit_status, CommandExitStatus::Succeeded);
-        assert!(
-            accepted_plan_run.output.contains("using session-attached accepted plan"),
-            "{}",
-            accepted_plan_run.output
-        );
+        assert_eq!(accepted_plan_run.exit_status, CommandExitStatus::InvalidInvocation);
 
         let resume_run = dispatch(&DeveloperCommand::Run {
             workspace: Some(workspace.clone()),
@@ -4700,13 +4949,9 @@ fn red_to_green_addition() {
             plan: None,
             accepted_plan: false,
             resume: Some("ER-20260617-abc123".to_string()),
+            route: RunRouteArgs::default(),
         });
-        assert_eq!(resume_run.exit_status, CommandExitStatus::Succeeded);
-        assert!(
-            resume_run.output.contains("resuming execution run: ER-20260617-abc123"),
-            "{}",
-            resume_run.output
-        );
+        assert_eq!(resume_run.exit_status, CommandExitStatus::InvalidInvocation);
 
         let missing_plan = dispatch(&DeveloperCommand::Run {
             workspace: Some(workspace),
@@ -4723,9 +4968,10 @@ fn red_to_green_addition() {
             plan: Some(plan_path.with_file_name("missing-plan.json")),
             accepted_plan: false,
             resume: None,
+            route: RunRouteArgs::default(),
         });
         assert_eq!(missing_plan.exit_status, CommandExitStatus::InvalidInvocation);
-        assert!(missing_plan.output.contains("plan file not found:"), "{}", missing_plan.output);
+        assert!(missing_plan.output.contains("not part of the Boundline 0.90 command surface"));
     }
 
     #[test]
@@ -4748,11 +4994,11 @@ fn red_to_green_addition() {
             plan: None,
             accepted_plan: true,
             resume: None,
+            route: RunRouteArgs::default(),
         });
 
-        assert_eq!(run.exit_status, CommandExitStatus::Succeeded);
-        assert!(run.output.contains("plan-based execution requested"), "{}", run.output);
-        assert!(run.output.contains("using session-attached accepted plan"), "{}", run.output);
+        assert_eq!(run.exit_status, CommandExitStatus::InvalidInvocation);
+        assert!(run.output.contains("not part of the Boundline 0.90 command surface"));
     }
 
     #[test]
@@ -4765,20 +5011,6 @@ fn red_to_green_addition() {
 
         assert_eq!(mismatch.exit_status, CommandExitStatus::NonSuccess);
         assert!(mismatch.output.contains("internal dispatch mismatch for run"));
-    }
-
-    #[test]
-    fn run_plan_dispatch_reports_workspace_resolution_failure_when_current_directory_is_unavailable()
-     {
-        let broken_workspace = temp_workspace("boundline-cli-run-plan-broken-cwd");
-        let _current_dir_guard = CurrentDirGuard::change_to(&broken_workspace);
-        fs::remove_dir_all(&broken_workspace).unwrap();
-        let _pwd_guard = PwdEnvGuard::set(Some(Path::new("relative-pwd")));
-
-        let run = super::dispatch_plan_run(None, None, true, None);
-
-        assert_eq!(run.exit_status, CommandExitStatus::InvalidInvocation);
-        assert!(run.output.contains("workspace resolution failed:"), "{}", run.output);
     }
 
     #[test]
@@ -5399,6 +5631,7 @@ fn red_to_green_addition() {
                 plan: None,
                 accepted_plan: false,
                 resume: None,
+                route: RunRouteArgs::default(),
             })
             .exit_status,
             CommandExitStatus::InvalidInvocation
@@ -5821,6 +6054,7 @@ fn red_to_green_addition() {
             plan: None,
             accepted_plan: false,
             resume: None,
+            route: RunRouteArgs::default(),
         });
         assert_eq!(session.command_name, CommandName::Run);
         assert_eq!(session.workspace_ref.as_deref(), Some(cluster.to_string_lossy().as_ref()));
@@ -5858,6 +6092,7 @@ fn red_to_green_addition() {
             plan: None,
             accepted_plan: false,
             resume: None,
+            route: RunRouteArgs::default(),
         });
         assert_eq!(file_run.exit_status, CommandExitStatus::InvalidInvocation);
 
@@ -5879,6 +6114,7 @@ fn red_to_green_addition() {
             plan: None,
             accepted_plan: false,
             resume: None,
+            route: RunRouteArgs::default(),
         });
         assert_eq!(bare_run.exit_status, CommandExitStatus::InvalidInvocation);
         assert!(bare_run.output.contains("bounded context required"), "{}", bare_run.output);
@@ -5888,7 +6124,7 @@ fn red_to_green_addition() {
     fn orchestrate_cli_parses_stream_intent_and_goal() {
         let cli = Cli::try_parse_from([
             "boundline",
-            "orchestrate",
+            "run",
             "--workspace",
             "/tmp/workspace",
             "--goal",
@@ -5899,19 +6135,23 @@ fn red_to_green_addition() {
             "phase-request",
             "--json-stream",
         ])
-        .expect("orchestrate command should parse");
+        .expect("run until command should parse");
 
-        let Some(DeveloperCommand::Orchestrate {
+        let Some(DeveloperCommand::Run {
             workspace,
             goal,
-            intent,
-            planning_stage_complete,
-            assistant_host,
-            json_stream,
+            route:
+                RunRouteArgs {
+                    until: Some(intent),
+                    planning_stage_complete,
+                    assistant_host,
+                    json_stream,
+                    ..
+                },
             ..
         }) = cli.command
         else {
-            panic!("expected orchestrate command");
+            panic!("expected run command");
         };
 
         assert_eq!(workspace, Some(PathBuf::from("/tmp/workspace")));
@@ -5948,29 +6188,33 @@ fn red_to_green_addition() {
     fn orchestrate_cli_parses_planning_stage_completion_resume() {
         let cli = Cli::try_parse_from([
             "boundline",
-            "orchestrate",
+            "run",
             "--workspace",
             "/tmp/workspace",
             "--planning-stage-complete",
             "plan:requirements",
             "--request-id",
             "req-session-planning-plan-requirements-review",
-            "--intent",
+            "--until",
             "continue-until-phase-request",
             "--json-stream",
         ])
-        .expect("orchestrate planning-stage completion command should parse");
+        .expect("run planning-stage completion command should parse");
 
-        let Some(DeveloperCommand::Orchestrate {
+        let Some(DeveloperCommand::Run {
             workspace,
-            planning_stage_complete,
-            request_id,
-            intent,
-            json_stream,
+            route:
+                RunRouteArgs {
+                    planning_stage_complete,
+                    request_id,
+                    until: Some(intent),
+                    json_stream,
+                    ..
+                },
             ..
         }) = cli.command
         else {
-            panic!("expected orchestrate command");
+            panic!("expected run command");
         };
 
         assert_eq!(workspace, Some(PathBuf::from("/tmp/workspace")));
@@ -5984,29 +6228,26 @@ fn red_to_green_addition() {
     fn orchestrate_cli_parses_goal_clarification_answer_resume() {
         let cli = Cli::try_parse_from([
             "boundline",
-            "orchestrate",
+            "run",
             "--workspace",
             "/tmp/workspace",
             "--request-id",
             "req-session-goal-goal-persistence-store",
             "--answer",
             "Postgres",
-            "--intent",
+            "--until",
             "continue-until-phase-request",
             "--json-stream",
         ])
-        .expect("orchestrate goal clarification answer command should parse");
+        .expect("run goal clarification answer command should parse");
 
-        let Some(DeveloperCommand::Orchestrate {
+        let Some(DeveloperCommand::Run {
             workspace,
-            request_id,
-            answer,
-            intent,
-            json_stream,
+            route: RunRouteArgs { request_id, answer, until: Some(intent), json_stream, .. },
             ..
         }) = cli.command
         else {
-            panic!("expected orchestrate command");
+            panic!("expected run command");
         };
 
         assert_eq!(workspace, Some(PathBuf::from("/tmp/workspace")));
@@ -6020,16 +6261,18 @@ fn red_to_green_addition() {
     fn orchestrate_cli_accepts_legacy_intent_values() {
         let cli = Cli::try_parse_from([
             "boundline",
-            "orchestrate",
+            "run",
             "--workspace",
             "/tmp/workspace",
-            "--intent",
+            "--until",
             "continue-until-terminal",
         ])
-        .expect("legacy orchestrate intent value should parse");
+        .expect("existing orchestration intent should parse");
 
-        let Some(DeveloperCommand::Orchestrate { intent, .. }) = cli.command else {
-            panic!("expected orchestrate command");
+        let Some(DeveloperCommand::Run { route: RunRouteArgs { until: Some(intent), .. }, .. }) =
+            cli.command
+        else {
+            panic!("expected run command");
         };
 
         assert_eq!(intent, OrchestrateIntent::ContinueUntilTerminal);
@@ -7012,6 +7255,7 @@ fn red_to_green_addition() {
             plan: None,
             accepted_plan: false,
             resume: None,
+            route: RunRouteArgs::default(),
         };
 
         let mut validation_session = DeveloperCommandSession::from_command(&run_command);
@@ -7145,8 +7389,159 @@ fn red_to_green_addition() {
     }
 
     #[test]
-    fn cli_helper_functions_cover_remaining_dispatch_and_outcome_paths() {
+    fn cli_helper_functions_cover_remaining_dispatch_and_outcome_paths()
+    -> Result<(), Box<dyn std::error::Error>> {
         let workspace = temp_workspace("boundline-cli-remaining-helper-paths");
+        let workspace_text = workspace.to_string_lossy().into_owned();
+
+        let preview_cases = [
+            vec![
+                "boundline".to_string(),
+                "preview".to_string(),
+                "flow".to_string(),
+                "bug-fix".to_string(),
+                "--workspace".to_string(),
+                workspace_text.clone(),
+            ],
+            vec![
+                "boundline".to_string(),
+                "preview".to_string(),
+                "workflow".to_string(),
+                "list".to_string(),
+                "--workspace".to_string(),
+                workspace_text.clone(),
+            ],
+            vec![
+                "boundline".to_string(),
+                "preview".to_string(),
+                "cluster".to_string(),
+                "status".to_string(),
+                "--workspace".to_string(),
+                workspace_text.clone(),
+            ],
+            vec![
+                "boundline".to_string(),
+                "preview".to_string(),
+                "council".to_string(),
+                "adjudicate".to_string(),
+                "--workspace".to_string(),
+                workspace_text.clone(),
+            ],
+            vec![
+                "boundline".to_string(),
+                "preview".to_string(),
+                "evals".to_string(),
+                "run".to_string(),
+                "--workspace".to_string(),
+                workspace_text.clone(),
+            ],
+            vec![
+                "boundline".to_string(),
+                "preview".to_string(),
+                "override".to_string(),
+                "--workspace".to_string(),
+                workspace_text.clone(),
+                "--guardian-id".to_string(),
+                "guardian".to_string(),
+                "--control-id".to_string(),
+                "control".to_string(),
+                "--level".to_string(),
+                "session".to_string(),
+                "--reason".to_string(),
+                "reviewed".to_string(),
+            ],
+            vec![
+                "boundline".to_string(),
+                "preview".to_string(),
+                "trace".to_string(),
+                "compact".to_string(),
+                "--workspace".to_string(),
+                workspace_text.clone(),
+            ],
+        ];
+        for args in preview_cases {
+            let cli = Cli::try_parse_from(args)?;
+            let Some(command @ DeveloperCommand::Preview { .. }) = cli.command else {
+                return Err("expected preview command".into());
+            };
+            let session = DeveloperCommandSession::from_command(&command);
+            if !matches!(
+                session.command_name,
+                CommandName::Flow
+                    | CommandName::Workflow
+                    | CommandName::Cluster
+                    | CommandName::Council
+                    | CommandName::Evals
+                    | CommandName::Override
+                    | CommandName::Trace
+            ) {
+                return Err("preview command projected the wrong command name".into());
+            }
+            if super::command_environment_workspace(&command)
+                != super::resolve_command_workspace(Some(workspace.as_path()))
+            {
+                return Err("preview command projected the wrong workspace".into());
+            }
+            let _outcome = dispatch(&command);
+        }
+
+        let cwd_workspace = temp_workspace("boundline-cli-preview-default-cwd");
+        let _current_dir_guard = CurrentDirGuard::change_to(&cwd_workspace);
+        let provider_key = format!("BOUNDLINE_PREVIEW_CWD_{}", Uuid::new_v4().simple());
+        fs::write(cwd_workspace.join(".env"), format!("{provider_key}=selected\n"))?;
+        let omitted_workspace_cases = [
+            vec!["boundline", "preview", "flow", "bug-fix"],
+            vec!["boundline", "preview", "workflow", "list"],
+            vec!["boundline", "preview", "cluster", "status"],
+            vec!["boundline", "preview", "council", "adjudicate"],
+            vec!["boundline", "preview", "evals", "run"],
+            vec![
+                "boundline",
+                "preview",
+                "override",
+                "--guardian-id",
+                "guardian",
+                "--control-id",
+                "control",
+                "--level",
+                "session",
+                "--reason",
+                "reviewed",
+            ],
+            vec!["boundline", "preview", "trace", "compact"],
+        ];
+        for args in omitted_workspace_cases {
+            let cli = Cli::try_parse_from(args)?;
+            let Some(command @ DeveloperCommand::Preview { .. }) = cli.command else {
+                return Err("expected preview command without an explicit workspace".into());
+            };
+            if super::command_environment_workspace(&command)
+                != super::resolve_command_workspace(None)
+            {
+                return Err("preview command did not select the cwd workspace".into());
+            }
+            super::load_command_environment(Some(&command))?;
+            if std::env::var(&provider_key).as_deref() != Ok("selected") {
+                return Err("preview command did not load the cwd provider environment".into());
+            }
+        }
+        unsafe {
+            std::env::remove_var(&provider_key);
+        }
+
+        for route in ["--until", "--one-step", "--resume"] {
+            let cli = Cli::try_parse_from([
+                "boundline",
+                "run",
+                "--workspace",
+                workspace_text.as_str(),
+                route,
+            ])?;
+            let Some(command @ DeveloperCommand::Run { .. }) = cli.command else {
+                return Err("expected run command".into());
+            };
+            let _outcome = dispatch(&command);
+        }
 
         let models_command = DeveloperCommand::Models {
             command: ModelsSubcommand::Auth { command: ModelsAuthSubcommand::Status },
@@ -7290,6 +7685,7 @@ fn red_to_green_addition() {
             plan: None,
             accepted_plan: false,
             resume: None,
+            route: RunRouteArgs::default(),
         };
 
         let session_mismatch = super::dispatch_session_command(&run_command);
@@ -7366,5 +7762,6 @@ fn red_to_green_addition() {
             workspace: Some(workspace),
         });
         assert_eq!(adapter_remove.exit_status, CommandExitStatus::Succeeded);
+        Ok(())
     }
 }

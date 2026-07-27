@@ -28,7 +28,7 @@ fn explicit_compatibility_run_is_visible_when_execution_profile_is_chosen_delibe
     );
     assert!(inspect_text.contains("execution_condition: terminal -"), "{inspect_text}");
 
-    let next = run_boundline_in(&workspace, &["next", "--workspace", "."]);
+    let next = run_boundline_in(&workspace, &["status", "--workspace", "."]);
     let next_text = terminal_text(&next);
     assert_eq!(next.status.code(), Some(0), "{next_text}");
     assert!(next_text.contains("continuity_authority: compatibility_trace"), "{next_text}");

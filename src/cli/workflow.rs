@@ -967,15 +967,15 @@ fn goal_command(workspace: &Path) -> String {
 }
 
 fn workflow_resume_command(workspace: &Path) -> String {
-    format!("boundline workflow resume --workspace {}", workspace.display())
+    format!("boundline preview workflow resume --workspace {}", workspace.display())
 }
 
 fn workflow_status_command(workspace: &Path) -> String {
-    format!("boundline workflow status --workspace {}", workspace.display())
+    format!("boundline preview workflow status --workspace {}", workspace.display())
 }
 
 fn workflow_inspect_command(workspace: &Path) -> String {
-    format!("boundline workflow inspect --workspace {}", workspace.display())
+    format!("boundline preview workflow inspect --workspace {}", workspace.display())
 }
 
 #[cfg(test)]
@@ -1845,9 +1845,16 @@ summary = "Default workflow"
         assert_eq!(terminal_reason(&record).as_deref(), Some("done"));
 
         assert!(goal_command(workspace.path()).contains("boundline goal --update --workspace"));
-        assert!(workflow_resume_command(workspace.path()).contains("boundline workflow resume"));
-        assert!(workflow_status_command(workspace.path()).contains("boundline workflow status"));
-        assert!(workflow_inspect_command(workspace.path()).contains("boundline workflow inspect"));
+        assert!(
+            workflow_resume_command(workspace.path()).contains("boundline preview workflow resume")
+        );
+        assert!(
+            workflow_status_command(workspace.path()).contains("boundline preview workflow status")
+        );
+        assert!(
+            workflow_inspect_command(workspace.path())
+                .contains("boundline preview workflow inspect")
+        );
 
         let initialized = initialize_session(workspace.path());
         assert_eq!(initialized.latest_status, SessionStatus::Initialized);
@@ -2100,7 +2107,7 @@ summary = "Inspect persisted evidence"
         assert_eq!(progress.current_phase, Some(WorkflowPhase::Inspect));
         assert_eq!(progress.lifecycle_state, WorkflowLifecycleState::Active);
         let next = progress.next_action.as_deref().unwrap();
-        assert!(next.contains("boundline workflow inspect --workspace"));
+        assert!(next.contains("boundline preview workflow inspect --workspace"));
     }
 
     #[test]

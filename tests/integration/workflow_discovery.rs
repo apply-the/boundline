@@ -14,7 +14,7 @@ fn run_boundline_in(workspace: &std::path::Path, args: &[&str]) -> std::process:
 fn workflow_list_surfaces_names_metadata_and_invocation_guidance() {
     let workspace = temp_workflow_discovery_workspace("workflow-discovery-list");
 
-    let output = run_boundline_in(&workspace, &["workflow", "list", "--workspace", "."]);
+    let output = run_boundline_in(&workspace, &["preview", "workflow", "list", "--workspace", "."]);
     let text = terminal_text(&output);
 
     assert_eq!(output.status.code(), Some(0), "{text}");
@@ -40,7 +40,10 @@ fn workflow_list_surfaces_names_metadata_and_invocation_guidance() {
         text.contains("summary: bounded workflow covering capture -> plan -> run -> inspect"),
         "{text}"
     );
-    assert!(text.contains("invoke_with: boundline workflow run quick-fix --workspace "), "{text}");
+    assert!(
+        text.contains("invoke_with: boundline preview workflow run quick-fix --workspace "),
+        "{text}"
+    );
     assert!(text.contains("delivery_path: idea_to_code"), "{text}");
     assert!(
         text.contains(
@@ -61,11 +64,14 @@ fn workflow_list_surfaces_names_metadata_and_invocation_guidance() {
 fn workflow_list_reports_invalid_registry_state_explicitly() {
     let workspace = temp_invalid_workflow_layer_workspace("workflow-discovery-invalid");
 
-    let output = run_boundline_in(&workspace, &["workflow", "list", "--workspace", "."]);
+    let output = run_boundline_in(&workspace, &["preview", "workflow", "list", "--workspace", "."]);
     let text = terminal_text(&output);
 
     assert_eq!(output.status.code(), Some(1), "{text}");
     assert!(text.contains("workflow registry status: invalid"), "{text}");
     assert!(text.contains("reason: workflow definitions could not be parsed"), "{text}");
-    assert!(text.contains("next_command: boundline workflow inspect --workspace "), "{text}");
+    assert!(
+        text.contains("next_command: boundline preview workflow inspect --workspace "),
+        "{text}"
+    );
 }

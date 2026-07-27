@@ -212,13 +212,6 @@ fn session_lifecycle_commands_can_emit_structured_host_output() {
         status_json["session_status"]["planning_analysis_coverage"].is_object(),
         "{status_text}"
     );
-
-    let next = run_boundline_in(&workspace, &["next", "--json"]);
-    let next_text = terminal_text(&next);
-    assert_eq!(next.status.code(), Some(0), "{next_text}");
-    let next_json: Value = stdout_json(&next);
-    assert_eq!(next_json["command_name"], "next", "{next_text}");
-    assert!(next_json["session_status"]["next_command"].is_string(), "{next_text}");
 }
 
 #[test]
@@ -356,7 +349,9 @@ fn orchestrate_continues_through_plan_to_execution_without_phase_request() {
     let orchestrate = run_boundline_in(
         &workspace,
         &[
-            "orchestrate",
+            "run",
+            "--until",
+            "continue-until-terminal",
             "--goal",
             "Prepare an architecture brief for the failing add test",
             "--json-stream",
@@ -385,7 +380,9 @@ fn orchestrate_json_host_output_uses_human_report_rendering() {
     let orchestrate = run_boundline_in(
         &workspace,
         &[
-            "orchestrate",
+            "run",
+            "--until",
+            "continue-until-terminal",
             "--goal",
             "Prepare an architecture brief for the failing add test",
             "--json",
@@ -408,7 +405,9 @@ fn orchestrate_resume_stream_uses_session_resumed_event() {
     let first = run_boundline_in(
         &workspace,
         &[
-            "orchestrate",
+            "run",
+            "--until",
+            "continue-until-terminal",
             "--goal",
             "Prepare an architecture brief for the failing add test",
             "--json-stream",
@@ -419,7 +418,7 @@ fn orchestrate_resume_stream_uses_session_resumed_event() {
 
     let resume = run_boundline_in(
         &workspace,
-        &["orchestrate", "--intent", "continue-until-phase-request", "--json-stream"],
+        &["run", "--until", "continue-until-phase-request", "--json-stream"],
     );
     let resume_text = terminal_text(&resume);
 
@@ -435,10 +434,10 @@ fn orchestrate_plan_quality_block_emits_one_phase_request_and_withholds_executio
     let orchestrate = run_boundline_in(
         &workspace,
         &[
-            "orchestrate",
+            "run",
             "--goal",
             "Refresh src/components/App.tsx against the latest design guidance",
-            "--intent",
+            "--until",
             "continue-until-phase-request",
             "--json-stream",
         ],
@@ -477,7 +476,7 @@ fn orchestrate_can_advance_ndjson_planning_stage_phase_requests_one_stage_at_a_t
     let orchestrate = run_boundline_in(
         &workspace,
         &[
-            "orchestrate",
+            "run",
             "--goal",
             "Deliver a governed feature",
             "--brief",
@@ -492,7 +491,7 @@ fn orchestrate_can_advance_ndjson_planning_stage_phase_requests_one_stage_at_a_t
             "engineering",
             "--owner",
             "platform",
-            "--intent",
+            "--until",
             "continue-until-phase-request",
             "--json-stream",
         ],
@@ -561,10 +560,10 @@ fn orchestrate_can_advance_ndjson_planning_stage_phase_requests_one_stage_at_a_t
     let resume = run_boundline_in(
         &workspace,
         &[
-            "orchestrate",
+            "run",
             "--planning-stage-complete",
             "plan:requirements",
-            "--intent",
+            "--until",
             "continue-until-phase-request",
             "--json-stream",
         ],
@@ -626,10 +625,10 @@ fn orchestrate_can_advance_ndjson_planning_stage_phase_requests_one_stage_at_a_t
     let resume_architecture = run_boundline_in(
         &workspace,
         &[
-            "orchestrate",
+            "run",
             "--planning-stage-complete",
             "plan:architecture",
-            "--intent",
+            "--until",
             "continue-until-phase-request",
             "--json-stream",
         ],

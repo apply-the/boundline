@@ -95,7 +95,7 @@ fn status_next_and_inspect_reuse_the_active_session_view_and_trace_reference() {
     assert!(status_text.contains("current_stage: investigate"), "{status_text}");
     assert!(status_text.contains("next_command: boundline run"), "{status_text}");
 
-    let next = run_boundline_in(&workspace, &["next"]);
+    let next = run_boundline_in(&workspace, &["status"]);
     let next_text = terminal_text(&next);
     assert_eq!(next.status.code(), Some(0), "{next_text}");
     assert!(next_text.contains("next_command: boundline run"), "{next_text}");

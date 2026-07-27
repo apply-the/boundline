@@ -14,7 +14,7 @@ fn bootstrap_bug_fix(workspace: &Path) {
             .code(),
         Some(0)
     );
-    assert_eq!(run_boundline_in(workspace, &["flow", "bug-fix"]).status.code(), Some(0));
+    assert_eq!(run_boundline_in(workspace, &["preview", "flow", "bug-fix"]).status.code(), Some(0));
     assert_eq!(run_boundline_in(workspace, &["plan"]).status.code(), Some(0));
 }
 
@@ -25,7 +25,7 @@ fn bootstrap_change(workspace: &Path) {
             .code(),
         Some(0)
     );
-    assert_eq!(run_boundline_in(workspace, &["flow", "change"]).status.code(), Some(0));
+    assert_eq!(run_boundline_in(workspace, &["preview", "flow", "change"]).status.code(), Some(0));
     assert_eq!(run_boundline_in(workspace, &["plan"]).status.code(), Some(0));
 }
 
@@ -275,7 +275,7 @@ fn governance_autopilot_flow_refreshes_security_assessment_approval_through_stat
             .contains("latest_governance_packet_ref: .canon/runs/canon-run-security-approval"),
         "{refreshed_text}"
     );
-    assert!(refreshed_text.contains("next_command: boundline step"), "{refreshed_text}");
+    assert!(refreshed_text.contains("next_command: boundline run --one-step"), "{refreshed_text}");
 }
 
 #[test]
@@ -290,7 +290,7 @@ fn governance_autopilot_flow_rejects_unsupported_future_canon_mode_configuration
         Some(0)
     );
 
-    let flow = run_boundline_in(&workspace, &["flow", "bug-fix"]);
+    let flow = run_boundline_in(&workspace, &["preview", "flow", "bug-fix"]);
     let flow_text = terminal_text(&flow);
     if flow.status.code() != Some(0) {
         assert!(flow_text.contains("session error"), "{flow_text}");

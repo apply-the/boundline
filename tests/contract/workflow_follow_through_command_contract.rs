@@ -18,7 +18,14 @@ fn workflow_follow_through_contract_surfaces_govern_pause_with_actionable_guidan
 
     let output = run_boundline_in(
         &workspace,
-        &["workflow", "run", "governed-delivery", "--goal", "Fix the failing checkout flow"],
+        &[
+            "preview",
+            "workflow",
+            "run",
+            "governed-delivery",
+            "--goal",
+            "Fix the failing checkout flow",
+        ],
     );
     let text = terminal_text(&output);
 
@@ -30,7 +37,10 @@ fn workflow_follow_through_contract_surfaces_govern_pause_with_actionable_guidan
         "{text}"
     );
     assert!(text.contains("execution_condition: waiting - governance approval is still pending before execution can continue"), "{text}");
-    assert!(text.contains("next_command: boundline workflow resume --workspace "), "{text}");
+    assert!(
+        text.contains("next_command: boundline preview workflow resume --workspace "),
+        "{text}"
+    );
     assert!(!text.contains("not yet executable from the workflow command surface"), "{text}");
 }
 
@@ -41,7 +51,14 @@ fn workflow_follow_through_contract_completes_review_and_govern_without_static_b
 
     let output = run_boundline_in(
         &workspace,
-        &["workflow", "run", "governed-delivery", "--goal", "Fix the failing checkout flow"],
+        &[
+            "preview",
+            "workflow",
+            "run",
+            "governed-delivery",
+            "--goal",
+            "Fix the failing checkout flow",
+        ],
     );
     let text = terminal_text(&output);
 

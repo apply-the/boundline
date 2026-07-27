@@ -93,7 +93,7 @@ fn flow_command_binds_bug_fix_to_the_active_session() {
         Some(0)
     );
 
-    let output = run_boundline_in(&workspace, &["flow", "bug-fix"]);
+    let output = run_boundline_in(&workspace, &["preview", "flow", "bug-fix"]);
     let text = terminal_text(&output);
     assert_eq!(output.status.code(), Some(0), "{text}");
     assert!(text.contains("active_flow: bug-fix"), "{text}");
@@ -119,10 +119,10 @@ fn flow_command_rejects_unknown_flow_names_with_guidance() {
         Some(0)
     );
 
-    let output = run_boundline_in(&workspace, &["flow", "unknown-flow"]);
+    let output = run_boundline_in(&workspace, &["preview", "flow", "unknown-flow"]);
     let text = terminal_text(&output);
 
     assert_eq!(output.status.code(), Some(1), "{text}");
     assert!(text.contains("unknown flow `unknown-flow`"), "{text}");
-    assert!(text.contains("next_command: boundline flow bug-fix"), "{text}");
+    assert!(text.contains("next_command: boundline preview flow bug-fix"), "{text}");
 }

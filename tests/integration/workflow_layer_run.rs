@@ -26,7 +26,7 @@ fn workflow_run_creates_a_session_and_persists_workflow_progress() {
 
     let output = run_boundline_in(
         &workspace,
-        &["workflow", "run", "default", "--goal", "Fix the failing add test"],
+        &["preview", "workflow", "run", "default", "--goal", "Fix the failing add test"],
     );
     let text = terminal_text(&output);
 
@@ -50,7 +50,7 @@ fn workflow_run_blocks_invalid_definitions_without_creating_a_session() {
 
     let output = run_boundline_in(
         &workspace,
-        &["workflow", "run", "invalid-flow", "--goal", "Fix the failing add test"],
+        &["preview", "workflow", "run", "invalid-flow", "--goal", "Fix the failing add test"],
     );
     let text = terminal_text(&output);
 

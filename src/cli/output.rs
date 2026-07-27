@@ -813,6 +813,7 @@ mod tests {
                     plan: None,
                     accepted_plan: false,
                     resume: None,
+                    route: crate::cli::RunRouteArgs::default(),
                 },
                 "run",
             ),

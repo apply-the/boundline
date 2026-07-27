@@ -1,29 +1,57 @@
-use crate::workspace_fixture::{run_boundline_in, temp_empty_workspace, terminal_text};
+use boundline::cli::govern::{GovernRequest, execute_govern};
+use boundline::domain::governance::CanonMode;
+
+use crate::workspace_fixture::temp_empty_workspace;
 
 #[test]
-fn govern_without_mode_lists_supported_choices() {
+fn govern_without_mode_lists_supported_choices() -> Result<(), String> {
     let workspace = temp_empty_workspace("boundline-govern-no-mode");
-
-    let output = run_boundline_in(&workspace, &["govern"]);
-    let text = terminal_text(&output);
-
-    assert_eq!(output.status.code(), Some(0), "{text}");
-    assert!(text.contains("govern: mode required"), "{text}");
-    assert!(text.contains("mode_choices:"), "{text}");
-    assert!(text.contains("- architecture"), "{text}");
-    assert!(text.contains("- supply-chain-analysis"), "{text}");
-    assert!(text.contains("- pr-review"), "{text}");
+    let report = execute_govern(GovernRequest {
+        workspace: Some(&workspace),
+        mode: None,
+        goal: None,
+        brief: &[],
+        base: None,
+        head: None,
+        risk: None,
+        structural_impact: false,
+        public_contract_change: false,
+        validation_exhausted: false,
+        pr_ready: false,
+        preserved_behavior_evidence: false,
+    })
+    .map_err(|error| error.to_string())?;
+    if !report.terminal_output.contains("mode_choices:")
+        || !report.terminal_output.contains("- architecture")
+        || !report.terminal_output.contains("- pr-review")
+    {
+        return Err(format!("internal govern choices changed: {}", report.terminal_output));
+    }
+    Ok(())
 }
 
 #[test]
-fn govern_with_mode_stops_when_session_state_is_missing() {
+fn govern_with_mode_stops_when_session_state_is_missing() -> Result<(), String> {
     let workspace = temp_empty_workspace("boundline-govern-missing-session");
-
-    let output = run_boundline_in(&workspace, &["govern", "--mode", "architecture"]);
-    let text = terminal_text(&output);
-
-    assert_eq!(output.status.code(), Some(1), "{text}");
-    assert!(text.contains("govern error:"), "{text}");
-    assert!(text.contains(".boundline/session.json"), "{text}");
-    assert!(text.contains("boundline goal --workspace"), "{text}");
+    let error = execute_govern(GovernRequest {
+        workspace: Some(&workspace),
+        mode: Some(CanonMode::Architecture),
+        goal: None,
+        brief: &[],
+        base: None,
+        head: None,
+        risk: None,
+        structural_impact: false,
+        public_contract_change: false,
+        validation_exhausted: false,
+        pr_ready: false,
+        preserved_behavior_evidence: false,
+    })
+    .err()
+    .ok_or_else(|| "internal govern unexpectedly accepted missing session state".to_string())?;
+    let rendered = error.to_string();
+    if !rendered.contains(".boundline/session.json") || !rendered.contains("boundline goal") {
+        return Err(format!("internal govern missing-session diagnostic changed: {rendered}"));
+    }
+    Ok(())
 }

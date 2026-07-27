@@ -222,7 +222,7 @@ fn chat_fallback_session_native_run_output_preserves_trace_and_next_step_cues() 
     assert!(status_text.contains("latest_trace_ref: "), "{status_text}");
     assert!(status_text.contains("next_command: boundline checkpoint restore"), "{status_text}");
 
-    let next_output = run_boundline(&["next", "--workspace", &workspace_ref]);
+    let next_output = run_boundline(&["status", "--workspace", &workspace_ref]);
     let next_text = terminal_text(&next_output);
 
     assert_eq!(next_output.status.code(), Some(0), "{next_text}");

@@ -10,6 +10,7 @@ fn cluster_init_persists_cluster_file_for_two_valid_members() {
     let output = run_boundline_in(
         &primary,
         &[
+            "preview",
             "cluster",
             "init",
             "--workspace",
@@ -45,6 +46,7 @@ fn cluster_init_rejects_non_boundline_member_without_partial_state() {
     let output = run_boundline_in(
         &primary,
         &[
+            "preview",
             "cluster",
             "init",
             "--workspace",

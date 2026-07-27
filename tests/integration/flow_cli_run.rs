@@ -114,7 +114,10 @@ fn bug_fix_flow_run_reports_failed_decisions_and_trace_guidance() {
             .code(),
         Some(0)
     );
-    assert_eq!(run_boundline_in(&workspace, &["flow", "bug-fix"]).status.code(), Some(0));
+    assert_eq!(
+        run_boundline_in(&workspace, &["preview", "flow", "bug-fix"]).status.code(),
+        Some(0)
+    );
     assert_eq!(run_boundline_in(&workspace, &["plan"]).status.code(), Some(0));
 
     let planned_status = terminal_text(&run_boundline_in(&workspace, &["status"]));
@@ -149,7 +152,10 @@ fn delivery_flow_preserves_stage_projection_when_native_delivery_change_is_unava
             .code(),
         Some(0)
     );
-    assert_eq!(run_boundline_in(&workspace, &["flow", "delivery"]).status.code(), Some(0));
+    assert_eq!(
+        run_boundline_in(&workspace, &["preview", "flow", "delivery"]).status.code(),
+        Some(0)
+    );
     assert_eq!(run_boundline_in(&workspace, &["plan"]).status.code(), Some(0));
 
     let run_output = run_boundline_in(&workspace, &["run"]);
@@ -180,7 +186,10 @@ fn bug_fix_recovery_decision_is_recorded_after_initial_fix_failure() {
             .code(),
         Some(0)
     );
-    assert_eq!(run_boundline_in(&workspace, &["flow", "bug-fix"]).status.code(), Some(0));
+    assert_eq!(
+        run_boundline_in(&workspace, &["preview", "flow", "bug-fix"]).status.code(),
+        Some(0)
+    );
     assert_eq!(run_boundline_in(&workspace, &["plan"]).status.code(), Some(0));
 
     let run_output = run_boundline_in(&workspace, &["run"]);
@@ -232,10 +241,13 @@ fn flow_cannot_be_replaced_once_a_plan_exists() {
             .code(),
         Some(0)
     );
-    assert_eq!(run_boundline_in(&workspace, &["flow", "bug-fix"]).status.code(), Some(0));
+    assert_eq!(
+        run_boundline_in(&workspace, &["preview", "flow", "bug-fix"]).status.code(),
+        Some(0)
+    );
     assert_eq!(run_boundline_in(&workspace, &["plan"]).status.code(), Some(0));
 
-    let output = run_boundline_in(&workspace, &["flow", "change"]);
+    let output = run_boundline_in(&workspace, &["preview", "flow", "change"]);
     let text = terminal_text(&output);
     assert_eq!(output.status.code(), Some(1), "{text}");
     assert!(text.contains("cannot replace active flow `bug-fix` with `change`"), "{text}");
@@ -251,7 +263,10 @@ fn invalid_flow_state_requires_a_new_session_before_stage_execution_resumes() {
             .code(),
         Some(0)
     );
-    assert_eq!(run_boundline_in(&workspace, &["flow", "bug-fix"]).status.code(), Some(0));
+    assert_eq!(
+        run_boundline_in(&workspace, &["preview", "flow", "bug-fix"]).status.code(),
+        Some(0)
+    );
     assert_eq!(run_boundline_in(&workspace, &["plan"]).status.code(), Some(0));
 
     let mut record = load_session_record(&workspace);
@@ -260,7 +275,7 @@ fn invalid_flow_state_requires_a_new_session_before_stage_execution_resumes() {
     active_flow.current_stage_id = "corrupted-stage".to_string();
     persist_session_record(&workspace, &record);
 
-    let output = run_boundline_in(&workspace, &["step"]);
+    let output = run_boundline_in(&workspace, &["run", "--one-step"]);
     let text = terminal_text(&output);
     assert_eq!(output.status.code(), Some(1), "{text}");
     assert!(text.contains("active session is invalid: session flow state is invalid"), "{text}");

@@ -212,39 +212,7 @@ pub fn render_orchestrate_stream_json(events: &[OrchestrateEventEnvelope]) -> St
 
 /// Returns the stable CLI command name used in output and host envelopes.
 pub fn command_name(command: &DeveloperCommand) -> &'static str {
-    match command {
-        DeveloperCommand::Doctor { .. } => "doctor",
-        DeveloperCommand::Checkpoint { .. } => "checkpoint",
-        DeveloperCommand::Orchestrate { .. } => "orchestrate",
-        DeveloperCommand::Goal { .. } => "goal",
-        DeveloperCommand::Flow { .. } => "flow",
-        DeveloperCommand::Plan { .. } => "plan",
-        DeveloperCommand::Probe { .. } => "probe",
-        DeveloperCommand::Step { .. } => "step",
-        DeveloperCommand::Run { .. } => "run",
-        DeveloperCommand::Workflow { .. } => "workflow",
-        DeveloperCommand::Index { .. } => "index",
-        DeveloperCommand::Inspect { .. } => "inspect",
-        DeveloperCommand::Status { .. } => "status",
-        DeveloperCommand::Next { .. } => "next",
-        DeveloperCommand::Continue { .. } => "continue",
-        DeveloperCommand::Session { .. } => "session",
-        DeveloperCommand::Govern { .. } => "govern",
-        DeveloperCommand::Assistant { .. } => "assistant",
-        DeveloperCommand::Init { .. } => "init",
-        DeveloperCommand::Update { .. } => "update",
-        DeveloperCommand::Config { .. } => "config",
-        DeveloperCommand::Adapter { .. } => "adapter",
-        DeveloperCommand::Provider { .. } => "provider",
-        DeveloperCommand::Cluster { .. } => "cluster",
-        DeveloperCommand::Models { .. } => "models",
-        DeveloperCommand::Council { .. } => "council",
-        DeveloperCommand::Override { .. } => "override",
-        DeveloperCommand::HelpNext(_) => "help-next",
-        DeveloperCommand::Evals { .. } => "evals",
-        DeveloperCommand::Trace { .. } => "trace",
-        DeveloperCommand::Exec { .. } => "exec",
-    }
+    command.name().as_str()
 }
 
 pub(crate) fn stdout_presentation() -> OutputPresentation {

@@ -84,7 +84,7 @@ fn change_flow_status_and_next_include_flow_stage_fields() {
         run_boundline_in(&workspace, &["goal", "--goal", "Apply the pricing change"]).status.code(),
         Some(0)
     );
-    assert_eq!(run_boundline_in(&workspace, &["flow", "change"]).status.code(), Some(0));
+    assert_eq!(run_boundline_in(&workspace, &["preview", "flow", "change"]).status.code(), Some(0));
     assert_eq!(run_boundline_in(&workspace, &["plan"]).status.code(), Some(0));
 
     let status_output = run_boundline_in(&workspace, &["status"]);
@@ -97,7 +97,7 @@ fn change_flow_status_and_next_include_flow_stage_fields() {
     assert!(status_text.contains("next_command: boundline run"), "{status_text}");
     assert!(!status_text.contains("current_step_id:"), "{status_text}");
 
-    let next_output = run_boundline_in(&workspace, &["next"]);
+    let next_output = run_boundline_in(&workspace, &["status"]);
     let next_text = terminal_text(&next_output);
     assert_eq!(next_output.status.code(), Some(0), "{next_text}");
     assert!(next_text.contains("active_flow: change"), "{next_text}");

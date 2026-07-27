@@ -594,6 +594,7 @@ fn developer_command_sessions_cover_variant_mapping_validation_and_completion() 
             plan: None,
             accepted_plan: false,
             resume: None,
+            route: boundline::cli::RunRouteArgs::default(),
         },
         DeveloperCommand::Inspect {
             trace: Some(trace.clone()),
@@ -677,6 +678,7 @@ fn developer_command_sessions_cover_variant_mapping_validation_and_completion() 
             plan: None,
             accepted_plan: false,
             resume: None,
+            route: boundline::cli::RunRouteArgs::default(),
         });
     assert!(direct_run_without_workspace.validate().is_ok());
 
@@ -696,6 +698,7 @@ fn developer_command_sessions_cover_variant_mapping_validation_and_completion() 
             plan: None,
             accepted_plan: false,
             resume: None,
+            route: boundline::cli::RunRouteArgs::default(),
         });
     assert_eq!(
         invalid_compatibility_run_workspace.validate().unwrap_err(),
@@ -717,6 +720,7 @@ fn developer_command_sessions_cover_variant_mapping_validation_and_completion() 
         plan: None,
         accepted_plan: false,
         resume: None,
+        route: boundline::cli::RunRouteArgs::default(),
     });
     assert_eq!(
         invalid_run_goal.validate().unwrap_err(),

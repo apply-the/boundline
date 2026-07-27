@@ -654,7 +654,7 @@ impl WorkflowRegistry {
                 phases: workflow.phases.clone(),
                 recommended_when: workflow.recommended_when.clone(),
                 invocation_command: format!(
-                    "boundline workflow run {} --workspace {}",
+                    "boundline preview workflow run {} --workspace {}",
                     workflow.workflow_name,
                     workspace.display()
                 ),

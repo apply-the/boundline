@@ -138,7 +138,11 @@ fn loads_optional_discovery_metadata_and_fallback_summary() {
     let quick_fix = entries.iter().find(|entry| entry.workflow_name == "quick-fix").unwrap();
     assert_eq!(quick_fix.summary, "bounded workflow covering capture -> plan -> run -> inspect");
     assert!(quick_fix.recommended_when.is_none());
-    assert!(quick_fix.invocation_command.contains("boundline workflow run quick-fix --workspace "));
+    assert!(
+        quick_fix
+            .invocation_command
+            .contains("boundline preview workflow run quick-fix --workspace ")
+    );
 }
 
 #[test]

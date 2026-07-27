@@ -177,6 +177,23 @@ boundline update
 T076 qualifies host and projection behavior only. It must not create either
 the RPC or MCP stdio runtime handler.
 
+#### Current M1C preview gateway
+
+```text
+boundline preview flow
+boundline preview workflow
+boundline preview cluster
+boundline preview council
+boundline preview evals
+boundline preview override
+boundline preview trace
+```
+
+These commands have no executable top-level aliases. The gateway is hidden
+from stable help and stable completion metadata, while
+`boundline preview --help` labels the entire subtree outside the stable
+compatibility promise.
+
 #### 0.90 migration and command classification map
 
 | Command | 0.90 | 1.0 | Rationale or transition |
@@ -188,14 +205,14 @@ the RPC or MCP stdio runtime handler.
 | `probe` | Removed | Removed | Migration diagnostic: `doctor` or `status`; no compatibility alias. |
 | `help-next` | Removed | Removed | Migration diagnostic: `doctor` or `status`; no compatibility alias. |
 | `govern` | Removed | Removed | Migration diagnostic: use `plan` or `run` now; add `approve` only after T037 promotes it to StableOperational. No compatibility alias. |
-| `flow` | Preview | Preview | Outside the 1.0 compatibility promise. |
-| `workflow` | Preview | Preview | Outside the 1.0 compatibility promise. |
+| `flow` | Preview | Preview | `boundline preview flow`; outside the 1.0 compatibility promise. |
+| `workflow` | Preview | Preview | `boundline preview workflow`; outside the 1.0 compatibility promise. |
 | `checkpoint` | Internal | Internal | Session/runtime machinery is surfaced through status, inspect, resume, and recovery rather than a stable root command. |
-| `cluster` | Preview | Preview / post-1.0 | Cluster and multi-agent orchestration are outside stable 1.0. |
-| `council` | Preview | Preview / post-1.0 | Council execution is an advanced reasoning capability and not a stable lifecycle entrypoint. |
-| `override` | Preview transitional | Removed, replacement `approve` | Final replacement: `boundline approve`. Remove only when T037 delivers operational approval and authority handling; never present it as stable. |
-| `evals` | Preview | Preview | Evaluation tooling is not part of the stable control-plane CLI. |
-| `trace` | Preview transitional | Removed as a root command | Final replacement: `boundline inspect` and read-only trace projections. Remove only when that replacement surface is operational; never present it as stable. |
+| `cluster` | Preview | Preview / post-1.0 | `boundline preview cluster`; cluster and multi-agent orchestration are outside stable 1.0. |
+| `council` | Preview | Preview / post-1.0 | `boundline preview council`; council execution is an advanced reasoning capability and not a stable lifecycle entrypoint. |
+| `override` | Preview transitional | Removed, replacement `approve` | `boundline preview override`; final replacement: `boundline approve`. Remove only when T037 delivers operational approval and authority handling; never present it as stable. |
+| `evals` | Preview | Preview | `boundline preview evals`; evaluation tooling is not part of the stable control-plane CLI. |
+| `trace` | Preview transitional | Removed as a root command | `boundline preview trace`; final replacement: `boundline inspect` and read-only trace projections. Remove only when that replacement surface is operational; never present it as stable. |
 | `exec` | Internal | Internal | Direct execution bypasses the admitted lifecycle and cannot be a public stable entrypoint. |
 
 Canon stable CLI:

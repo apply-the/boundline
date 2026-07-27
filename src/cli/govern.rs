@@ -284,7 +284,7 @@ fn render_mode_choices() -> String {
             entry.recommendation_only
         )
     }));
-    lines.push("next_command: boundline govern --mode <mode> --workspace <workspace>".to_string());
+    lines.push("next_command: boundline plan --workspace <workspace>".to_string());
     lines.join("\n")
 }
 

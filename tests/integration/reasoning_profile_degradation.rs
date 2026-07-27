@@ -62,7 +62,7 @@ fn bootstrap_bug_fix(workspace: &Path) -> Result<(), Box<dyn Error>> {
     let goal = run_boundline_in(workspace, &["goal", "--goal", "Fix the failing checkout flow"]);
     ensure_success(&goal, &terminal_text(&goal), "goal")?;
 
-    let flow = run_boundline_in(workspace, &["flow", "bug-fix"]);
+    let flow = run_boundline_in(workspace, &["preview", "flow", "bug-fix"]);
     ensure_success(&flow, &terminal_text(&flow), "flow")?;
 
     let plan = run_boundline_in(workspace, &["plan"]);

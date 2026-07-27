@@ -12,7 +12,7 @@ fn bootstrap_bug_fix(workspace: &Path) {
             .code(),
         Some(0)
     );
-    assert_eq!(run_boundline_in(workspace, &["flow", "bug-fix"]).status.code(), Some(0));
+    assert_eq!(run_boundline_in(workspace, &["preview", "flow", "bug-fix"]).status.code(), Some(0));
     assert_eq!(run_boundline_in(workspace, &["plan"]).status.code(), Some(0));
 }
 
@@ -57,7 +57,7 @@ fn governance_session_contract_native_planned_sessions_require_run_instead_of_st
     let workspace = temp_canon_approval_workspace("boundline-governance-approval-session");
     bootstrap_bug_fix(&workspace);
 
-    let step = run_boundline_in(&workspace, &["step"]);
+    let step = run_boundline_in(&workspace, &["run", "--one-step"]);
     let step_text = terminal_text(&step);
     assert_ne!(step.status.code(), Some(0), "{step_text}");
     assert!(step_text.contains("active session has no planned task"), "{step_text}");

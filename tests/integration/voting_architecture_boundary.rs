@@ -1,30 +1,37 @@
+use boundline::cli::govern::{GovernRequest, execute_govern};
+use boundline::domain::governance::CanonMode;
+
 use crate::workspace_fixture::{run_boundline_in, temp_fixture_workspace, terminal_text};
 
 #[test]
-fn high_impact_architecture_govern_stage_persists_blocking_voting_state() {
+fn high_impact_architecture_govern_stage_persists_blocking_voting_state() -> Result<(), String> {
     let workspace = temp_fixture_workspace("boundline-voting-architecture");
-
-    let govern = run_boundline_in(
-        &workspace,
-        &[
-            "govern",
-            "--mode",
-            "architecture",
-            "--goal",
-            "Choose architecture for the onboarding capability",
-            "--risk",
-            "high",
-            "--structural-impact",
-        ],
-    );
-    let govern_text = terminal_text(&govern);
-    assert_eq!(govern.status.code(), Some(0), "{govern_text}");
-
+    execute_govern(GovernRequest {
+        workspace: Some(&workspace),
+        mode: Some(CanonMode::Architecture),
+        goal: Some("Choose architecture for the onboarding capability"),
+        brief: &[],
+        base: None,
+        head: None,
+        risk: Some("high"),
+        structural_impact: true,
+        public_contract_change: false,
+        validation_exhausted: false,
+        pr_ready: false,
+        preserved_behavior_evidence: false,
+    })
+    .map_err(|error| error.to_string())?;
     let status = run_boundline_in(&workspace, &["status"]);
     let text = terminal_text(&status);
-    assert_eq!(status.status.code(), Some(0), "{text}");
-    assert!(text.contains("latest_voting_trigger: high_impact_architecture"), "{text}");
-    assert!(text.contains("latest_voting_result: pending"), "{text}");
-    assert!(text.contains("latest_voting_blocking: true"), "{text}");
-    assert!(text.contains("latest_voting_next_action: resolve_voting_boundary"), "{text}");
+    for expected in [
+        "latest_voting_trigger: high_impact_architecture",
+        "latest_voting_result: pending",
+        "latest_voting_blocking: true",
+        "latest_voting_next_action: resolve_voting_boundary",
+    ] {
+        if !text.contains(expected) {
+            return Err(format!("architecture voting projection omitted {expected}: {text}"));
+        }
+    }
+    Ok(())
 }

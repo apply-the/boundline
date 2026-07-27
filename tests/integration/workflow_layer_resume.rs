@@ -22,10 +22,11 @@ fn load_session_record(workspace: &std::path::Path) -> ActiveSessionRecord {
 fn workflow_status_reports_paused_capture_state_and_resume_guidance() {
     let workspace = temp_workflow_layer_workspace("workflow-layer-resume-status");
 
-    let start = run_boundline_in(&workspace, &["workflow", "run", "default"]);
+    let start = run_boundline_in(&workspace, &["preview", "workflow", "run", "default"]);
     assert_eq!(start.status.code(), Some(0), "{}", terminal_text(&start));
 
-    let output = run_boundline_in(&workspace, &["workflow", "status", "--workspace", "."]);
+    let output =
+        run_boundline_in(&workspace, &["preview", "workflow", "status", "--workspace", "."]);
     let text = terminal_text(&output);
 
     assert_eq!(output.status.code(), Some(0), "{text}");
@@ -48,7 +49,7 @@ fn workflow_status_reports_paused_capture_state_and_resume_guidance() {
 fn workflow_resume_continues_after_goal_capture_without_replaying_completed_phases() {
     let workspace = temp_workflow_layer_workspace("workflow-layer-resume-run");
 
-    let start = run_boundline_in(&workspace, &["workflow", "run", "default"]);
+    let start = run_boundline_in(&workspace, &["preview", "workflow", "run", "default"]);
     assert_eq!(start.status.code(), Some(0), "{}", terminal_text(&start));
 
     let goal = run_boundline_in(
@@ -57,7 +58,8 @@ fn workflow_resume_continues_after_goal_capture_without_replaying_completed_phas
     );
     assert_eq!(goal.status.code(), Some(0), "{}", terminal_text(&goal));
 
-    let output = run_boundline_in(&workspace, &["workflow", "resume", "--workspace", "."]);
+    let output =
+        run_boundline_in(&workspace, &["preview", "workflow", "resume", "--workspace", "."]);
     let text = terminal_text(&output);
 
     assert_eq!(output.status.code(), Some(1), "{text}");
@@ -84,11 +86,12 @@ fn workflow_inspect_includes_workflow_projection_and_trace_summary() {
 
     let run = run_boundline_in(
         &workspace,
-        &["workflow", "run", "default", "--goal", "Fix the failing add test"],
+        &["preview", "workflow", "run", "default", "--goal", "Fix the failing add test"],
     );
     assert_eq!(run.status.code(), Some(1), "{}", terminal_text(&run));
 
-    let output = run_boundline_in(&workspace, &["workflow", "inspect", "--workspace", "."]);
+    let output =
+        run_boundline_in(&workspace, &["preview", "workflow", "inspect", "--workspace", "."]);
     let text = terminal_text(&output);
 
     assert_eq!(output.status.code(), Some(1), "{text}");

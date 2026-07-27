@@ -2963,7 +2963,7 @@ pub fn governance_next_action_for_state(governance_state: Option<&str>) -> Optio
             Some("wait for approval and rerun boundline status".to_string())
         }
         Some("blocked") => {
-            Some("resolve the governance blocker, then rerun boundline step".to_string())
+            Some("resolve the governance blocker, then rerun boundline run --one-step".to_string())
         }
         _ => None,
     }

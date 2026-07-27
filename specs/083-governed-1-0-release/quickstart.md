@@ -67,6 +67,33 @@ generic not-yet-implemented response as a stable command. M1C removes legacy
 lifecycle entrypoints without aliases, keeps preview commands visibly preview,
 and keeps internal commands hidden.
 
+Use the consolidated lifecycle spellings:
+
+```text
+boundline run --until [intent]
+boundline run --one-step
+boundline run --resume
+```
+
+Use structured `next_actions` from `boundline status` instead of `next`.
+Use `boundline doctor` or `boundline status` instead of `probe` and
+`help-next`; use `boundline plan` or `boundline run` instead of `govern`.
+
+Preview capabilities are available only through the explicit gateway:
+
+```text
+boundline preview flow ...
+boundline preview workflow ...
+boundline preview cluster ...
+boundline preview council ...
+boundline preview evals ...
+boundline preview override ...
+boundline preview trace ...
+```
+
+The preview gateway is intentionally absent from stable root help and stable
+completion metadata. Use `boundline preview --help` to inspect it.
+
 ## 5. Exercise mutation in disposable fixtures
 
 Each transaction fixture must create:

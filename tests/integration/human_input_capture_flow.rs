@@ -259,12 +259,12 @@ fn orchestrate_brief_only_reuses_existing_goal_as_planning_input() {
     let orchestrate = run_boundline_in(
         &workspace,
         &[
-            "orchestrate",
+            "run",
             "--brief",
             "plan.md",
             "--assistant-host",
             "copilot",
-            "--intent",
+            "--until",
             "continue-until-phase-request",
             "--json-stream",
         ],
@@ -322,14 +322,14 @@ fn orchestrate_goal_clarification_accepts_request_id_and_answer() {
     let first = run_boundline_in(
         &workspace,
         &[
-            "orchestrate",
+            "run",
             "--goal",
             "Build a bounded user management microservice. API operations: create and list users. \
              Success criteria: operators can create users successfully. Validation target: cargo \
              test user_management_flow.",
             "--assistant-host",
             "copilot",
-            "--intent",
+            "--until",
             "continue-until-phase-request",
             "--json-stream",
         ],
@@ -370,10 +370,10 @@ fn orchestrate_goal_clarification_accepts_request_id_and_answer() {
     let second = run_boundline_in(
         &workspace,
         &[
-            "orchestrate",
+            "run",
             "--assistant-host",
             "copilot",
-            "--intent",
+            "--until",
             "continue-until-phase-request",
             "--json-stream",
             "--request-id",
@@ -419,14 +419,14 @@ fn orchestrate_with_slug_embeds_slug_in_session_id() {
     let output = run_boundline_in(
         &workspace,
         &[
-            "orchestrate",
+            "run",
             "--goal",
             "Fix the failing add test",
             "--slug",
             "fix-add-test",
             "--assistant-host",
             "copilot",
-            "--intent",
+            "--until",
             "continue-until-phase-request",
             "--json-stream",
         ],
@@ -456,12 +456,12 @@ fn orchestrate_brief_only_on_fresh_workspace_bootstraps_via_brief_only_path() {
     let output = run_boundline_in(
         &workspace,
         &[
-            "orchestrate",
+            "run",
             "--brief",
             brief.to_string_lossy().as_ref(),
             "--assistant-host",
             "copilot",
-            "--intent",
+            "--until",
             "continue-until-phase-request",
             "--json-stream",
         ],

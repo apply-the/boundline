@@ -13,7 +13,7 @@ fn assistant_install_user_scope_reports_global_bootstrap_commands_for_supported_
         assert!(text.contains("/boundline:init"), "{text}");
         assert!(text.contains("/boundline:doctor"), "{text}");
         assert!(text.contains("/boundline:status"), "{text}");
-        assert!(text.contains("/boundline:continue"), "{text}");
+        assert!(text.contains("/boundline:run"), "{text}");
         assert!(text.contains("boundline init --workspace"), "{text}");
     }
 }
