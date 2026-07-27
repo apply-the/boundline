@@ -70,6 +70,30 @@ M5/RC execution gate.
 Final platform and filesystem support claims are frozen only after T093/RC.
 No M0 observation expands the supported surface.
 
+## M1D bridge-migration qualification
+
+| Product bridge | Local result | Qualified scope | Carried disposition |
+|---|---|---|---|
+| Boundline 0.82.0 to 0.90 state | 15 focused tests pass; every declared durable boundary exercised in-process and by forced child termination | macOS arm64, local APFS, exact fixture digest `ee0b51e2a34cccd2ba288bdaf3fd421e607019de7ae5fe88f6f5c2e9e4f0004c` | Linux, Windows, reboot, power loss, and other filesystems remain unqualified under T071, T072, and T093 and must fail closed |
+| Canon 0.72.6 to 0.90 state | 16 focused tests pass; every declared durable boundary exercised in-process and by forced child termination | macOS arm64, local APFS, exact fixture digest `b514fd7bddf9d86c94a07d9d9d8dff25c1a12cc306c6d9450f7abff04c87ce42` | Linux, Windows, reboot, power loss, and other filesystems remain unqualified under T071, T072, and T093 and must fail closed |
+
+The supported source versions are exact. Older, unknown, mixed, corrupt, and
+future schema state is not converted. Pre-0.90 active or ambiguous state is
+preserved in a read-only product archive with an immutable manifest and is
+excluded from resume.
+
+Focused M1D coverage uses repository-specific temporary target directories
+because 30 GiB free space was insufficient to safely repeat two unbounded
+workspace coverage runs. The accepted diff/LCOV intersection measured:
+
+| Repository | M1D patch coverage | Gate |
+|---|---:|---:|
+| Boundline | 90.63% (871 / 961 executable changed lines) | 90% |
+| Canon | 90.67% (875 / 965 executable changed lines) | 90% |
+
+The frozen whole-repository M0 thresholds are unchanged. M1D did not claim a
+new whole-repository measurement or a waiver.
+
 ## Deterministic and probabilistic gates
 
 | Corpus | Gate |

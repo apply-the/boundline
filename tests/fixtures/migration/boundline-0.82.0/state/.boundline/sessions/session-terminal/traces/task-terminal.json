@@ -1,0 +1,15 @@
+{
+  "task_id": "task-terminal",
+  "session_id": "session-terminal",
+  "goal": "Preserve the terminal bridge fixture",
+  "started_at": 1716115200000,
+  "ended_at": 1716115600000,
+  "terminal_status": "succeeded",
+  "terminal_reason": {
+    "condition": "goal_satisfied",
+    "message": "legacy terminal evidence retained",
+    "details": null
+  },
+  "events": [],
+  "trace_location": ".boundline/sessions/session-terminal/traces/task-terminal.json"
+}

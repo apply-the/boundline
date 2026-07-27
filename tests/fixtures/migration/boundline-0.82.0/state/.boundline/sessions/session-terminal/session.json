@@ -1,0 +1,16 @@
+{
+  "session_id": "session-terminal",
+  "workspace_ref": ".",
+  "goal": "Preserve the terminal bridge fixture",
+  "active_task": null,
+  "decisions": [],
+  "latest_status": "succeeded",
+  "latest_terminal_reason": {
+    "condition": "goal_satisfied",
+    "message": "legacy terminal evidence retained",
+    "details": null
+  },
+  "latest_trace_ref": ".boundline/sessions/session-terminal/traces/task-terminal.json",
+  "created_at": 1716115200000,
+  "updated_at": 1716115600000
+}

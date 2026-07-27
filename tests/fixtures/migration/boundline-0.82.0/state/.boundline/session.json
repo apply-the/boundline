@@ -1,0 +1,12 @@
+{
+  "session_id": "session-inactive",
+  "workspace_ref": ".",
+  "goal": null,
+  "active_task": null,
+  "decisions": [],
+  "latest_status": "initialized",
+  "latest_terminal_reason": null,
+  "latest_trace_ref": null,
+  "created_at": 1716115200000,
+  "updated_at": 1716115200000
+}

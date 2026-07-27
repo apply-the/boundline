@@ -94,7 +94,39 @@ boundline preview trace ...
 The preview gateway is intentionally absent from stable root help and stable
 completion metadata. Use `boundline preview --help` to inspect it.
 
-## 5. Exercise mutation in disposable fixtures
+## 5. Inspect and exercise the M1D bridge
+
+M1D adds repository-local library APIs; it does not add a stable CLI command:
+
+```text
+inspect_legacy_state(source)
+plan_migration(inspection)
+apply_migration(plan)
+recover_migration(source)
+```
+
+Only Boundline 0.82.0 and Canon 0.72.6 are admitted. Inspection and planning
+are byte-preserving and create no lock, backup, staging, journal, or completion
+record. Apply binds the plan to the inspected source digest, creates and
+verifies a durable backup, builds and verifies a separate staged tree, then
+performs the journaled same-filesystem replacement. Recovery proceeds only
+when the matching journal explains the state and no live process owns the OS
+lock.
+
+Use the compact historical fixture trees under each repository's
+`tests/fixtures/migration/` directory. Their `PROVENANCE.toml` files bind the
+fixture digest to the exact historical tag and record that the fixtures were
+hand-authored from the tagged types, never serialized by the new migrator.
+Active, partially mutated, or semantically ambiguous pre-0.90 state is archived
+read-only and requires a new admitted session or run; it is never resumed.
+
+Run the bridge and forced-termination matrix with:
+
+```bash
+cargo test --test bridge_090 --all-features
+```
+
+## 6. Exercise mutation in disposable fixtures
 
 Each transaction fixture must create:
 
@@ -115,7 +147,7 @@ surviving child -> reconciliation waits
 changed crash state -> uncommitted_candidate
 ```
 
-## 6. Exercise publication recovery
+## 7. Exercise publication recovery
 
 Inject termination:
 
@@ -129,7 +161,7 @@ between each per-path validation, replacement, index update, and ref update
 Every case must complete, restore the prior authoritative state, or preserve
 unexplained state without destructive action.
 
-## 7. Qualify cross-repository completion
+## 8. Qualify cross-repository completion
 
 The RC vertical slice must:
 
@@ -142,7 +174,7 @@ The RC vertical slice must:
 7. Verify exactly one decision-memory outcome.
 8. Compare normalized CLI, JSON-RPC, MCP, and five host-pack projections.
 
-## 8. Freeze the RC
+## 9. Freeze the RC
 
 After `1.0.0-rc.1`, accept only corrections required to satisfy an already
 frozen stable contract. Run the complete Linux, macOS, Windows, migration,

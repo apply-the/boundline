@@ -238,3 +238,45 @@ Canon checks policy satisfaction but does not produce this evidence itself.
    as success.
 7. Unknown authoritative state is preserved and quarantined.
 8. Cleanup cannot remove evidence required by an incomplete Canon outbox.
+
+## M1D repository-local bridge records
+
+The 0.90 bridge implementations use the same conceptual lifecycle while
+keeping persistence types private to each product:
+
+```text
+Inspect -> Plan -> Backup -> Stage -> Verify -> Commit -> Complete
+                                                     \-> RecoveryRequired
+```
+
+`MigrationInspection` identifies the exact product, source release, schema,
+tree digest, ordered legacy inventory, conversion action, and warnings.
+`MigrationPlan` binds that inspection to the target 0.90 schema and migration
+implementation version. Neither record is persisted by inspection or planning.
+
+`MigrationJournal` durably records the current phase, exact source digest,
+ordered inventory, verified backup digest, verified staged digest, and report
+candidate. `BackupManifest` binds the immutable backup tree to the migration
+identity and source digest. `ArchiveManifest` binds each non-resumable legacy
+item to its source/schema/digest, archive digest, reason, creation time, and
+mandatory fresh-admission disposition.
+
+`ConversionReport` is the portable typed projection. It contains source and
+target identities, normalized logical backup/staging identities, timestamps,
+counts, warnings, semantic losses, unsupported states, verification results,
+terminal status/reason, and recovery instructions. Absolute host paths are
+kept out of this projection. Timestamp values and the archive-derived staged
+digest are the only explicitly volatile values normalized for deterministic
+comparison.
+
+The migration identity is scoped by product, source identity, source schema,
+source digest, target line, and migration implementation version. A matching
+rerun returns or reconstructs the recorded outcome; an identity collision with
+a different digest fails with `idempotency_conflict`.
+
+The source tree is never incrementally rewritten. A verified backup and
+manifest precede staging. A verified same-filesystem staged tree replaces the
+source through a journaled rename boundary, and completion is persisted only
+after reopening and validating the target. An exclusive OS-backed ownership
+lock prevents competing commits. Recovery uses only a matching durable journal
+after the prior OS owner has released the lock; unexplained state is preserved.

@@ -1,0 +1,12 @@
+source_product = "boundline"
+source_version = "0.82.0"
+source_commit = "d97b5c1d775e892f80ce2b7b3f0672a48e2d6b1c"
+source_schema = "boundline-workspace-state-0.82.0"
+fixture_digest = "ee0b51e2a34cccd2ba288bdaf3fd421e607019de7ae5fe88f6f5c2e9e4f0004c"
+fixture_digest_algorithm = "boundline-tree-sha256-v1"
+creation_method = "Hand-authored from the tagged ActiveSessionRecord, session path helpers, scaffold manifest, trace, and checkpoint types."
+generated_by_new_migrator = false
+expected_sessions = 2
+expected_terminal_sessions = 1
+expected_traces = 1
+expected_checkpoints = 1
