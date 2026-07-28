@@ -103,10 +103,10 @@ produced by Boundline.
 Boundline publishes while Canon is unavailable, and later synchronization
 creates exactly one decision-memory event.
 
-- [ ] T049 [P] [US3] Add golden tests for exactly nine stable profiles and preview/removal of implementation mode in `canon:tests/golden/profile_registry.rs`
-- [ ] T050 [US3] Implement the nine-profile registry and change-vs-implementation boundary in `canon:crates/canon-engine/src/modes/mod.rs`
-- [ ] T051 [P] [US3] Add tests proving external semantic evidence lineage and rejecting self-attested or internally executed semantic review in `canon:tests/contract/external_verification.rs`
-- [ ] T052 [US3] Replace synthetic Copilot verification, reviewer stubs, MCP stubs, and unimplemented stable verify behavior with deterministic validation or explicit unsupported status in `canon:crates/canon-adapters/src/reviewer.rs`, `canon:crates/canon-adapters/src/mcp_stdio.rs`, and `canon:crates/canon-cli/src/commands/verify.rs`
+- [x] T049 [P] [US3] Add golden tests for exactly nine stable profiles and preview/removal of implementation mode in `canon:tests/golden/profile_registry.rs`
+- [x] T050 [US3] Implement the nine-profile registry and change-vs-implementation boundary in `canon:crates/canon-engine/src/modes/mod.rs`
+- [x] T051 [P] [US3] Add tests proving external semantic evidence lineage and rejecting self-attested or internally executed semantic review in `canon:tests/contract/external_verification.rs`
+- [x] T052 [US3] Replace synthetic Copilot verification, reviewer stubs, MCP stubs, and unimplemented stable verify behavior with deterministic validation or explicit unsupported status in `canon:crates/canon-adapters/src/reviewer.rs`, `canon:crates/canon-adapters/src/mcp_stdio.rs`, and `canon:crates/canon-cli/src/commands/verify.rs`
 - [ ] T053 [P] [US3] Add structural, cross-packet, authority, required-evidence, and stale-propagation corpus tests in `canon:tests/golden/deterministic_governance.rs`
 - [ ] T054 [US3] Implement typed governance bundles, deterministic validators, decision-memory graph, and stale propagation in `canon:crates/canon-engine/src/decision_memory/mod.rs`
 - [ ] T055 [P] [US3] Add CLI and one-shot RPC contract tests for all stable Canon commands and operations in `canon:tests/contract/stable_surface.rs`

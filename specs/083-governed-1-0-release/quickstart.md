@@ -51,7 +51,38 @@ M0 -> M1 -> M2a
 M2b, M3, and M4 may proceed in parallel only after their frozen M1 contract
 dependencies exist.
 
-## 4. Keep M1C help honest
+## 4. Exercise the M2a Canon boundary
+
+Canon admits exactly these stable profiles, in this order:
+
+```text
+discovery
+requirements
+architecture
+backlog
+change
+refactor
+verification
+pr-review
+incident
+```
+
+`implementation` and the earlier extended mode taxonomy are not stable
+admission aliases. Historical records remain inspectable only through the
+explicit legacy boundary. `change` governs intent and constraints; it does not
+execute a repository mutation.
+
+Use `canon verify --run <RUN_ID>` only as a deterministic inspection of the
+persisted evidence projection. It reports structural validity separately from
+`external_semantic_judgment: required_missing` and exits nonzero while required
+external evidence is absent. Canon does not run a semantic reviewer, invoke a
+model, or manufacture review evidence. MCP transport and handlers remain
+absent until their later owner task.
+
+The complete M2a acceptance record is
+[`evidence/m2a-canon-profiles-verification.md`](evidence/m2a-canon-profiles-verification.md).
+
+## 5. Keep M1C help honest
 
 At 0.90, stable help and completion metadata list only StableOperational
 commands: commands with a parser, real operational handler, fail-closed
@@ -94,7 +125,7 @@ boundline preview trace ...
 The preview gateway is intentionally absent from stable root help and stable
 completion metadata. Use `boundline preview --help` to inspect it.
 
-## 5. Inspect and exercise the M1D bridge
+## 6. Inspect and exercise the M1D bridge
 
 M1D adds repository-local library APIs; it does not add a stable CLI command:
 
@@ -126,7 +157,7 @@ Run the bridge and forced-termination matrix with:
 cargo test --test bridge_090 --all-features
 ```
 
-## 6. Verify the M1E package candidates
+## 7. Verify the M1E package candidates
 
 T019 aligns the Boundline and Canon workspaces to `0.90.0`, qualifies exact
 local candidates for `boundline-protocol` and `canon-contracts`, and replaces
@@ -147,7 +178,7 @@ publish the exact reviewed contract artifacts, retrieve and test them from the
 real registry, create annotated cryptographically signed `0.90.0` tags at the
 reviewed source commits, verify the signatures, and push without force.
 
-## 7. Exercise mutation in disposable fixtures
+## 8. Exercise mutation in disposable fixtures
 
 Each transaction fixture must create:
 
@@ -168,7 +199,7 @@ surviving child -> reconciliation waits
 changed crash state -> uncommitted_candidate
 ```
 
-## 8. Exercise publication recovery
+## 9. Exercise publication recovery
 
 Inject termination:
 
@@ -182,7 +213,7 @@ between each per-path validation, replacement, index update, and ref update
 Every case must complete, restore the prior authoritative state, or preserve
 unexplained state without destructive action.
 
-## 9. Qualify cross-repository completion
+## 10. Qualify cross-repository completion
 
 The RC vertical slice must:
 
@@ -195,7 +226,7 @@ The RC vertical slice must:
 7. Verify exactly one decision-memory outcome.
 8. Compare normalized CLI, JSON-RPC, MCP, and five host-pack projections.
 
-## 10. Freeze the RC
+## 11. Freeze the RC
 
 After `1.0.0-rc.1`, accept only corrections required to satisfy an already
 frozen stable contract. Run the complete Linux, macOS, Windows, migration,
