@@ -1,12 +1,17 @@
 # M1E-A Versioning and Package-Readiness Evidence
 
 **Evidence date**: 2026-07-27  
-**Owning tasks**: T019 complete; T020 incomplete and `READY_TO_PUBLISH`  
-**Decision**: GO M1E-A  
+**Owning tasks at this snapshot**: T019 complete; T020 incomplete and
+`READY_TO_PUBLISH`
+
+**Decision at this snapshot**: GO M1E-A
+
 **Branch**: `083-governed-1-0-release` in all three repositories
 
 This record preserves the reversible M1E-A work. It is not public-registry,
-tag-signature, or remote-push evidence.
+tag-signature, or remote-push evidence. The immutable T020 completion addendum
+at the end records the later irreversible execution without rewriting this
+readiness snapshot.
 
 ## Scope and preconditions
 
@@ -316,3 +321,110 @@ Three distinct review passes were completed before closure:
 
 No Critical or Important finding remains. T019 is complete. T020 is
 `READY_TO_PUBLISH`, not complete.
+
+## T020 completion addendum
+
+**Execution date**: 2026-07-28
+
+**Owning task**: T020 complete
+
+**Decision**: GO T020
+
+This addendum records the separately authorized irreversible execution. It
+does not alter the M1E-A observations above.
+
+### Historical blocks and recovery
+
+The first T020 attempt was correctly blocked because normal DNS resolution for
+`crates.io` and `index.crates.io` failed and no readable Cargo credential
+source was configured. A diagnostic request through an explicit IP was not
+accepted as release connectivity evidence. Those failures caused no upload,
+tag, or remote mutation.
+
+After normal DNS was restored and a user-only Cargo credential source was
+configured, the release preflight passed using ordinary hostname and
+certificate validation. The credential file was readable by Cargo with mode
+`0600`; no token value was printed, logged, committed, or passed as a process
+argument. A subsequent publication request reached crates.io but was rejected
+with HTTP 400 because the account email was not yet verified. That attempt
+created no version. The preceding HTTP 404 namespace observations remained
+point-in-time evidence only. After the operator verified the account email,
+both namespaces were refreshed and the exact versions were still absent before
+the successful retry.
+
+| Gate | Command or check | Time (UTC) | Result |
+|---|---|---|---|
+| DNS | normal resolver lookup for `crates.io`, `index.crates.io`, and configured Git hosts | 2026-07-28 before 08:01 | PASS after the historical failure |
+| TLS | HTTPS requests to crates.io API and index using normal certificate validation | 2026-07-28 before 08:01 | PASS |
+| Cargo registry | crates.io metadata refresh | 2026-07-28 before 08:01 | PASS |
+| Credentials | Cargo credential-source presence and permission check; secret content not read into evidence | 2026-07-28 before 08:01 | PASS |
+| Namespace | exact-version API lookup immediately before each publish | 2026-07-28 | HTTP 404 / version absent |
+
+### Repository and artifact gates
+
+The three feature branches were pushed without force and their remote tips
+matched the reviewed local heads before publication:
+
+| Repository | Remote feature-branch tip | Qualified source/tag target | Source-to-tip classification |
+|---|---|---|---|
+| Boundline | `70550b5041e6c2c03d5fd3793f3ccf8c6d678623` | `860b7247d8343c63dca2940a923b58f3172632f9` | documentation and M1 closure evidence only; source target is an ancestor |
+| Canon | `39ac51d764bc7e2f9d7f09dc4fe54eca00386e18` | `bd361d7e2ad112e5e0d599267e8024e748293605` | documentation and M1 closure evidence only; source target is an ancestor |
+| Speckit adapter | `ce7cb2e57c7ad8bd38064c684a4736029397756c` | same commit | reviewed registry-dependency qualification source |
+
+Detached clean worktrees at the two qualified source commits reproduced the
+reviewed archives exactly. Generated manifests and inventories contained no
+path or Git dependency, developer-local path, credential, cache, target,
+coverage output, or temporary state. Extracted-package builds and tests passed.
+
+| Package | Source | Artifact SHA-256 | Normalized payload | Tests |
+|---|---|---|---|---:|
+| `boundline-protocol 0.90.0` | `860b7247d8343c63dca2940a923b58f3172632f9` | `3bde42852595c53b256afb1d459f3e9e2f0994ed4f401f6161cb266044f0ae07` | `ed1c2cd636a835a07ba0b51c549aeecff19f18a5dd90ed966b7116f706dc43d8` | 13 passed |
+| `canon-contracts 0.90.0` | `bd361d7e2ad112e5e0d599267e8024e748293605` | `f6874bfbeca46f10307a9345c7aba84ba9d67fbb0b7a83b1eb6e1d3e17d44680` | `681e6248d98959046a2adc40deee78cff1b8665968c85028fd382132d4b366e7` | 8 passed |
+
+Both detached trees passed format, Clippy with warnings denied, focused
+all-feature tests, cargo-deny, `cargo publish --dry-run --locked`, package
+inventory inspection, and extracted-package verification before upload.
+Boundline retained only its documented duplicate-version warnings; no failure
+was converted to success.
+
+### Registry publication and consumers
+
+| Package | Publish command | Start–end (UTC) | Exit | crates.io `published_at` | Owner |
+|---|---|---|---:|---|---|
+| `boundline-protocol 0.90.0` | `cargo publish --locked -p boundline-protocol` | 08:01:53–08:01:56 | 0 | `2026-07-28T08:01:55.500352Z` | `robertotru` |
+| `canon-contracts 0.90.0` | `cargo publish --locked -p canon-contracts` | 08:05:25–08:05:28 | 0 | `2026-07-28T08:05:26.977508Z` | `robertotru` |
+
+Neither successful command had an ambiguous result. Both registry versions are
+unyanked. The crates.io checksum and the independently downloaded archive hash
+equal the reviewed artifact SHA-256 for each package.
+
+Clean consumers used exact `=0.90.0` requirements, isolated Cargo homes, fresh
+lockfiles, and registry-only metadata. No path, Git, workspace, or patch source
+was present.
+
+| Consumer | Lockfile SHA-256 | Online | Offline | Downloaded archive |
+|---|---|---|---|---|
+| Boundline protocol | `f1c6ba7fd9bbb9690c714ac5bba96bac3a996d03f39cd806b08052150472f2a8` | build and 1 test PASS | build and 1 test PASS | exact reviewed SHA-256 |
+| Canon contracts | `d8e116eac3eeaebef20ca197d212735906560986bbf51aba97c7b5936630d62e` | build and 1 test PASS | build and 1 test PASS | exact reviewed SHA-256 |
+| Speckit adapter | `b4a8b221e8f85421cc0c4b0f7575752b318f30e3007e810cc23f19e1e704a3c3` | build and 23 tests PASS | build and 23 tests PASS | protocol resolved only from crates.io |
+
+The adapter remained unpublished.
+
+### Signed tags and remote verification
+
+Both repositories use the signed annotated tag `0.90.0`. The signer key
+fingerprint is
+`16A8F86BAA21130A2657B41B25C2C7D21E91FD50`.
+
+| Repository | Tag object | Target | Remote result |
+|---|---|---|---|
+| Boundline | `27ed5a17c34016554186eab84288021903d300c3` | `860b7247d8343c63dca2940a923b58f3172632f9` | isolated fetch matched object and target; signature PASS |
+| Canon | `cf68539f9e326b8542576319eff7bb8120c77153` | `bd361d7e2ad112e5e0d599267e8024e748293605` | isolated fetch matched object and target; signature PASS |
+
+Each tag message records package/version, source commit, artifact SHA-256,
+normalized payload digest, and provenance-manifest digest. Each tag was pushed
+individually without force. Boundline's push gate passed 2,719 tests with 2
+skipped; Canon's passed 1,715 tests with none skipped. No adapter tag was
+created.
+
+T020 is complete. T021 and all later tasks remain unstarted.

@@ -139,3 +139,22 @@ The later T020 operator must:
 
 Publication is irreversible. Package upload, final tag creation, commit push,
 and tag push always require a separate explicit approval.
+
+### 0.90.0 contract-package publication record
+
+T020 completed on 2026-07-28 under separate explicit approval. The published
+packages are `boundline-protocol 0.90.0` and `canon-contracts 0.90.0`; the
+Speckit adapter was qualified against the crates.io protocol package but was
+not published.
+
+The Boundline tag `0.90.0` is signed and targets
+`860b7247d8343c63dca2940a923b58f3172632f9`. Its tag object is
+`27ed5a17c34016554186eab84288021903d300c3`. The Canon tag with the same name
+targets `bd361d7e2ad112e5e0d599267e8024e748293605`, with tag object
+`cf68539f9e326b8542576319eff7bb8120c77153`. Both remote tags were fetched into
+isolated verification namespaces and passed target, object-identity, and GPG
+signature checks.
+
+The complete registry checksums, consumer lockfile digests, timestamps, and
+historical preflight failures are retained in
+`specs/083-governed-1-0-release/evidence/m1e-package-readiness.md`.

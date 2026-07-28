@@ -35,13 +35,14 @@ Release metadata note:
   exact registry-compatible workspace dependency requirements and the public
   `boundline-protocol` package metadata.
 - Aligned assistant and distribution package metadata with the prerelease
-  train. Public registry publication and the matching signed tag remain gated
-  by T020 and were not performed by this change.
+  train.
 - Qualified a reproducible `boundline-protocol-0.90.0.crate` candidate from
   source commit `860b7247d8343c63dca2940a923b58f3172632f9`, including
-  extracted-package tests and clean registry-shaped consumers. T020 is
-  `READY_TO_PUBLISH`, but the package and signed `0.90.0` tag do not yet exist
-  on the public release surfaces.
+  extracted-package tests and clean registry-shaped consumers.
+- Published `boundline-protocol 0.90.0` to crates.io on 2026-07-28, verified
+  its exact registry checksum through clean online and offline consumers, and
+  pushed the signed annotated `0.90.0` source tag after independent remote
+  object, target, and signature verification.
 
 ## [0.80.0] - 2026-06-17
 
