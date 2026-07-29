@@ -109,8 +109,8 @@ creates exactly one decision-memory event.
 - [x] T052 [US3] Replace synthetic Copilot verification, reviewer stubs, MCP stubs, and unimplemented stable verify behavior with deterministic validation or explicit unsupported status in `canon:crates/canon-adapters/src/reviewer.rs`, `canon:crates/canon-adapters/src/mcp_stdio.rs`, and `canon:crates/canon-cli/src/commands/verify.rs`
 - [x] T053 [P] [US3] Add structural, cross-packet, authority, required-evidence, and stale-propagation corpus tests in `canon:tests/golden/deterministic_governance.rs`
 - [x] T054 [US3] Implement typed governance bundles, deterministic validators, decision-memory graph, and stale propagation in `canon:crates/canon-engine/src/decision_memory/mod.rs`
-- [ ] T055 [P] [US3] Add CLI and one-shot RPC contract tests for all stable Canon commands and operations in `canon:tests/contract/stable_surface.rs`
-- [ ] T056 [US3] Implement standalone Canon CLI commands and exactly-one-request JSON RPC dispatch in `canon:crates/canon-cli/src/commands.rs` and `canon:crates/canon-cli/src/rpc.rs`
+- [x] T055 [P] [US3] Add CLI and one-shot RPC contract tests for all stable Canon commands and operations in `canon:tests/contract/stable_surface.rs`
+- [x] T056 [US3] Implement standalone Canon CLI commands and exactly-one-request JSON RPC dispatch in `canon:crates/canon-cli/src/commands.rs` and `canon:crates/canon-cli/src/rpc.rs`
 - [ ] T057 [P] [US3] Add Canon outcome outbox tests for retry, duplicate delivery, digest conflict, permanent rejection, evidence retention, and authorized archival in `boundline:tests/integration/canon_outcome_sync.rs`
 - [ ] T058 [US3] Implement the durable outcome outbox and status projection in `boundline:crates/boundline-core/src/publication/canon_outbox.rs`
 - [ ] T059 [US3] Implement transactional outcome ingestion and decision-memory revision responses in `canon:crates/canon-engine/src/decision_memory/outcome.rs`
