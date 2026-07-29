@@ -301,3 +301,26 @@ source through a journaled rename boundary, and completion is persisted only
 after reopening and validating the target. An exclusive OS-backed ownership
 lock prevents competing commits. Recovery uses only a matching durable journal
 after the prior OS owner has released the lock; unexplained state is preserved.
+
+## Canon 0.91 Terminal Outcome Exchange
+
+`RecordOutcomeRequest` carries the event identity and digest, Boundline source
+and clone-local repository identity, governance bundle identity and digest,
+session and final transaction revision, terminal status, optional published
+commit and final fingerprint, proof references, deviations, terminal claims,
+authority and optional approval bindings, challenge binding, producer/reviewer
+lineage, and an optional authoritative occurrence time.
+
+Accepted terminal values are `published`, `no_change`, `failed`, `cancelled`,
+and `rejected`. `published` requires both commit and fingerprint; `no_change`
+requires a fingerprint and forbids a commit; the remaining accepted values
+forbid a commit. Closed candidates `blocked` and `stale` are nonterminal and
+fail with `nonterminal_outcome`.
+
+`RecordOutcomeResponse` carries the same event identity and digest, a
+`recorded`, `replayed`, or `rejected` disposition, the decision-memory revision
+and digest only for recorded/replayed outcomes, a stable reason only for
+rejection, and typed next actions. The event digest uses domain
+`canon-boundline-outcome-c14n-v1`, recursively sorted JSON object keys,
+preserved semantic sequence order, sorted duplicate-free set fields, integers
+only, and SHA-256.

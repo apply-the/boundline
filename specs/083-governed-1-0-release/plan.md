@@ -229,3 +229,16 @@ cross their ownership boundaries without a contract change reviewed in M1.
 | Three repositories in one roadmap | The stable authority and adapter boundaries cannot be qualified in isolation | Separate milestone owners and published contracts; no new repository |
 | Canon integration vs. external-system independence | Decision memory must record the actual outcome | Durable idempotent outbox; publication never rolls back or blocks on temporary Canon failure |
 | Concurrent sessions vs. sequential-first constitution | Sessions may prepare independently, but mutation of one session and publication of one repository remain serialized | One executor per session and one publisher per local repository; no hidden fan-out |
+
+## M2b-C0-A Contract Amendment
+
+M2b-C is gated by a public outcome-recording contract rather than a private
+wire format. T097 freezes `record_outcome` in `canon-contracts 0.91.0`; T098
+makes it capability-discoverable but unavailable until T059 installs
+transactional ingestion. T099 publishes and verifies that exact package before
+T057-T059 begin.
+
+The dependency chain is `T097 -> T098 -> T099 -> T057/T058/T059`. The workspace
+version follows 0.91 because Canon packages inherit one workspace version. The
+wire envelope stays V1 (`"1.0"`), the six 0.90 operations keep exact semantics,
+and `publish` remains read-only.

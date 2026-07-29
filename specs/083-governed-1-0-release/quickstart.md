@@ -144,6 +144,23 @@ unregistered in M2b-B because T056 owns only the frozen JSON one-shot
 transport. Full evidence is in
 [`evidence/m2b-b-canon-cli-rpc.md`](evidence/m2b-b-canon-cli-rpc.md).
 
+### 6.1 Inspect the M2b-C0-A 0.91 amendment
+
+The historical M2b-B evidence remains the six-operation 0.90 record. The 0.91
+contract inventory is:
+
+```text
+capabilities start refresh approve inspect publish record_outcome
+```
+
+Before T059, inspect capabilities to confirm `record_outcome` is present but
+unavailable. A direct valid request must return rejected
+`unsupported_operation`, with no decision-memory revision or digest and no
+state snapshot. Contract fields, terminal invariants, digest rules, package
+readiness, and the T099 stop conditions are recorded in
+[`contracts/canon-contracts-v1.md`](contracts/canon-contracts-v1.md) and
+[`evidence/m2b-c0-outcome-contract-amendment.md`](evidence/m2b-c0-outcome-contract-amendment.md).
+
 ## 7. Keep M1C help honest
 
 At 0.90, stable help and completion metadata list only StableOperational

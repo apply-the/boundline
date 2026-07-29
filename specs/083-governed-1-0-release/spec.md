@@ -176,6 +176,20 @@ As a maintainer, I can migrate supported recent releases and qualify the 1.0 rel
 - **SC-012**: No nonterminal or unsynchronized session worktree can be removed through the stable cleanup surface.
 - **SC-013**: Stable help and completion metadata contain exactly the StableOperational surface for the current release milestone; the documented 1.0 target inventory separately records every StableTargetPending command without claiming operational availability.
 
+## Canon 0.91 Outcome Contract Amendment
+
+- **FR-037**: Canon's one-shot 0.91 operation inventory MUST be the historical
+  six operations plus additive `record_outcome`; the existing six semantics,
+  human CLI roots, and V1 envelope MUST remain unchanged.
+- **FR-038**: `record_outcome` MUST use public typed request and response DTOs,
+  a domain-separated canonical digest, closed terminal invariants, and stable
+  rejection reason codes. A private integration wire format is forbidden.
+- **FR-039**: Before transactional ingestion is installed by T059,
+  `record_outcome` MUST be discoverable as unavailable and MUST return typed
+  non-success without creating a decision-memory revision.
+- **FR-040**: The published `canon-contracts 0.90.0` artifact and signed tag
+  MUST remain immutable; the additive Rust API is released as 0.91.0.
+
 ## Assumptions
 
 - Boundline, Canon, and the Speckit adapter remain separate repositories.

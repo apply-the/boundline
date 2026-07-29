@@ -21,7 +21,7 @@ One-shot machine interface:
 canon rpc --stdio
 ```
 
-Supported operations:
+Historical 0.90 operations:
 
 ```text
 capabilities
@@ -31,6 +31,18 @@ approve
 inspect
 publish
 ```
+
+The additive 0.91 inventory appends:
+
+```text
+record_outcome
+```
+
+The six historical operation names and semantics remain exact. In particular,
+`publish` is still a read-only projection operation with an empty payload.
+Before T059, capability metadata advertises `record_outcome` as unavailable
+and direct invocation returns typed `unsupported_operation` with no durable
+decision-memory state.
 
 Stable profiles:
 
@@ -99,3 +111,9 @@ Temporary Canon failure leaves the outcome pending and never reverses a
 successful Git publication. Permanent rejection remains visible as
 `canon_outcome_sync_failed`. Authorized archival preserves the payload and
 audit trail and cannot rewrite the publication outcome.
+
+The public 0.91 exchange is frozen in
+[`canon-contracts-v1.md`](canon-contracts-v1.md). Its digest domain is
+`canon-boundline-outcome-c14n-v1`; the existing envelope remains
+`CanonContractVersion::V1`, serialized as `"1.0"`, because the amendment is
+additive and capability-discovered.

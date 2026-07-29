@@ -111,9 +111,16 @@ creates exactly one decision-memory event.
 - [x] T054 [US3] Implement typed governance bundles, deterministic validators, decision-memory graph, and stale propagation in `canon:crates/canon-engine/src/decision_memory/mod.rs`
 - [x] T055 [P] [US3] Add CLI and one-shot RPC contract tests for all stable Canon commands and operations in `canon:tests/contract/stable_surface.rs`
 - [x] T056 [US3] Implement standalone Canon CLI commands and exactly-one-request JSON RPC dispatch in `canon:crates/canon-cli/src/commands.rs` and `canon:crates/canon-cli/src/rpc.rs`
+- [x] T097 [US3] Freeze the public `record_outcome` request, response, disposition, rejection reasons, terminal-status matrix, lineage and authority bindings, and domain-separated canonical digest in `canon-contracts 0.91.0`; prove that the historical six 0.90 operations retain their exact wire values
+- [x] T098 [US3] Add `record_outcome` to the versioned capability inventory and one-shot RPC dispatch as discoverable but unavailable before T059; direct invocation returns typed `unsupported_operation`, creates no decision-memory revision, and cannot report recorded or replayed success
+- [ ] T099 [US3] **READY_TO_PUBLISH** Publish and retrieve `canon-contracts 0.91.0`, verify exact registry consumers online and offline, create and verify the signed `0.91.0` source tag, then update Boundline to the exact registry dependency `canon-contracts = "=0.91.0"`. Stop on source, artifact, checksum, consumer, registry, or signature mismatch
 - [ ] T057 [P] [US3] Add Canon outcome outbox tests for retry, duplicate delivery, digest conflict, permanent rejection, evidence retention, and authorized archival in `boundline:tests/integration/canon_outcome_sync.rs`
 - [ ] T058 [US3] Implement the durable outcome outbox and status projection in `boundline:crates/boundline-core/src/publication/canon_outbox.rs`
 - [ ] T059 [US3] Implement transactional outcome ingestion and decision-memory revision responses in `canon:crates/canon-engine/src/decision_memory/outcome.rs`
+
+Dependency order is frozen as `T097 -> T098 -> T099 -> T057/T058/T059`.
+T099 is prepared but incomplete; T057-T059 cannot start against a private or
+path-only contract.
 
 ---
 

@@ -237,7 +237,14 @@ refresh
 approve
 inspect
 publish
+record_outcome
 ```
+
+`record_outcome` is additive in `canon-contracts 0.91.0` and is discovered
+through capabilities. It remains unavailable with typed
+`unsupported_operation` until T059 installs transactional ingestion. The
+historical six operations retain their exact semantics and `publish` remains
+read-only.
 
 Canon stable profiles are exactly:
 
@@ -611,6 +618,12 @@ The outbox record is persisted before the session is considered fully synchroniz
 A temporary Canon failure never rolls back a successful workspace publication. Boundline exposes `canon_outcome_sync_pending`, retries safely, and prevents cleanup of the final evidence needed for synchronization. Permanent rejection becomes `canon_outcome_sync_failed` with an inspectable reason and operator action. Explicit archival may close a failed synchronization only with named authority and preserved payload; it cannot rewrite the publication result.
 
 Canon validates and records the outcome as decision-memory and evidence projections. Canon never applies the commit or workspace diff itself.
+
+The public request and response for this second phase are frozen as
+`record_outcome` in `canon-contracts 0.91.0`. The event digest uses
+domain-separated canonical JSON under `canon-boundline-outcome-c14n-v1`.
+`CanonContractVersion::V1` remains serialized as `"1.0"` because the operation
+is additive and capability-discovered; no existing operation is repurposed.
 
 ---
 
