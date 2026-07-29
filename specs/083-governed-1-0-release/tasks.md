@@ -107,8 +107,8 @@ creates exactly one decision-memory event.
 - [x] T050 [US3] Implement the nine-profile registry and change-vs-implementation boundary in `canon:crates/canon-engine/src/modes/mod.rs`
 - [x] T051 [P] [US3] Add tests proving external semantic evidence lineage and rejecting self-attested or internally executed semantic review in `canon:tests/contract/external_verification.rs`
 - [x] T052 [US3] Replace synthetic Copilot verification, reviewer stubs, MCP stubs, and unimplemented stable verify behavior with deterministic validation or explicit unsupported status in `canon:crates/canon-adapters/src/reviewer.rs`, `canon:crates/canon-adapters/src/mcp_stdio.rs`, and `canon:crates/canon-cli/src/commands/verify.rs`
-- [ ] T053 [P] [US3] Add structural, cross-packet, authority, required-evidence, and stale-propagation corpus tests in `canon:tests/golden/deterministic_governance.rs`
-- [ ] T054 [US3] Implement typed governance bundles, deterministic validators, decision-memory graph, and stale propagation in `canon:crates/canon-engine/src/decision_memory/mod.rs`
+- [x] T053 [P] [US3] Add structural, cross-packet, authority, required-evidence, and stale-propagation corpus tests in `canon:tests/golden/deterministic_governance.rs`
+- [x] T054 [US3] Implement typed governance bundles, deterministic validators, decision-memory graph, and stale propagation in `canon:crates/canon-engine/src/decision_memory/mod.rs`
 - [ ] T055 [P] [US3] Add CLI and one-shot RPC contract tests for all stable Canon commands and operations in `canon:tests/contract/stable_surface.rs`
 - [ ] T056 [US3] Implement standalone Canon CLI commands and exactly-one-request JSON RPC dispatch in `canon:crates/canon-cli/src/commands.rs` and `canon:crates/canon-cli/src/rpc.rs`
 - [ ] T057 [P] [US3] Add Canon outcome outbox tests for retry, duplicate delivery, digest conflict, permanent rejection, evidence retention, and authorized archival in `boundline:tests/integration/canon_outcome_sync.rs`

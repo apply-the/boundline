@@ -192,6 +192,27 @@ Canon checks policy satisfaction but does not produce this evidence itself.
 - relationships and supersession links
 - freshness and stale reason
 
+### DecisionMemoryGraph
+
+- schema and canonicalization versions
+- typed nodes for decisions, packets, artifacts, claims, evidence, approvals,
+  verification requirements, assumptions, alternatives, triggers, and risk
+  acceptances
+- typed dependency edges with packet-local authority and evidence bindings
+- deterministic node, edge, projection, and graph digests
+- append-only ordered journal entries for bundle admission, validation, stale
+  propagation, and supersession
+- transitive, branch-local, idempotent stale propagation
+- exact replay state containing admitted bundle roots and the complete journal
+- crash-consistent snapshot persisted at
+  `.canon/decision-memory/state.json`
+
+The graph rejects conflicting identities, malformed topology, cycles,
+cross-packet authority borrowing, incomplete evidence, and replay divergence.
+Every deterministic validation result records zero process, network, provider
+credential, and evidence-creation activity. Human or model-assisted semantic
+judgment remains external evidence and is never executed by this graph.
+
 ### PublicationOutcomeProjection
 
 - idempotent event identity and digest

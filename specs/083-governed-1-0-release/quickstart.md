@@ -82,7 +82,40 @@ absent until their later owner task.
 The complete M2a acceptance record is
 [`evidence/m2a-canon-profiles-verification.md`](evidence/m2a-canon-profiles-verification.md).
 
-## 5. Keep M1C help honest
+## 5. Exercise M2b-A deterministic decision memory
+
+Construct a typed governance bundle with one of the nine stable profiles and
+admit it through Canon's decision-memory validator. Admission runs the frozen
+deterministic phases in order:
+
+```text
+structural
+cross-packet
+authority
+required-evidence
+freshness
+```
+
+The resulting graph contains typed nodes and dependency edges, a versioned
+canonical digest, and an ordered journal. Change any normative dependency and
+propagate staleness before revalidation. Repeating the same propagation is
+idempotent; conflicting identities, malformed cycles, authority borrowed from
+another packet, and evidence with an inexact binding fail closed.
+
+Persisted state lives at `.canon/decision-memory/state.json`. Canon writes a
+same-directory temporary snapshot, synchronizes it, atomically renames it, and
+synchronizes the parent directory. Reload must reproduce admitted bundle roots,
+the complete journal, terminal validation, projections, and graph digest
+exactly; torn or topologically inconsistent snapshots are rejected.
+
+M2b-A does not add CLI, RPC, MCP, outcome ingestion, or semantic-review
+execution. Every validation audit must retain zero process, network, provider
+credential, and evidence-creation activity.
+
+The complete M2b-A acceptance record is
+[`evidence/m2b-a-deterministic-governance.md`](evidence/m2b-a-deterministic-governance.md).
+
+## 6. Keep M1C help honest
 
 At 0.90, stable help and completion metadata list only StableOperational
 commands: commands with a parser, real operational handler, fail-closed
@@ -125,7 +158,7 @@ boundline preview trace ...
 The preview gateway is intentionally absent from stable root help and stable
 completion metadata. Use `boundline preview --help` to inspect it.
 
-## 6. Inspect and exercise the M1D bridge
+## 7. Inspect and exercise the M1D bridge
 
 M1D adds repository-local library APIs; it does not add a stable CLI command:
 
@@ -157,7 +190,7 @@ Run the bridge and forced-termination matrix with:
 cargo test --test bridge_090 --all-features
 ```
 
-## 7. Verify the M1E package candidates
+## 8. Verify the M1E package candidates
 
 T019 aligns the Boundline and Canon workspaces to `0.90.0`, qualifies exact
 local candidates for `boundline-protocol` and `canon-contracts`, and replaces
@@ -178,7 +211,7 @@ publish the exact reviewed contract artifacts, retrieve and test them from the
 real registry, create annotated cryptographically signed `0.90.0` tags at the
 reviewed source commits, verify the signatures, and push without force.
 
-## 8. Exercise mutation in disposable fixtures
+## 9. Exercise mutation in disposable fixtures
 
 Each transaction fixture must create:
 
@@ -199,7 +232,7 @@ surviving child -> reconciliation waits
 changed crash state -> uncommitted_candidate
 ```
 
-## 9. Exercise publication recovery
+## 10. Exercise publication recovery
 
 Inject termination:
 
@@ -213,7 +246,7 @@ between each per-path validation, replacement, index update, and ref update
 Every case must complete, restore the prior authoritative state, or preserve
 unexplained state without destructive action.
 
-## 10. Qualify cross-repository completion
+## 11. Qualify cross-repository completion
 
 The RC vertical slice must:
 
@@ -226,7 +259,7 @@ The RC vertical slice must:
 7. Verify exactly one decision-memory outcome.
 8. Compare normalized CLI, JSON-RPC, MCP, and five host-pack projections.
 
-## 11. Freeze the RC
+## 12. Freeze the RC
 
 After `1.0.0-rc.1`, accept only corrections required to satisfy an already
 frozen stable contract. Run the complete Linux, macOS, Windows, migration,
