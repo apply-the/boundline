@@ -175,7 +175,7 @@ Cargo.toml SHA-256: 10cb130804af53215e5b889d44211bcc12cea2c56a24d7b965829a8da990
 Cargo.lock SHA-256: 00e88e6bf7a7cbc4d104d8a4dd742d1c4a33b6538ee0a27377a40d7c6517ead7
 artifact SHA-256: ec789921edf1ac39028cfb68107d5e09d425d4efab95b13292102703aca155ed
 normalized payload SHA-256: f45c4689f6a255e53723c3b2eeb72958e93b512dbf943e125e1b16f69eb746e9
-provenance manifest SHA-256: f2cb4ba8607f7463d780fb6d6e66a1a309d9a540b465749720cee912261a8aca
+provenance manifest SHA-256: 78e2d6f8b6f580bcd123c8e7bdc7ac80bef00059dd7058c8e0acd15253dcc414
 ```
 
 Two successive package runs were byte-identical. The archive contains 16
@@ -247,3 +247,20 @@ T099 remains incomplete and `READY_TO_PUBLISH`. Its irreversible sequence is:
 
 Any source, artifact, checksum, registry, consumer, or signature mismatch
 stops T099. Only after T099 closes may T057-T059 begin.
+
+## T100 provenance correction
+
+The first T099 execution stopped at Gate 4 on 2026-07-30 because the
+previously frozen provenance-manifest digest
+`f2cb4ba8607f7463d780fb6d6e66a1a309d9a540b465749720cee912261a8aca`
+could not be reproduced. No upload, tag, Boundline dependency change, or
+T057-T059 work occurred.
+
+T100 supersedes only that incorrect readiness value. The normative digest is
+SHA-256 over the eight documented UTF-8 values, in order, with one newline
+after every value including the final normalized-payload digest. Its
+reproducible result is
+`78e2d6f8b6f580bcd123c8e7bdc7ac80bef00059dd7058c8e0acd15253dcc414`.
+All package inputs and the candidate artifact remain unchanged. The complete
+correction and historical failure evidence is recorded in
+[`t100-canon-0.91-provenance-digest-amendment.md`](t100-canon-0.91-provenance-digest-amendment.md).
