@@ -319,6 +319,52 @@ fn transient_fault_windows_are_durable_and_explicitly_retryable() -> TestResult 
 }
 
 #[test]
+fn retry_policy_refuses_early_delivery_and_exhausts_the_finite_budget() -> TestResult {
+    let root = tempfile::tempdir()?;
+    let request = request_for(EVENT_ID, TerminalOutcomeStatus::Published)?;
+    let outbox = CanonOutcomeOutbox::open(root.path())?;
+    outbox.enqueue_terminal_outcome(request)?;
+    let failure = TransportFailure::new(
+        TransportFailureKind::BeforeProcessStart,
+        "controlled unavailable Canon runtime",
+    );
+    let mut transport = ScriptedTransport::new(vec![
+        Err(failure.clone()),
+        Err(failure.clone()),
+        Err(failure.clone()),
+        Err(failure.clone()),
+        Err(failure),
+    ]);
+    let mut now = NOW_MS;
+
+    for attempt in 1..=5 {
+        let result = outbox.deliver_once(EVENT_ID, &mut transport, &FixedClock(now))?;
+        if attempt < 5 {
+            require_eq(result, DeliveryAttemptResult::RetryScheduled, "retryable attempt")?;
+            let retry_at = outbox.load(EVENT_ID)?.next_retry_at_ms.ok_or("retry missing")?;
+            require_eq(
+                outbox.deliver_once(EVENT_ID, &mut transport, &FixedClock(retry_at - 1))?,
+                DeliveryAttemptResult::NotEligible,
+                "early retry",
+            )?;
+            now = retry_at;
+        } else {
+            require_eq(result, DeliveryAttemptResult::RetryExhausted, "finite retry budget")?;
+        }
+    }
+
+    require_eq(transport.calls(), 5, "transport attempt budget")?;
+    require_eq(
+        outbox.deliver_once(EVENT_ID, &mut transport, &FixedClock(now + 1))?,
+        DeliveryAttemptResult::RetryExhausted,
+        "exhausted terminal replay",
+    )?;
+    let record = outbox.load(EVENT_ID)?;
+    require_eq(record.state, OutboxState::PermanentRejected, "exhausted state")?;
+    require_eq(record.attempt_history.len(), 5, "durable attempt history")
+}
+
+#[test]
 fn mismatched_response_identity_is_durably_retryable() -> TestResult {
     let root = tempfile::tempdir()?;
     let request = request_for(EVENT_ID, TerminalOutcomeStatus::Published)?;
@@ -461,6 +507,158 @@ fn archival_is_authorized_durable_and_non_destructive() -> TestResult {
             )
             .is_err(),
         "active record was archived",
+    )
+}
+
+#[test]
+fn status_projection_and_archive_authority_fail_closed() -> TestResult {
+    let root = tempfile::tempdir()?;
+    let outbox = CanonOutcomeOutbox::open(root.path())?;
+    require_eq(
+        outbox.sync_status(None)?,
+        CanonOutcomeSyncStatus::NotRequired,
+        "no outcome projection",
+    )?;
+    let request = request_for(EVENT_ID, TerminalOutcomeStatus::Published)?;
+    outbox.enqueue_terminal_outcome(request.clone())?;
+    let mut transport = ScriptedTransport::new(vec![Ok(rejected_response(
+        &request,
+        RecordOutcomeRejectionReason::InvalidOutcome,
+    ))]);
+    outbox.deliver_once(EVENT_ID, &mut transport, &FixedClock(NOW_MS))?;
+    require_eq(
+        outbox.sync_status(Some(EVENT_ID))?,
+        CanonOutcomeSyncStatus::Failed,
+        "permanent rejection projection",
+    )?;
+
+    for authorization in [
+        ArchiveAuthorization::new("", "retention complete", NOW_MS + 1),
+        ArchiveAuthorization::new("release-owner", "", NOW_MS + 1),
+        ArchiveAuthorization::new("release-owner", "retention complete", 0),
+    ] {
+        require(
+            matches!(
+                outbox.archive_outbox_record(EVENT_ID, authorization),
+                Err(OutboxError::ArchiveNotPermitted)
+            ),
+            "invalid archive authority was accepted",
+        )?;
+    }
+
+    outbox.archive_outbox_record(
+        EVENT_ID,
+        ArchiveAuthorization::new("release-owner", "retention complete", NOW_MS + 1),
+    )?;
+    require_eq(
+        outbox.sync_status(Some(EVENT_ID))?,
+        CanonOutcomeSyncStatus::NotRequired,
+        "archived projection",
+    )
+}
+
+#[test]
+fn real_transport_enforces_the_configured_response_limit() -> TestResult {
+    let Some(executable) = std::env::var_os("BOUNDLINE_CANON_TEST_BINARY") else {
+        return Ok(());
+    };
+    let workspace = tempfile::tempdir()?;
+    admit_real_governance_bundle(&executable, workspace.path())?;
+    let snapshot: serde_json::Value = serde_json::from_slice(&std::fs::read(
+        workspace.path().join(".canon/decision-memory/state.json"),
+    )?)?;
+    let contract = &snapshot["snapshot"]["admitted_bundles"][0]["contract"];
+    let bundle_id = contract["bundle_id"].as_str().ok_or("bundle id missing")?;
+    let bundle_digest = contract["bundle_digest"].as_str().ok_or("bundle digest missing")?;
+    let mut request =
+        request_for("outcome-event-response-limit", TerminalOutcomeStatus::Published)?;
+    request.governance_bundle_id = BundleId::new(bundle_id);
+    request.governance_bundle_digest = BundleDigest::new(bundle_digest);
+    request.recompute_event_digest()?;
+    let mut transport = CanonSubprocessTransport::new(
+        executable,
+        workspace.path(),
+        workspace.path(),
+        Duration::from_secs(20),
+    )
+    .with_max_response_bytes(1);
+
+    let error = transport.deliver(&request);
+    require(
+        matches!(error, Err(TransportFailure { kind: TransportFailureKind::ResponseRead, .. })),
+        "oversized Canon response did not fail at the response boundary",
+    )
+}
+
+#[cfg(unix)]
+#[test]
+fn subprocess_transport_classifies_process_exit_and_timeout_boundaries() -> TestResult {
+    use std::os::unix::fs::PermissionsExt;
+
+    let root = tempfile::tempdir()?;
+    let executable = root.path().join("fake-canon.sh");
+    std::fs::write(&executable, "#!/bin/sh\ncat >/dev/null\nprintf 'not-json'\nexit 7\n")?;
+    std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700))?;
+    let request = request_for("outcome-event-process-exit", TerminalOutcomeStatus::Published)?;
+    let mut transport = CanonSubprocessTransport::new(
+        &executable,
+        root.path(),
+        root.path(),
+        Duration::from_secs(5),
+    );
+    require(
+        matches!(
+            transport.deliver(&request),
+            Err(TransportFailure { kind: TransportFailureKind::ProcessExit, .. })
+        ),
+        "non-successful malformed response was not classified as process exit",
+    )?;
+
+    std::fs::write(&executable, "#!/bin/sh\ncat >/dev/null\nwhile :; do :; done\n")?;
+    let mut transport = CanonSubprocessTransport::new(
+        &executable,
+        root.path(),
+        root.path(),
+        Duration::from_millis(10),
+    );
+    require(
+        matches!(
+            transport.deliver(&request),
+            Err(TransportFailure { kind: TransportFailureKind::Timeout, .. })
+        ),
+        "overdue Canon process was not terminated at the deadline",
+    )
+}
+
+#[test]
+fn persisted_identity_and_schema_tampering_fail_closed() -> TestResult {
+    let root = tempfile::tempdir()?;
+    let outbox = CanonOutcomeOutbox::open(root.path())?;
+    outbox.enqueue_terminal_outcome(request_for(EVENT_ID, TerminalOutcomeStatus::Published)?)?;
+    require(
+        matches!(outbox.load("missing-event"), Err(OutboxError::NotFound)),
+        "missing record did not fail closed",
+    )?;
+    let records = root.path().join("canon-outbox/records");
+    let path = std::fs::read_dir(records)?.next().ok_or("persisted record missing")??.path();
+    let original = std::fs::read(&path)?;
+    let mut persisted: serde_json::Value = serde_json::from_slice(&original)?;
+    persisted["request"]["event_id"] = serde_json::Value::String("changed-event".to_owned());
+    std::fs::write(&path, serde_json::to_vec_pretty(&persisted)?)?;
+    require(
+        matches!(
+            outbox.load(EVENT_ID),
+            Err(OutboxError::IdentityDigestConflict | OutboxError::Serialization(_))
+        ),
+        "persisted identity tampering was accepted",
+    )?;
+
+    persisted = serde_json::from_slice(&original)?;
+    persisted["schema_version"] = serde_json::Value::String("future-outbox-v2".to_owned());
+    std::fs::write(&path, serde_json::to_vec_pretty(&persisted)?)?;
+    require(
+        matches!(outbox.load(EVENT_ID), Err(OutboxError::IdentityDigestConflict)),
+        "unsupported persistence schema was accepted",
     )
 }
 
