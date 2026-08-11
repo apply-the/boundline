@@ -35,6 +35,7 @@ boundline-core = { version = "=0.90.0", path = "crates/boundline-core" }
 boundline-adapters = { version = "=0.90.0", path = "crates/boundline-adapters" }
 boundline-cli = { version = "=0.90.0", path = "crates/boundline-cli" }
 boundline-protocol = { version = "=0.90.0", path = "crates/boundline-protocol" }
+canon-contracts = "=0.91.0"
 
 [workspace.lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage)'] }

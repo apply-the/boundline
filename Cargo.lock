@@ -217,6 +217,7 @@ name = "boundline-core"
 version = "0.90.0"
 dependencies = [
  "boundline-protocol",
+ "canon-contracts",
  "clap",
  "rust_decimal",
  "serde",
@@ -269,6 +270,17 @@ name = "bytes"
 version = "1.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e748733b7cbc798e1434b6ac524f0c1ff2ab456fe201501e6497c8417a4fc33"
+
+[[package]]
+name = "canon-contracts"
+version = "0.91.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ec789921edf1ac39028cfb68107d5e09d425d4efab95b13292102703aca155ed"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2",
+]
 
 [[package]]
 name = "cc"
