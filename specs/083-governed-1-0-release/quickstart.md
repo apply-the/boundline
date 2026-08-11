@@ -153,11 +153,13 @@ contract inventory is:
 capabilities start refresh approve inspect publish record_outcome
 ```
 
-Before T059, inspect capabilities to confirm `record_outcome` is present but
-unavailable. A direct valid request must return rejected
-`unsupported_operation`, with no decision-memory revision or digest and no
-state snapshot. Contract fields, terminal invariants, digest rules, package
-readiness, and the T099 stop conditions are recorded in
+The historical T098 readiness evidence confirms the pre-handler state. After
+T059, inspect capabilities to confirm `record_outcome` is present and
+available, then submit the same valid request twice. The first response must
+be `recorded`; the exact retry must be `replayed` with the same
+decision-memory revision and digest and only one `outcome_recorded` journal
+event. Contract fields, terminal invariants, digest rules, package readiness,
+and the T099 stop conditions are recorded in
 [`contracts/canon-contracts-v1.md`](contracts/canon-contracts-v1.md) and
 [`evidence/m2b-c0-outcome-contract-amendment.md`](evidence/m2b-c0-outcome-contract-amendment.md).
 
@@ -166,6 +168,23 @@ package, verified its signed source tag, and pinned `boundline-core` to the
 exact registry version without starting outcome delivery or ingestion. The
 complete publication and consumer record is
 [`evidence/t099-canon-0.91-publication.md`](evidence/t099-canon-0.91-publication.md).
+
+### 6.2 Qualify durable outcome synchronization
+
+Run the focused Boundline contract against the real Canon binary:
+
+```bash
+cargo build --manifest-path ../canon/Cargo.toml --bin canon
+BOUNDLINE_CANON_TEST_BINARY=../canon/target/debug/canon \
+  cargo test --test canon_outcome_sync --all-features
+```
+
+The qualification covers enqueue and restart, exact replay, local and Canon
+digest conflicts, transient retries, permanent rejection, evidence retention,
+authorized archival, concurrent fencing, response loss, and exactly one Canon
+decision-memory event. The production repositories remain separate; the
+relative path above is an operator-supplied test binding, not a Cargo path
+dependency or persisted runtime path.
 
 ## 7. Keep M1C help honest
 

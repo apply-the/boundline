@@ -222,6 +222,34 @@ judgment remains external evidence and is never executed by this graph.
 - terminal claims and deviations
 - publication status
 
+### CanonOutcomeOutboxRecord
+
+- event identity and frozen 0.91 canonical request digest
+- complete portable `RecordOutcomeRequest` payload
+- `pending`, `in_flight`, `retry_scheduled`, `synchronized`,
+  `permanent_rejected`, `conflict`, or `archived` lifecycle state
+- monotonic delivery fencing token and durable attempt history
+- finite retry eligibility and next-attempt time supplied by an injected clock
+- exact Canon disposition, reason, decision-memory revision, and digest
+- named archival authority, reason, and time when archived
+
+The outbox persists `in_flight` before starting its one-shot Canon subprocess.
+An exact event/digest retry converges on the recorded Canon projection; reuse
+of an event identity with different authoritative content fails closed.
+Archival is permitted only after synchronization or permanent rejection and
+retains the complete payload, history, and evidence references.
+
+### Canon OutcomeRecorded event
+
+- complete frozen `RecordOutcomeRequest`
+- assigned decision-memory revision and deterministic decision digest
+- ordered deterministic validation-phase trace
+- zero process, network, provider-credential, and evidence-creation counters
+
+`OutcomeRecorded` shares Canon's existing atomic graph journal and snapshot.
+There is no second outcome store: replay reconstructs and validates the event,
+graph revision, terminal projection, and digest together.
+
 ## Adapter entities
 
 ### AdapterDescriptor

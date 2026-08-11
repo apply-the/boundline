@@ -115,14 +115,14 @@ creates exactly one decision-memory event.
 - [x] T098 [US3] Add `record_outcome` to the versioned capability inventory and one-shot RPC dispatch as discoverable but unavailable before T059; direct invocation returns typed `unsupported_operation`, creates no decision-memory revision, and cannot report recorded or replayed success
 - [x] T100 [US3] Recompute and freeze the `canon-contracts 0.91.0` provenance manifest digest using the normative newline-delimited algorithm with a final newline; independently reproduce the published 0.90 digest, correct every 0.91 readiness reference without changing package inputs, and restore T099 to `READY_TO_PUBLISH`
 - [x] T099 [US3] Publish and retrieve `canon-contracts 0.91.0`, verify exact registry consumers online and offline, create and verify the signed `0.91.0` source tag, then update Boundline to the exact registry dependency `canon-contracts = "=0.91.0"`. Stop on source, artifact, checksum, consumer, registry, or signature mismatch
-- [ ] T057 [P] [US3] Add Canon outcome outbox tests for retry, duplicate delivery, digest conflict, permanent rejection, evidence retention, and authorized archival in `boundline:tests/integration/canon_outcome_sync.rs`
-- [ ] T058 [US3] Implement the durable outcome outbox and status projection in `boundline:crates/boundline-core/src/publication/canon_outbox.rs`
-- [ ] T059 [US3] Implement transactional outcome ingestion and decision-memory revision responses in `canon:crates/canon-engine/src/decision_memory/outcome.rs`
+- [x] T057 [P] [US3] Add Canon outcome outbox tests for retry, duplicate delivery, digest conflict, permanent rejection, evidence retention, and authorized archival in `boundline:tests/integration/canon_outcome_sync.rs`
+- [x] T058 [US3] Implement the durable outcome outbox and status projection in `boundline:crates/boundline-core/src/publication/canon_outbox.rs`
+- [x] T059 [US3] Implement transactional outcome ingestion and decision-memory revision responses in `canon:crates/canon-engine/src/decision_memory/outcome.rs`
 
 Dependency order is frozen as
 `T097 -> T098 -> T100 -> T099 -> T057/T058/T059`.
-T099 is complete; T057-T059 may now consume the frozen public contract but
-remain separately scoped and incomplete.
+T099 is complete. T057-T059 consume the frozen public contract through a
+durable Boundline outbox and Canon's transactional decision-memory handler.
 
 ---
 

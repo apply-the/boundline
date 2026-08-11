@@ -39,15 +39,16 @@ record_outcome
 ```
 
 The public `canon-contracts 0.91.0` package is qualified from crates.io, and
-`boundline-core` owns Boundline's exact `=0.91.0` registry dependency. This is
-only the frozen exchange boundary: until T057-T059 land, Boundline has no
-outbox or delivery path and Canon has no transactional outcome ingestion.
+`boundline-core` owns Boundline's exact `=0.91.0` registry dependency.
+Boundline now persists the complete request in a durable fenced outbox and
+delivers it through a bounded one-shot subprocess. Canon records it in the
+existing atomic decision-memory graph and journal.
 
 The six historical operation names and semantics remain exact. In particular,
 `publish` is still a read-only projection operation with an empty payload.
-Before T059, capability metadata advertises `record_outcome` as unavailable
-and direct invocation returns typed `unsupported_operation` with no durable
-decision-memory state.
+Capability metadata advertises `record_outcome` as available only because its
+transactional handler is installed. Direct invocation returns a typed
+recorded, replayed, or rejected response and never reports success from a stub.
 
 Stable profiles:
 
@@ -111,6 +112,19 @@ containing:
 
 Delivery is idempotent by event identifier and canonical digest. Canon records
 the event transactionally and returns the resulting decision-memory revision.
+
+Boundline persists `in_flight` intent before execution, uses a monotonic
+fencing token under an exclusive outbox lock, and records every attempt. The
+transport permits one request and one response, separates stderr, enforces
+timeout and output bounds, and creates no retry daemon or background process.
+Finite retries use an injected clock. Lost responses and post-commit crashes
+replay the exact event and converge without a second decision event.
+
+Canon validates the envelope identity before idempotency lookup, then performs
+exact event/digest replay before allocating a revision. A changed digest is a
+conflict. Validation and `OutcomeRecorded` append share the existing atomic
+snapshot; fault injection before persistence leaves no event, while a fault
+after durable commit replays the one committed event.
 
 Temporary Canon failure leaves the outcome pending and never reverses a
 successful Git publication. Permanent rejection remains visible as
