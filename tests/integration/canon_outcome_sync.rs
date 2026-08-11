@@ -4,11 +4,12 @@ use std::collections::VecDeque;
 use std::fmt::Debug;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::Duration;
 
 use boundline_core::publication::canon_outbox::{
-    ArchiveAuthorization, CanonOutcomeOutbox, CanonOutcomeTransport, Clock, DeliveryAttemptResult,
-    DeliveryControl, EnqueueOutcome, OutboxError, OutboxState, TransportFailure,
-    TransportFailureKind,
+    ArchiveAuthorization, CanonOutcomeOutbox, CanonOutcomeTransport, CanonSubprocessTransport,
+    Clock, DeliveryAttemptResult, DeliveryControl, EnqueueOutcome, OutboxError, OutboxState,
+    TransportFailure, TransportFailureKind,
 };
 use boundline_protocol::CanonOutcomeSyncStatus;
 use canon_contracts::{
@@ -484,4 +485,182 @@ fn portable_state_excludes_private_execution_material() -> TestResult {
         require(!portable.contains(forbidden), format!("portable state leaked {forbidden}"))?;
     }
     Ok(())
+}
+
+#[test]
+fn real_canon_process_commits_once_and_response_loss_replays() -> TestResult {
+    let Some(executable) = std::env::var_os("BOUNDLINE_CANON_TEST_BINARY") else {
+        return Ok(());
+    };
+    let workspace = tempfile::tempdir()?;
+    admit_real_governance_bundle(&executable, workspace.path())?;
+    let snapshot_path = workspace.path().join(".canon/decision-memory/state.json");
+    let snapshot: serde_json::Value = serde_json::from_slice(&std::fs::read(&snapshot_path)?)?;
+    let contract = &snapshot["snapshot"]["admitted_bundles"][0]["contract"];
+    let bundle_id = contract["bundle_id"].as_str().ok_or("bundle id missing")?;
+    let bundle_digest = contract["bundle_digest"].as_str().ok_or("bundle digest missing")?;
+
+    let mut request = request_for(EVENT_ID, TerminalOutcomeStatus::Published)?;
+    request.governance_bundle_id = BundleId::new(bundle_id);
+    request.governance_bundle_digest = BundleDigest::new(bundle_digest);
+    request.recompute_event_digest()?;
+    let outbox_root = workspace.path().join("boundline-state");
+    let outbox = CanonOutcomeOutbox::open(&outbox_root)?;
+    outbox.enqueue_terminal_outcome(request)?;
+    let mut transport = CanonSubprocessTransport::new(
+        executable,
+        workspace.path(),
+        workspace.path(),
+        Duration::from_secs(20),
+    );
+    require_eq(
+        outbox.deliver_once_with_control(
+            EVENT_ID,
+            &mut transport,
+            &FixedClock(NOW_MS),
+            DeliveryControl::fail_before_ack(),
+        )?,
+        DeliveryAttemptResult::AcknowledgementPending,
+        "real response-loss boundary",
+    )?;
+    require_eq(
+        outbox.deliver_once(EVENT_ID, &mut transport, &FixedClock(NOW_MS + 1))?,
+        DeliveryAttemptResult::Synchronized,
+        "real Canon replay",
+    )?;
+    let final_snapshot: serde_json::Value = serde_json::from_slice(&std::fs::read(snapshot_path)?)?;
+    let events = final_snapshot["snapshot"]["graph"]["events"]
+        .as_array()
+        .ok_or("decision-memory journal missing")?;
+    let outcomes =
+        events.iter().filter(|event| event["event"] == "outcome_recorded").collect::<Vec<_>>();
+    require_eq(outcomes.len(), 1, "real Canon outcome event count")?;
+    require(
+        outcomes[0]["outcome"]["execution_audit"]
+            == serde_json::json!({
+                "process_invocations": 0,
+                "network_invocations": 0,
+                "provider_credential_reads": 0,
+                "model_calls": 0,
+                "semantic_evidence_created": 0
+            }),
+        "Canon outcome ingestion executed a semantic capability",
+    )
+}
+
+fn admit_real_governance_bundle(
+    executable: &std::ffi::OsStr,
+    workspace: &std::path::Path,
+) -> TestResult {
+    let bundle_id = "bundle-083-001";
+    let packet_id = format!("packet-{bundle_id}");
+    let artifact_id = format!("artifact-{bundle_id}");
+    let claim_id = format!("claim-{bundle_id}-main");
+    let requirement_id = format!("requirement-{bundle_id}");
+    let evidence_id = format!("evidence-{bundle_id}");
+    let draft = serde_json::json!({
+        "bundle_id": bundle_id,
+        "profile": "discovery",
+        "decision_memory_revision": 1,
+        "packets": [{
+            "packet_id": packet_id,
+            "profile": "discovery",
+            "revision": 1,
+            "change_intent": "record terminal outcome",
+            "scope": ["workspace"],
+            "risks": ["incorrect outcome"],
+            "invariants": ["no semantic execution"],
+            "acceptance_criteria": ["exact outcome binding"],
+            "cross_packet_references": []
+        }],
+        "subject_artifacts": [{
+            "artifact_id": artifact_id,
+            "packet_id": packet_id,
+            "content": {
+                "artifact_identity": "workspace",
+                "revision": "git:fixture",
+                "content_digest": "a".repeat(64)
+            }
+        }],
+        "required_approvers": ["release-owner"],
+        "authority_zone": "governance-release",
+        "risk_tier": 2,
+        "change_class": "governance-kernel",
+        "context_class": "repository-local",
+        "owners": ["release-owner"],
+        "claims": ["claim-exact-binding"],
+        "required_evidence": [{
+            "requirement_id": requirement_id,
+            "packet_id": packet_id,
+            "claim_ids": [claim_id],
+            "artifact_ids": [artifact_id],
+            "kind": "external_semantic_review",
+            "minimum_challenge_tier": "tier_2",
+            "accepted_evidence_references": [format!("sha256:{}", "e".repeat(64))]
+        }],
+        "provided_evidence": [{
+            "evidence_id": evidence_id,
+            "packet_id": packet_id,
+            "claim_ids": [claim_id],
+            "artifact_ids": [artifact_id],
+            "requirement_ids": [requirement_id],
+            "references": [format!("sha256:{}", "e".repeat(64))],
+            "lineage": "provider:challenger/executor:review/invocation:cross-repo",
+            "independent_context_identity": "context-independent-cross-repo",
+            "challenge_tier": "tier_2",
+            "external_semantic": true,
+            "fresh": true,
+            "named_override": null
+        }],
+        "forbidden_lineages": [],
+        "approvals": [{
+            "approval_id": format!("approval-{bundle_id}"),
+            "packet_id": packet_id,
+            "claim_ids": [claim_id],
+            "artifact_ids": [artifact_id],
+            "evidence_ids": [evidence_id],
+            "requirement_ids": [requirement_id],
+            "approver": "release-owner",
+            "authority_zone": "governance-release",
+            "approved": true,
+            "decision_memory_revision": 1,
+            "valid_through_revision": 1,
+            "fresh": true
+        }],
+        "assumptions": ["contract immutable"],
+        "alternatives": ["defer"],
+        "rationale": "bind actual outcome",
+        "risk_acceptances": [],
+        "triggers": ["governed state changes"],
+        "no_change": false
+    });
+    let request = serde_json::json!({
+        "contract_version": "1.0",
+        "request_id": bundle_id,
+        "operation": "start",
+        "payload": {"bundle": draft}
+    });
+    let mut child = std::process::Command::new(executable)
+        .args(["--canon-root"])
+        .arg(workspace)
+        .args(["--repo-root"])
+        .arg(workspace)
+        .args(["rpc", "--stdio"])
+        .current_dir(workspace)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()?;
+    let mut stdin = child.stdin.take().ok_or("Canon stdin missing")?;
+    serde_json::to_writer(&mut stdin, &request)?;
+    drop(stdin);
+    let output = child.wait_with_output()?;
+    require(
+        output.status.success(),
+        format!(
+            "Canon governance admission failed: stdout={} stderr={}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        ),
+    )
 }
