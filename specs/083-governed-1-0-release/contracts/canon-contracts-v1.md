@@ -1,5 +1,14 @@
 # Canon Contracts V1 and the 0.91 Outcome Amendment
 
+## Published package boundary
+
+`canon-contracts 0.91.0` is published on crates.io and source-tagged at
+`cd9209a861acf8d2960b185c476fedfdac9e41d2`. Boundline consumes the exact
+registry requirement `canon-contracts = "=0.91.0"` through `boundline-core`;
+no path, Git, patch, or local-registry source is admitted. Publication freezes
+the package bytes and contract surface described below. T099 consumption does
+not make `record_outcome` operational and does not begin T057-T059.
+
 ## Version boundary
 
 `canon-contracts 0.91.0` adds one public operation and its DTOs while retaining

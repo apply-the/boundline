@@ -161,6 +161,12 @@ readiness, and the T099 stop conditions are recorded in
 [`contracts/canon-contracts-v1.md`](contracts/canon-contracts-v1.md) and
 [`evidence/m2b-c0-outcome-contract-amendment.md`](evidence/m2b-c0-outcome-contract-amendment.md).
 
+T099 subsequently published and independently qualified the exact crates.io
+package, verified its signed source tag, and pinned `boundline-core` to the
+exact registry version without starting outcome delivery or ingestion. The
+complete publication and consumer record is
+[`evidence/t099-canon-0.91-publication.md`](evidence/t099-canon-0.91-publication.md).
+
 ## 7. Keep M1C help honest
 
 At 0.90, stable help and completion metadata list only StableOperational

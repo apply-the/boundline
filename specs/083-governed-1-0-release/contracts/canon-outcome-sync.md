@@ -38,6 +38,11 @@ The additive 0.91 inventory appends:
 record_outcome
 ```
 
+The public `canon-contracts 0.91.0` package is qualified from crates.io, and
+`boundline-core` owns Boundline's exact `=0.91.0` registry dependency. This is
+only the frozen exchange boundary: until T057-T059 land, Boundline has no
+outbox or delivery path and Canon has no transactional outcome ingestion.
+
 The six historical operation names and semantics remain exact. In particular,
 `publish` is still a read-only projection operation with an empty payload.
 Before T059, capability metadata advertises `record_outcome` as unavailable
