@@ -319,6 +319,31 @@ fn transient_fault_windows_are_durable_and_explicitly_retryable() -> TestResult 
 }
 
 #[test]
+fn mismatched_response_identity_is_durably_retryable() -> TestResult {
+    let root = tempfile::tempdir()?;
+    let request = request_for(EVENT_ID, TerminalOutcomeStatus::Published)?;
+    let outbox = CanonOutcomeOutbox::open(root.path())?;
+    outbox.enqueue_terminal_outcome(request.clone())?;
+    let mut mismatched = recorded_response(&request);
+    mismatched.event_id = OutcomeEventId::new("different-event");
+    let mut transport = ScriptedTransport::new(vec![Ok(mismatched)]);
+
+    require_eq(
+        outbox.deliver_once(EVENT_ID, &mut transport, &FixedClock(NOW_MS))?,
+        DeliveryAttemptResult::RetryScheduled,
+        "mismatched response classification",
+    )?;
+    let record = outbox.load(EVENT_ID)?;
+    require_eq(record.state, OutboxState::RetryScheduled, "mismatched response state")?;
+    require_eq(record.attempt_history.len(), 1, "mismatched response history")?;
+    require_eq(
+        record.last_reason_code.as_deref(),
+        Some("response_read"),
+        "mismatched response reason",
+    )
+}
+
+#[test]
 fn permanent_rejections_and_conflicts_never_auto_retry() -> TestResult {
     for reason in [
         RecordOutcomeRejectionReason::UnsupportedContractLine,

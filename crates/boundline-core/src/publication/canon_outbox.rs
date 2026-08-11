@@ -287,7 +287,17 @@ impl CanonOutcomeOutbox {
             Ok(response) => response,
             Err(failure) => return record_transport_failure(&path, record, failure, now),
         };
-        validate_response(&record, &response)?;
+        if validate_response(&record, &response).is_err() {
+            return record_transport_failure(
+                &path,
+                record,
+                TransportFailure::new(
+                    TransportFailureKind::ResponseRead,
+                    "response failed identity or contract validation",
+                ),
+                now,
+            );
+        }
         if control.fail_before_ack {
             return Ok(DeliveryAttemptResult::AcknowledgementPending);
         }
