@@ -143,6 +143,11 @@ impl PublicationTransaction {
             ],
         )
         .map_err(|_| PublicationError::PublicationRebaseRequired)?;
+        self.replace_affected_paths()?;
+        let published_index = git(&self.authoritative, &["write-tree"])?;
+        if published_index != self.manifest.target_tree_digest {
+            return Err(PublicationError::FinalFingerprintMismatch);
+        }
         git_status(&self.authoritative, &["reset", "--hard", &self.manifest.candidate_commit])?;
         let final_commit = git(&self.authoritative, &["rev-parse", "HEAD"])?;
         let final_tree = git(&self.authoritative, &["rev-parse", "HEAD^{tree}"])?;
@@ -155,6 +160,39 @@ impl PublicationTransaction {
         }
         let _session_commit = git(&self.session, &["rev-parse", "HEAD"])?;
         Ok(PublicationResult { published_commit: final_commit, final_tree_digest: final_tree })
+    }
+
+    fn replace_affected_paths(&self) -> Result<(), PublicationError> {
+        for precondition in &self.manifest.path_preconditions {
+            validate_path(&precondition.path)?;
+            reject_symlink_ancestor(&self.authoritative, &precondition.path)?;
+            let unchanged = git_quiet(
+                &self.authoritative,
+                &[
+                    "diff",
+                    "--quiet",
+                    &self.manifest.expected_base_revision,
+                    "--",
+                    &precondition.path,
+                ],
+            )?;
+            let untracked = git(
+                &self.authoritative,
+                &["ls-files", "--others", "--exclude-standard", "--", &precondition.path],
+            )?;
+            if !unchanged || !untracked.is_empty() {
+                return Err(PublicationError::AuthoritativePreconditionFailed);
+            }
+            if precondition.candidate_entry.is_empty() {
+                remove_candidate_path(&self.authoritative, &precondition.path)?;
+            } else {
+                git_status(
+                    &self.authoritative,
+                    &["checkout", &self.manifest.candidate_commit, "--", &precondition.path],
+                )?;
+            }
+        }
+        Ok(())
     }
 
     fn validate_preconditions(&self) -> Result<(), PublicationError> {
@@ -310,6 +348,34 @@ fn validate_path(value: &str) -> Result<(), PublicationError> {
     } else {
         Err(PublicationError::InvalidName)
     }
+}
+fn reject_symlink_ancestor(root: &Path, value: &str) -> Result<(), PublicationError> {
+    let components = Path::new(value).components().collect::<Vec<_>>();
+    let mut current = root.to_path_buf();
+    for component in components.iter().take(components.len().saturating_sub(1)) {
+        let Component::Normal(segment) = component else {
+            return Err(PublicationError::InvalidName);
+        };
+        current.push(segment);
+        match fs::symlink_metadata(&current) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Err(PublicationError::AuthoritativePreconditionFailed);
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+        }
+    }
+    Ok(())
+}
+fn remove_candidate_path(root: &Path, value: &str) -> Result<(), PublicationError> {
+    let target = root.join(value);
+    match fs::symlink_metadata(&target) {
+        Ok(_) => fs::remove_file(target)?,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error.into()),
+    }
+    git_status(root, &["add", "-u", "--", value])
 }
 fn git_path(root: &Path, arguments: &[&str]) -> Result<PathBuf, PublicationError> {
     fs::canonicalize(PathBuf::from(git(root, arguments)?)).map_err(Into::into)

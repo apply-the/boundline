@@ -100,3 +100,31 @@ fn second_session_becomes_rebase_required_after_first_publication() -> TestResul
         "stale candidate auto-merged or published",
     )
 }
+
+#[test]
+fn publication_replaces_adds_and_deletes_through_the_affected_path_ledger() -> TestResult {
+    let (fixture, repository) = fixture()?;
+    std::fs::write(repository.join("deleted.txt"), "remove me\n")?;
+    git(&repository, &["add", "deleted.txt"])?;
+    git(&repository, &["commit", "-m", "add deletion fixture"])?;
+    let session_path = fixture.path().join("session");
+    session(&repository, &session_path)?;
+    let base = output(&repository, &["rev-parse", "HEAD"])?;
+    std::fs::remove_file(session_path.join("deleted.txt"))?;
+    std::fs::write(session_path.join("tracked.txt"), "replaced\n")?;
+    std::fs::create_dir(session_path.join("nested"))?;
+    std::fs::write(session_path.join("nested/new.txt"), "added\n")?;
+    let prepared =
+        PublicationTransaction::prepare(&repository, &session_path, "refs/heads/main", &base)?;
+    require(prepared.affected_paths().len() == 3, "affected path ledger is incomplete")?;
+    prepared.publish()?;
+    require(!repository.join("deleted.txt").exists(), "deleted candidate path survived")?;
+    require(
+        std::fs::read_to_string(repository.join("tracked.txt"))? == "replaced\n",
+        "replacement was not published",
+    )?;
+    require(
+        std::fs::read_to_string(repository.join("nested/new.txt"))? == "added\n",
+        "addition was not published",
+    )
+}
