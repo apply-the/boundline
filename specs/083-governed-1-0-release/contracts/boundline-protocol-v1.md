@@ -104,13 +104,14 @@ authority and failure semantics, contract tests, command tree, help,
 completions, and documentation are complete. A placeholder or generic
 not-yet-implemented result cannot satisfy this rule.
 
-Current M1C StableOperational commands:
+Current post-T037 StableOperational commands:
 
 ```text
 init
 goal
 plan
 run
+approve
 status
 inspect
 doctor
@@ -128,9 +129,6 @@ Documented 1.0 StableTargetPending commands and owners:
 
 | Command | Owner |
 |---|---|
-| `approve` | T037 |
-| `session abort <id>` | T037 |
-| `session cleanup <id>` | T037 |
 | `recover inspect` | T047 and T048 |
 | `recover complete` | T047 and T048 |
 | `recover restore` | T047 and T048 |

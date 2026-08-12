@@ -8,3 +8,4 @@ pub use boundline_core::domain;
 pub(crate) mod test_support;
 
 pub mod cli;
+pub mod projection;

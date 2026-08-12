@@ -68,6 +68,7 @@ pub enum CommandName {
     Checkpoint,
     Orchestrate,
     Run,
+    Approve,
     Workflow,
     Index,
     Inspect,
@@ -104,6 +105,7 @@ impl CommandName {
             Self::Checkpoint => "checkpoint",
             Self::Orchestrate => "orchestrate",
             Self::Run => "run",
+            Self::Approve => "approve",
             Self::Workflow => "workflow",
             Self::Index => "index",
             Self::Inspect => "inspect",
@@ -273,6 +275,13 @@ pub enum DeveloperCommand {
         /// Operational lifecycle routing that replaces overlapping legacy roots.
         #[command(flatten)]
         route: RunRouteArgs,
+    },
+    /// Record human approval for the exact fresh governed session state.
+    #[command(display_order = 5)]
+    Approve {
+        session_id: String,
+        #[arg(long)]
+        workspace: Option<PathBuf>,
     },
     #[command(skip)]
     Orchestrate {
@@ -796,6 +805,18 @@ pub enum SessionSubcommand {
         #[arg(long)]
         cluster: Option<PathBuf>,
     },
+    /// Durably abort a governed session while retaining its worktree.
+    Abort {
+        session_id: String,
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+    },
+    /// Remove a terminal or explicitly aborted governed session worktree.
+    Cleanup {
+        session_id: String,
+        #[arg(long)]
+        workspace: Option<PathBuf>,
+    },
 }
 
 /// Assistant asset installation subcommands.
@@ -1195,6 +1216,7 @@ impl DeveloperCommand {
             Self::Probe { .. } => CommandName::Probe,
             Self::Step { .. } => CommandName::Step,
             Self::Run { .. } => CommandName::Run,
+            Self::Approve { .. } => CommandName::Approve,
             Self::Workflow { .. } => CommandName::Workflow,
             Self::Index { .. } => CommandName::Index,
             Self::Inspect { .. } => CommandName::Inspect,
@@ -1466,6 +1488,18 @@ impl DeveloperCommandSession {
                 exit_status: None,
                 trace_location: None,
             },
+            DeveloperCommand::Approve { session_id, workspace } => Self {
+                command_name: CommandName::Approve,
+                workspace_ref: workspace.as_ref().map(|path| path.to_string_lossy().into_owned()),
+                requires_workspace_ref: false,
+                install_check: false,
+                goal: Some(session_id.clone()),
+                trace_ref: None,
+                started_at: current_timestamp_millis(),
+                completed_at: None,
+                exit_status: None,
+                trace_location: None,
+            },
             DeveloperCommand::Workflow { command } => Self {
                 command_name: CommandName::Workflow,
                 workspace_ref: match command {
@@ -1560,6 +1594,10 @@ impl DeveloperCommandSession {
                         .as_ref()
                         .or(cluster.as_ref())
                         .map(|path| path.to_string_lossy().into_owned()),
+                    SessionSubcommand::Abort { workspace, .. }
+                    | SessionSubcommand::Cleanup { workspace, .. } => {
+                        workspace.as_ref().map(|path| path.to_string_lossy().into_owned())
+                    }
                 },
                 requires_workspace_ref: false,
                 install_check: false,
@@ -1849,6 +1887,7 @@ impl DeveloperCommandSession {
                 }
             }
             CommandName::Checkpoint
+            | CommandName::Approve
             | CommandName::Goal
             | CommandName::Flow
             | CommandName::Plan
@@ -2299,6 +2338,7 @@ fn command_environment_workspace(command: &DeveloperCommand) -> Option<PathBuf> 
         | DeveloperCommand::Step { workspace, .. }
         | DeveloperCommand::Orchestrate { workspace, .. }
         | DeveloperCommand::Run { workspace, .. }
+        | DeveloperCommand::Approve { workspace, .. }
         | DeveloperCommand::Inspect { workspace, .. }
         | DeveloperCommand::Status { workspace, .. }
         | DeveloperCommand::Next { workspace, .. }
@@ -2415,6 +2455,10 @@ fn session_command_environment_workspace(command: &SessionSubcommand) -> Option<
         | SessionSubcommand::Resume { workspace, cluster, .. } => {
             resolve_command_workspace(workspace.as_deref().or(cluster.as_deref()))
         }
+        SessionSubcommand::Abort { workspace, .. }
+        | SessionSubcommand::Cleanup { workspace, .. } => {
+            resolve_command_workspace(workspace.as_deref())
+        }
     }
 }
 
@@ -2524,6 +2568,9 @@ fn dispatch(command: &DeveloperCommand) -> DispatchOutcome {
         }
         DeveloperCommand::Orchestrate { .. } => dispatch_orchestrate_command(command),
         DeveloperCommand::Run { .. } => dispatch_run_command(command),
+        DeveloperCommand::Approve { session_id, workspace } => {
+            dispatch_approve_command(workspace.as_deref(), session_id)
+        }
         DeveloperCommand::Workflow { command } => dispatch_workflow_command(command),
         DeveloperCommand::Index { command } => dispatch_index_command(command),
         DeveloperCommand::Checkpoint { command } => dispatch_checkpoint_command(command),
@@ -3099,8 +3146,70 @@ fn dispatch_session_history_command(command: &SessionSubcommand) -> DispatchOutc
                 session_id,
             )
         }
+        SessionSubcommand::Abort { session_id, workspace } => {
+            return dispatch_managed_session_lifecycle(workspace.as_deref(), session_id, false);
+        }
+        SessionSubcommand::Cleanup { session_id, workspace } => {
+            return dispatch_managed_session_lifecycle(workspace.as_deref(), session_id, true);
+        }
     };
     dispatch_session_result(CommandName::Session, result)
+}
+
+const EXTERNAL_STATE_ROOT_ENV: &str = "BOUNDLINE_STATE_ROOT";
+
+fn dispatch_approve_command(workspace: Option<&Path>, session_id: &str) -> DispatchOutcome {
+    let result = resolve_governed_roots(workspace).and_then(|(workspace, state_root)| {
+        boundline_core::transaction::governed_session::GovernedSessionStore::open(
+            workspace, state_root,
+        )
+        .map_err(|error| error.to_string())?
+        .approve(session_id)
+        .map_err(|error| error.to_string())
+    });
+    match result {
+        Ok(record) => match serde_json::to_string_pretty(&record.projection) {
+            Ok(projection) => DispatchOutcome::text(CommandExitStatus::Succeeded, projection, None),
+            Err(error) => {
+                DispatchOutcome::text(CommandExitStatus::NonSuccess, error.to_string(), None)
+            }
+        },
+        Err(error) => DispatchOutcome::text(CommandExitStatus::NonSuccess, error, None),
+    }
+}
+
+fn dispatch_managed_session_lifecycle(
+    workspace: Option<&Path>,
+    session_id: &str,
+    cleanup: bool,
+) -> DispatchOutcome {
+    let result = resolve_governed_roots(workspace).and_then(|(workspace, state_root)| {
+        let manager = boundline_core::execution::worktree::SessionWorktreeManager::open(
+            workspace, state_root,
+        )
+        .map_err(|error| error.to_string())?;
+        if cleanup {
+            manager.cleanup(session_id).map_err(|error| error.to_string())?;
+            Ok(format!("session {session_id} cleaned"))
+        } else {
+            manager.abort(session_id).map_err(|error| error.to_string())?;
+            Ok(format!("session {session_id} aborted; worktree retained"))
+        }
+    });
+    match result {
+        Ok(message) => DispatchOutcome::text(CommandExitStatus::Succeeded, message, None),
+        Err(error) => DispatchOutcome::text(CommandExitStatus::NonSuccess, error, None),
+    }
+}
+
+fn resolve_governed_roots(workspace: Option<&Path>) -> Result<(PathBuf, PathBuf), String> {
+    let workspace =
+        cli_workspace::resolve_workspace(workspace).map_err(|error| error.to_string())?;
+    let state_root =
+        std::env::var_os(EXTERNAL_STATE_ROOT_ENV).map(PathBuf::from).ok_or_else(|| {
+            format!("{EXTERNAL_STATE_ROOT_ENV} must identify the protected external state root")
+        })?;
+    Ok((workspace, state_root))
 }
 
 fn dispatch_inspect_command(

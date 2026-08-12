@@ -51,6 +51,7 @@ const COMMAND_SURFACE: &[CommandSurfaceEntry] = &[
     entry("goal", CommandClassification::StableOperational),
     entry("plan", CommandClassification::StableOperational),
     entry("run", CommandClassification::StableOperational),
+    entry("approve", CommandClassification::StableOperational),
     entry("status", CommandClassification::StableOperational),
     entry("inspect", CommandClassification::StableOperational),
     entry("doctor", CommandClassification::StableOperational),

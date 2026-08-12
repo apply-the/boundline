@@ -16,11 +16,12 @@ use clap::{CommandFactory, Parser};
 
 type TestResult = Result<(), Box<dyn Error>>;
 
-const STABLE_COMMANDS: [&str; 15] = [
+const STABLE_COMMANDS: [&str; 16] = [
     "init",
     "goal",
     "plan",
     "run",
+    "approve",
     "status",
     "inspect",
     "doctor",
@@ -33,7 +34,7 @@ const STABLE_COMMANDS: [&str; 15] = [
     "assistant",
     "update",
 ];
-const PENDING_ROOT_COMMANDS: [&str; 4] = ["approve", "recover", "rpc", "serve"];
+const PENDING_ROOT_COMMANDS: [&str; 3] = ["recover", "rpc", "serve"];
 const REMOVED_COMMANDS: [(&str, &str); 7] = [
     ("orchestrate", "Use `boundline run --until"),
     ("step", "Use `boundline run --one-step`"),
@@ -81,6 +82,97 @@ fn temp_workspace(label: &str) -> Result<PathBuf, io::Error> {
 
 fn text(bytes: &[u8]) -> String {
     String::from_utf8_lossy(bytes).replace("\r\n", "\n")
+}
+
+fn initialize_governed_repository(path: &Path) -> TestResult {
+    let commands: &[&[&str]] = &[
+        &["init", "-b", "main"],
+        &["config", "user.name", "Boundline Test"],
+        &["config", "user.email", "boundline@example.invalid"],
+        &["config", "commit.gpgsign", "false"],
+    ];
+    for arguments in commands {
+        let output = Command::new("git").args(*arguments).current_dir(path).output()?;
+        ensure(output.status.success(), String::from_utf8_lossy(&output.stderr))?;
+    }
+    fs::write(path.join(".gitignore"), ".boundline/\n")?;
+    let output = Command::new("git").args(["add", ".gitignore"]).current_dir(path).output()?;
+    ensure(output.status.success(), String::from_utf8_lossy(&output.stderr))?;
+    let output =
+        Command::new("git").args(["commit", "-m", "baseline"]).current_dir(path).output()?;
+    ensure(output.status.success(), String::from_utf8_lossy(&output.stderr))
+}
+
+#[test]
+fn governed_approve_abort_and_cleanup_have_operational_handlers() -> TestResult {
+    use boundline_core::execution::worktree::{ManagedSessionState, SessionWorktreeManager};
+    use boundline_core::transaction::challenge::ChallengeDecision;
+    use boundline_core::transaction::evidence::{
+        BoundEvidence, EvidenceKind, EvidenceLedger, GovernedStateBinding,
+    };
+    use boundline_core::transaction::governed_session::{
+        GovernedSessionRecord, GovernedSessionStore,
+    };
+    use boundline_protocol::{
+        CanonOutcomeSyncStatus, ExecutorCapabilityStatus, OperatingStage, ProofFreshness,
+        ProtocolVersion, PublicSessionProjection, PublicationStatus, QuarantineStatus,
+        RecoveryStatus, RepositoryId, Revision, SessionId, SessionLifecycle,
+    };
+
+    let fixture = tempfile::tempdir()?;
+    let workspace = fixture.path().join("workspace");
+    let state_root = fixture.path().join("state");
+    fs::create_dir(&workspace)?;
+    initialize_governed_repository(&workspace)?;
+    let store = GovernedSessionStore::open(&workspace, &state_root)?;
+    let binding =
+        GovernedStateBinding::new("session-1", 4, "diff", "fingerprint", ["claim"], "reviewer");
+    let mut evidence = EvidenceLedger::new(binding.clone());
+    evidence.record(BoundEvidence::new(EvidenceKind::Proof, binding.clone(), "proof"))?;
+    evidence.record(BoundEvidence::new(EvidenceKind::Verification, binding, "verification"))?;
+    let projection = PublicSessionProjection {
+        protocol_version: ProtocolVersion::V1,
+        session_id: SessionId::new("session-1"),
+        repository_id: RepositoryId::new("repository"),
+        transaction_revision: Revision::new(4),
+        lifecycle: SessionLifecycle::ApprovalPending,
+        stage: OperatingStage::Verify,
+        next_actions: Vec::new(),
+        executor_capability: ExecutorCapabilityStatus::Admitted,
+        proof_freshness: ProofFreshness::Fresh,
+        publication: PublicationStatus::Pending,
+        recovery: RecoveryStatus::NotRequired,
+        quarantine: QuarantineStatus::Clear,
+        canon_outcome_sync: CanonOutcomeSyncStatus::NotRequired,
+    };
+    store.save(&GovernedSessionRecord::new(projection, evidence, ChallengeDecision::Satisfied))?;
+    let approve = Command::new(env!("CARGO_BIN_EXE_boundline"))
+        .args(["approve", "session-1", "--workspace"])
+        .arg(&workspace)
+        .env("BOUNDLINE_STATE_ROOT", &state_root)
+        .output()?;
+    ensure(approve.status.success(), text(&approve.stderr))?;
+    ensure(store.load("session-1")?.approved, "approve handler did not persist authority")?;
+
+    let manager = SessionWorktreeManager::open(&workspace, &state_root)?;
+    manager.create("session-2")?;
+    let abort = Command::new(env!("CARGO_BIN_EXE_boundline"))
+        .args(["session", "abort", "session-2", "--workspace"])
+        .arg(&workspace)
+        .env("BOUNDLINE_STATE_ROOT", &state_root)
+        .output()?;
+    ensure(abort.status.success(), text(&abort.stderr))?;
+    ensure(
+        manager.resume("session-2")?.state() == ManagedSessionState::Aborted,
+        "abort handler did not persist abort",
+    )?;
+    let cleanup = Command::new(env!("CARGO_BIN_EXE_boundline"))
+        .args(["session", "cleanup", "session-2", "--workspace"])
+        .arg(&workspace)
+        .env("BOUNDLINE_STATE_ROOT", &state_root)
+        .output()?;
+    ensure(cleanup.status.success(), text(&cleanup.stderr))?;
+    ensure(!manager.session_path("session-2").exists(), "cleanup handler retained worktree")
 }
 
 #[test]
@@ -175,8 +267,8 @@ fn pending_commands_are_not_registered_or_completed() -> TestResult {
 
     for nested in ["abort", "cleanup"] {
         ensure(
-            Cli::try_parse_from(["boundline", "session", nested, "session-1"]).is_err(),
-            format!("pending session command {nested} parsed"),
+            Cli::try_parse_from(["boundline", "session", nested, "session-1"]).is_ok(),
+            format!("stable session command {nested} did not parse"),
         )?;
     }
     let session_help = Cli::command()
@@ -185,8 +277,12 @@ fn pending_commands_are_not_registered_or_completed() -> TestResult {
         .clone()
         .render_long_help()
         .to_string();
-    ensure(!session_help.contains("abort"), "session abort leaked into help")?;
-    ensure(!session_help.contains("cleanup"), "session cleanup leaked into help")
+    ensure(session_help.contains("abort"), "session abort missing from help")?;
+    ensure(session_help.contains("cleanup"), "session cleanup missing from help")?;
+    ensure(
+        Cli::try_parse_from(["boundline", "approve", "session-1"]).is_ok(),
+        "stable approve command did not parse",
+    )
 }
 
 #[test]
@@ -478,7 +574,7 @@ fn stable_administration_nested_help_is_preserved_without_preview_duplicates() -
         ("provider", &["add", "show", "remove", "health"][..]),
         ("adapter", &["add", "show", "remove"][..]),
         ("index", &["status", "refresh", "rebuild", "clean", "doctor"][..]),
-        ("session", &["list", "resume"][..]),
+        ("session", &["list", "resume", "abort", "cleanup"][..]),
         ("assistant", &["install"][..]),
     ];
     let command = Cli::command();
