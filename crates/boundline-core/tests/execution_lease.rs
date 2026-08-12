@@ -77,3 +77,25 @@ fn expected_revision_is_checked_before_executor_admission() -> TestResult {
     let lease = store.acquire("session-1", "executor", 2)?;
     require(lease.expected_revision() == 2, "lease lost expected revision")
 }
+
+#[test]
+fn active_executor_blocks_revision_rewrite_and_invalid_session_paths() -> TestResult {
+    let root = tempfile::tempdir()?;
+    let store = ExecutionLeaseStore::open(root.path())?;
+    store.set_revision("session-1", 4)?;
+    let lease = store.acquire("session-1", "executor", 4)?;
+
+    require(
+        matches!(store.set_revision("session-1", 5), Err(ExecutionLeaseError::AlreadyHeld)),
+        "active executor allowed the admitted revision to change",
+    )?;
+    require(
+        matches!(
+            store.acquire("../escape", "executor", 4),
+            Err(ExecutionLeaseError::InvalidSessionId)
+        ),
+        "session identifier escaped the lease root",
+    )?;
+    store.validate_write(&lease)?;
+    Ok(())
+}

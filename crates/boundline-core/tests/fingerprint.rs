@@ -110,3 +110,22 @@ fn schema_is_versioned_and_case_folded_unicode_collisions_fail_closed() -> TestR
         "schema version",
     )
 }
+
+#[test]
+fn digest_projection_is_versioned_and_content_sensitive() -> TestResult {
+    let root = repository()?;
+    let policy = FingerprintPolicy::new(std::iter::empty::<&str>());
+    let baseline = ProductFingerprint::capture(root.path(), &policy)?;
+    let baseline_digest = baseline.digest().to_owned();
+    require(
+        baseline_digest.starts_with("sha256:") && baseline_digest.len() == 71,
+        "fingerprint digest lost its algorithm-qualified representation",
+    )?;
+
+    std::fs::write(root.path().join("tracked.txt"), "changed\n")?;
+    let changed = ProductFingerprint::capture(root.path(), &policy)?;
+    require(
+        changed.digest() != baseline_digest,
+        "tracked content change preserved the projected digest",
+    )
+}

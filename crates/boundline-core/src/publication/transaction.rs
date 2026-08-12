@@ -404,3 +404,143 @@ fn git_bytes(root: &Path, arguments: &[&str]) -> Result<Vec<u8>, PublicationErro
         Err(PublicationError::Git(String::from_utf8_lossy(&output.stderr).trim().to_owned()))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    //! Boundary tests exercise fail-closed helpers that typed public plans cannot forge.
+
+    use std::path::Path;
+    use std::process::Command;
+
+    use super::{
+        PUBLICATION_SCHEMA_VERSION, PathPrecondition, PublicationError, PublicationManifest,
+        RestorePlan, git_quiet, persist_manifest, reject_symlink_ancestor, remove_candidate_path,
+        validate_path, validate_persisted_manifest, validate_ref,
+    };
+
+    type TestResult = Result<(), Box<dyn std::error::Error>>;
+
+    fn require(condition: bool, message: &str) -> TestResult {
+        if condition { Ok(()) } else { Err(std::io::Error::other(message).into()) }
+    }
+
+    fn git(root: &Path, arguments: &[&str]) -> TestResult {
+        let output = Command::new("git").args(arguments).current_dir(root).output()?;
+        require(output.status.success(), &String::from_utf8_lossy(&output.stderr))
+    }
+
+    fn repository() -> Result<tempfile::TempDir, Box<dyn std::error::Error>> {
+        let root = tempfile::tempdir()?;
+        git(root.path(), &["init", "-b", "main"])?;
+        git(root.path(), &["config", "user.name", "Boundline Test"])?;
+        git(root.path(), &["config", "user.email", "boundline@example.invalid"])?;
+        git(root.path(), &["config", "commit.gpgsign", "false"])?;
+        std::fs::write(root.path().join("tracked.txt"), "base\n")?;
+        git(root.path(), &["add", "tracked.txt"])?;
+        git(root.path(), &["commit", "-m", "base"])?;
+        Ok(root)
+    }
+
+    #[test]
+    fn path_and_ref_validators_reject_escape_forms() -> TestResult {
+        require(validate_ref("refs/heads/main").is_ok(), "canonical branch ref was rejected")?;
+        require(
+            matches!(validate_ref("refs/heads/../escape"), Err(PublicationError::InvalidName)),
+            "ref traversal was admitted",
+        )?;
+        require(validate_path("nested/file.txt").is_ok(), "normalized product path was rejected")?;
+        require(
+            matches!(validate_path("../escape"), Err(PublicationError::InvalidName)),
+            "path traversal was admitted",
+        )
+    }
+
+    #[test]
+    fn symlink_ancestor_and_non_normal_component_fail_closed() -> TestResult {
+        let root = tempfile::tempdir()?;
+        std::fs::create_dir(root.path().join("outside"))?;
+        std::os::unix::fs::symlink("outside", root.path().join("link"))?;
+
+        require(
+            matches!(
+                reject_symlink_ancestor(root.path(), "link/file.txt"),
+                Err(PublicationError::AuthoritativePreconditionFailed)
+            ),
+            "publication followed a symlink ancestor",
+        )?;
+        require(
+            matches!(
+                reject_symlink_ancestor(root.path(), "../escape"),
+                Err(PublicationError::InvalidName)
+            ),
+            "publication helper accepted a non-normal component",
+        )?;
+        reject_symlink_ancestor(root.path(), "missing/file.txt")?;
+        Ok(())
+    }
+
+    #[test]
+    fn absent_candidate_deletion_is_idempotent_and_preserves_index() -> TestResult {
+        let root = repository()?;
+        std::fs::remove_file(root.path().join("tracked.txt"))?;
+        remove_candidate_path(root.path(), "tracked.txt")?;
+        require(
+            !git_quiet(root.path(), &["diff", "--quiet", "--cached"])?,
+            "already-absent tracked deletion was not staged",
+        )
+    }
+
+    #[test]
+    fn tampered_durable_manifest_is_rejected() -> TestResult {
+        let common = tempfile::tempdir()?;
+        let manifest = PublicationManifest {
+            schema_version: PUBLICATION_SCHEMA_VERSION.to_owned(),
+            publication_id: "publication-1".to_owned(),
+            expected_base_revision: "base".to_owned(),
+            target_ref: "refs/heads/main".to_owned(),
+            candidate_commit: "candidate".to_owned(),
+            target_tree_digest: "tree".to_owned(),
+            affected_paths: vec!["tracked.txt".to_owned()],
+            path_preconditions: vec![PathPrecondition {
+                path: "tracked.txt".to_owned(),
+                expected_base_entry: "base-entry".to_owned(),
+                candidate_entry: "candidate-entry".to_owned(),
+            }],
+            backup_commit: "base".to_owned(),
+            restore_plan: RestorePlan {
+                restore_ref_to: "base".to_owned(),
+                restore_checkout_to: "base".to_owned(),
+            },
+        };
+        persist_manifest(common.path(), &manifest)?;
+        let path = common.path().join("boundline/publication/plans/publication-1.json");
+        let mut tampered = manifest.clone();
+        tampered.backup_commit = "different-base".to_owned();
+        std::fs::write(path, serde_json::to_vec_pretty(&tampered)?)?;
+
+        require(
+            matches!(
+                validate_persisted_manifest(common.path(), &manifest),
+                Err(PublicationError::ManifestValidationFailed)
+            ),
+            "tampered backup manifest remained publishable",
+        )
+    }
+
+    #[test]
+    fn git_quiet_distinguishes_changes_from_inspection_failure() -> TestResult {
+        let root = repository()?;
+        std::fs::write(root.path().join("tracked.txt"), "changed\n")?;
+        require(
+            !git_quiet(root.path(), &["diff", "--quiet"])?,
+            "dirty tracked content was reported unchanged",
+        )?;
+        require(
+            matches!(
+                git_quiet(root.path(), &["diff", "--definitely-invalid-option"]),
+                Err(PublicationError::Git(_))
+            ),
+            "Git inspection failure was interpreted as a clean precondition",
+        )
+    }
+}

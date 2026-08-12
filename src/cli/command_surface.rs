@@ -141,3 +141,42 @@ pub fn preview_command_names() -> Vec<&'static str> {
         .map(|entry| entry.name)
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    //! Runtime tests protect the constructor invariants used by the frozen inventory.
+
+    use std::hint::black_box;
+
+    use super::{
+        CommandClassification, command_surface, entry, removed, removed_command_diagnostic,
+    };
+
+    type TestResult = Result<(), Box<dyn std::error::Error>>;
+
+    fn require(condition: bool, message: &str) -> TestResult {
+        if condition { Ok(()) } else { Err(std::io::Error::other(message).into()) }
+    }
+
+    #[test]
+    fn runtime_constructors_preserve_diagnostic_authority_boundaries() -> TestResult {
+        let ordinary =
+            entry(black_box("status"), black_box(CommandClassification::StableOperational));
+        require(
+            ordinary.migration_diagnostic.is_none(),
+            "operational command acquired a migration diagnostic",
+        )?;
+
+        let retired = removed(black_box("legacy"), black_box("use replacement"));
+        require(
+            retired.classification == CommandClassification::Removed
+                && retired.migration_diagnostic == Some("use replacement"),
+            "removed constructor lost its fail-closed classification or diagnostic",
+        )?;
+        require(
+            command_surface().iter().any(|item| item.name == "approve")
+                && removed_command_diagnostic("govern").is_some(),
+            "canonical inventory lost an operational or retired boundary",
+        )
+    }
+}

@@ -171,4 +171,23 @@ mod tests {
         );
         require(abort.mutation_admitted, "explicit abort was not projected")
     }
+
+    #[test]
+    fn denied_executor_and_completed_publication_both_block_reexecution() -> TestResult {
+        let mut completed = session(SessionLifecycle::Terminal, ProofFreshness::Fresh);
+        completed.executor_capability = ExecutorCapabilityStatus::Denied;
+        completed.publication = PublicationStatus::Completed;
+        let projection = GovernedSessionProjection::derive(
+            GovernedSessionOperation::Run,
+            completed,
+            ChallengeProjection::Satisfied,
+        );
+
+        require(!projection.mutation_admitted, "completed denied session regained authority")?;
+        require(
+            projection.blocking_reasons
+                == ["executor_capability_denied", "publication_already_completed"],
+            "projection did not preserve both independent authority denials",
+        )
+    }
 }

@@ -101,3 +101,16 @@ fn role_markers_are_stable_and_prevent_authoritative_role_confusion() -> TestRes
     let marker = std::fs::read_to_string(fixture.path().join(".boundline/worktree-role.json"))?;
     require(!marker.contains(fixture.path().to_string_lossy().as_ref()), "marker leaked host path")
 }
+
+#[test]
+fn ordinary_directory_cannot_claim_repository_identity() -> TestResult {
+    let fixture = tempfile::tempdir()?;
+
+    require(
+        matches!(
+            RepositoryIdentityStore::open(fixture.path(), WorktreeRole::Authoritative),
+            Err(RepositoryIdentityError::GitDiscovery(_))
+        ),
+        "non-Git directory acquired a repository lock identity",
+    )
+}

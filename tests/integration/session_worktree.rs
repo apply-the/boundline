@@ -98,3 +98,36 @@ fn explicit_abort_is_durable_before_cleanup() -> TestResult {
     manager.cleanup("session-1")?;
     Ok(())
 }
+
+#[test]
+fn state_root_inside_authoritative_worktree_fails_closed() -> TestResult {
+    let fixture = tempfile::tempdir()?;
+    let authoritative = fixture.path().join("authoritative");
+    std::fs::create_dir(&authoritative)?;
+    repository(&authoritative)?;
+
+    require(
+        matches!(
+            SessionWorktreeManager::open(&authoritative, authoritative.join("state")),
+            Err(SessionWorktreeError::NestedStateRoot)
+        ),
+        "managed state root was admitted inside the authoritative checkout",
+    )
+}
+
+#[test]
+fn duplicate_session_creation_preserves_the_existing_worktree() -> TestResult {
+    let fixture = tempfile::tempdir()?;
+    let authoritative = fixture.path().join("authoritative");
+    let state_root = fixture.path().join("state-root");
+    std::fs::create_dir(&authoritative)?;
+    repository(&authoritative)?;
+    let manager = SessionWorktreeManager::open(&authoritative, &state_root)?;
+    let created = manager.create("session-1")?;
+
+    require(
+        matches!(manager.create("session-1"), Err(SessionWorktreeError::AlreadyExists)),
+        "duplicate session replaced its managed checkout",
+    )?;
+    require(created.path().is_dir(), "duplicate admission removed the existing checkout")
+}
