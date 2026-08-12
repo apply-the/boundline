@@ -183,6 +183,7 @@ matrices.
 - [ ] T087 Run `boundline:scripts/test.sh` plus complete workspace/all-feature tests and nextest in Canon and the adapter and fix every failure
 - [ ] T088 Run `boundline:scripts/coverage.sh` and repository-equivalent coverage checks and confirm at least 95% coverage for every modified or created Rust file
 - [ ] T089 Run the 90% patch-coverage gate using `boundline:scripts/common/coverage/intersect_patch_coverage.py` and resolve or explicitly approve every expiring waiver
+- [x] T101 [US1] Close the T021-T037 coverage deficit with real behavioral tests, preserving the frozen 92.77% repository threshold, 95% modified/created Rust file threshold, and 90% patch threshold without new exclusions or waivers
 - [ ] T090 Run `boundline:scripts/check-no-local-paths.sh` and equivalent path scans in Canon and the adapter
 - [ ] T091 Run `boundline:scripts/check-rust-no-panic.sh` and equivalent no-panic audits in Canon and the adapter
 - [ ] T092 Run `cargo deny check licenses advisories bans sources` in all three repositories and resolve every release-blocking finding
