@@ -32,6 +32,7 @@ dotenvy = "0.15.7"
 rust_decimal = "1"
 sha2 = "0.10"
 tempfile = "3"
+unicode-normalization = "0.1"
 boundline-core = { version = "=0.90.0", path = "crates/boundline-core" }
 boundline-adapters = { version = "=0.90.0", path = "crates/boundline-adapters" }
 boundline-cli = { version = "=0.90.0", path = "crates/boundline-cli" }

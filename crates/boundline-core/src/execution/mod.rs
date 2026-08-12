@@ -5,10 +5,13 @@
 //! capture, secret redaction, dry-run tiering, mutation boundary
 //! tracking, and governance hooks.
 
+pub mod capability;
 pub mod classifier;
 pub mod dry_run;
 pub mod evidence;
 pub mod hooks;
+pub mod lease;
 pub mod mutation;
 pub mod policy;
 pub mod redaction;
+pub mod worktree;

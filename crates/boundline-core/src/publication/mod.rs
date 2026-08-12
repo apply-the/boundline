@@ -2,3 +2,5 @@
 
 /// Durable delivery of terminal outcomes to Canon.
 pub mod canon_outbox;
+/// Verified Git candidate publication with repository-scoped serialization.
+pub mod transaction;

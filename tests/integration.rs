@@ -294,3 +294,9 @@ mod exec_command_integration;
 
 #[path = "integration/inference_economics_cli.rs"]
 mod inference_economics_cli;
+
+#[path = "integration/session_worktree.rs"]
+mod session_worktree;
+
+#[path = "integration/publication.rs"]
+mod publication;
