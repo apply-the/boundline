@@ -52,23 +52,23 @@ invalidate stale proof, and publish exactly one verified commit.
 once and leaves the authoritative worktree clean and equal to the candidate
 commit.
 
-- [ ] T021 [P] [US1] Add clone-vs-linked-worktree repository identity tests in `boundline:crates/boundline-core/tests/repository_identity.rs`
-- [ ] T022 [US1] Implement clone-local repository and authoritative-worktree identity with role markers in `boundline:crates/boundline-core/src/identity/repository.rs`
-- [ ] T023 [P] [US1] Add fingerprint fixtures for tracked/untracked files, index, rename, delete, executable bit, symlink, binary, Unicode collision, exclusions, and schema upgrades in `boundline:crates/boundline-core/tests/fingerprint.rs`
-- [ ] T024 [US1] Implement versioned product fingerprints and explicit ignored/cache policy in `boundline:crates/boundline-core/src/transaction/fingerprint.rs`
-- [ ] T025 [P] [US1] Add evidence-binding tests for exact revision/diff/fingerprint/claims/lineage and formatter/codegen staleness in `boundline:crates/boundline-core/tests/evidence_binding.rs`
-- [ ] T026 [US1] Implement approval, proof, risk, and verification freshness propagation in `boundline:crates/boundline-core/src/transaction/evidence.rs`
-- [ ] T027 [P] [US1] Add session execution lease tests for concurrent admission and superseded fencing-token writes in `boundline:crates/boundline-core/tests/execution_lease.rs`
-- [ ] T028 [US1] Implement exclusive per-session execution leases and monotonic fencing checks in `boundline:crates/boundline-core/src/execution/lease.rs`
-- [ ] T029 [P] [US1] Add capability-grant rejection tests for path, command, environment, secret, network, process, resource, output, Git-ref, and state-root escapes in `boundline:crates/boundline-core/tests/capability_grant.rs`
-- [ ] T030 [US1] Implement the shared provider/tool/adapter capability grant and fail-closed admission service in `boundline:crates/boundline-core/src/execution/capability.rs`
-- [ ] T031 [P] [US1] Add persistent external worktree retention and cleanup-state tests in `boundline:tests/integration/session_worktree.rs`
-- [ ] T032 [US1] Implement external managed worktree creation, lease metadata, role validation, resume, abort, and cleanup in `boundline:crates/boundline-core/src/execution/worktree.rs`
-- [ ] T033 [P] [US1] Add Tier 0–3 challenge tests, same-lineage override tests, and shared-conversation rejection tests in `boundline:crates/boundline-core/tests/challenge_policy.rs`
-- [ ] T034 [US1] Implement the frozen Tier 0–3 challenge matrix and named override records in `boundline:crates/boundline-core/src/transaction/challenge.rs`
-- [ ] T035 [P] [US1] Add candidate-commit, per-path precondition, CAS, stale-base, and clean-final-worktree tests in `boundline:tests/integration/publication.rs`
-- [ ] T036 [US1] Implement candidate preparation, backup validation, per-path replacement, index update, target-ref CAS, and final fingerprint verification in `boundline:crates/boundline-core/src/publication/transaction.rs`
-- [ ] T037 [US1] Add `run`, `approve`, `status`, `inspect`, `session abort`, and `session cleanup` projections for execution, proof freshness, challenge, and publication in `boundline:crates/boundline-cli/src/projection/session.rs`
+- [x] T021 [P] [US1] Add clone-vs-linked-worktree repository identity tests in `boundline:crates/boundline-core/tests/repository_identity.rs`
+- [x] T022 [US1] Implement clone-local repository and authoritative-worktree identity with role markers in `boundline:crates/boundline-core/src/identity/repository.rs`
+- [x] T023 [P] [US1] Add fingerprint fixtures for tracked/untracked files, index, rename, delete, executable bit, symlink, binary, Unicode collision, exclusions, and schema upgrades in `boundline:crates/boundline-core/tests/fingerprint.rs`
+- [x] T024 [US1] Implement versioned product fingerprints and explicit ignored/cache policy in `boundline:crates/boundline-core/src/transaction/fingerprint.rs`
+- [x] T025 [P] [US1] Add evidence-binding tests for exact revision/diff/fingerprint/claims/lineage and formatter/codegen staleness in `boundline:crates/boundline-core/tests/evidence_binding.rs`
+- [x] T026 [US1] Implement approval, proof, risk, and verification freshness propagation in `boundline:crates/boundline-core/src/transaction/evidence.rs`
+- [x] T027 [P] [US1] Add session execution lease tests for concurrent admission and superseded fencing-token writes in `boundline:crates/boundline-core/tests/execution_lease.rs`
+- [x] T028 [US1] Implement exclusive per-session execution leases and monotonic fencing checks in `boundline:crates/boundline-core/src/execution/lease.rs`
+- [x] T029 [P] [US1] Add capability-grant rejection tests for path, command, environment, secret, network, process, resource, output, Git-ref, and state-root escapes in `boundline:crates/boundline-core/tests/capability_grant.rs`
+- [x] T030 [US1] Implement the shared provider/tool/adapter capability grant and fail-closed admission service in `boundline:crates/boundline-core/src/execution/capability.rs`
+- [x] T031 [P] [US1] Add persistent external worktree retention and cleanup-state tests in `boundline:tests/integration/session_worktree.rs`
+- [x] T032 [US1] Implement external managed worktree creation, lease metadata, role validation, resume, abort, and cleanup in `boundline:crates/boundline-core/src/execution/worktree.rs`
+- [x] T033 [P] [US1] Add Tier 0–3 challenge tests, same-lineage override tests, and shared-conversation rejection tests in `boundline:crates/boundline-core/tests/challenge_policy.rs`
+- [x] T034 [US1] Implement the frozen Tier 0–3 challenge matrix and named override records in `boundline:crates/boundline-core/src/transaction/challenge.rs`
+- [x] T035 [P] [US1] Add candidate-commit, per-path precondition, CAS, stale-base, and clean-final-worktree tests in `boundline:tests/integration/publication.rs`
+- [x] T036 [US1] Implement candidate preparation, backup validation, per-path replacement, index update, target-ref CAS, and final fingerprint verification in `boundline:crates/boundline-core/src/publication/transaction.rs`
+- [x] T037 [US1] Add `run`, `approve`, `status`, `inspect`, `session abort`, and `session cleanup` projections for execution, proof freshness, challenge, and publication in `boundline:crates/boundline-cli/src/projection/session.rs`
 
 ---
 
